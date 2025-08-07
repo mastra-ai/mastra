@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { withSpan } from '../telemetry/telemetry.decorators';
 import type { ReadableStream, WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, StreamTextResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
@@ -2267,134 +2268,153 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
-    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
+    const spanDecorator = withSpan({
+      spanName: 'agent.stream',
+      skipIfNoTelemetry: true,
+      tracerName: 'default-tracer',
+    });
 
-    const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
-      ...defaultStreamOptions,
-      ...streamOptions,
-    };
+    const wrappedStream = spanDecorator(
+      this,
+      'stream',
+      {
+        value: async (
+          messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+          streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {}
+        ) => {
+          const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
 
-    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
-    const beforeResult = await before();
-
-    // Check for tripwire and return early if triggered
-    if (beforeResult.tripwire) {
-      // Return a promise that resolves immediately with empty result
-      const emptyResult = {
-        textStream: (async function* () {
-          // Empty async generator - yields nothing
-        })(),
-        fullStream: Promise.resolve('').then(() => {
-          const emptyStream = new (globalThis as any).ReadableStream({
-            start(controller: any) {
-              controller.close();
-            },
-          });
-          return emptyStream;
-        }),
-        text: Promise.resolve(''),
-        usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
-        finishReason: Promise.resolve('other'),
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
-        response: {
-          id: randomUUID(),
-          timestamp: new Date(),
-          modelId: 'tripwire',
-          messages: [],
-        },
-        toolCalls: Promise.resolve([]),
-        toolResults: Promise.resolve([]),
-        warnings: Promise.resolve(undefined),
-        request: {
-          body: JSON.stringify({ messages: [] }),
-        },
-        experimental_output: undefined,
-        steps: undefined,
-        experimental_providerMetadata: undefined,
-        toAIStream: () =>
-          Promise.resolve('').then(() => {
-            const emptyStream = new (globalThis as any).ReadableStream({
-              start(controller: any) {
-                controller.close();
+          const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
+            ...defaultStreamOptions,
+            ...streamOptions,
+          };
+      
+          const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+          const beforeResult = await before();
+      
+          // Check for tripwire and return early if triggered
+          if (beforeResult.tripwire) {
+            // Return a promise that resolves immediately with empty result
+            const emptyResult = {
+              textStream: (async function* () {
+                // Empty async generator - yields nothing
+              })(),
+              fullStream: Promise.resolve('').then(() => {
+                const emptyStream = new (globalThis as any).ReadableStream({
+                  start(controller: any) {
+                    controller.close();
+                  },
+                });
+                return emptyStream;
+              }),
+              text: Promise.resolve(''),
+              usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
+              finishReason: Promise.resolve('other'),
+              tripwire: true,
+              tripwireReason: beforeResult.tripwireReason,
+              response: {
+                id: randomUUID(),
+                timestamp: new Date(),
+                modelId: 'tripwire',
+                messages: [],
               },
-            });
-            return emptyStream;
-          }),
-        get experimental_partialOutputStream() {
-          return (async function* () {
-            // Empty async generator for partial output stream
-          })();
-        },
-        pipeDataStreamToResponse: () => Promise.resolve(),
-        pipeTextStreamToResponse: () => Promise.resolve(),
-        toDataStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
-        toTextStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
-      };
-
-      return emptyResult as unknown as
-        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
-    }
-
-    const { onFinish, runId, output, experimental_output, ...llmOptions } = beforeResult;
-
-    if (!output || experimental_output) {
-      this.logger.debug(`Starting agent ${this.name} llm stream call`, {
-        runId,
-      });
-
-      const streamResult = llm.__stream({
-        ...llmOptions,
-        onFinish: async result => {
-          try {
-            const outputText = result.text;
-            await after({
-              result,
-              outputText,
-            });
-          } catch (e) {
-            this.logger.error('Error saving memory on finish', {
-              error: e,
+              toolCalls: Promise.resolve([]),
+              toolResults: Promise.resolve([]),
+              warnings: Promise.resolve(undefined),
+              request: {
+                body: JSON.stringify({ messages: [] }),
+              },
+              experimental_output: undefined,
+              steps: undefined,
+              experimental_providerMetadata: undefined,
+              toAIStream: () =>
+                Promise.resolve('').then(() => {
+                  const emptyStream = new (globalThis as any).ReadableStream({
+                    start(controller: any) {
+                      controller.close();
+                    },
+                  });
+                  return emptyStream;
+                }),
+              get experimental_partialOutputStream() {
+                return (async function* () {
+                  // Empty async generator for partial output stream
+                })();
+              },
+              pipeDataStreamToResponse: () => Promise.resolve(),
+              pipeTextStreamToResponse: () => Promise.resolve(),
+              toDataStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+              toTextStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+            };
+      
+            return emptyResult as unknown as
+              | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+              | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
+          }
+      
+          const { onFinish, runId, output, experimental_output, ...llmOptions } = beforeResult;
+      
+          if (!output || experimental_output) {
+            this.logger.debug(`Starting agent ${this.name} llm stream call`, {
               runId,
             });
+      
+            const streamResult = llm.__stream({
+              ...llmOptions,
+              onFinish: async result => {
+                try {
+                  const outputText = result.text;
+                  await after({
+                    result,
+                    outputText,
+                  });
+                } catch (e) {
+                  this.logger.error('Error saving memory on finish', {
+                    error: e,
+                    runId,
+                  });
+                }
+                await onFinish?.({ ...result, runId } as any);
+              },
+              runId,
+              experimental_output,
+            });
+      
+            return streamResult as
+              | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+              | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
           }
-          await onFinish?.({ ...result, runId } as any);
-        },
-        runId,
-        experimental_output,
-      });
-
-      return streamResult as
-        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
-    }
-
-    this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {
-      runId,
-    });
-
-    return llm.__streamObject({
-      ...llmOptions,
-      onFinish: async result => {
-        try {
-          const outputText = JSON.stringify(result.object);
-          await after({
-            result,
-            outputText,
-            structuredOutput: true,
-          });
-        } catch (e) {
-          this.logger.error('Error saving memory on finish', {
-            error: e,
+      
+          this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {
             runId,
           });
+      
+          return llm.__streamObject({
+            ...llmOptions,
+            onFinish: async result => {
+              try {
+                const outputText = JSON.stringify(result.object);
+                await after({
+                  result,
+                  outputText,
+                  structuredOutput: true,
+                });
+              } catch (e) {
+                this.logger.error('Error saving memory on finish', {
+                  error: e,
+                  runId,
+                });
+              }
+              await onFinish?.({ ...result, runId } as any);
+            },
+            runId,
+            structuredOutput: output,
+          });
         }
-        await onFinish?.({ ...result, runId } as any);
-      },
-      runId,
-      structuredOutput: output,
-    });
+      } as PropertyDescriptor,
+    );
+
+    return (wrappedStream?.value as any).call(this, messages, streamOptions);
   }
 
   streamVNext<
