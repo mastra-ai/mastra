@@ -227,23 +227,23 @@ describe('Tool Schema Compatibility', () => {
 
   const modelsToTest = [
     // Anthropic Models
-    // openrouter('anthropic/claude-3.7-sonnet'),
-    // openrouter('anthropic/claude-3.5-sonnet'),
-    // openrouter('anthropic/claude-3.5-haiku'),
+    openrouter('anthropic/claude-3.7-sonnet'),
+    openrouter('anthropic/claude-3.5-sonnet'),
+    openrouter('anthropic/claude-3.5-haiku'),
 
-    // // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
-    // // Unions of objects are not supported
-    // // Google Models
-    // openrouter('google/gemini-2.5-pro-preview-03-25'),
-    // openrouter('google/gemini-2.5-flash'),
+    // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
+    // Unions of objects are not supported
+    // Google Models
+    openrouter('google/gemini-2.5-pro-preview-03-25'),
+    openrouter('google/gemini-2.5-flash'),
     openrouter('google/gemini-2.0-flash-lite-001'),
 
     // OpenAI Models
-    // openrouter('openai/gpt-4o-mini'),
-    // openrouter('openai/gpt-4.1-mini'),
-    // // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
-    // openai('o3-mini'),
-    // openai('o4-mini'),
+    openrouter('openai/gpt-4o-mini'),
+    openrouter('openai/gpt-4.1-mini'),
+    // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
+    openai('o3-mini'),
+    openai('o4-mini'),
 
     // Meta Models
     // Meta often calls the tool with the wrong name, ie 'tesTool_number'/'TestTool_number' instead of 'testTool_number'
@@ -260,7 +260,7 @@ describe('Tool Schema Compatibility', () => {
   // Specify which schemas to test - empty array means test all
   // To test specific schemas, add their names to this array
   // Example: ['string', 'number'] to test only string and number schemas
-  const schemasToTest: SchemaKey[] = [`stringRegex`];
+  const schemasToTest: SchemaKey[] = [];
   const testSchemas = createTestSchemas(schemasToTest);
 
   // Helper to check if a model is from Google
