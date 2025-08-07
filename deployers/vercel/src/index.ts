@@ -91,7 +91,7 @@ export const HEAD = handle(app);
     );
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
@@ -126,7 +126,7 @@ export const HEAD = handle(app);
     this.logger?.info('Deploying to Vercel is deprecated. Please use the Vercel dashboard to deploy.');
   }
 
-  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
     const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;

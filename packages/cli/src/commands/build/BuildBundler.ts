@@ -31,7 +31,7 @@ export class BuildBundler extends Bundler {
     await super.prepare(outputDirectory);
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
@@ -93,7 +93,7 @@ export class BuildBundler extends Bundler {
     `;
   }
 
-  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
   }
 }
