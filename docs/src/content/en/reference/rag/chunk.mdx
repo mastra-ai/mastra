@@ -49,7 +49,7 @@ The following parameters are available for all chunking strategies.
   content={[
     {
       name: "strategy",
-      type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence'",
+      type: "'recursive' | 'character' | 'token' | 'markdown' | 'semantic-markdown' | 'html' | 'json' | 'latex' | 'sentence'",
       isOptional: true,
       description:
         "The chunking strategy to use. If not specified, defaults based on document type. Depending on the chunking strategy, there are additional optionals. Defaults: .md files → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', others → 'recursive'",
@@ -106,10 +106,12 @@ The following parameters are available for all chunking strategies.
       type: "ExtractParams",
       isOptional: true,
       description:
-        "Metadata extraction configuration. See [ExtractParams reference](/reference/rag/extract-params) for details.",
+        "Metadata extraction configuration.",
     },
   ]}
 />
+
+See [ExtractParams reference](/reference/rag/extract-params.mdx) for details on the `extract` parameter.
 
 ## Strategy-Specific Options
 
@@ -159,6 +161,13 @@ const chunks = await doc.chunk({
     ["##", "section"],
   ], // Markdown-specific option
   stripHeaders: true, // Markdown-specific option
+});
+
+// Semantic Markdown strategy example
+const chunks = await doc.chunk({
+  strategy: "semantic-markdown",
+  joinThreshold: 500, // Semantic Markdown-specific option
+  modelName: "gpt-3.5-turbo", // Semantic Markdown-specific option
 });
 
 // Token strategy example
@@ -318,6 +327,46 @@ The options documented below are passed directly at the top level of the configu
 />
 
 **Important:** When using the `headers` option, the markdown strategy ignores all general options and content is split based on the markdown header structure. To use size-based chunking with markdown, omit the `headers` parameter.
+
+### Semantic Markdown
+
+<PropertiesTable
+  content={[
+    {
+      name: "joinThreshold",
+      type: "number",
+      isOptional: true,
+      defaultValue: "500",
+      description: "Maximum token count for merging related sections. Sections exceeding this limit individually are left intact, but smaller sections are merged with siblings or parents if the combined size stays under this threshold.",
+    },
+    {
+      name: "modelName",
+      type: "string",
+      isOptional: true,
+      description: "Name of the model for tokenization. If provided, the model's underlying tokenization `encodingName` will be used.",
+    },
+    {
+      name: "encodingName",
+      type: "string",
+      isOptional: true,
+      defaultValue: "cl100k_base",
+      description: "Name of the token encoding to use. Derived from `modelName` if available.",
+    },
+    {
+      name: "allowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "Set of special tokens allowed during tokenization, or 'all' to allow all special tokens",
+    },
+    {
+      name: "disallowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      defaultValue: "all",
+      description: "Set of special tokens to disallow during tokenization, or 'all' to disallow all special tokens",
+    },
+  ]}
+/>
 
 ### Token
 

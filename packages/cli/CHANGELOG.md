@@ -1,5 +1,27 @@
 # mastra
 
+## 0.10.21-alpha.1
+
+### Patch Changes
+
+- 63449d0: Change the globbing of tools to exclude test files. Files inside `__tests__` directory and files with `.test.` or `.spec.` in their file name are now excluded from bundling.
+- Updated dependencies [2e74797]
+- Updated dependencies [63449d0]
+  - @mastra/core@0.13.2-alpha.1
+  - @mastra/deployer@0.13.2-alpha.1
+
+## 0.10.21-alpha.0
+
+### Patch Changes
+
+- 7aad750: Fix tool ui showing after message when chat is refreshed
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+  - @mastra/core@0.13.2-alpha.0
+  - @mastra/deployer@0.13.2-alpha.0
+
 ## 0.10.20
 
 ### Patch Changes
