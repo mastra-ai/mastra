@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- 2e74797: Fix tool arguments being lost when tool-result messages arrive separately from tool-call messages or when messages are restored from database. Tool invocations now correctly preserve their arguments in all scenarios.
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+
 ## 0.13.2-alpha.0
 
 ### Patch Changes

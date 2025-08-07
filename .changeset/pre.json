@@ -73,11 +73,15 @@
     "@mastra/inngest": "0.11.9"
   },
   "changesets": [
+    "cool-humans-pay",
+    "cuddly-wombats-cover",
+    "curly-seals-sniff",
     "fluffy-cameras-greet",
     "great-worms-brake",
     "green-buttons-swim",
     "pink-apes-turn",
     "red-walls-punch",
+    "silly-singers-fix",
     "silver-cycles-listen"
   ]
 }

@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 0.12.2-alpha.1
+
+### Patch Changes
+
+- da62f49: When using a schema for working memory, make that the tools schema so the agent better understands the schema.
+- Updated dependencies [2e74797]
+- Updated dependencies [63449d0]
+  - @mastra/core@0.13.2-alpha.1
+
 ## 0.12.2-alpha.0
 
 ### Patch Changes
