@@ -1,15 +1,21 @@
 import { mastra } from './mastra';
 
 async function main() {
-  const myWorkflow = mastra.getWorkflow('myWorkflow');
-  const { start } = myWorkflow.createRun();
+  const run = await mastra.getWorkflow('myWorkflow').createRunAsync();
   try {
-    const res = await start({
-      triggerData: {
-        inputValue: 30,
+    const res = await run.start({
+      inputData: {
+        inputValue: 12,
       },
     });
-    console.log(res.results);
+
+    if (res.status === 'success') {
+      console.log(res.result);
+    } else if (res.status === 'failed') {
+      console.log('Workflow failed:', res.error);
+    } else {
+      console.log('Workflow suspended:', res.suspended);
+    }
   } catch (e) {
     console.log(e);
   }

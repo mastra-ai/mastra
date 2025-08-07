@@ -22,6 +22,7 @@ Use `chunk` to split documents into manageable pieces. Mastra supports multiple 
 - `character`: Simple character-based splits
 - `token`: Token-aware splitting
 - `markdown`: Markdown-aware splitting
+- `semantic-markdown`: Markdown splitting based on related header families
 - `html`: HTML structure-aware splitting
 - `json`: JSON structure-aware splitting
 - `latex`: LaTeX structure-aware splitting
@@ -53,6 +54,16 @@ const chunks = await doc.chunk({
   overlap: 0,
   sentenceEnders: ["."],
   keepSeparator: true,
+});
+```
+
+For markdown documents where preserving the semantic relationships between sections is important, here's an example of how to use the `semantic-markdown` strategy:
+
+```ts showLineNumbers copy
+const chunks = await doc.chunk({
+  strategy: "semantic-markdown",
+  joinThreshold: 500,
+  modelName: "gpt-3.5-turbo",
 });
 ```
 

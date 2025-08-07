@@ -27,7 +27,7 @@ This template demonstrates how to build an AI coding assistant that can work wit
 1. **Clone and install dependencies:**
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/mastra-ai/template-coding-agent.git
    cd template-coding-agent
    pnpm install
    ```
@@ -49,83 +49,6 @@ This template demonstrates how to build an AI coding assistant that can work wit
    ```bash
    pnpm run dev
    ```
-
-## Usage
-
-### Using the Coding Agent
-
-The coding agent provides a conversational interface for development tasks:
-
-```typescript
-import { mastra } from './src/mastra/index';
-
-const agent = mastra.getAgent('codingAgent');
-
-const response = await agent.stream([
-  {
-    role: 'user',
-    content: 'Create a Python script that analyzes CSV data and generates visualizations',
-  },
-]);
-
-for await (const chunk of response.textStream) {
-  console.log(chunk);
-}
-```
-
-### Example Interactions
-
-#### **Python Data Analysis Project**
-
-```typescript
-const response = await agent.stream([
-  {
-    role: 'user',
-    content: `
-      Create a complete data analysis project with:
-      1. A Python script that reads CSV files
-      2. Generate statistical summaries
-      3. Create data visualizations with matplotlib
-      4. Export results to different formats
-    `,
-  },
-]);
-```
-
-#### **JavaScript/TypeScript Web Development**
-
-```typescript
-const response = await agent.stream([
-  {
-    role: 'user',
-    content: `
-      Set up a TypeScript project with:
-      1. Proper tsconfig.json configuration
-      2. A simple Express.js API server
-      3. Basic middleware and routing
-      4. Build and watch scripts
-    `,
-  },
-]);
-```
-
-#### **Multi-File Project with Testing**
-
-```typescript
-const response = await agent.stream([
-  {
-    role: 'user',
-    content: `
-      Create a Python package with:
-      1. Proper directory structure
-      2. Core functionality modules
-      3. Unit tests with pytest
-      4. Requirements and setup files
-      5. Documentation
-    `,
-  },
-]);
-```
 
 ## Architecture
 
@@ -178,71 +101,12 @@ Complete toolkit for sandbox interaction:
 
 ### Memory System
 
-The agent includes a sophisticated memory system:
+The agent includes a configured memory system:
 
 - **Thread Management**: Automatic conversation title generation
 - **Semantic Recall**: Search through previous interactions
 - **Working Memory**: Maintains context across interactions
-- **Vector Storage**: Semantic search capabilities with LibSQL
-
-## Tool Categories & Usage Patterns
-
-### **Project Planning & Structure**
-
-1. Analyze requirements and design architecture
-2. Plan directory structure and file organization
-3. Create foundation with proper tooling configuration
-4. Implement components incrementally with validation
-5. Monitor and optimize with live development tools
-
-### **Multi-File Project Workflow**
-
-For complex projects requiring multiple files:
-
-1. **Environment Setup**: Create sandbox, install dependencies
-2. **Structure Creation**: Use `createDirectory` and `writeFiles` for scaffolding
-3. **Live Development**: Enable `watchDirectory` for change monitoring
-4. **Incremental Building**: Write, test, and validate progressively
-5. **Integration Testing**: Run complete system validation
-
-### **Language-Specific Workflows**
-
-#### **TypeScript/JavaScript Projects**
-
-- Initialize with `package.json` and TypeScript configuration
-- Set up build processes with live compilation monitoring
-- Run development servers with streaming command execution
-- Manage npm installations and environment setup
-
-#### **Python Projects**
-
-- Set up virtual environments and dependency management
-- Create proper package structure with `__init__.py` files
-- Implement testing frameworks and validation
-- Monitor execution and changes during development
-
-## Development Best Practices
-
-### **File Operations Optimization**
-
-- Use `writeFiles` for batch operations to reduce API calls
-- Check file existence before operations to prevent errors
-- Monitor file sizes for large outputs or failed operations
-- Implement proper directory structures for organization
-
-### **Error Handling & Recovery**
-
-- Validate paths and permissions before file operations
-- Handle missing directories with proper creation
-- Parse command error outputs for actionable feedback
-- Provide clear error messages with suggested fixes
-
-### **Security & Resource Management**
-
-- Maintain sandbox isolation and resource limits
-- Validate file paths and prevent directory traversal
-- Use proper timeouts for all operations
-- Monitor resource usage and prevent overconsumption
+- **Vector Storage**: Semantic search capabilities with `LibSQLVector`
 
 ## Configuration
 
@@ -268,54 +132,6 @@ export const codingAgent = new Agent({
   // ... other configuration
 });
 ```
-
-## Advanced Features
-
-### **Live Development Workflow**
-
-- Set up file watchers before making changes
-- Use streaming commands for long-running processes
-- Monitor performance and file changes continuously
-- Provide real-time feedback on build processes
-
-### **Multi-Language Projects**
-
-- Coordinate between different language ecosystems
-- Share data and configurations between components
-- Use appropriate build tools for each language
-- Implement inter-process communication
-
-### **Professional Development Patterns**
-
-- Multi-stage build processes with dependency management
-- Live reload and hot-swapping for development efficiency
-- Performance profiling and optimization recommendations
-- Automated testing and continuous integration workflows
-
-## Example Projects
-
-The agent can handle various development scenarios:
-
-### **Data Science Project**
-
-- Python environment setup with scientific libraries
-- CSV data processing and analysis
-- Statistical computations and visualizations
-- Report generation and export capabilities
-
-### **Web Application**
-
-- TypeScript/JavaScript project setup
-- Express.js or React application development
-- Build configuration and development servers
-- Testing and deployment preparation
-
-### **API Development**
-
-- RESTful API creation with proper routing
-- Database integration and ORM setup
-- Authentication and middleware implementation
-- Documentation and testing frameworks
 
 ## Common Issues
 
@@ -343,73 +159,23 @@ The agent can handle various development scenarios:
 - Check sandbox file system limits
 - Ensure directories exist before file operations
 
+### "Agent stopping with tool-call reason"
+
+- Increase `maxSteps` in the agent configuration
+
 ## Development
 
 ### Project Structure
 
 ```text
 src/mastra/
-   agents/
-      coding-agent.ts              # Main coding agent with development capabilities
-   tools/
-      e2b.ts                      # Complete E2B sandbox interaction toolkit
-   index.ts                        # Mastra configuration with storage and logging
+      agents/
+        coding-agent.ts              # Main coding agent with development capabilities
+      tools/
+        e2b.ts                      # Complete E2B sandbox interaction toolkit
+      index.ts                        # Mastra configuration with storage and logging
 ```
-
-### Testing
-
-```bash
-# Start the development server
-pnpm run dev
-
-# Test with a simple code execution
-curl -X POST http://localhost:4000/agents/codingAgent/generate \
-  -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "Write a Python script that prints Hello World"}]}'
-```
-
-## What Makes This Template Special
-
-### **=' Complete Development Environment**
-
-- Full-featured coding agent with professional development capabilities
-- Secure, isolated execution environments for safe code testing
-- Comprehensive file management with batch operations
-
-### **¡ Multi-Language Support**
-
-- Python, JavaScript, and TypeScript execution
-- Language-specific development workflows
-- Cross-language project coordination
-
-### **>à Intelligent Memory System**
-
-- Persistent conversation context
-- Semantic search through development history
-- Working memory for maintaining project state
-
-### **=Ê Live Development Monitoring**
-
-- File system change monitoring
-- Real-time build process feedback
-- Performance tracking and optimization
-
-### **=€ Professional Development Patterns**
-
-- Multi-file project management
-- Build automation and dependency management
-- Testing frameworks and validation
-- Documentation generation and project analytics
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## License
 
 This project is part of the Mastra ecosystem and follows the same licensing terms.
-

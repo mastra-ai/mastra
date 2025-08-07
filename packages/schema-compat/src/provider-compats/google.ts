@@ -1,7 +1,7 @@
-import type { LanguageModelV1 } from 'ai';
 import type { ZodTypeAny } from 'zod';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
+import type { ModelInformation } from '../schema-compatibility';
 import {
   SchemaCompatLayer,
   UNSUPPORTED_ZOD_TYPES,
@@ -15,7 +15,7 @@ import {
 } from '../schema-compatibility';
 
 export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: LanguageModelV1) {
+  constructor(model: ModelInformation) {
     super(model);
   }
 
