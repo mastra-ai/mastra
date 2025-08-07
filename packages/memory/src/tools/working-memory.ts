@@ -1,9 +1,9 @@
 import type { MemoryConfig } from '@mastra/core';
 import { createTool } from '@mastra/core';
-import { z, type ZodTypeAny } from 'zod';
-import { ZodObject } from 'zod';
 import { convertSchemaToZod } from '@mastra/schema-compat';
 import type { Schema } from 'ai';
+import { z, ZodObject } from 'zod';
+import type { ZodTypeAny } from 'zod';
 
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
   const schema = memoryConfig?.workingMemory?.schema;
