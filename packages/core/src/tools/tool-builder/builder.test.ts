@@ -302,8 +302,8 @@ describe('Tool Schema Compatibility', () => {
             if (
               (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null'))) ||
               // This works consistently locally but for some reason keeps failing in CI,
-              (model.modelId.includes('gpt-4o-mini') ||
-                model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
+              model.modelId.includes('gpt-4o-mini') ||
+              (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
             ) {
               it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
               return;
