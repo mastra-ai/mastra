@@ -119,7 +119,7 @@ type StringConstraints = {
   uuid?: boolean;
   cuid?: boolean;
   emoji?: boolean;
-  regex?: { pattern: string; flags?: string };
+  regex?: string;
 };
 
 type NumberConstraints = {
@@ -398,10 +398,7 @@ export abstract class SchemaCompatLayer {
         if (handleChecks.includes(check.kind as StringCheckType)) {
           switch (check.kind) {
             case 'regex': {
-              constraints.regex = {
-                pattern: check.regex.source,
-                flags: check.regex.flags,
-              };
+              constraints.regex = `A string that must match the regex pattern: ${check.regex.source}, with flags: ${check.regex.flags}`;
               break;
             }
             case 'emoji': {
