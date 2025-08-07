@@ -1,45 +1,72 @@
 ---
-title: "Reference: Agent.generate() | Agents | Mastra Docs"
+title: "Reference: generate() | Agents | Mastra Docs"
 description: "Documentation for the `.generate()` method in Mastra agents, which produces text or structured responses."
 ---
 
-# Agent.generate()
+# generate()
 
-The `generate()` method is used to interact with an agent to produce text or structured responses. This method accepts `messages` and an optional `options` object as parameters.
+The `.generate()` method is used to interact with an agent to produce text or structured responses. This method accepts messages and optional generation options.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const response = await agent.generate("message for agent");
+```
 
 ## Parameters
 
-### `messages`
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects with multimodal content (text, images, etc.).",
+    },
+    {
+      name: "options",
+      type: "AgentGenerateOptions",
+      isOptional: true,
+      description: "Optional configuration for the generation process.",
+    },
+  ]}
+/>
 
-The `messages` parameter can be:
+## Extended usage example
 
-- A single string
-- An array of strings
-- An array of message objects with `role` and `content` properties
-- An array of `UIMessageWithMetadata` objects (for messages with metadata)
-
-The message object structures:
-
-```typescript
-interface Message {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
-
-// For messages with metadata
-interface UIMessageWithMetadata {
-  role: "user" | "assistant";
-  content: string;
-  parts: Array<{ type: string; text?: string; [key: string]: any }>;
-  metadata?: Record<string, unknown>; // Optional metadata field
-}
+```typescript showLineNumbers copy
+const response = await agent.generate([
+  { role: "user", content: "message for agent" },
+  {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: "message for agent"
+      },
+      {
+        type: "image",
+        imageUrl: "https://example.com/image.jpg",
+        mimeType: "image/jpeg"
+      }
+    ]
+  }
+], {
+  temperature: 0.7,
+  maxSteps: 3,
+  memory: {
+    thread: "user-123",
+    resource: "test-app"
+  },
+  toolChoice: "auto",
+  providerOptions: {
+    openai: {
+      reasoningEffort: "high"
+    }
+  }
+});
 ```
 
-When using `UIMessageWithMetadata`, the metadata will be preserved throughout the conversation and stored with the messages in memory.
-
-### `options` (Optional)
-
-An optional object that can include configuration for output structure, memory management, tool usage, telemetry, and more.
+### Options parameters
 
 <PropertiesTable
   content={[
@@ -124,13 +151,6 @@ An optional object that can include configuration for output structure, memory m
       description: "Maximum number of retries. Set to 0 to disable retries.",
     },
     {
-      name: "memoryOptions",
-      type: "MemoryConfig",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.options` instead. Configuration options for memory management. See MemoryConfig section below for details.",
-    },
-    {
       name: "onStepFinish",
       type: "GenerateTextOnStepFinishCallback<any> | never",
       isOptional: true,
@@ -138,18 +158,51 @@ An optional object that can include configuration for output structure, memory m
         "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
     },
     {
-      name: "resourceId",
+      name: "runId",
       type: "string",
       isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for telemetry collection during generation. See TelemetrySettings section below for details.",
+        "Settings for telemetry collection during generation.",
+      properties: [
+        {
+          parameters: [{
+            name: "isEnabled",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable telemetry. Disabled by default while experimental."
+          }]
+        },
+        {
+          parameters: [{
+            name: "recordInputs",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
+          }]
+        },
+        {
+          parameters: [{
+            name: "recordOutputs",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
+          }]
+        },
+        {
+          parameters: [{
+            name: "functionId",
+            type: "string",
+            isOptional: true,
+            description: "Identifier for this function. Used to group telemetry data by function."
+          }]
+        }
+      ]
     },
     {
       name: "temperature",
@@ -159,18 +212,41 @@ An optional object that can include configuration for output structure, memory m
         "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
     },
     {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
-    },
-    {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
       isOptional: true,
       defaultValue: "'auto'",
       description: "Controls how the agent uses tools during generation.",
+      properties: [
+        {
+          parameters: [{
+            name: "'auto'",
+            type: "string",
+            description: "Let the model decide whether to use tools (default)."
+          }]
+        },
+        {
+          parameters: [{
+            name: "'none'",
+            type: "string",
+            description: "Do not use any tools."
+          }]
+        },
+        {
+          parameters: [{
+            name: "'required'",
+            type: "string",
+            description: "Require the model to use at least one tool."
+          }]
+        },
+        {
+          parameters: [{
+            name: "{ type: 'tool'; toolName: string }",
+            type: "object",
+            description: "Require the model to use a specific tool by name."
+          }]
+        }
+      ]
     },
     {
       name: "toolsets",
@@ -191,169 +267,105 @@ An optional object that can include configuration for output structure, memory m
       type: "boolean",
       isOptional: true,
       description: "Save messages incrementally after each stream step completes (default: false).",
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, JSONValue>>",
+      isOptional: true,
+      description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. Since Mastra extends AI SDK, see the [AI SDK documentation](https://sdk.vercel.ai/docs/providers/ai-sdk-providers) for complete provider options.",
+      properties: [
+        {
+          parameters: [{
+            name: "openai",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`"
+          }]
+        },
+        {
+          parameters: [{
+            name: "anthropic",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "Anthropic-specific options. Example: `{ maxTokens: 1000 }`"
+          }]
+        },
+        {
+          parameters: [{
+            name: "google",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "Google-specific options. Example: `{ safetySettings: [...] }`"
+          }]
+        },
+        {
+          parameters: [{
+            name: "[providerName]",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options."
+          }]
+        }
+      ]
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description: "Runtime context for dependency injection and contextual information.",
+    },
+    {
+      name: "maxTokens",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of tokens to generate.",
+    },
+    {
+      name: "topP",
+      type: "number",
+      isOptional: true,
+      description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either `temperature` or `topP`, but not both.",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
+    },
+    {
+      name: "presencePenalty",
+      type: "number",
+      isOptional: true,
+      description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+    },
+    {
+      name: "frequencyPenalty",
+      type: "number",
+      isOptional: true,
+      description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+    },
+    {
+      name: "stopSequences",
+      type: "string[]",
+      isOptional: true,
+      description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
+    },
+    {
+      name: "seed",
+      type: "number",
+      isOptional: true,
+      description: "The seed (integer) to use for random sampling. If set and supported by the model, calls will generate deterministic results.",
+    },
+    {
+      name: "headers",
+      type: "Record<string, string | undefined>",
+      isOptional: true,
+      description: "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
     }
   ]}
 />
 
-#### MemoryConfig
-
-Configuration options for memory management:
-
-<PropertiesTable
-  content={[
-    {
-      name: "lastMessages",
-      type: "number | false",
-      isOptional: true,
-      description:
-        "Number of most recent messages to include in context. Set to false to disable.",
-    },
-    {
-      name: "semanticRecall",
-      type: "boolean | object",
-      isOptional: true,
-      description:
-        "Configuration for semantic memory recall. Can be boolean or detailed config.",
-      properties: [
-        {
-          type: "number",
-          parameters: [
-            {
-              name: "topK",
-              type: "number",
-              isOptional: true,
-              description:
-                "Number of most semantically similar messages to retrieve.",
-            },
-          ],
-        },
-        {
-          type: "number | object",
-          parameters: [
-            {
-              name: "messageRange",
-              type: "number | { before: number; after: number }",
-              isOptional: true,
-              description:
-                "Range of messages to consider for semantic search. Can be a single number or before/after configuration.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "workingMemory",
-      type: "object",
-      isOptional: true,
-      description: "Configuration for working memory.",
-      properties: [
-        {
-          type: "boolean",
-          parameters: [
-            {
-              name: "enabled",
-              type: "boolean",
-              isOptional: true,
-              description: "Whether to enable working memory.",
-            },
-          ],
-        },
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "template",
-              type: "string",
-              isOptional: true,
-              description: "Template to use for working memory.",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "threads",
-      type: "object",
-      isOptional: true,
-      description: "Thread-specific memory configuration.",
-      properties: [
-        {
-          type: "boolean | object",
-          parameters: [
-            {
-              name: "generateTitle",
-              type: "boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>), instructions: string | ((ctx: RuntimeContext) => string | Promise<string>) }",
-              isOptional: true,
-              description:
-                `Controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object specifying a custom model and/or custom instructions for title generation (useful for cost optimization or title customization).
-Example: { model: openai('gpt-4.1-nano'), instructions: 'Generate a concise title based on the initial user message.' }`,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
-/>
-
-#### TelemetrySettings
-
-Settings for telemetry collection during generation:
-
-<PropertiesTable
-  content={[
-    {
-      name: "isEnabled",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description:
-        "Enable or disable telemetry. Disabled by default while experimental.",
-    },
-    {
-      name: "recordInputs",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description:
-        "Enable or disable input recording. You might want to disable this to avoid recording sensitive information, reduce data transfers, or increase performance.",
-    },
-    {
-      name: "recordOutputs",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "true",
-      description:
-        "Enable or disable output recording. You might want to disable this to avoid recording sensitive information, reduce data transfers, or increase performance.",
-    },
-    {
-      name: "functionId",
-      type: "string",
-      isOptional: true,
-      description:
-        "Identifier for this function. Used to group telemetry data by function.",
-    },
-    {
-      name: "metadata",
-      type: "Record<string, AttributeValue>",
-      isOptional: true,
-      description:
-        "Additional information to include in the telemetry data. AttributeValue can be string, number, boolean, array of these types, or null.",
-    },
-    {
-      name: "tracer",
-      type: "Tracer",
-      isOptional: true,
-      description:
-        "A custom OpenTelemetry tracer instance to use for the telemetry data. See OpenTelemetry documentation for details.",
-    },
-  ]}
-/>
-
 ## Returns
-
-The return value of the `generate()` method depends on the options provided, specifically the `output` option.
-
-### PropertiesTable for Return Values
 
 <PropertiesTable
   content={[
@@ -361,45 +373,37 @@ The return value of the `generate()` method depends on the options provided, spe
       name: "text",
       type: "string",
       isOptional: true,
-      description:
-        "The generated text response. Present when output is 'text' (no schema provided).",
+      description: "The generated text response. Present when output is 'text' (no schema provided).",
     },
     {
       name: "object",
       type: "object",
       isOptional: true,
-      description:
-        "The generated structured response. Present when a schema is provided via `output` or `experimental_output`.",
+      description: "The generated structured response. Present when a schema is provided via `output` or `experimental_output`.",
     },
     {
       name: "toolCalls",
       type: "Array<ToolCall>",
       isOptional: true,
-      description:
-        "The tool calls made during the generation process. Present in both text and object modes.",
+      description: "The tool calls made during the generation process. Present in both text and object modes.",
+      properties: [
+        {
+          parameters: [{
+            name: "toolName",
+            type: "string",
+            required: true,
+            description: "The name of the tool invoked."
+          }]
+        },
+        {
+          parameters: [{
+            name: "args",
+            type: "any",
+            required: true,
+            description: "The arguments passed to the tool."
+          }]
+        }
+      ]
     },
   ]}
 />
-
-#### ToolCall Structure
-
-<PropertiesTable
-  content={[
-    {
-      name: "toolName",
-      type: "string",
-      required: true,
-      description: "The name of the tool invoked.",
-    },
-    {
-      name: "args",
-      type: "any",
-      required: true,
-      description: "The arguments passed to the tool.",
-    },
-  ]}
-/>
-
-## Related Methods
-
-For real-time streaming responses, see the [`stream()`](./stream.mdx) method documentation.
