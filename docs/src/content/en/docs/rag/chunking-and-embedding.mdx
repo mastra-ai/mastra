@@ -22,21 +22,48 @@ Use `chunk` to split documents into manageable pieces. Mastra supports multiple 
 - `character`: Simple character-based splits
 - `token`: Token-aware splitting
 - `markdown`: Markdown-aware splitting
+- `semantic-markdown`: Markdown splitting based on related header families
 - `html`: HTML structure-aware splitting
 - `json`: JSON structure-aware splitting
 - `latex`: LaTeX structure-aware splitting
+- `sentence`: Sentence-aware splitting
+
+**Note:** Each strategy accepts different parameters optimized for its chunking approach.
 
 Here's an example of how to use the `recursive` strategy:
 
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 512,
+  maxSize: 512,
   overlap: 50,
-  separator: "\n",
+  separators: ["\n"],
   extract: {
     metadata: true, // Optionally extract metadata
   },
+});
+```
+
+For text where preserving sentence structure is important, here's an example of how to use the `sentence` strategy:
+
+```ts showLineNumbers copy
+const chunks = await doc.chunk({
+  strategy: "sentence",
+  maxSize: 450,
+  minSize: 50,
+  overlap: 0,
+  sentenceEnders: ["."],
+  keepSeparator: true,
+});
+```
+
+For markdown documents where preserving the semantic relationships between sections is important, here's an example of how to use the `semantic-markdown` strategy:
+
+```ts showLineNumbers copy
+const chunks = await doc.chunk({
+  strategy: "semantic-markdown",
+  joinThreshold: 500,
+  modelName: "gpt-3.5-turbo",
 });
 ```
 
@@ -130,7 +157,7 @@ const doc = MDocument.fromText(`
 // Create chunks
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 256,
+  maxSize: 256,
   overlap: 50,
 });
 

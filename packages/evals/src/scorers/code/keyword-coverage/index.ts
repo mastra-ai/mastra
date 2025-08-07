@@ -1,14 +1,16 @@
 import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import keyword_extractor from 'keyword-extractor';
 
 export function createKeywordCoverageScorer() {
-  return createScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Completeness',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
-    extract: async run => {
-      const input = run.input?.map(i => i.content).join(', ') || '';
-      const output = run.output.text;
+  })
+    .preprocess(async ({ run }) => {
+      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
+      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
 
       if (!input && !output) {
         return {
@@ -31,36 +33,37 @@ export function createKeywordCoverageScorer() {
       const referenceKeywords = new Set(extractKeywords(input));
       const responseKeywords = new Set(extractKeywords(output));
       return {
-        result: {
-          referenceKeywords,
-          responseKeywords,
-        },
+        referenceKeywords,
+        responseKeywords,
       };
-    },
-    analyze: async run => {
-      if (!run.extractStepResult?.referenceKeywords.size && !run.extractStepResult?.responseKeywords.size) {
+    })
+    .analyze(async ({ results }) => {
+      if (
+        !results.preprocessStepResult?.referenceKeywords?.size &&
+        !results.preprocessStepResult?.responseKeywords?.size
+      ) {
         return {
-          score: 1,
-          result: {
-            totalKeywords: 0,
-            matchedKeywords: 0,
-          },
+          totalKeywordsLength: 0,
+          matchedKeywordsLength: 0,
         };
       }
 
-      const matchedKeywords = [...run.extractStepResult?.referenceKeywords].filter(k =>
-        run.extractStepResult?.responseKeywords.has(k),
+      const matchedKeywords = [...results.preprocessStepResult?.referenceKeywords].filter(k =>
+        results.preprocessStepResult?.responseKeywords?.has(k),
       );
-      const totalKeywords = run.extractStepResult?.referenceKeywords.size;
-      const coverage = totalKeywords > 0 ? matchedKeywords.length / totalKeywords : 0;
 
       return {
-        score: coverage,
-        result: {
-          totalKeywords: run.extractStepResult?.referenceKeywords.size,
-          matchedKeywords: matchedKeywords.length,
-        },
+        totalKeywordsLength: Array.from(results.preprocessStepResult?.referenceKeywords).length ?? 0,
+        matchedKeywordsLength: matchedKeywords.length ?? 0,
       };
-    },
-  });
+    })
+    .generateScore(({ results }) => {
+      if (!results.analyzeStepResult?.totalKeywordsLength) {
+        return 1;
+      }
+
+      const totalKeywords = results.analyzeStepResult?.totalKeywordsLength!;
+      const matchedKeywords = results.analyzeStepResult?.matchedKeywordsLength!;
+      return totalKeywords > 0 ? matchedKeywords / totalKeywords : 0;
+    });
 }

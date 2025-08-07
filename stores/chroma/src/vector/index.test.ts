@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import { describe, expect, beforeEach, afterEach, it, beforeAll, afterAll, vi } from 'vitest';
 
@@ -1546,5 +1547,25 @@ describe('ChromaVector Integration Tests', () => {
       }
       expect(pages).toHaveLength(Math.ceil(batchSize / pageSize));
     }, 30000);
+  });
+});
+
+// Metadata filtering tests for Memory system
+describe('Chroma Metadata Filtering', () => {
+  const chromaVector = new ChromaVector({ path: 'http://localhost:8000' });
+
+  createVectorTestSuite({
+    vector: chromaVector,
+    createIndex: async (indexName: string) => {
+      // Using dimension 4 as required by the metadata filtering test vectors
+      await chromaVector.createIndex({ indexName, dimension: 4 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await chromaVector.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // Chroma may need a short wait for indexing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    },
   });
 });

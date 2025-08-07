@@ -30,10 +30,10 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
-import type { MastraScorers } from '../scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import { MastraAgentStream } from '../stream/MastraAgentStream';
-import type { ChunkType } from '../stream/MastraAgentStream';
+import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
 import type { CoreTool } from '../tools/types';
@@ -60,12 +60,12 @@ import type {
   ToolsInput,
   AgentMemoryOption,
 } from './types';
-export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
+export type { ChunkType } from '../stream/types';
+export type { MastraAgentStream } from '../stream/MastraAgentStream';
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
 export * from './types';
-type IDGenerator = () => string;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -109,6 +109,8 @@ function resolveThreadIdFromArgs(args: {
     'getDefaultGenerateOptions',
     'getDefaultStreamOptions',
     'getDescription',
+    'getScorers',
+    'getVoice',
   ],
 })
 export class Agent<
@@ -878,71 +880,29 @@ export class Agent<
     const memoryTools = memory?.getTools?.();
 
     if (memoryTools) {
-      const memoryToolEntries = await Promise.all(
-        Object.entries(memoryTools).map(async ([k, tool]) => {
-          return [
-            k,
-            {
-              description: tool.description,
-              parameters: tool.parameters,
-              execute:
-                typeof tool?.execute === 'function'
-                  ? async (args: any, options: any) => {
-                      try {
-                        this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
-                          name: k,
-                          description: tool.description,
-                          args,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        return (
-                          tool?.execute?.(
-                            {
-                              context: args,
-                              mastra: mastraProxy as MastraUnion | undefined,
-                              memory,
-                              runId,
-                              threadId,
-                              resourceId,
-                              logger: this.logger,
-                              agentName: this.name,
-                              runtimeContext,
-                            },
-                            options,
-                          ) ?? undefined
-                        );
-                      } catch (err) {
-                        const mastraError = new MastraError(
-                          {
-                            id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
-                            domain: ErrorDomain.AGENT,
-                            category: ErrorCategory.USER,
-                            details: {
-                              agentName: this.name,
-                              runId: runId || '',
-                              threadId: threadId || '',
-                              resourceId: resourceId || '',
-                            },
-                            text: `[Agent:${this.name}] - Failed memory tool execution`,
-                          },
-                          err,
-                        );
-                        this.logger.trackException(mastraError);
-                        this.logger.error(mastraError.toString());
-                        throw mastraError;
-                      }
-                    }
-                  : undefined,
-            },
-          ] as [string, CoreTool];
-        }),
+      this.logger.debug(
+        `[Agent:${this.name}] - Adding tools from memory ${Object.keys(memoryTools || {}).join(', ')}`,
+        {
+          runId,
+        },
       );
-
-      convertedMemoryTools = Object.fromEntries(
-        memoryToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
-      );
+      for (const [toolName, tool] of Object.entries(memoryTools)) {
+        const toolObj = tool;
+        const options = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          runtimeContext,
+          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+        };
+        const convertedToCoreTool = makeCoreTool(toolObj, options);
+        convertedMemoryTools[toolName] = convertedToCoreTool;
+      }
     }
     return convertedMemoryTools;
   }
@@ -1392,7 +1352,6 @@ export class Agent<
     toolsets,
     clientTools,
     runtimeContext,
-    generateMessageId,
     saveQueueManager,
     writableStream,
   }: {
@@ -1406,7 +1365,6 @@ export class Agent<
     runId?: string;
     messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
     runtimeContext: RuntimeContext;
-    generateMessageId: undefined | IDGenerator;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
   }) {
@@ -1452,7 +1410,7 @@ export class Agent<
         const messageList = new MessageList({
           threadId,
           resourceId,
-          generateMessageId,
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1623,7 +1581,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const processedList = new MessageList({
           threadId: threadObject.id,
           resourceId,
-          generateMessageId: this.#mastra?.generateId.bind(this.#mastra),
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1656,7 +1614,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         runId,
         messageList,
         threadExists,
-        toolCallsCollection,
         structuredOutput = false,
       }: {
         runId: string;
@@ -1667,7 +1624,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText: string;
         messageList: MessageList;
         threadExists: boolean;
-        toolCallsCollection: Map<string, any>;
         structuredOutput?: boolean;
       }) => {
         const resToLog = {
@@ -1695,6 +1651,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const messageListResponses = new MessageList({
           threadId,
           resourceId,
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1730,7 +1687,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               ];
             }
             if (responseMessages) {
-              messageList.add(responseMessages, 'response');
+              // Remove IDs from response messages to ensure the custom ID generator is used
+              const messagesWithoutIds = responseMessages.map((m: any) => {
+                const { id, ...messageWithoutId } = m;
+                return messageWithoutId;
+              });
+              messageList.add(messagesWithoutIds, 'response');
             }
 
             if (!threadExists) {
@@ -1798,20 +1760,30 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             this.logger.error(mastraError.toString());
             throw mastraError;
           }
+        } else {
+          let responseMessages = result.response.messages;
+          if (!responseMessages && result.object) {
+            responseMessages = [
+              {
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'text',
+                    text: outputText, // outputText contains the stringified object
+                  },
+                ],
+              },
+            ];
+          }
+          if (responseMessages) {
+            messageList.add(responseMessages, 'response');
+          }
         }
-
-        const outputForScoring = {
-          text: result?.text,
-          object: result?.object,
-          usage: result?.usage,
-          toolCalls: Array.from(toolCallsCollection.values()),
-        };
 
         await this.#runScorers({
           messageList,
           runId,
           outputText,
-          output: outputForScoring,
           instructions,
           runtimeContext,
           structuredOutput,
@@ -1824,14 +1796,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     messageList,
     runId,
     outputText,
-    output,
     instructions,
     runtimeContext,
     structuredOutput,
   }: {
     messageList: MessageList;
     runId: string;
-    output: Record<string, any>;
     outputText: string;
     instructions: string;
     runtimeContext: RuntimeContext;
@@ -1859,14 +1829,23 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const scorers = await this.getScorers({ runtimeContext });
 
+    const scorerInput: ScorerRunInputForAgent = {
+      inputMessages: messageList.getPersisted.input.ui(),
+      rememberedMessages: messageList.getPersisted.remembered.ui(),
+      systemMessages: messageList.getSystemMessages(),
+      taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
+    };
+
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
+
     if (Object.keys(scorers || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorers)) {
         runScorer({
           scorerId: id,
           scorerObject: scorerObject,
           runId,
-          input: userInputMessages,
-          output,
+          input: scorerInput,
+          output: scorerOutput,
           runtimeContext,
           entity: {
             id: this.id,
@@ -1989,10 +1968,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...args
     } = options;
 
-    const generateMessageId =
-      `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
-        ? (args.experimental_generateMessageId as IDGenerator)
-        : undefined;
+    // Currently not being used, but should be kept around for now in case it's needed later
+    // const generateMessageId =
+    //   `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
+    //     ? (args.experimental_generateMessageId as IDGenerator)
+    //     : undefined;
 
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
     const resourceId = args.memory?.resource || resourceIdFromArgs;
@@ -2046,7 +2026,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       toolsets,
       clientTools,
       runtimeContext,
-      generateMessageId,
       saveQueueManager,
       writableStream,
     });
@@ -2055,7 +2034,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     let thread: StorageThreadType | null | undefined;
     let threadExists: boolean;
 
-    const toolCallsCollection = new Map();
     return {
       llm,
       before: async () => {
@@ -2101,12 +2079,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               });
             }
 
-            if (props.finishReason === 'tool-calls') {
-              for (const toolCall of props.toolCalls) {
-                toolCallsCollection.set(toolCall.toolCallId, toolCall);
-              }
-            }
-
             return onStepFinish?.({ ...props, runId });
           },
           ...(beforeResult.tripwire && {
@@ -2137,7 +2109,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           memoryConfig,
           runId,
           messageList,
-          toolCallsCollection,
           structuredOutput,
           threadExists,
         });

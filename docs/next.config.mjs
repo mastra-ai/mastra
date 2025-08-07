@@ -127,8 +127,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/deployment/deployment",
-        destination: "/docs/deployment/serverless-platforms",
+        source: "/:locale/docs/deployment/deployment",
+        destination: "/:locale/docs/deployment/serverless-platforms",
         permanent: true,
       },
       {
@@ -728,6 +728,11 @@ export default withGT(
       {
         source: "/examples/workflows/agent-and-tool-interop",
         destination: "/examples/workflows/agent-as-step",
+        permanent: true,
+      },
+      {
+        source: "/reference/agents/createTool",
+        destination: "/reference/tools/create-tool",
         permanent: true,
       },
     ],

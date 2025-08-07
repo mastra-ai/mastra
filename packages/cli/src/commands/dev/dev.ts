@@ -177,8 +177,15 @@ export async function dev({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
+  // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
   const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
-  const discoveredTools = [defaultToolsPath, ...(tools || [])];
+  const defaultToolsIgnorePaths = [
+    `!${join(mastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+    `!${join(mastraDir, 'tools/**/__tests__/**')}`,
+  ];
+  // We pass an array to globby to allow for the aforementioned negations
+  const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
+  const discoveredTools = [defaultTools, ...(tools ?? [])];
   const startOptions = { inspect, inspectBrk, customArgs };
 
   const fileService = new FileService();

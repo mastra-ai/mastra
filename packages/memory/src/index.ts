@@ -1,5 +1,5 @@
 import { generateEmptyFromSchema } from '@mastra/core';
-import type { CoreTool, MastraMessageV1 } from '@mastra/core';
+import type { MastraMessageV1, ToolAction } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
@@ -948,7 +948,7 @@ ${
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
-  public getTools(config?: MemoryConfig): Record<string, CoreTool> {
+  public getTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
       return {

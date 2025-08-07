@@ -1,5 +1,93 @@
 # @mastra/playground-ui
 
+## 5.1.20-alpha.0
+
+### Patch Changes
+
+- 7aad750: Fix tool ui showing after message when chat is refreshed
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+  - @mastra/core@0.13.2-alpha.0
+  - @mastra/client-js@0.10.21-alpha.0
+
+## 5.1.19
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1
+  - @mastra/client-js@0.10.20
+
+## 5.1.19-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1-alpha.0
+  - @mastra/client-js@0.10.20-alpha.0
+
+## 5.1.18
+
+### Patch Changes
+
+- 0ebfe8a: dependencies updates:
+  - Updated dependency [`motion@^12.23.12` ↗︎](https://www.npmjs.com/package/motion/v/12.23.12) (from `^12.23.9`, in `dependencies`)
+- f5853be: Added a preview button that opens a modal, rendering the markdown in the working memory text area
+- ea0c5f2: Update to support new scorer api
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [42dfc48]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+  - @mastra/client-js@0.10.19
+
+## 5.1.18-alpha.3
+
+### Patch Changes
+
+- f5853be: Added a preview button that opens a modal, rendering the markdown in the working memory text area
+
+## 5.1.18-alpha.2
+
+### Patch Changes
+
+- 0ebfe8a: dependencies updates:
+  - Updated dependency [`motion@^12.23.12` ↗︎](https://www.npmjs.com/package/motion/v/12.23.12) (from `^12.23.9`, in `dependencies`)
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [42dfc48]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+  - @mastra/client-js@0.10.19-alpha.2
+
+## 5.1.18-alpha.1
+
+### Patch Changes
+
+- ea0c5f2: Update to support new scorer api
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+  - @mastra/client-js@0.10.19-alpha.1
+
 ## 5.1.18-alpha.0
 
 ### Patch Changes
