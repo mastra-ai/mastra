@@ -108,6 +108,16 @@ const markdownChunkOptionsSchema = baseChunkOptionsSchema
   })
   .strict();
 
+const semanticMarkdownChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    joinThreshold: z.number().positive().optional(),
+    encodingName: z.string().optional(),
+    modelName: z.string().optional(),
+    allowedSpecial: setOrAllSchema,
+    disallowedSpecial: setOrAllSchema,
+  })
+  .strict();
+
 const latexChunkOptionsSchema = baseChunkOptionsSchema.strict();
 
 // Strategy-specific validation schemas
@@ -119,6 +129,7 @@ const validationSchemas = {
   json: jsonChunkOptionsSchema.transform(handleDeprecatedSize),
   html: htmlChunkOptionsSchema.transform(handleDeprecatedSize),
   markdown: markdownChunkOptionsSchema.transform(handleDeprecatedSize),
+  'semantic-markdown': semanticMarkdownChunkOptionsSchema.transform(handleDeprecatedSize),
   latex: latexChunkOptionsSchema.transform(handleDeprecatedSize),
 } as const;
 

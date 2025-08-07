@@ -52,8 +52,8 @@ export async function generateTypes(rootDir) {
       await fs.writeFile(fullPath, code);
     }
   } catch (err) {
-    console.log(err);
-    // debug here?
-    throw err;
+    // TypeScript errors are already printed to console via stdio: 'inherit'
+    // Just exit with the same code as tsc
+    process.exit(err.code || 1);
   }
 }

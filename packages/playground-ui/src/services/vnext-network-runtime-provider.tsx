@@ -190,9 +190,9 @@ export function VNextMastraNetworkRuntimeProvider({
             userMessage = message.content;
             setMessages(currentConversation => {
               if (currentConversation.some(m => m.id === message.id)) {
-                return currentConversation;
+                return currentConversation as ThreadMessageLike[];
               }
-              return [...currentConversation, message];
+              return [...currentConversation, message] as ThreadMessageLike[];
             });
           }
           if (role === 'assistant') {

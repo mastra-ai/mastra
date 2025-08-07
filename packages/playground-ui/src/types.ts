@@ -1,23 +1,6 @@
-export interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: any;
-  isError?: boolean;
-  parts?: Array<
-    | {
-        type: 'text';
-        text: string;
-      }
-    | {
-        type: 'step-start';
-      }
-    | {
-        type: 'reasoning';
-        reasoning: string;
-        details: Array<{ type: 'text'; text: string }>;
-      }
-  >;
-}
+import type { AiMessageType } from '@mastra/core/memory';
+
+export type Message = AiMessageType;
 
 export interface AssistantMessage {
   id: string;

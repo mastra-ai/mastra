@@ -456,17 +456,9 @@ export async function createHonoServer(
         root: './playground/assets',
       }),
     );
-
-    // Serve extra static files from playground directory
-    app.use(
-      '*',
-      serveStatic({
-        root: './playground',
-      }),
-    );
   }
 
-  // Catch-all route to serve index.html for any non-API routes
+  // Dynamic HTML handler - this must come before static file serving
   app.get('*', async (c, next) => {
     // Skip if it's an API route
     if (
@@ -477,18 +469,42 @@ export async function createHonoServer(
       return await next();
     }
 
+    // Skip if it's an asset file (has extension other than .html)
+    const path = c.req.path;
+    if (path.includes('.') && !path.endsWith('.html')) {
+      return await next();
+    }
+
     if (options?.playground) {
-      // For all other routes, serve index.html
+      // For HTML routes, serve index.html with dynamic replacements
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
       indexHtml = indexHtml.replace(
         `'%%MASTRA_TELEMETRY_DISABLED%%'`,
         `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
       );
+
+      // Inject the server port information
+      const serverOptions = mastra.getServer();
+      const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+      const host = serverOptions?.host ?? 'localhost';
+
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_URL%%'`, `'http://${host}:${port}'`);
+
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
     return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
   });
+
+  if (options?.playground) {
+    // Serve extra static files from playground directory (this comes after HTML handler)
+    app.use(
+      '*',
+      serveStatic({
+        root: './playground',
+      }),
+    );
+  }
 
   return app;
 }

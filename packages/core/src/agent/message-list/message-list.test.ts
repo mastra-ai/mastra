@@ -131,6 +131,181 @@ describe('MessageList', () => {
       ] satisfies VercelUIMessage[]);
     });
 
+    it('should preserve tool args when restoring messages from database with toolInvocations', () => {
+      // This test simulates messages being restored from the database where
+      // toolInvocations might have empty args but parts have the correct args
+      const dbMessage: MastraMessageV2 = {
+        id: 'db-msg-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-123',
+                toolName: 'searchTool',
+                args: { query: 'mastra framework' }, // Args are here in parts
+                result: { results: ['result1', 'result2'] },
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-123',
+              toolName: 'searchTool',
+              args: {}, // But args might be empty in toolInvocations
+              result: { results: ['result1', 'result2'] },
+            },
+          ],
+        },
+      };
+
+      const list = new MessageList().add(dbMessage, 'memory');
+
+      // Check that args are preserved in both parts and toolInvocations
+      const v2Messages = list.get.all.v2();
+      expect(v2Messages).toHaveLength(1);
+
+      // Check parts array has correct args and no duplicate entries
+      expect(v2Messages[0].content.parts).toEqual([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-123',
+            toolName: 'searchTool',
+            args: { query: 'mastra framework' },
+            result: { results: ['result1', 'result2'] },
+          },
+        },
+      ]);
+
+      // Check toolInvocations array has correct args (should be fixed by hydration)
+      expect(v2Messages[0].content.toolInvocations).toEqual([
+        {
+          state: 'result',
+          toolCallId: 'call-123',
+          toolName: 'searchTool',
+          args: { query: 'mastra framework' },
+          result: { results: ['result1', 'result2'] },
+        },
+      ]);
+
+      // Check UI messages preserve args
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].toolInvocations![0].args).toEqual({ query: 'mastra framework' });
+    });
+
+    it('should preserve tool args when tool-result arrives in a separate message', () => {
+      // This test reproduces the issue where tool args are lost when tool-result
+      // messages arrive separately from tool-call messages
+      const userMessage = {
+        role: 'user' as const,
+        content: 'Check the weather in Paris',
+      } satisfies VercelCoreMessage;
+
+      const toolCallMessage = {
+        role: 'assistant' as const,
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolName: 'weatherTool',
+            toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+            args: { location: 'Paris' },
+          },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const toolResultMessage = {
+        role: 'tool' as const,
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolName: 'weatherTool',
+            toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+            result: {
+              temperature: 24.3,
+              conditions: 'Partly cloudy',
+            },
+          },
+        ],
+      } satisfies VercelCoreMessage;
+
+      // Add messages as they would arrive from the AI SDK
+      const list = new MessageList()
+        .add(userMessage, 'user')
+        .add(toolCallMessage, 'response')
+        .add(toolResultMessage, 'response');
+
+      // Check that args are preserved in v2 messages (internal representation)
+      const v2Messages = list.get.all.v2();
+      expect(v2Messages).toHaveLength(2);
+
+      const assistantV2Message = v2Messages[1];
+      expect(assistantV2Message.role).toBe('assistant');
+
+      // Check parts array has correct args and only one tool-invocation (no duplicate call part)
+      expect(assistantV2Message.content.parts).toEqual([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+            toolName: 'weatherTool',
+            args: { location: 'Paris' },
+            result: {
+              temperature: 24.3,
+              conditions: 'Partly cloudy',
+            },
+          },
+        },
+      ]);
+
+      // Check toolInvocations array has correct args
+      expect(assistantV2Message.content.toolInvocations).toEqual([
+        {
+          state: 'result',
+          toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+          toolName: 'weatherTool',
+          args: { location: 'Paris' },
+          result: {
+            temperature: 24.3,
+            conditions: 'Partly cloudy',
+          },
+        },
+      ]);
+
+      // Check that the args are preserved in the final UI messages
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(2);
+
+      const assistantMessage = uiMessages[1];
+      expect(assistantMessage.role).toBe('assistant');
+      expect(assistantMessage.toolInvocations).toHaveLength(1);
+      expect(assistantMessage.toolInvocations![0].args).toEqual({ location: 'Paris' });
+
+      // Check that args are preserved in Core messages (used by LLM)
+      const coreMessages = list.get.all.core();
+      // Note: Core messages may include the tool message separately
+      expect(coreMessages.length).toBeGreaterThanOrEqual(2);
+
+      const assistantCoreMessage = coreMessages[1];
+      expect(assistantCoreMessage.role).toBe('assistant');
+
+      // Find the tool-call part in the content
+      const toolCallPart = assistantCoreMessage.content.find((part: any) => part.type === 'tool-call');
+      // This is the bug - the tool-call part doesn't exist in core messages after sanitization
+      expect(toolCallPart).toBeDefined();
+      expect(toolCallPart?.args).toEqual({ location: 'Paris' });
+    });
+
     it('should correctly convert and add a Mastra V1 MessageType with array content (text and tool-call)', () => {
       const inputV1Message = {
         id: 'v1-msg-2',
