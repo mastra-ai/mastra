@@ -1,5 +1,15 @@
 # mastra
 
+## 0.10.21-alpha.1
+
+### Patch Changes
+
+- 63449d0: Change the globbing of tools to exclude test files. Files inside `__tests__` directory and files with `.test.` or `.spec.` in their file name are now excluded from bundling.
+- Updated dependencies [2e74797]
+- Updated dependencies [63449d0]
+  - @mastra/core@0.13.2-alpha.1
+  - @mastra/deployer@0.13.2-alpha.1
+
 ## 0.10.21-alpha.0
 
 ### Patch Changes

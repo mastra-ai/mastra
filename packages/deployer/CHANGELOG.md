@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+- Updated dependencies [2e74797]
+- Updated dependencies [63449d0]
+  - @mastra/core@0.13.2-alpha.1
+  - @mastra/server@0.13.2-alpha.1
+
 ## 0.13.2-alpha.0
 
 ### Patch Changes
