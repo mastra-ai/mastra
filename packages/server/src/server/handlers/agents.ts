@@ -325,3 +325,44 @@ export async function streamGenerateHandler({
     return handleError(error, 'error streaming agent response');
   }
 }
+
+export function streamVNextGenerateHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'streamVNext'> & {
+    runtimeContext?: string;
+  };
+  abortSignal?: AbortSignal;
+}): ReturnType<Agent['streamVNext']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const streamResult = agent.streamVNext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      abortSignal,
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}

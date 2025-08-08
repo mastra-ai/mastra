@@ -7,9 +7,11 @@ import {
   getLiveEvalsByAgentIdHandler as getOriginalLiveEvalsByAgentIdHandler,
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
+  streamVNextGenerateHandler as getOriginalStreamVNextGenerateHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
+import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
 
 // Agent handlers
@@ -103,6 +105,53 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     });
 
     return streamResponse;
+  } catch (error) {
+    return handleError(error, 'Error streaming from agent');
+  }
+}
+
+export async function streamVNextGenerateHandler(c: Context): Promise<Response | undefined> {
+  try {
+    const mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+    const logger = mastra.getLogger();
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const result = getOriginalStreamVNextGenerateHandler({
+            mastra,
+            agentId,
+            runtimeContext,
+            body,
+            abortSignal: c.req.raw.signal,
+          });
+
+          const reader = result.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+          }
+        } catch (err) {
+          logger.error('Error in streamVNext generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+
+        await stream.close();
+      },
+      async err => {
+        logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
   } catch (error) {
     return handleError(error, 'Error streaming from agent');
   }

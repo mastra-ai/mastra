@@ -19,7 +19,7 @@ const startServer = async (
   dotMastraPath: string,
   port: number,
   env: Map<string, string>,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
   errorRestartCount = 0,
 ) => {
   let serverIsReady = false;
@@ -35,6 +35,10 @@ const startServer = async (
 
     if (startOptions.inspectBrk) {
       commands.push('--inspect-brk'); //stops at beginning of script
+    }
+
+    if (startOptions.customArgs) {
+      commands.push(...startOptions.customArgs);
     }
 
     if (!isWebContainer()) {
@@ -128,7 +132,7 @@ async function rebundleAndRestart(
   dotMastraPath: string,
   port: number,
   bundler: DevBundler,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
 ) {
   if (isRestarting) {
     return;
@@ -158,6 +162,7 @@ export async function dev({
   env,
   inspect,
   inspectBrk,
+  customArgs,
 }: {
   dir?: string;
   root?: string;
@@ -166,20 +171,41 @@ export async function dev({
   env?: string;
   inspect?: boolean;
   inspectBrk?: boolean;
+  customArgs?: string[];
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
+  // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
   const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
-  const discoveredTools = [defaultToolsPath, ...(tools || [])];
-  const startOptions = { inspect, inspectBrk };
+  const defaultToolsIgnorePaths = [
+    `!${join(mastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
+    `!${join(mastraDir, 'tools/**/__tests__/**')}`,
+  ];
+  // We pass an array to globby to allow for the aforementioned negations
+  const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
+  const discoveredTools = [defaultTools, ...(tools ?? [])];
+  const startOptions = { inspect, inspectBrk, customArgs };
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
   bundler.__setLogger(logger);
+
+  // Get the port to use before prepare to set environment variables
+  const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
+  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  if (!portToUse || isNaN(Number(portToUse))) {
+    const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
+    portToUse = String(
+      await getPort({
+        port: portList,
+      }),
+    );
+  }
+
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
@@ -189,19 +215,6 @@ export async function dev({
   // spread loadedEnv into process.env
   for (const [key, value] of loadedEnv.entries()) {
     process.env[key] = value;
-  }
-
-  const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
-
-  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
-  if (!portToUse || isNaN(Number(portToUse))) {
-    const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
-
-    portToUse = String(
-      await getPort({
-        port: portList,
-      }),
-    );
   }
 
   await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);

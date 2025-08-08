@@ -3,6 +3,9 @@ import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
 
+export type { ChunkType } from '../stream/types';
+export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;
@@ -66,6 +69,8 @@ export type StepResult<P, R, S, T> =
   | StepSuspended<P, S>
   | StepRunning<P, R, S>
   | StepWaiting<P, R, S>;
+
+export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;

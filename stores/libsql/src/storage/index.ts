@@ -17,6 +17,7 @@ import type {
   WorkflowRuns,
   StorageGetTracesArg,
   StorageDomains,
+  ThreadSortOptions,
 } from '@mastra/core/storage';
 
 import type { Trace } from '@mastra/core/telemetry';
@@ -69,7 +70,10 @@ export class LibSQLStore extends MastraStorage {
         this.shouldCacheInit = false;
       }
 
-      this.client = createClient({ url: config.url });
+      this.client = createClient({
+        url: config.url,
+        ...(config.authToken ? { authToken: config.authToken } : {}),
+      });
 
       // Set PRAGMAs for better concurrency, especially for file-based databases
       if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
@@ -114,6 +118,7 @@ export class LibSQLStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
+      deleteMessages: true,
     };
   }
 
@@ -172,15 +177,17 @@ export class LibSQLStore extends MastraStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
    */
-  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
+  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     return this.stores.memory.getThreadsByResourceId(args);
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  public async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 
@@ -244,6 +251,10 @@ export class LibSQLStore extends MastraStorage {
     })[];
   }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages({ messages });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   /** @deprecated use getEvals instead */

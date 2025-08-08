@@ -1,6 +1,6 @@
 import { client } from '@/lib/client';
 import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
-import { WorkflowRunStatus } from '@mastra/core';
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';

@@ -127,8 +127,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/deployment/deployment",
-        destination: "/docs/deployment/serverless-platforms",
+        source: "/:locale/docs/deployment/deployment",
+        destination: "/:locale/docs/deployment/serverless-platforms",
         permanent: true,
       },
       {
@@ -713,6 +713,26 @@ export default withGT(
       {
         source: "/:locale/docs/frameworks/agentic-uis",
         destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
+        permanent: true,
+      },
+      {
+        source: "/examples/evals/word-inclusion",
+        destination: "/examples/evals/custom-native-javascript-eval",
+        permanent: true,
+      },
+      {
+        source: "/examples/evals/custom-eval",
+        destination: "/examples/evals/custom-llm-judge-eval",
+        permanent: true,
+      },
+      {
+        source: "/examples/workflows/agent-and-tool-interop",
+        destination: "/examples/workflows/agent-as-step",
+        permanent: true,
+      },
+      {
+        source: "/reference/agents/createTool",
+        destination: "/reference/tools/create-tool",
         permanent: true,
       },
     ],

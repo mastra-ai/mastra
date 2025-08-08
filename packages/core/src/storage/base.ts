@@ -32,6 +32,7 @@ import type {
   StorageGetMessagesArg,
   StorageResourceType,
   StoragePagination,
+  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
   StorageGetTracesArg,
@@ -100,12 +101,14 @@ export abstract class MastraStorage extends MastraBase {
     resourceWorkingMemory: boolean;
     hasColumn: boolean;
     createTable: boolean;
+    deleteMessages: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
       hasColumn: false,
       createTable: false,
+      deleteMessages: false,
     };
   }
 
@@ -206,7 +209,11 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
+  abstract getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
@@ -272,6 +279,13 @@ export abstract class MastraStorage extends MastraBase {
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
   }): Promise<MastraMessageV2[]>;
+
+  async deleteMessages(_messageIds: string[]): Promise<void> {
+    throw new Error(
+      `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The deleteMessages method needs to be implemented in the storage adapter.`,
+    );
+  }
 
   abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
 
@@ -438,11 +452,13 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 
-  abstract getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+  abstract getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   abstract getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },

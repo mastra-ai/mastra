@@ -13,6 +13,8 @@ import {
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { telemetry } from './telemetry-config.mjs';
 
+globalThis.___MASTRA_TELEMETRY___ = true;
+
 class CompositeExporter {
   constructor(exporters) {
     this.exporters = exporters;

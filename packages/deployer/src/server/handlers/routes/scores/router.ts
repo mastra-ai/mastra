@@ -16,7 +16,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
 
   // Scores routes
   router.get(
-    '/api/scores/scorers',
+    '/scorers',
     describeRoute({
       description: 'Get all scorers',
       tags: ['scores'],
@@ -30,7 +30,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.get(
-    '/api/scores/scorers/:scorerId',
+    '/scorers/:scorerId',
     describeRoute({
       description: 'Get a scorer by ID',
       tags: ['scores'],
@@ -44,7 +44,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.get(
-    '/api/scores/run/:runId',
+    '/run/:runId',
     describeRoute({
       description: 'Get scores by run ID',
       tags: ['scores'],
@@ -80,7 +80,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.get(
-    '/api/scores/scorer/:scorerId',
+    '/scorer/:scorerId',
     describeRoute({
       description: 'Get scores by scorer ID',
       tags: ['scores'],
@@ -116,7 +116,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.get(
-    '/api/scores/entity/:entityType/:entityId',
+    '/entity/:entityType/:entityId',
     describeRoute({
       description: 'Get scores by entity ID and type',
       tags: ['scores'],
@@ -160,7 +160,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.post(
-    '/api/scores',
+    '/',
     bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Save a score',

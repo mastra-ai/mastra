@@ -24,7 +24,9 @@ export class BaseResource {
         const response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
           ...options,
           headers: {
-            ...(options.body && (options.method === 'POST' || options.method === 'PUT')
+            ...(options.body &&
+            !(options.body instanceof FormData) &&
+            (options.method === 'POST' || options.method === 'PUT')
               ? { 'content-type': 'application/json' }
               : {}),
             ...headers,

@@ -34,6 +34,10 @@ vi.mock('@clack/prompts', () => ({
   outro: vi.fn(),
   note: vi.fn(),
   select: vi.fn(),
+  spinner: vi.fn(() => ({
+    start: vi.fn(),
+    stop: vi.fn(),
+  })),
 }));
 
 // Mock init command
@@ -268,6 +272,131 @@ describe('create command with --template flag', () => {
       ).rejects.toThrow('Install failed');
 
       expect(log.error).toHaveBeenCalledWith('Failed to create project from template: Install failed');
+    });
+
+    it('should handle GitHub URLs as templates', async () => {
+      const { cloneTemplate, installDependencies } = await import('../../utils/clone-template');
+      const { text, isCancel, spinner, note } = await import('@clack/prompts');
+
+      // Mock spinner
+      const mockSpinner = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        message: vi.fn(),
+      };
+      vi.mocked(spinner).mockReturnValue(mockSpinner);
+
+      // Mock fetch for GitHub validation
+      vi.mocked(global.fetch).mockImplementation(async url => {
+        const urlStr = typeof url === 'string' ? url : url.toString();
+        if (urlStr.includes('/package.json')) {
+          return {
+            ok: true,
+            text: async () =>
+              JSON.stringify({
+                name: 'test-project',
+                dependencies: {
+                  '@mastra/core': '^1.0.0',
+                },
+              }),
+          } as Response;
+        }
+        if (urlStr.includes('/src/mastra/index.ts')) {
+          return {
+            ok: true,
+            text: async () => 'export const mastra = new Mastra({});',
+          } as Response;
+        }
+        return { ok: false } as Response;
+      });
+
+      vi.mocked(text).mockResolvedValue('my-github-project');
+      vi.mocked(isCancel).mockReturnValue(false);
+      vi.mocked(cloneTemplate).mockResolvedValue('/my-github-project');
+      vi.mocked(installDependencies).mockResolvedValue();
+
+      const { create } = await import('./create');
+      await create({
+        template: 'https://github.com/mastra-ai/template-deep-research',
+        projectName: 'my-github-project',
+      });
+
+      expect(mockSpinner.start).toHaveBeenCalledWith('Validating GitHub repository...');
+      expect(mockSpinner.stop).toHaveBeenCalledWith('Valid Mastra project ✓');
+      expect(cloneTemplate).toHaveBeenCalledWith({
+        template: expect.objectContaining({
+          githubUrl: 'https://github.com/mastra-ai/template-deep-research',
+          title: 'mastra-ai/template-deep-research',
+          slug: 'template-deep-research',
+        }),
+        projectName: 'my-github-project',
+      });
+      expect(note).toHaveBeenCalled();
+    });
+
+    it('should fail validation for invalid GitHub projects', async () => {
+      const { log, spinner } = await import('@clack/prompts');
+
+      // Mock spinner
+      const mockSpinner = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        message: vi.fn(),
+      };
+      vi.mocked(spinner).mockReturnValue(mockSpinner);
+
+      // Mock fetch to return project without @mastra/core
+      vi.mocked(global.fetch).mockImplementation(async url => {
+        const urlStr = typeof url === 'string' ? url : url.toString();
+        if (urlStr.includes('/package.json')) {
+          return {
+            ok: true,
+            text: async () =>
+              JSON.stringify({
+                name: 'test-project',
+                dependencies: {},
+              }),
+          } as Response;
+        }
+        if (urlStr.includes('/src/mastra/index.ts')) {
+          return { ok: false } as Response;
+        }
+        return { ok: false } as Response;
+      });
+
+      const { create } = await import('./create');
+
+      await expect(
+        create({
+          template: 'https://github.com/user/invalid-repo',
+        }),
+      ).rejects.toThrow('Invalid Mastra project');
+
+      expect(mockSpinner.start).toHaveBeenCalledWith('Validating GitHub repository...');
+      expect(mockSpinner.stop).toHaveBeenCalledWith('Validation failed');
+      expect(log.error).toHaveBeenCalledWith('This does not appear to be a valid Mastra project:');
+      expect(log.error).toHaveBeenCalledWith('  - Missing @mastra/core dependency in package.json');
+      expect(log.error).toHaveBeenCalledWith('  - Missing src/mastra/index.ts file');
+    });
+
+    it('should detect GitHub URLs correctly', async () => {
+      const { loadTemplates, findTemplateByName } = await import('../../utils/template-utils');
+      const { log } = await import('@clack/prompts');
+
+      // Mock template not found for GitHub URL (since it won't be in the template list)
+      vi.mocked(loadTemplates).mockResolvedValue([mockTemplate]);
+      vi.mocked(findTemplateByName).mockReturnValue(null);
+
+      const { create } = await import('./create');
+
+      // This should not throw "template not found" error for GitHub URLs
+      await expect(
+        create({
+          template: 'github.com/user/repo', // without https://
+        }),
+      ).rejects.toThrow('Template "github.com/user/repo" not found');
+
+      expect(log.error).toHaveBeenCalledWith('Template "github.com/user/repo" not found. Available templates:');
     });
 
     it('should not use template creation when template is undefined', async () => {

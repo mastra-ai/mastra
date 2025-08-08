@@ -14,13 +14,15 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     }
   }
 
-  let extractStepResultValue: any = null;
-  if (row.extractStepResult) {
+  let preprocessStepResultValue: any = null;
+  if (row.preprocessStepResult) {
     try {
-      extractStepResultValue =
-        typeof row.extractStepResult === 'string' ? safelyParseJSON(row.extractStepResult) : row.extractStepResult;
+      preprocessStepResultValue =
+        typeof row.preprocessStepResult === 'string'
+          ? safelyParseJSON(row.preprocessStepResult)
+          : row.preprocessStepResult;
     } catch (e) {
-      console.warn('Failed to parse extractStepResult:', e);
+      console.warn('Failed to parse preprocessStepResult:', e);
     }
   }
 
@@ -79,7 +81,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     traceId: row.traceId as string,
     runId: row.runId as string,
     scorer: scorerValue,
-    extractStepResult: extractStepResultValue,
+    preprocessStepResult: preprocessStepResultValue,
     analyzeStepResult: analyzeStepResultValue,
     score: row.score as number,
     reason: row.reason as string,
@@ -142,26 +144,28 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         scorerId: score.scorerId,
         traceId: score.traceId || '',
         runId: score.runId,
-        scorer: typeof score.scorer === 'string' ? score.scorer : JSON.stringify(score.scorer),
-        extractStepResult:
-          typeof score.extractStepResult === 'string'
-            ? score.extractStepResult
-            : JSON.stringify(score.extractStepResult),
+        scorer: typeof score.scorer === 'string' ? safelyParseJSON(score.scorer) : score.scorer,
+        preprocessStepResult:
+          typeof score.preprocessStepResult === 'string'
+            ? safelyParseJSON(score.preprocessStepResult)
+            : score.preprocessStepResult,
         analyzeStepResult:
           typeof score.analyzeStepResult === 'string'
-            ? score.analyzeStepResult
-            : JSON.stringify(score.analyzeStepResult),
+            ? safelyParseJSON(score.analyzeStepResult)
+            : score.analyzeStepResult,
         score: score.score,
         reason: score.reason,
-        extractPrompt: score.extractPrompt,
+        preprocessPrompt: score.preprocessPrompt,
+        generateScorePrompt: score.generateScorePrompt,
+        generateReasonPrompt: score.generateReasonPrompt,
         analyzePrompt: score.analyzePrompt,
         reasonPrompt: score.reasonPrompt,
-        input: typeof score.input === 'string' ? score.input : JSON.stringify(score.input),
-        output: typeof score.output === 'string' ? score.output : JSON.stringify(score.output),
+        input: typeof score.input === 'string' ? safelyParseJSON(score.input) : score.input,
+        output: typeof score.output === 'string' ? safelyParseJSON(score.output) : score.output,
         additionalContext: score.additionalContext,
         runtimeContext:
-          typeof score.runtimeContext === 'string' ? score.runtimeContext : JSON.stringify(score.runtimeContext),
-        entity: typeof score.entity === 'string' ? score.entity : JSON.stringify(score.entity),
+          typeof score.runtimeContext === 'string' ? safelyParseJSON(score.runtimeContext) : score.runtimeContext,
+        entity: typeof score.entity === 'string' ? safelyParseJSON(score.entity) : score.entity,
         source: score.source,
         resourceId: score.resourceId || '',
         threadId: score.threadId || '',

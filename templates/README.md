@@ -85,10 +85,6 @@ The overview of the template.
 
 - `OPENAI_API_KEY`: Your OpenAI API key. [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 - `OTHER_REQUIRED_VARIABLE`: Description of what this variable is for.
-
----
-
-For more guidance, check out the [weather-agent](./weather-agent/) template.
 ```
 
 ## 3. Additional Recommendations

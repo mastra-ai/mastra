@@ -3,7 +3,11 @@ title: "Reference: Context Position | Metrics | Evals | Mastra Docs"
 description: Documentation for the Context Position Metric in Mastra, which evaluates the ordering of context nodes based on their relevance to the query and output.
 ---
 
+import { ScorerCallout } from '@/components/scorer-callout'
+
 # ContextPositionMetric
+
+<ScorerCallout />
 
 The `ContextPositionMetric` class evaluates how well context nodes are ordered based on their relevance to the query and output. It uses position-weighted scoring to emphasize the importance of having the most relevant context pieces appear earlier in the sequence.
 

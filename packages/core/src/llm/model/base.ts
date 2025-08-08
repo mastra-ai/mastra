@@ -1,27 +1,24 @@
-import type {
-  CoreMessage,
-  DeepPartial,
-  GenerateObjectResult,
-  GenerateTextResult,
-  StreamObjectResult,
-  StreamTextResult,
-} from 'ai';
+import type { CoreMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
-import type {
-  GenerateReturn,
-  LLMInnerStreamOptions,
-  LLMStreamObjectOptions,
-  LLMStreamOptions,
-  LLMTextObjectOptions,
-  LLMTextOptions,
-  StreamReturn,
-} from '../';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import type {
+  GenerateTextWithMessagesArgs,
+  GenerateTextResult,
+  ToolSet,
+  GenerateReturn,
+  GenerateObjectResult,
+  GenerateObjectWithMessagesArgs,
+  StreamReturn,
+  StreamTextWithMessagesArgs,
+  StreamTextResult,
+  StreamObjectResult,
+  StreamObjectWithMessagesArgs,
+} from './base.types';
 
 export abstract class MastraLLMBase extends MastraBase {
   constructor({ name }: { name: string }) {
@@ -36,31 +33,49 @@ export abstract class MastraLLMBase extends MastraBase {
 
   abstract __registerMastra(p: Mastra): void;
 
-  abstract __text<Z extends ZodSchema | JSONSchema7 | undefined>(
-    input: LLMTextOptions<Z>,
-  ): Promise<GenerateTextResult<any, any>>;
+  abstract __text<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined>(
+    input: GenerateTextWithMessagesArgs<Tools, Z>,
+  ): Promise<GenerateTextResult<Tools, Z extends ZodSchema ? z.infer<Z> : unknown>>;
 
-  abstract __textObject<T extends ZodSchema | JSONSchema7 | undefined>(
-    input: LLMTextObjectOptions<T>,
-  ): Promise<GenerateObjectResult<T>>;
+  abstract __textObject<Z extends ZodSchema | JSONSchema7>(
+    input: GenerateObjectWithMessagesArgs<Z>,
+  ): Promise<GenerateObjectResult<Z>>;
 
-  abstract generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  abstract generate<
+    Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+    StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
+    Tools extends ToolSet = ToolSet,
+  >(
     messages: string | string[] | CoreMessage[],
-    options: LLMStreamOptions<Z>,
-  ): Promise<GenerateReturn<Z>>;
+    options: Omit<
+      Output extends undefined
+        ? GenerateTextWithMessagesArgs<Tools, StructuredOutput>
+        : GenerateObjectWithMessagesArgs<NonNullable<Output>>,
+      'messages'
+    >,
+  ): Promise<GenerateReturn<Tools, Output, StructuredOutput>>;
 
-  abstract __stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    input: LLMInnerStreamOptions<Z>,
-  ): StreamTextResult<any, any>;
+  abstract __stream<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    input: StreamTextWithMessagesArgs<Tools, Z>,
+  ): StreamTextResult<Tools, Z extends ZodSchema ? z.infer<Z> : unknown>;
 
-  abstract __streamObject<T extends ZodSchema | JSONSchema7 | undefined>(
-    input: LLMStreamObjectOptions<T>,
-  ): StreamObjectResult<DeepPartial<T>, T, never>;
+  abstract __streamObject<Z extends ZodSchema | JSONSchema7>(
+    input: StreamObjectWithMessagesArgs<Z>,
+  ): StreamObjectResult<Z>;
 
-  abstract stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  abstract stream<
+    Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+    StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
+    Tools extends ToolSet = ToolSet,
+  >(
     messages: string | string[] | CoreMessage[],
-    options: LLMStreamOptions<Z>,
-  ): StreamReturn<Z>;
+    options: Omit<
+      Output extends undefined
+        ? StreamTextWithMessagesArgs<Tools, StructuredOutput>
+        : StreamObjectWithMessagesArgs<NonNullable<Output>> & { maxSteps?: never },
+      'messages'
+    >,
+  ): StreamReturn<Tools, Output, StructuredOutput>;
 
   convertToMessages(messages: string | string[] | CoreMessage[]): CoreMessage[] {
     if (Array.isArray(messages)) {

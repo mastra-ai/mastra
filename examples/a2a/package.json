@@ -30,7 +30,7 @@
   "devDependencies": {
     "mastra": "latest",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.8.3"
   },
   "pnpm": {
     "overrides": {

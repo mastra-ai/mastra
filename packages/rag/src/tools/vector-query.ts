@@ -1,4 +1,5 @@
 import { createTool } from '@mastra/core/tools';
+import type { MastraVector } from '@mastra/core/vector';
 import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
@@ -11,7 +12,9 @@ import type { VectorQueryToolOptions } from './types';
 
 export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
   const { id, description } = options;
-  const toolId = id || `VectorQuery ${options.vectorStoreName} ${options.indexName} Tool`;
+  const storeName = options['vectorStoreName'] ? options.vectorStoreName : 'DirectVectorStore';
+
+  const toolId = id || `VectorQuery ${storeName} ${options.indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
   const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
 
@@ -22,7 +25,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     outputSchema,
     execute: async ({ context, mastra, runtimeContext }) => {
       const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+      const vectorStoreName: string =
+        'vectorStore' in options ? storeName : (runtimeContext.get('vectorStoreName') ?? storeName);
       const includeVectors: boolean = runtimeContext.get('includeVectors') ?? options.includeVectors ?? false;
       const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
       const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
@@ -30,7 +34,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const model: EmbeddingModel<string> = runtimeContext.get('model') ?? options.model;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
-      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
+      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
 
       const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
       const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
@@ -54,8 +58,12 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
               ? Number(topK)
               : 10;
 
-        const vectorStore = mastra?.getVector(vectorStoreName);
-
+        let vectorStore: MastraVector | undefined = undefined;
+        if ('vectorStore' in options) {
+          vectorStore = options.vectorStore;
+        } else if (mastra) {
+          vectorStore = mastra.getVector(vectorStoreName);
+        }
         if (!vectorStore) {
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });

@@ -3,7 +3,7 @@ import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV1 } from '../../memory';
-import type { MastraMessageV2 } from '../message-list';
+import type { MastraMessageV2, UIMessageWithMetadata } from '../message-list';
 import { MessageList } from './index';
 
 type VercelUIMessage = Message;
@@ -129,6 +129,181 @@ describe('MessageList', () => {
           ],
         },
       ] satisfies VercelUIMessage[]);
+    });
+
+    it('should preserve tool args when restoring messages from database with toolInvocations', () => {
+      // This test simulates messages being restored from the database where
+      // toolInvocations might have empty args but parts have the correct args
+      const dbMessage: MastraMessageV2 = {
+        id: 'db-msg-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-123',
+                toolName: 'searchTool',
+                args: { query: 'mastra framework' }, // Args are here in parts
+                result: { results: ['result1', 'result2'] },
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-123',
+              toolName: 'searchTool',
+              args: {}, // But args might be empty in toolInvocations
+              result: { results: ['result1', 'result2'] },
+            },
+          ],
+        },
+      };
+
+      const list = new MessageList().add(dbMessage, 'memory');
+
+      // Check that args are preserved in both parts and toolInvocations
+      const v2Messages = list.get.all.v2();
+      expect(v2Messages).toHaveLength(1);
+
+      // Check parts array has correct args and no duplicate entries
+      expect(v2Messages[0].content.parts).toEqual([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-123',
+            toolName: 'searchTool',
+            args: { query: 'mastra framework' },
+            result: { results: ['result1', 'result2'] },
+          },
+        },
+      ]);
+
+      // Check toolInvocations array has correct args (should be fixed by hydration)
+      expect(v2Messages[0].content.toolInvocations).toEqual([
+        {
+          state: 'result',
+          toolCallId: 'call-123',
+          toolName: 'searchTool',
+          args: { query: 'mastra framework' },
+          result: { results: ['result1', 'result2'] },
+        },
+      ]);
+
+      // Check UI messages preserve args
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].toolInvocations![0].args).toEqual({ query: 'mastra framework' });
+    });
+
+    it('should preserve tool args when tool-result arrives in a separate message', () => {
+      // This test reproduces the issue where tool args are lost when tool-result
+      // messages arrive separately from tool-call messages
+      const userMessage = {
+        role: 'user' as const,
+        content: 'Check the weather in Paris',
+      } satisfies VercelCoreMessage;
+
+      const toolCallMessage = {
+        role: 'assistant' as const,
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolName: 'weatherTool',
+            toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+            args: { location: 'Paris' },
+          },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const toolResultMessage = {
+        role: 'tool' as const,
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolName: 'weatherTool',
+            toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+            result: {
+              temperature: 24.3,
+              conditions: 'Partly cloudy',
+            },
+          },
+        ],
+      } satisfies VercelCoreMessage;
+
+      // Add messages as they would arrive from the AI SDK
+      const list = new MessageList()
+        .add(userMessage, 'user')
+        .add(toolCallMessage, 'response')
+        .add(toolResultMessage, 'response');
+
+      // Check that args are preserved in v2 messages (internal representation)
+      const v2Messages = list.get.all.v2();
+      expect(v2Messages).toHaveLength(2);
+
+      const assistantV2Message = v2Messages[1];
+      expect(assistantV2Message.role).toBe('assistant');
+
+      // Check parts array has correct args and only one tool-invocation (no duplicate call part)
+      expect(assistantV2Message.content.parts).toEqual([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+            toolName: 'weatherTool',
+            args: { location: 'Paris' },
+            result: {
+              temperature: 24.3,
+              conditions: 'Partly cloudy',
+            },
+          },
+        },
+      ]);
+
+      // Check toolInvocations array has correct args
+      expect(assistantV2Message.content.toolInvocations).toEqual([
+        {
+          state: 'result',
+          toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
+          toolName: 'weatherTool',
+          args: { location: 'Paris' },
+          result: {
+            temperature: 24.3,
+            conditions: 'Partly cloudy',
+          },
+        },
+      ]);
+
+      // Check that the args are preserved in the final UI messages
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(2);
+
+      const assistantMessage = uiMessages[1];
+      expect(assistantMessage.role).toBe('assistant');
+      expect(assistantMessage.toolInvocations).toHaveLength(1);
+      expect(assistantMessage.toolInvocations![0].args).toEqual({ location: 'Paris' });
+
+      // Check that args are preserved in Core messages (used by LLM)
+      const coreMessages = list.get.all.core();
+      // Note: Core messages may include the tool message separately
+      expect(coreMessages.length).toBeGreaterThanOrEqual(2);
+
+      const assistantCoreMessage = coreMessages[1];
+      expect(assistantCoreMessage.role).toBe('assistant');
+
+      // Find the tool-call part in the content
+      const toolCallPart = assistantCoreMessage.content.find((part: any) => part.type === 'tool-call');
+      // This is the bug - the tool-call part doesn't exist in core messages after sanitization
+      expect(toolCallPart).toBeDefined();
+      expect(toolCallPart?.args).toEqual({ location: 'Paris' });
     });
 
     it('should correctly convert and add a Mastra V1 MessageType with array content (text and tool-call)', () => {
@@ -2315,8 +2490,8 @@ describe('MessageList', () => {
 
       // toolInvocations array should also only have the result
       expect(uiMessage.toolInvocations).toHaveLength(1);
-      expect(uiMessage.toolInvocations[0].state).toBe('result');
-      expect(uiMessage.toolInvocations[0].toolCallId).toBe('call-4');
+      expect(uiMessage.toolInvocations![0].state).toBe('result');
+      expect(uiMessage.toolInvocations![0].toolCallId).toBe('call-4');
     });
 
     it('should handle clientTool scenario - filter call states when querying from memory', () => {
@@ -2436,12 +2611,613 @@ describe('MessageList', () => {
       const resultToolParts = uiMessageWithResult.parts.filter(p => p.type === 'tool-invocation');
       expect(resultToolParts.length).toBe(1);
       expect(resultToolParts[0].toolInvocation.state).toBe('result');
-      expect(resultToolParts[0].toolInvocation.result).toBe(42);
+      if (resultToolParts[0].toolInvocation.state === `result`) {
+        expect(resultToolParts[0].toolInvocation.result).toBe(42);
+      }
 
       // toolInvocations array should have the result
       expect(uiMessageWithResult.toolInvocations).toHaveLength(1);
-      expect(uiMessageWithResult.toolInvocations[0].state).toBe('result');
-      expect(uiMessageWithResult.toolInvocations[0].result).toBe(42);
+      expect(uiMessageWithResult.toolInvocations![0].state).toBe('result');
+      if (uiMessageWithResult.toolInvocations![0].state === `result`) {
+        expect(uiMessageWithResult.toolInvocations![0].result).toBe(42);
+      }
+    });
+  });
+
+  describe('MessageList metadata support', () => {
+    describe('existing v2 metadata support', () => {
+      it('should preserve metadata when adding MastraMessageV2', () => {
+        const metadata = {
+          customField: 'custom value',
+          context: [{ type: 'project', content: '', displayName: 'Project', path: './' }],
+          anotherField: { nested: 'data' },
+        };
+
+        const v2Message: MastraMessageV2 = {
+          id: 'v2-msg-metadata',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Hello with metadata' }],
+            metadata,
+          },
+          createdAt: new Date('2023-10-26T12:00:00.000Z'),
+          threadId,
+          resourceId,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(v2Message, 'user');
+        const messages = list.get.all.v2();
+
+        expect(messages.length).toBe(1);
+        expect(messages[0].content.metadata).toEqual(metadata);
+      });
+
+      it('should preserve metadata through message transformations', () => {
+        const metadata = { preserved: true, data: 'test' };
+
+        const v2Message: MastraMessageV2 = {
+          id: 'v2-msg-transform',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Message with metadata' }],
+            metadata,
+          },
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(v2Message, 'response');
+
+        // Convert to UI and back to v2
+        const uiMessages = list.get.all.ui();
+        const newList = new MessageList({ threadId, resourceId }).add(uiMessages, 'response');
+        const v2Messages = newList.get.all.v2();
+
+        expect(v2Messages[0].content.metadata).toEqual(metadata);
+      });
+    });
+
+    describe('UIMessage metadata extraction', () => {
+      it('should preserve metadata field from UIMessage', () => {
+        const metadata = {
+          context: [{ type: 'project', content: '', displayName: 'Project', path: './' }],
+          customField: 'custom value',
+          anotherField: { nested: 'data' },
+        };
+
+        const uiMessage: UIMessageWithMetadata = {
+          id: 'ui-msg-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual(metadata);
+      });
+
+      it('should ignore non-metadata custom fields on UIMessage', () => {
+        const uiMessage = {
+          id: 'ui-msg-custom',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          // These should be ignored
+          context: 'ignored',
+          customField: 'ignored',
+          // This should be preserved
+          metadata: { preserved: true },
+        } as UIMessageWithMetadata & { context: string; customField: string };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual({ preserved: true });
+        // Verify custom fields were not copied to metadata
+        expect(v2Messages[0].content.metadata).not.toHaveProperty('context');
+        expect(v2Messages[0].content.metadata).not.toHaveProperty('customField');
+      });
+
+      it('should handle UIMessage with no metadata field', () => {
+        const uiMessage = {
+          id: 'ui-msg-no-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toBeUndefined();
+      });
+
+      it('should handle UIMessage with empty metadata object', () => {
+        const uiMessage: UIMessageWithMetadata = {
+          id: 'ui-msg-empty-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: {},
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual({});
+      });
+
+      it('should handle UIMessage with null/undefined metadata', () => {
+        const uiMessageNull: UIMessageWithMetadata = {
+          id: 'ui-msg-null-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: null as any, // null is technically not allowed by the type, but we're testing the edge case
+        };
+
+        const uiMessageUndefined: UIMessageWithMetadata = {
+          id: 'ui-msg-undefined-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: undefined,
+        };
+
+        const list1 = new MessageList({ threadId, resourceId }).add(uiMessageNull, 'user');
+        const list2 = new MessageList({ threadId, resourceId }).add(uiMessageUndefined, 'user');
+
+        expect(list1.get.all.v2()[0].content.metadata).toBeUndefined();
+        expect(list2.get.all.v2()[0].content.metadata).toBeUndefined();
+      });
+
+      it('should preserve metadata for assistant UIMessage with tool invocations', () => {
+        const metadata = { assistantContext: 'processing', step: 1 };
+
+        const uiMessage: UIMessageWithMetadata = {
+          id: 'ui-assistant-metadata',
+          role: 'assistant' as const,
+          content: 'Processing your request',
+          createdAt: new Date(),
+          parts: [{ type: 'text' as const, text: 'Processing your request' }],
+          toolInvocations: [],
+          metadata,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'response');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual(metadata);
+      });
+    });
+
+    describe('end-to-end metadata flow', () => {
+      it('should preserve metadata through a complete message flow simulation', () => {
+        // Simulate what happens in agent.stream/generate
+        const userMetadata = {
+          context: [{ type: 'project', content: '', displayName: 'Project', path: './' }],
+          sessionId: '12345',
+          customData: { priority: 'high' },
+        };
+
+        // 1. User sends message with metadata
+        const userMessage: UIMessageWithMetadata = {
+          id: 'user-msg-flow',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: userMetadata,
+        };
+
+        const list = new MessageList({ threadId, resourceId });
+
+        // Add user message (like what happens in agent.__primitive)
+        list.add(userMessage, 'user');
+
+        // Simulate assistant response
+        const assistantResponse = {
+          role: 'assistant' as const,
+          content: 'Hello! How can I help you?',
+        } satisfies CoreMessage;
+
+        list.add(assistantResponse, 'response');
+
+        // Get final messages (what would be saved to memory)
+        const v2Messages = list.get.all.v2();
+
+        // Verify user message metadata is preserved
+        const savedUserMessage = v2Messages.find(m => m.id === 'user-msg-flow');
+        expect(savedUserMessage).toBeDefined();
+        expect(savedUserMessage?.content.metadata).toEqual(userMetadata);
+
+        // Convert back to UI messages (for client display)
+        const uiMessages = list.get.all.ui();
+        const uiUserMessage = uiMessages.find(m => m.id === 'user-msg-flow') as UIMessageWithMetadata | undefined;
+        expect(uiUserMessage).toBeDefined();
+        expect(uiUserMessage?.metadata).toEqual(userMetadata);
+      });
+
+      it('should handle metadata from onlook.dev use case', () => {
+        // This is what onlook.dev would send after migration
+        const onlookMessage: UIMessageWithMetadata = {
+          id: '586b71b9-1a84-421e-b931-3ff40a06728f',
+          role: 'user' as const,
+          content: 'hi',
+          createdAt: new Date('2025-07-25T16:46:38.580Z'),
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          metadata: {
+            context: [
+              {
+                type: 'project',
+                content: '',
+                displayName: 'Project',
+                path: './',
+              },
+            ],
+            snapshots: [],
+          },
+        };
+
+        const list = new MessageList({ threadId: 'onlook-thread', resourceId: 'onlook-project' });
+        list.add(onlookMessage, 'user');
+
+        // Verify it's saved correctly as v2
+        const v2Messages = list.get.all.v2();
+        expect(v2Messages[0].content.metadata).toEqual(onlookMessage.metadata);
+
+        // Verify it roundtrips back to UI format
+        const uiMessages = list.get.all.ui();
+        expect((uiMessages[0] as UIMessageWithMetadata).metadata).toEqual(onlookMessage.metadata);
+      });
+    });
+  });
+
+  describe('Memory integration', () => {
+    it('should preserve metadata when messages are saved and retrieved from memory', async () => {
+      // Create a message list with thread/resource info (simulating memory context)
+      const messageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+
+      // Add messages with metadata
+      const messagesWithMetadata: UIMessageWithMetadata[] = [
+        {
+          id: 'msg1',
+          role: 'user',
+          content: 'Hello with metadata',
+          parts: [{ type: 'text', text: 'Hello with metadata' }],
+          metadata: {
+            source: 'web-ui',
+            timestamp: 1234567890,
+            customField: 'custom-value',
+          },
+        },
+        {
+          id: 'msg2',
+          role: 'assistant',
+          content: 'Response with metadata',
+          parts: [{ type: 'text', text: 'Response with metadata' }],
+          metadata: {
+            model: 'gpt-4',
+            processingTime: 250,
+            tokens: 50,
+          },
+        },
+      ];
+
+      messageList.add(messagesWithMetadata[0], 'user');
+      messageList.add(messagesWithMetadata[1], 'response');
+
+      // Get messages in v2 format (what would be saved to memory)
+      const v2Messages = messageList.get.all.v2();
+
+      // Verify metadata is preserved in v2 format
+      expect(v2Messages.length).toBe(2);
+      expect(v2Messages[0].content.metadata).toEqual({
+        source: 'web-ui',
+        timestamp: 1234567890,
+        customField: 'custom-value',
+      });
+      expect(v2Messages[1].content.metadata).toEqual({
+        model: 'gpt-4',
+        processingTime: 250,
+        tokens: 50,
+      });
+
+      // Simulate loading from memory by creating a new MessageList with v2 messages
+      const newMessageList = new MessageList();
+      newMessageList.add(v2Messages, 'memory');
+
+      // Get back as UI messages
+      const uiMessages = newMessageList.get.all.ui();
+
+      // Verify metadata is still preserved after round trip
+      expect(uiMessages[0].metadata).toEqual({
+        source: 'web-ui',
+        timestamp: 1234567890,
+        customField: 'custom-value',
+      });
+      expect(uiMessages[1].metadata).toEqual({
+        model: 'gpt-4',
+        processingTime: 250,
+        tokens: 50,
+      });
+    });
+  });
+
+  describe('v1 message ID bug', () => {
+    it('should handle memory processor flow like agent does (BUG: v1 messages with same ID replace each other)', () => {
+      // This test reproduces the bug where v1 messages with the same ID replace each other
+      // when added back to a MessageList, causing tool history to be lost
+
+      // Step 1: Create message list with thread info
+      const messageList = new MessageList({
+        threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+        resourceId: 'weatherAgent',
+      });
+
+      // Step 2: Add memory messages (from rememberMessages)
+      const memoryMessagesV2: MastraMessageV2[] = [
+        {
+          id: 'fbd2f506-90e6-4f52-8ba4-633abe9e8442',
+          role: 'user',
+          createdAt: new Date('2025-08-05T22:58:18.403Z'),
+          threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+          resourceId: 'weatherAgent',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'LA weather' }],
+            content: 'LA weather',
+          },
+        },
+        {
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+          role: 'assistant',
+          createdAt: new Date('2025-08-05T22:58:22.151Z'),
+          threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+          resourceId: 'weatherAgent',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                  toolName: 'weatherTool',
+                  args: { location: 'Los Angeles' },
+                  result: {
+                    temperature: 29.4,
+                    feelsLike: 30.5,
+                    humidity: 48,
+                    windSpeed: 16,
+                    windGust: 18.7,
+                    conditions: 'Clear sky',
+                    location: 'Los Angeles',
+                  },
+                },
+              },
+              {
+                type: 'text',
+                text: 'The current weather in Los Angeles is as follows:\n\n- **Temperature:** 29.4°C (Feels like 30.5°C)\n- **Humidity:** 48%\n- **Wind Speed:** 16 km/h\n- **Wind Gusts:** 18.7 km/h\n- **Conditions:** Clear sky\n\nIf you need any specific activities or further information, let me know!',
+              },
+            ],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                toolName: 'weatherTool',
+                args: { location: 'Los Angeles' },
+                result: {
+                  temperature: 29.4,
+                  feelsLike: 30.5,
+                  humidity: 48,
+                  windSpeed: 16,
+                  windGust: 18.7,
+                  conditions: 'Clear sky',
+                  location: 'Los Angeles',
+                },
+              },
+            ],
+          },
+        },
+      ];
+
+      messageList.add(memoryMessagesV2, 'memory');
+
+      // Step 3: Get remembered messages as v1 (like agent does for processing)
+      const rememberedV1 = messageList.get.remembered.v1();
+
+      // Step 4: Simulate memory.processMessages (which just returns them if no processors)
+      const processedMemoryMessages = rememberedV1;
+
+      // Step 5: Create return list like agent does
+      const returnList = new MessageList().add(processedMemoryMessages as any, 'memory').add(
+        [
+          {
+            id: 'd936d31b-0ad5-43a8-89ed-c5cc24c60895',
+            role: 'user',
+            createdAt: new Date('2025-08-05T22:58:38.656Z'),
+            threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+            resourceId: 'weatherAgent',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'what was the result when you called the tool?' }],
+              content: 'what was the result when you called the tool?',
+            },
+          },
+        ],
+        'user',
+      );
+
+      // Step 6: Get prompt messages (what's sent to LLM)
+      const promptMessages = returnList.get.all.prompt();
+
+      // Verify the tool history is preserved
+      // Check if tool calls are present
+      const hasToolCall = promptMessages.some(
+        m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call'),
+      );
+
+      const hasToolResult = promptMessages.some(
+        m => m.role === 'tool' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-result'),
+      );
+
+      // These should be true if tool history is preserved
+      expect(hasToolCall).toBe(true);
+      expect(hasToolResult).toBe(true);
+    });
+
+    it('should handle v1 messages with suffixed IDs and prevent double-suffixing', () => {
+      // Test what happens when we create a new MessageList using v1 messages that already have suffixed IDs
+      const v1MessagesWithSuffixes: MastraMessageV1[] = [
+        {
+          role: 'user',
+          id: 'user-1',
+          createdAt: new Date('2025-08-05T22:58:18.403Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'text',
+          content: 'LA weather',
+        },
+        {
+          role: 'assistant',
+          id: 'msg-1',
+          createdAt: new Date('2025-08-05T22:58:22.151Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'tool-call',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_123',
+              toolName: 'weatherTool',
+              args: { location: 'LA' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          id: 'msg-1__split-1', // Suffixed ID from our fix with new pattern
+          createdAt: new Date('2025-08-05T22:58:22.151Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'tool-result',
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId: 'call_123',
+              toolName: 'weatherTool',
+              result: { temperature: 29.4 },
+            },
+          ],
+        },
+        {
+          role: 'assistant',
+          id: 'msg-1__split-2', // Suffixed ID from our fix with new pattern
+          createdAt: new Date('2025-08-05T22:58:22.151Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'text',
+          content: 'The weather in LA is 29.4°C.',
+        },
+      ];
+
+      // Create a new MessageList with these v1 messages
+      const newList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
+      newList.add(v1MessagesWithSuffixes, 'memory');
+
+      // Get the v2 messages to see how they're stored
+      const v2Messages = newList.get.all.v2();
+
+      // Check that all messages are preserved with their IDs
+      expect(v2Messages.length).toBe(4);
+      expect(v2Messages[0].id).toBe('user-1');
+      expect(v2Messages[1].id).toBe('msg-1');
+      expect(v2Messages[2].id).toBe('msg-1__split-1');
+      expect(v2Messages[3].id).toBe('msg-1__split-2');
+
+      // Now convert back to v1 and see what happens
+      const v1Again = newList.get.all.v1();
+
+      // With our improved suffix pattern, messages with __split- suffix should NOT get double-suffixed
+      // Note: v1 tool messages get converted to v2 assistant messages, then split again when converting back
+      expect(v1Again.length).toBe(5); // 5 messages because tool message gets split
+      expect(v1Again[0].id).toBe('user-1');
+      expect(v1Again[1].id).toBe('msg-1');
+      expect(v1Again[2].id).toBe('msg-1__split-1'); // assistant tool-call (preserved)
+      expect(v1Again[3].id).toBe('msg-1__split-1'); // tool result (preserved - no double suffix!)
+      expect(v1Again[4].id).toBe('msg-1__split-2'); // assistant text (preserved)
+
+      // Now if we try to convert these v2 messages that came from suffixed v1s
+      // We need to check if we get double-suffixed IDs
+      const v2MessageWithToolAndText: MastraMessageV2 = {
+        id: 'msg-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call_456',
+                toolName: 'anotherTool',
+                args: {},
+                result: { data: 'test' },
+              },
+            },
+            {
+              type: 'text',
+              text: 'Here is the result.',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result' as const,
+              toolCallId: 'call_456',
+              toolName: 'anotherTool',
+              args: {},
+              result: { data: 'test' },
+            },
+          ],
+        },
+      };
+
+      // Add this new message that will be split
+      newList.add(v2MessageWithToolAndText, 'response');
+
+      // Get v1 messages again
+      const finalV1 = newList.get.all.v1();
+
+      // The test shows our fix works! Messages with __split- suffix are not getting double-suffixed
+      expect(finalV1.length).toBeGreaterThanOrEqual(8); // At least 5 existing + 3 new split messages
+
+      // Verify that messages with __split- suffix are preserved (no double-suffixing)
+      const splitMessages = finalV1.filter(m => m.id.includes('__split-'));
+      splitMessages.forEach(msg => {
+        // Check that we don't have double suffixes like __split-1__split-1
+        expect(msg.id).not.toMatch(/__split-\d+__split-\d+/);
+      });
     });
   });
 });

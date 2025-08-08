@@ -1,4 +1,4 @@
-import { AlertDialog } from '@/components/ui/alert-dialog';
+import { AlertDialog } from '@mastra/playground-ui';
 
 import { useAgent } from '@/hooks/use-agents';
 

@@ -4258,6 +4258,124 @@ describe('MastraInngestWorkflow', () => {
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
     });
+
+    it('should handle consecutive nested workflows with suspend/resume', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+        if (!resumeData?.suspect) {
+          return await suspend({ message: 'What is the suspect?' });
+        }
+        return { suspect: resumeData.suspect };
+      });
+      const step1Definition = createStep({
+        id: 'step-1',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ suspect: z.string() }),
+        execute: step1,
+      });
+
+      const step2 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+        if (!resumeData?.suspect) {
+          return await suspend({ message: 'What is the second suspect?' });
+        }
+        return { suspect: resumeData.suspect };
+      });
+      const step2Definition = createStep({
+        id: 'step-2',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ suspect: z.string() }),
+        execute: step2,
+      });
+
+      const subWorkflow1 = createWorkflow({
+        id: 'sub-workflow-1',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(step1Definition)
+        .commit();
+
+      const subWorkflow2 = createWorkflow({
+        id: 'sub-workflow-2',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(step2Definition)
+        .commit();
+
+      const mainWorkflow = createWorkflow({
+        id: 'main-workflow',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(subWorkflow1)
+        .then(subWorkflow2)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: { mainWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await mainWorkflow.createRunAsync();
+
+      const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
+      expect(initialResult.status).toBe('suspended');
+
+      const firstResumeResult = await run.resume({
+        step: ['sub-workflow-1', 'step-1'],
+        resumeData: { suspect: 'first-suspect' },
+      });
+      expect(firstResumeResult.status).toBe('suspended');
+
+      const secondResumeResult = await run.resume({
+        step: ['sub-workflow-2', 'step-2'],
+        resumeData: { suspect: 'second-suspect' },
+      });
+
+      expect(step1).toHaveBeenCalledTimes(2);
+      expect(step2).toHaveBeenCalledTimes(2);
+      expect(secondResumeResult.status).toBe('success');
+      expect(secondResumeResult.steps['sub-workflow-1']).toMatchObject({
+        status: 'success',
+      });
+      expect(secondResumeResult.steps['sub-workflow-2']).toMatchObject({
+        status: 'success',
+      });
+
+      srv.close();
+    });
   });
 
   describe('Accessing Mastra', () => {

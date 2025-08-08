@@ -40,7 +40,7 @@ importers:
         specifier: ^4.7.0
         version: 4.19.4
       typescript:
-        specifier: ^5.3.3
+        specifier: ^5.8.3
         version: 5.8.3
 
 packages:

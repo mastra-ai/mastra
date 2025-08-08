@@ -3,7 +3,11 @@ title: "Reference: Context Relevancy | Evals | Mastra Docs"
 description: Documentation for the Context Relevancy Metric, which evaluates the relevance of retrieved context in RAG pipelines.
 ---
 
+import { ScorerCallout } from '@/components/scorer-callout'
+
 # ContextRelevancyMetric
+
+<ScorerCallout />
 
 The `ContextRelevancyMetric` class evaluates the quality of your RAG (Retrieval-Augmented Generation) pipeline's retriever by measuring how relevant the retrieved context is to the input query. It uses an LLM-based evaluation system that first extracts statements from the context and then assesses their relevance to the input.
 

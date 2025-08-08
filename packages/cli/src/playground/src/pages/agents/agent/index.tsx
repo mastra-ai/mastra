@@ -4,8 +4,8 @@ import {
   AgentSettingsProvider,
   WorkingMemoryProvider,
 } from '@mastra/playground-ui';
-import { useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
 import { AgentInformation } from '@/domains/agents/agent-information';
@@ -16,9 +16,11 @@ import type { Message } from '@/types';
 
 function Agent() {
   const { agentId, threadId } = useParams();
+  const [searchParams] = useSearchParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
   const navigate = useNavigate();
+  const [chatInputValue, setChatInputValue] = useState('');
   const { messages, isLoading: isMessagesLoading } = useMessages({
     agentId: agentId!,
     threadId: threadId!,
@@ -37,6 +39,24 @@ function Agent() {
       navigate(`/agents/${agentId}/chat/${uuid()}`);
     }
   }, [memory?.result, threadId]);
+
+  // Handle scrolling to message after navigation
+  useEffect(() => {
+    const messageId = searchParams.get('messageId');
+    if (messageId && messages && !isMessagesLoading) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageElement) {
+          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          messageElement.classList.add('bg-surface4');
+          setTimeout(() => {
+            messageElement.classList.remove('bg-surface4');
+          }, 2000);
+        }
+      }, 100);
+    }
+  }, [searchParams, messages, isMessagesLoading]);
 
   if (isAgentLoading) {
     return null;
@@ -60,10 +80,11 @@ function Agent() {
               initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
               memory={memory?.result}
               refreshThreadList={refreshThreads}
+              onInputChange={setChatInputValue}
             />
           </div>
 
-          <AgentInformation agentId={agentId!} />
+          <AgentInformation agentId={agentId!} chatInputValue={chatInputValue} />
         </MainContentContent>
       </WorkingMemoryProvider>
     </AgentSettingsProvider>

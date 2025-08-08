@@ -1,0 +1,36 @@
+{
+  "name": "template-pdf-to-audio",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "seed": "bun run src/lib/seed"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "A Mastra template that processes PDF files and converts their content to audio using voice synthesis. Features PDF text extraction, summarization, and text-to-speech conversion with configurable voice options.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.23",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/voice-openai": "latest",
+    "ai": "^4.0.56",
+    "pdf2json": "^3.1.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "mastra": "latest",
+    "typescript": "^5.8.3"
+  }
+}

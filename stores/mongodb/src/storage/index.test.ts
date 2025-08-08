@@ -51,6 +51,11 @@ describe('Validation', () => {
     it('does not throw on valid config', () => {
       expect(() => new MongoDBStore(validWithConnectionHandlerConfig)).not.toThrow();
     });
+
+    it('should initialize the stores correctly', () => {
+      const store = new MongoDBStore(validWithConnectionHandlerConfig);
+      expect(Object.keys(store.stores)).not.toHaveLength(0);
+    });
   });
 });
 

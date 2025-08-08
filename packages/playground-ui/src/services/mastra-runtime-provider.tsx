@@ -5,9 +5,6 @@ import {
   ThreadMessageLike,
   AppendMessage,
   AssistantRuntimeProvider,
-  SimpleImageAttachmentAdapter,
-  CompositeAttachmentAdapter,
-  SimpleTextAttachmentAdapter,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
@@ -18,8 +15,8 @@ import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
-import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
 import { MastraClient } from '@mastra/client-js';
+import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -126,15 +123,7 @@ export function MastraRuntimeProvider({
     ) {
       if (initialMessages && threadId && memory) {
         const convertedMessages: ThreadMessageLike[] = initialMessages
-          ?.map((message: any) => {
-            const toolInvocationsAsContentParts = (message.toolInvocations || []).map((toolInvocation: any) => ({
-              type: 'tool-call',
-              toolCallId: toolInvocation?.toolCallId,
-              toolName: toolInvocation?.toolName,
-              args: toolInvocation?.args,
-              result: toolInvocation?.result,
-            }));
-
+          ?.map((message: Message) => {
             const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
               type: image.contentType.startsWith(`image/`)
                 ? 'image'
@@ -145,20 +134,52 @@ export function MastraRuntimeProvider({
               image: image.url,
             }));
 
-            const reasoning = message?.parts
-              ?.find(({ type }: { type: string }) => type === 'reasoning')
-              ?.details?.map((detail: { type: 'text'; text: string }) => detail?.text)
-              ?.join(' ');
+            const formattedParts = (message.parts || [])
+              .map(part => {
+                if (part.type === 'reasoning') {
+                  return {
+                    type: 'reasoning',
+                    text:
+                      part.reasoning ||
+                      part?.details
+                        ?.filter(detail => detail.type === 'text')
+                        ?.map(detail => detail.text)
+                        .join(' '),
+                  };
+                }
+                if (part.type === 'tool-invocation') {
+                  if (part.toolInvocation.state === 'result') {
+                    return {
+                      type: 'tool-call',
+                      toolCallId: part.toolInvocation.toolCallId,
+                      toolName: part.toolInvocation.toolName,
+                      args: part.toolInvocation.args,
+                      result: part.toolInvocation.result,
+                    };
+                  }
+                }
+
+                if (part.type === 'file') {
+                  return {
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: part.data,
+                  };
+                }
+
+                if (part.type === 'text') {
+                  return {
+                    type: 'text',
+                    text: part.text,
+                  };
+                }
+              })
+              .filter(Boolean);
 
             return {
               ...message,
-              content: [
-                ...(reasoning ? [{ type: 'reasoning', text: reasoning }] : []),
-                ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
-                ...toolInvocationsAsContentParts,
-                ...attachmentsAsContentParts,
-              ],
-            };
+              content: [...formattedParts, ...attachmentsAsContentParts],
+            } as ThreadMessageLike;
           })
           .filter(Boolean);
         setMessages(convertedMessages);
@@ -216,7 +237,7 @@ export function MastraRuntimeProvider({
           ...(memory ? { threadId, resourceId: agentId } : {}),
           providerOptions: providerOptions as any,
         });
-        if (generateResponse.response) {
+        if (generateResponse.response && 'messages' in generateResponse.response) {
           const latestMessage = generateResponse.response.messages.reduce(
             (acc, message) => {
               const _content = Array.isArray(acc.content) ? acc.content : [];
@@ -556,20 +577,18 @@ export function MastraRuntimeProvider({
     }
   };
 
+  const { adapters, isReady } = useAdapters(agentId);
+
   const runtime = useExternalStoreRuntime({
     isRunning,
     messages,
     convertMessage,
     onNew,
     onCancel,
-    adapters: {
-      attachments: new CompositeAttachmentAdapter([
-        new SimpleImageAttachmentAdapter(),
-        new SimpleTextAttachmentAdapter(),
-        new PDFAttachmentAdapter(),
-      ]),
-    },
+    adapters: isReady ? adapters : undefined,
   });
+
+  if (!isReady) return null;
 
   return <AssistantRuntimeProvider runtime={runtime}> {children} </AssistantRuntimeProvider>;
 }

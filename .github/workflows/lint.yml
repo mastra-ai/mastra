@@ -41,29 +41,6 @@ jobs:
       - name: Format
         run: pnpm prettier --check .
 
-  contributor-actions:
-    name: Setup actions with secrets
-    runs-on: ubuntu-latest
-    permissions:
-      statuses: write
-    strategy:
-      matrix:
-        include:
-          - context: 'core/unit'
-            description: 'Core Package Tests'
-          - context: 'mcp/unit'
-            description: 'MCP Package Tests'
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup custom action
-        uses: ./.github/workflows/shared-actions/set-pr-status
-        with:
-          status: 'pending'
-          context: ${{ matrix.description }}
-          sha: ${{ github.event.pull_request.head.sha }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
   prebuild:
     name: Prebuild
     runs-on: ubuntu-latest
@@ -72,6 +49,7 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:rw
+      NODE_OPTIONS: --max-old-space-size=4096
     permissions:
       pull-requests: read
 
@@ -95,6 +73,9 @@ jobs:
 
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
+
+      - name: Type Check
+        run: pnpm typecheck
 
   check-bundle:
     name: Validate build outputs
@@ -138,30 +119,3 @@ jobs:
       - name: Check bundles
         working-directory: ./e2e-tests/pkg-outputs
         run: pnpm test
-
-  validator:
-    name: Validate examples packages.json
-    runs-on: ubuntu-latest
-    # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:rw
-    permissions:
-      pull-requests: read
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.19.1
-
-      - name: Install dependencies
-        run: npm install globby
-
-      - name: Run examples validator
-        run: node .github/scripts/validate-examples.js
