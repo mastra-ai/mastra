@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.17.1",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "jsdom": "^26.1.0",

@@ -30,7 +30,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@apidevtools/json-schema-ref-parser": "^14.1.1",
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.17.1",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "fast-deep-equal": "^3.1.3",
