@@ -4,6 +4,7 @@ import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions, StepRe
 
 import type { ChunkType } from '../../../../../stream/types';
 import type { MastraModelOutput } from '../../base';
+import type { ExecuteOptions } from '../../types';
 import type { ConsumeStreamOptions } from '../v4/compat';
 import { consumeStream, getErrorMessage } from '../v4/compat';
 import { convertFullStreamChunkToUIMessageStream, getErrorMessageV5, getResponseUIMessageId } from './compat';
@@ -100,7 +101,13 @@ export class AISDKV5OutputStream {
   #modelOutput: MastraModelOutput;
   #options: { toolCallStreaming?: boolean };
 
-  constructor({ modelOutput, options }: { modelOutput: MastraModelOutput; options: { toolCallStreaming?: boolean } }) {
+  constructor({
+    modelOutput,
+    options,
+  }: {
+    modelOutput: MastraModelOutput;
+    options: { toolCallStreaming?: boolean; executeOptions?: ExecuteOptions };
+  }) {
     this.#modelOutput = modelOutput;
     this.#options = options;
   }

@@ -1,16 +1,24 @@
 import { TransformStream, TextEncoderStream, TextDecoderStream } from 'stream/web';
 import type { DataStreamOptions, DataStreamWriter, LanguageModelV1StreamPart, StreamData } from 'ai';
+import { NoObjectGeneratedError } from 'ai';
 import type { ChunkType } from '../../../../../stream/types';
 import type { MastraModelOutput } from '../../base';
+import type { ExecuteOptions } from '../../types';
 import { consumeStream, getErrorMessage, getErrorMessageV4, mergeStreams, prepareResponseHeaders } from './compat';
 import type { ConsumeStreamOptions } from './compat';
-import { convertFullStreamChunkToAISDKv4 } from './transforms';
+import { convertFullStreamChunkToAISDKv4, createObjectStreamTransformer } from './transforms';
 
 export class AISDKV4OutputStream {
   #modelOutput: MastraModelOutput;
-  #options: { toolCallStreaming?: boolean };
+  #options: { toolCallStreaming?: boolean; executeOptions?: ExecuteOptions };
 
-  constructor({ modelOutput, options }: { modelOutput: MastraModelOutput; options: { toolCallStreaming?: boolean } }) {
+  constructor({
+    modelOutput,
+    options,
+  }: {
+    modelOutput: MastraModelOutput;
+    options: { toolCallStreaming?: boolean; executeOptions?: ExecuteOptions };
+  }) {
     this.#modelOutput = modelOutput;
     this.#options = options;
   }
@@ -139,9 +147,18 @@ export class AISDKV4OutputStream {
     let startEvent: ChunkType | undefined;
     let hasStarted: boolean = false;
     const self = this;
-    return this.#modelOutput.fullStream.pipeThrough(
-      new TransformStream<ChunkType, LanguageModelV1StreamPart>({
+
+    const objectTransformer = createObjectStreamTransformer({ executeOptions: self.#options.executeOptions });
+
+    return this.#modelOutput.fullStream.pipeThrough(objectTransformer).pipeThrough(
+      new TransformStream<ChunkType | any, LanguageModelV1StreamPart>({
         transform(chunk, controller) {
+          // object chunks from the object transformer
+          if (chunk.type === 'object') {
+            controller.enqueue(chunk);
+            return;
+          }
+
           if (chunk.type === 'start') {
             return;
           }
@@ -182,6 +199,75 @@ export class AISDKV4OutputStream {
 
           if (chunk.type === 'error') {
             controller.terminate();
+          }
+        },
+      }),
+    );
+  }
+
+  get object(): Promise<any> {
+    return (async () => {
+      const chunks: any[] = [];
+      const reader = this.partialObjectStream.getReader();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        if (chunks.length === 0) {
+          throw new NoObjectGeneratedError({
+            message: 'No object generated: response did not match schema.',
+            response: this.#modelOutput.response || { body: '', headers: {} },
+            usage: this.#modelOutput.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            finishReason: this.#modelOutput.finishReason || 'stop',
+          });
+        }
+
+        const finalObject = chunks[chunks.length - 1];
+        const schema = this.#options.executeOptions?.schema;
+        const output = this.#options.executeOptions?.output;
+
+        // For array output, the finalObject is already the elements array from the transformer
+        // For object output, finalObject is the object itself
+        let resultObject = finalObject;
+
+        // Validate final object against schema if provided (only for Zod schemas)
+        if (schema && typeof schema === 'object' && 'parse' in schema) {
+          try {
+            // For array output, validate each element in the array
+            if (output === 'array' && Array.isArray(resultObject)) {
+              return resultObject.map(element => (schema as any).parse(element));
+            } else {
+              return (schema as any).parse(resultObject);
+            }
+          } catch (error) {
+            throw new NoObjectGeneratedError({
+              message: 'No object generated: response did not match schema.',
+              response: this.#modelOutput.response || { body: '', headers: {} },
+              usage: this.#modelOutput.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+              finishReason: this.#modelOutput.finishReason || 'stop',
+            });
+          }
+        }
+
+        return resultObject;
+      } finally {
+        reader.releaseLock();
+      }
+    })();
+  }
+
+  get partialObjectStream() {
+    const self = this;
+    const objectTransformer = createObjectStreamTransformer({ executeOptions: self.#options.executeOptions });
+    return this.#modelOutput.fullStream.pipeThrough(objectTransformer).pipeThrough(
+      new TransformStream<any, any>({
+        transform(chunk, controller) {
+          if (chunk.type === 'object') {
+            controller.enqueue(chunk.object);
           }
         },
       }),

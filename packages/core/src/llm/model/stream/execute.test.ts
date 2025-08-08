@@ -4,12 +4,14 @@ import { generateTextTestsV4 } from './ai-sdk/v4/test-utils/generateText';
 import { mergeIntoDataStreamTests } from './ai-sdk/v4/test-utils/mergeIntoDataStream';
 import { optionsTests as optionsTestsV4 } from './ai-sdk/v4/test-utils/options';
 import { resultObjectTests as resultObjectTestsV4 } from './ai-sdk/v4/test-utils/result-object';
+import { streamObjectTestsV4 } from './ai-sdk/v4/test-utils/streamObject';
 import { textStreamTests as textStreamTestsV4 } from './ai-sdk/v4/test-utils/textStream';
 import { toDataStreamResponseTests } from './ai-sdk/v4/test-utils/toDataStreamResponse';
 import { fullStreamTests as fullStreamTestsV5 } from './ai-sdk/v5/test-utils/fullStream';
 import { generateTextTestsV5 } from './ai-sdk/v5/test-utils/generateText';
 import { optionsTests as optionsTestsV5 } from './ai-sdk/v5/test-utils/options';
 import { resultObjectTests as resultObjectTestsV5 } from './ai-sdk/v5/test-utils/result-object';
+import { streamObjectTestsV5 } from './ai-sdk/v5/test-utils/streamObject';
 import { telemetryTests as telemetryTestsV5 } from './ai-sdk/v5/test-utils/telemetry';
 import { textStreamTests as textStreamTestsV5 } from './ai-sdk/v5/test-utils/textStream';
 import { toolsTests as toolsTestsV5 } from './ai-sdk/v5/test-utils/tools';
@@ -41,6 +43,7 @@ describe('V4 tests', () => {
   });
 
   generateTextTestsV4({ executeFn: execute, runId });
+  streamObjectTestsV4({ executeFn: execute, runId });
 });
 
 describe('V5 tests', () => {
@@ -59,4 +62,5 @@ describe('V5 tests', () => {
   toUIMessageStreamTests({ executeFn: execute, runId });
 
   generateTextTestsV5({ executeFn: execute, runId });
+  streamObjectTestsV5({ executeFn: execute, runId });
 });
