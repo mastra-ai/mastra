@@ -65,6 +65,7 @@ export class MastraBaseError<D, C> extends Error {
   public readonly category: C;
   public readonly details?: Record<string, Json<Scalar>> = {};
   public readonly message: string;
+  public readonly stack?: string;
 
   constructor(
     errorDefinition: IErrorDefinition<D, C>,
@@ -83,6 +84,7 @@ export class MastraBaseError<D, C> extends Error {
     this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
     this.details = errorDefinition.details ?? {};
+    this.stack = error?.stack;
     this.message = message;
 
     Object.setPrototypeOf(this, new.target.prototype);
@@ -97,6 +99,7 @@ export class MastraBaseError<D, C> extends Error {
       domain: this.domain,
       category: this.category,
       details: this.details,
+      stack: this.stack,
     };
   }
 
