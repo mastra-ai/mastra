@@ -1,4 +1,4 @@
-import { useTemplateRepo } from '@/hooks/use-templates';
+import { useTemplateRepo, useTemplateRepoEnvVars } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import {
   Breadcrumb,
@@ -14,20 +14,36 @@ import {
 } from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
 import { useEffect, useState } from 'react';
-import { useTemplateEnvVars } from '@/domains/templates/use-template-envvars';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
-  const { data: template, isLoading } = useTemplateRepo({ repoOrSlug: templateSlug, owner: 'mastra-ai' });
-  const [isInstalling, setIsInstalling] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>('');
-  const { data: templateEnvVars, ok: templateEnvVarsLoaded } = useTemplateEnvVars(selectedProvider);
+  const [isInstalling, setIsInstalling] = useState(false);
   const [variables, setVariables] = useState({});
   const [errors, setErrors] = useState<string[]>([]);
   const [success, setSuccess] = useState(false);
+  const { data: template, isLoading: isLoadingTemplate } = useTemplateRepo({
+    repoOrSlug: templateSlug,
+    owner: 'mastra-ai',
+  });
 
-  const providerOptions = (template?.supportedProviders || []).map(provider => ({ value: provider, label: provider }));
+  // const template = undefined;
+  // const isLoadingTemplate = true;
+
+  const { data: templateEnvVars, isLoading: isLoadingEnvVars } = useTemplateRepoEnvVars({
+    repo: `template-${templateSlug}`,
+    owner: 'mastra-ai',
+    branch: 'main',
+    llmProvider: selectedProvider,
+  });
+
+  const providerOptions = [
+    { value: 'openai', label: 'OpenAI' },
+    { value: 'anthropic', label: 'Anthropic' },
+    { value: 'groq', label: 'Groq' },
+    { value: 'google', label: 'Google' },
+  ];
 
   const templateInfoData = [
     {
@@ -62,34 +78,26 @@ export default function Template() {
     },
   ];
 
-  console.log({ templateInfoData });
-
+  // mock of installed entities
+  // In a real application, this data would be fetched from the server or derived from the template installation process
+  // For now, we are just simulating the installation of three entities: a tool,
   const installedEntities = [
     {
-      key: 'tools',
-      label: 'Tools',
-      value: template?.tools?.length ? template.tools.map(tool => tool).join(', ') : 'n/a',
-      icon: <ToolsIcon />,
+      ...templateInfoData[0],
     },
     {
-      key: 'agents',
-      label: 'Agents',
-      value: template?.agents?.length ? template.agents.map(agent => agent).join(', ') : 'n/a',
-      icon: <AgentIcon />,
+      ...templateInfoData[1],
     },
     {
-      key: 'workflows',
-      label: 'Workflows',
-      value: template?.workflows?.length ? template.workflows.map(workflow => workflow).join(', ') : 'n/a',
-      icon: <WorkflowIcon />,
+      ...templateInfoData[2],
     },
-  ];
+  ].filter(entity => entity.value !== 'n/a');
 
   useEffect(() => {
-    if (templateEnvVarsLoaded) {
+    if (templateEnvVars) {
       setVariables(templateEnvVars || {});
     }
-  }, [templateEnvVarsLoaded, templateEnvVars]);
+  }, [templateEnvVars]);
 
   const handleProviderChange = (value: string) => {
     setSelectedProvider(value);
@@ -147,39 +155,40 @@ export default function Template() {
         </Breadcrumb>
       </Header>
       <div className={cn('max-w-[80rem] w-full px-[3rem] mx-auto grid gap-y-[1rem] h-full overflow-y-scroll')}>
-        {template && (
-          <div className="p-[1.5rem] ">
-            <TemplateInfo
-              isLoading={true}
-              title={template.title}
-              description={template.longDescription}
-              imageURL={template.imageURL}
-              githubUrl={template.githubUrl}
-              infoData={templateInfoData}
-            />
-            {template && (
-              <>
-                {isInstalling && <TemplateInstallation name={template.title} />}
-                {template && success && (
-                  <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
-                )}
-                {!isInstalling && !success && (
-                  <TemplateForm
-                    providerOptions={providerOptions}
-                    selectedProvider={selectedProvider}
-                    onProviderChange={handleProviderChange}
-                    variables={variables}
-                    setVariables={setVariables}
-                    errors={errors}
-                    setErrors={setErrors}
-                    handleInstallTemplate={handleInstallTemplate}
-                    handleVariableChange={handleVariableChange}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        )}
+        <div className="p-[1.5rem]">
+          <TemplateInfo
+            isLoading={isLoadingTemplate}
+            title={template?.title}
+            description={template?.longDescription}
+            imageURL={template?.imageURL}
+            githubUrl={template?.githubUrl}
+            infoData={templateInfoData}
+          />
+          {template && (
+            <>
+              {isInstalling && <TemplateInstallation name={template.title} />}
+
+              {template && success && (
+                <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
+              )}
+
+              {!isInstalling && !success && (
+                <TemplateForm
+                  providerOptions={providerOptions}
+                  selectedProvider={selectedProvider}
+                  onProviderChange={handleProviderChange}
+                  variables={variables}
+                  setVariables={setVariables}
+                  errors={errors}
+                  setErrors={setErrors}
+                  handleInstallTemplate={handleInstallTemplate}
+                  handleVariableChange={handleVariableChange}
+                  isLoadingEnvVars={isLoadingEnvVars}
+                />
+              )}
+            </>
+          )}
+        </div>
       </div>
     </MainContentLayout>
   );

@@ -100,14 +100,30 @@ async function getTemplateRepo({ repoOrSlug, owner }: { repoOrSlug: string; owne
   return template;
 }
 
+const LLM_PROVIDER_ENV_MAP = {
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  groq: 'GROQ_API_KEY',
+};
+
+const LLM_MODEL_ENV_MAP = {
+  openai: 'gpt-4.1',
+  anthropic: 'claude-3-5-sonnet-20240620',
+  google: 'gemini-2.5-pro',
+  groq: 'llama-3.3-70b-versatile',
+};
+
 async function getTemplateRepoEnvVars({
   repo,
   owner,
   branch,
+  llmProvider,
 }: {
   repo: string;
   owner: string;
   branch: string;
+  llmProvider: string;
 }): Promise<Record<string, string>> {
   const envUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/.env.example`;
   const envResponse = await fetch(envUrl);
@@ -116,14 +132,30 @@ async function getTemplateRepoEnvVars({
     const envContent = await envResponse.text();
     const envVars = envContent.split('\n').reduce(
       (acc, line) => {
+        if (!line || line.startsWith('#')) return acc; // Skip empty lines and comments
+
         const [key, value] = line.split('=');
+
         if (key) {
-          acc[key] = value?.split('')?.every(item => item === '*') ? '' : value?.replaceAll('"', '');
+          let mappedKey = key.trim();
+
+          const isLLMProviderApiKey = Object.values(LLM_PROVIDER_ENV_MAP).includes(key);
+
+          if (isLLMProviderApiKey && llmProvider) {
+            mappedKey = LLM_PROVIDER_ENV_MAP?.[llmProvider as keyof typeof LLM_PROVIDER_ENV_MAP] || key;
+          }
+
+          acc[mappedKey] = value?.split('')?.every(item => item === '*') ? '' : value?.replaceAll('"', '');
+
+          if (isLLMProviderApiKey && llmProvider) {
+            acc['MODEL'] = LLM_MODEL_ENV_MAP?.[llmProvider as keyof typeof LLM_MODEL_ENV_MAP] || '';
+          }
         }
         return acc;
       },
       {} as Record<string, string>,
     );
+
     return envVars;
   }
 
@@ -144,9 +176,19 @@ export const useTemplateRepo = ({ repoOrSlug, owner }: { repoOrSlug: string; own
   });
 };
 
-export const useTemplateRepoEnvVars = ({ repo, owner, branch }: { repo: string; owner: string; branch: string }) => {
+export const useTemplateRepoEnvVars = ({
+  repo,
+  owner,
+  branch,
+  llmProvider,
+}: {
+  repo: string;
+  owner: string;
+  branch: string;
+  llmProvider: string;
+}) => {
   return useQuery({
-    queryKey: ['template-repo-env-vars', repo, owner, branch],
-    queryFn: () => getTemplateRepoEnvVars({ repo, owner, branch }),
+    queryKey: ['template-repo-env-vars', repo, owner, branch, llmProvider],
+    queryFn: () => getTemplateRepoEnvVars({ repo, owner, branch, llmProvider }),
   });
 };

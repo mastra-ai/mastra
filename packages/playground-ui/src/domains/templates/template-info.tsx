@@ -13,22 +13,29 @@ type TemplateInfoProps = {
 };
 
 export function TemplateInfo({ title, description, imageURL, githubUrl, isLoading, infoData }: TemplateInfoProps) {
+  console.log({ isLoading });
+
   return (
     <>
-      <div
-        className={cn('grid grid-cols-[1fr_1fr] gap-x-[6rem] mt-[2rem]', {
-          '[&>h2]:bg-surface': isLoading,
-        })}
-      >
-        <h2
+      <div className={cn('grid grid-cols-[1fr_1fr] gap-x-[6rem] mt-[2rem] min-h-[4rem] items-center')}>
+        <div
           className={cn(
-            'text-[1.5rem] flex items-center gap-[0.75rem] py-[1rem]',
-            '[&>svg]:w-[1.2em] [&_svg]:h-[1.2em] [&_svg]:opacity-50',
+            'text-[1.5rem] flex items-center gap-[0.75rem] ',
+            '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50',
+            {
+              '[&>svg]:opacity-20': isLoading,
+            },
           )}
         >
           <PackageIcon />
-          {title}
-        </h2>
+          <h2
+            className={cn({
+              'bg-surface4 flex rounded-lg min-w-[50%]': isLoading,
+            })}
+          >
+            {isLoading ? <>&nbsp;</> : title}
+          </h2>
+        </div>
         <div
           className="w-full h-full bg-cover bg-center transition-scale duration-150 rounded-lg overflow-hidden"
           style={{
@@ -38,19 +45,27 @@ export function TemplateInfo({ title, description, imageURL, githubUrl, isLoadin
       </div>
       <div className="grid grid-cols-[1fr_1fr]  gap-x-[6rem] mt-[2rem] ">
         <div className="grid">
-          <p className="mb-[1rem] text-[0.875rem] text-icon4">{description}</p>
-          <a
-            href={githubUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-[.5rem] mt-auto text-icon3 text-[0.875rem] hover:text-icon5"
+          <p
+            className={cn('mb-[1rem] text-[0.875rem] text-icon4 mt-[.5rem] leading-[1.75]', {
+              'bg-surface4 rounded-lg ': isLoading,
+            })}
           >
-            <GithubIcon />
-            {githubUrl?.split('/')?.pop()}
-          </a>
+            {isLoading ? <>&nbsp;</> : description}
+          </p>
+          {githubUrl && (
+            <a
+              href={githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-[.5rem] mt-auto text-icon3 text-[0.875rem] hover:text-icon5"
+            >
+              <GithubIcon />
+              {githubUrl?.split('/')?.pop()}
+            </a>
+          )}
         </div>
 
-        {infoData && <KeyValueList data={infoData} LinkComponent={Link} labelsAreHidden={true} />}
+        {infoData && <KeyValueList data={infoData} LinkComponent={Link} labelsAreHidden={true} isLoading={isLoading} />}
       </div>
     </>
   );

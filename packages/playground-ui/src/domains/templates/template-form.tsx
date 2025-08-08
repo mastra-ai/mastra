@@ -14,6 +14,7 @@ type TemplateFormProps = {
   setErrors: (errors: string[]) => void;
   handleInstallTemplate: () => void;
   handleVariableChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isLoadingEnvVars?: boolean;
 };
 
 export function TemplateForm({
@@ -24,6 +25,7 @@ export function TemplateForm({
   errors,
   handleInstallTemplate,
   handleVariableChange,
+  isLoadingEnvVars,
 }: TemplateFormProps) {
   return (
     <Container>
@@ -44,39 +46,49 @@ export function TemplateForm({
           placeholder="Select a provider"
         />
 
-        {Object.entries(variables || {}).length > 0 && (
+        {selectedProvider && Object.entries(variables || {}).length > 0 && (
           <>
             <h3 className="text-icon3 text-[0.875rem]">Set required Environmental Variables</h3>
             <div className="grid grid-cols-[1fr_1fr] gap-[1rem] items-start">
-              {Object.entries(variables).map(([key, value]) => (
-                <Fragment key={key}>
-                  <InputField name={`env-${key}`} labelIsHidden={true} label="Key" value={key} disabled />
-                  <InputField
-                    name={key}
-                    labelIsHidden={true}
-                    label="Value"
-                    value={value as string}
-                    onChange={handleVariableChange}
-                    errorMsg={errors.includes(key) ? `Value is required.` : ''}
-                  />
-                </Fragment>
-              ))}
+              {isLoadingEnvVars ? (
+                <>
+                  <InputField name={`empty`} labelIsHidden={true} label="Key" value={'empty'} disabled />
+                  <InputField name={`empty`} labelIsHidden={true} label="Key" value={'empty'} disabled />
+                </>
+              ) : (
+                Object.entries(variables).map(([key, value]) => (
+                  <Fragment key={key}>
+                    <InputField name={`env-${key}`} labelIsHidden={true} label="Key" value={key} disabled />
+                    <InputField
+                      name={key}
+                      labelIsHidden={true}
+                      label="Value"
+                      value={value as string}
+                      onChange={handleVariableChange}
+                      errorMsg={errors.includes(key) ? `Value is required.` : ''}
+                      autoComplete="off"
+                    />
+                  </Fragment>
+                ))
+              )}
             </div>
           </>
         )}
 
-        <button
-          className={cn(
-            'flex items-center gap-[0.5rem] justify-center text-[0.875rem] w-full bg-surface5 min-h-[2.5rem] rounded-lg text-icon5 hover:bg-surface6 transition-colors',
-            '[&<svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
-          )}
-          onClick={() => {
-            handleInstallTemplate();
-          }}
-          disabled={!selectedProvider || errors.length > 0}
-        >
-          Install <ArrowRightIcon />
-        </button>
+        {selectedProvider && !isLoadingEnvVars && (
+          <button
+            className={cn(
+              'flex items-center gap-[0.5rem] justify-center text-[0.875rem] w-full bg-surface5 min-h-[2.5rem] rounded-lg text-icon5 hover:bg-surface6 transition-colors',
+              '[&<svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
+            )}
+            onClick={() => {
+              handleInstallTemplate();
+            }}
+            disabled={!selectedProvider || errors.length > 0}
+          >
+            Install <ArrowRightIcon />
+          </button>
+        )}
       </div>
     </Container>
   );

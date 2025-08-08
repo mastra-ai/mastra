@@ -25,9 +25,10 @@ type KeyValueListProps = {
   LinkComponent: React.ComponentType;
   labelsAreHidden?: boolean;
   className?: string;
+  isLoading?: boolean;
 };
 
-export function KeyValueList({ data, LinkComponent, className, labelsAreHidden = false }: KeyValueListProps) {
+export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, isLoading }: KeyValueListProps) {
   const { Link } = useLinkComponent();
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
     return labelsAreHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
@@ -51,6 +52,9 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden =
                 className={cn(
                   'flex items-center gap-[0.5rem]',
                   '[&>svg]:w-[1.4em] [&>svg]:h-[1.4em] [&>svg]:text-icon3 [&>svg]:opacity-50',
+                  {
+                    '[&>svg]:opacity-20': isLoading,
+                  },
                 )}
               >
                 {icon} <LabelWrapper>{label}</LabelWrapper>
@@ -68,20 +72,31 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden =
                 '[&>a:hover]:text-icon6 [&>a:hover]:bg-surface6',
               )}
             >
-              {isValueItemArray ? (
-                value?.map(item => {
-                  return item.path ? (
-                    <RelationWrapper description={item.description}>
-                      <Link href={item.path} key={item.id}>
-                        {item?.name}
-                      </Link>
-                    </RelationWrapper>
-                  ) : (
-                    <span key={item.id}>{item?.name}</span>
-                  );
-                })
+              {isLoading ? (
+                <span
+                  className={cn('bg-surface4 rounded-e-lg w-full')}
+                  style={{ width: `${Math.floor(Math.random() * (90 - 30 + 1)) + 50}%` }}
+                >
+                  &nbsp;
+                </span>
               ) : (
-                <>{value ? value : <span className="text-icon3 text-[0.75rem]">n/a</span>}</>
+                <>
+                  {isValueItemArray ? (
+                    value?.map(item => {
+                      return item.path ? (
+                        <RelationWrapper description={item.description}>
+                          <Link href={item.path} key={item.id}>
+                            {item?.name}
+                          </Link>
+                        </RelationWrapper>
+                      ) : (
+                        <span key={item.id}>{item?.name}</span>
+                      );
+                    })
+                  ) : (
+                    <>{value ? value : <span className="text-icon3 text-[0.75rem]">n/a</span>}</>
+                  )}
+                </>
               )}
             </dd>
           </>
