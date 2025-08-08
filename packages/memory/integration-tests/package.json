@@ -3,8 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "pnpm compile:worker && pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors",
+    "test": "pnpm compile:worker && pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors && pnpm test:ai-sdk-compat",
     "pretest:pg": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "test:ai-sdk-compat": "vitest run ./src/ai-sdk-compatibility.test.ts",
     "test:pg": "vitest run ./src/with-pg-storage.test.ts",
     "posttest:pg": "docker compose down --volumes",
     "pretest:upstash": "docker compose up -d redis serverless-redis-http",
@@ -29,9 +30,9 @@
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/google": "^1.2.19",
-    "@ai-sdk/openai": "^1.3.0",
-    "@ai-sdk/react": "^1.2.1",
+    "@ai-sdk/google": "latest",
+    "@ai-sdk/openai": "latest",
+    "@ai-sdk/react": "latest",
     "@mastra/fastembed": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
@@ -47,7 +48,7 @@
     "@testing-library/react": "^16.2.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",
-    "ai": "^4.2.2",
+    "ai": "latest",
     "jsdom": "^26.0.0",
     "mastra": "workspace:*",
     "next": "^15.2.4",

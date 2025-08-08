@@ -717,19 +717,19 @@ export function createStep<
               await emitter.emit('watch-v2', {
                 type: 'tool-call-delta',
                 ...toolData,
-                argsTextDelta: chunk.textDelta,
+                argsTextDelta: chunk.text,
               });
               break;
 
-            case 'step-start':
-            case 'step-finish':
+            case 'start-step':
+            case 'finish-step':
             case 'finish':
               break;
 
             case 'tool-call':
             case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
+            case 'tool-input-start':
+            case 'tool-input-delta':
             case 'source':
             case 'file':
             default:

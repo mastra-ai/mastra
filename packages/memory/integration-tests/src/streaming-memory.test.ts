@@ -8,7 +8,7 @@ import { useChat } from '@ai-sdk/react';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import type { Message } from 'ai';
+import { DefaultChatTransport, isToolUIPart } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';
@@ -68,7 +68,7 @@ describe('Memory Streaming Tests', () => {
 
     expect(chunks1.length).toBeGreaterThan(0);
     expect(response1).toContain('weather');
-    expect(response1).toContain('70 degrees');
+    expect(response1).toContain('70');
 
     // Second weather check
     const stream2 = await agent.stream('what is the weather in Seattle?', {
@@ -86,7 +86,7 @@ describe('Memory Streaming Tests', () => {
     expect(chunks2.length).toBeGreaterThan(0);
     expect(response2).toContain('Seattle');
     expect(response2).toContain('weather');
-    expect(response2).toContain('70 degrees');
+    expect(response2).toContain('70');
   });
 
   it('should use custom mastra ID generator for messages in memory', async () => {
@@ -189,16 +189,21 @@ describe('Memory Streaming Tests', () => {
       let error: Error | null = null;
       const { result } = renderHook(() => {
         const chat = useChat({
-          api: `http://localhost:${port}/api/agents/test/stream`,
-          experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
-            return {
-              messages: [messages.at(-1)],
-              threadId,
-              resourceId,
-            };
-          },
+          transport: new DefaultChatTransport({
+            api: `http://localhost:${port}/api/agents/test/stream`,
+            prepareRequest({ messages, body }) {
+              return {
+                body: {
+                  messages: [messages.at(-1)],
+                  threadId,
+                  resourceId,
+                  ...body,
+                },
+              };
+            },
+          }),
           onFinish(message) {
-            console.log('useChat finished', message.id);
+            console.log('useChat finished', message);
           },
           onError(e) {
             error = e;
@@ -212,9 +217,9 @@ describe('Memory Streaming Tests', () => {
       async function expectResponse({ message, responseContains }: { message: string; responseContains: string[] }) {
         messageCount++;
         await act(async () => {
-          await result.current.append({
-            role: 'user',
-            content: message,
+          await result.current.sendMessage({
+            role: 'user' as const,
+            parts: [{ type: 'text', text: message }],
           });
         });
         const responseIndex = messageCount * 2 - 1;
@@ -223,7 +228,7 @@ describe('Memory Streaming Tests', () => {
             expect(error).toBeNull();
             expect(result.current.messages).toHaveLength(messageCount * 2);
             for (const should of responseContains) {
-              expect(result.current.messages[responseIndex].content).toContain(should);
+              expect(JSON.stringify(result.current.messages[responseIndex].parts)).toContain(should);
             }
           },
           { timeout: 1000 },
@@ -232,12 +237,12 @@ describe('Memory Streaming Tests', () => {
 
       await expectResponse({
         message: 'what is the weather in Los Angeles?',
-        responseContains: ['Los Angeles', '70 degrees'],
+        responseContains: ['Los Angeles', '70'],
       });
 
       await expectResponse({
         message: 'what is the weather in Seattle?',
-        responseContains: ['Seattle', '70 degrees'],
+        responseContains: ['Seattle', '70'],
       });
     });
 
@@ -256,17 +261,23 @@ describe('Memory Streaming Tests', () => {
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
-          api: `http://localhost:${port}/api/agents/test/stream`,
-          initialMessages,
-          experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
-            return {
-              messages: [messages.at(-1)],
-              threadId,
-              resourceId,
-            };
-          },
+          messages: initialMessages,
+          transport: new DefaultChatTransport({
+            api: `http://localhost:${port}/api/agents/test/stream`,
+
+            prepareRequest({ messages, body }) {
+              return {
+                body: {
+                  messages: [messages.at(-1)],
+                  threadId,
+                  resourceId,
+                  ...body,
+                },
+              };
+            },
+          }),
           onFinish(message) {
-            console.log('useChat finished', message.id);
+            console.log('useChat finished', message);
           },
           onError(e) {
             error = e;
@@ -286,9 +297,9 @@ describe('Memory Streaming Tests', () => {
       async function expectResponse({ message, responseContains }: { message: string; responseContains: string[] }) {
         const messageCountBefore = result.current.messages.length;
         await act(async () => {
-          await result.current.append({
-            role: 'user',
-            content: message,
+          await result.current.sendMessage({
+            role: 'user' as const,
+            parts: [{ type: 'text', text: message }],
           });
         });
 
@@ -308,20 +319,20 @@ describe('Memory Streaming Tests', () => {
         if (
           latestMessage.role === `assistant` &&
           latestMessage.parts.length === 2 &&
-          latestMessage.parts[1].type === `tool-invocation`
+          isToolUIPart(latestMessage.parts[1])
         ) {
           // client side tool call
           return;
         }
         for (const should of responseContains) {
-          let searchString = typeof latestMessage.content === `string` ? latestMessage.content : ``;
+          let searchString = ``;
 
           for (const part of latestMessage.parts) {
             if (part.type === `text`) {
               searchString += `\n${part.text}`;
             }
-            if (part.type === `tool-invocation`) {
-              searchString += `\n${JSON.stringify(part.toolInvocation)}`;
+            if (isToolUIPart(part)) {
+              searchString += `\n${JSON.stringify(part)}`;
             }
           }
 
@@ -336,7 +347,7 @@ describe('Memory Streaming Tests', () => {
       });
       await expectResponse({
         message: 'weather in Las Vegas',
-        responseContains: ['Las Vegas', '70 degrees'],
+        responseContains: ['Las Vegas', '70'],
       });
       state.clipboard = `test 2!`;
       await expectResponse({

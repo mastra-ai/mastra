@@ -140,7 +140,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         threadId,
         resourceId,
         workingMemory: workingMemory,
-        searchString: context.searchString,
+        searchString: context.searchString || undefined,
         memoryConfig: config,
       });
 

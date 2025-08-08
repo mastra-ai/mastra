@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '..';
@@ -13,6 +13,14 @@ import type { StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
+
+const usage = {
+  completionTokens: 10,
+  promptTokens: 3,
+  inputTokens: 10,
+  outputTokens: 100,
+  totalTokens: 200,
+};
 
 vi.mock('crypto', () => {
   return {
@@ -25,7 +33,7 @@ describe('Workflow', () => {
     vi.resetAllMocks();
 
     let counter = 0;
-    (randomUUID as vi.Mock).mockImplementation(() => {
+    (randomUUID as any).mockImplementation(() => {
       return `mock-uuid-${++counter}`;
     });
   });
@@ -315,37 +323,54 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
-        model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
+        model: new MockLanguageModelV2({
+          doStream() {
+            return Promise.resolve({
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    logprobs: undefined,
+                    usage: {
+                      completionTokens: 10,
+                      promptTokens: 3,
+                      inputTokens: 10,
+                      outputTokens: 100,
+                      totalTokens: 200,
+                    },
+                  },
+                ] as const,
+              }),
+            });
+          },
         }),
       });
 
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'London' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
                   logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage: {
+                    completionTokens: 10,
+                    promptTokens: 3,
+                    inputTokens: 10,
+                    outputTokens: 100,
+                    totalTokens: 200,
+                  },
                 },
               ],
             }),
@@ -399,7 +424,7 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = await run.stream({
+      const { stream } = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -426,6 +451,7 @@ describe('Workflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -456,6 +482,7 @@ describe('Workflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -484,6 +511,7 @@ describe('Workflow', () => {
               prompt: 'Capital of France, just the name',
             },
             startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -495,12 +523,23 @@ describe('Workflow', () => {
           type: 'tool-call-streaming-start',
         },
         {
+          type: 'start',
+        },
+        {
+          id: 'text-1',
+          type: 'text-start',
+        },
+        {
           args: {
             prompt: 'Capital of France, just the name',
           },
           argsTextDelta: 'Paris',
           name: 'test-agent-1',
           type: 'tool-call-delta',
+        },
+        {
+          id: 'text-1',
+          type: 'text-end',
         },
         {
           payload: {
@@ -527,6 +566,7 @@ describe('Workflow', () => {
               text: 'Paris',
             },
             startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -555,6 +595,7 @@ describe('Workflow', () => {
               prompt: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -566,12 +607,23 @@ describe('Workflow', () => {
           type: 'tool-call-streaming-start',
         },
         {
+          type: 'start',
+        },
+        {
+          id: 'text-1',
+          type: 'text-start',
+        },
+        {
           args: {
             prompt: 'Capital of UK, just the name',
           },
           argsTextDelta: 'London',
           name: 'test-agent-2',
           type: 'tool-call-delta',
+        },
+        {
+          id: 'text-1',
+          type: 'text-end',
         },
         {
           payload: {
@@ -2321,7 +2373,7 @@ describe('Workflow', () => {
           ])
           .map({
             result: {
-              step: step3,
+              step: step2,
               path: 'result',
             },
           })
@@ -6244,16 +6296,18 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
                   logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage,
                 },
               ],
             }),
@@ -6265,16 +6319,18 @@ describe('Workflow', () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'London' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
                   logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage,
                 },
               ],
             }),
@@ -6380,16 +6436,18 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
                   logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage,
                 },
               ],
             }),
@@ -6401,16 +6459,18 @@ describe('Workflow', () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'London' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
                   logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage,
                 },
               ],
             }),
@@ -6530,12 +6590,13 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
+            content: [{ type: 'text', text: 'Paris' }],
+            warnings: [],
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
+            usage,
           }),
         }),
       });
@@ -6543,12 +6604,13 @@ describe('Workflow', () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
+            content: [{ type: 'text', text: 'London' }],
+            warnings: [],
+            usage,
           }),
         }),
       });
@@ -6654,24 +6716,26 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
+            content: [{ type: 'text', text: 'Paris' }],
+            warnings: [],
+            usage,
           }),
         }),
       });
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
+            content: [{ type: 'text', text: 'London' }],
+            warnings: [],
+            usage,
           }),
         }),
       });
@@ -8719,7 +8783,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result1: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }: any) => ({
           result1: `processed-${inputData.input}`,
         })),
       });
@@ -8732,7 +8796,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result2: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }: any) => ({
           result2: `transformed-${inputData.input}`,
         })),
       });
@@ -8751,7 +8815,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result3: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }: any) => ({
           result3: `combined-${inputData.step1.result1}-${inputData.step2.result2}`,
         })),
       });
@@ -8769,7 +8833,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result4: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }: any) => ({
           result4: `final-${inputData.step1.result1}-${inputData.step2.result2}`,
         })),
       });
@@ -8920,8 +8984,8 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       })
-        .dowhile(step1, async ({ inputData }) => inputData.count < 3)
-        .dountil(step2, async ({ inputData }) => inputData.count === 10)
+        .dowhile(step1, async ({ inputData }) => (inputData?.count ?? 0) < 3)
+        .dountil(step2, async ({ inputData }) => (inputData?.count ?? 0) >= 10)
         .commit();
 
       const result = await workflow.createRun().start({ inputData: {} });

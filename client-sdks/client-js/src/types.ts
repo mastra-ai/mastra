@@ -1,6 +1,6 @@
+import type { UIMessage } from 'ai';
 import type {
   MastraMessageV1,
-  AiMessageType,
   CoreMessage,
   QueryResult,
   StorageThreadType,
@@ -11,7 +11,7 @@ import type {
   PaginationInfo,
   MastraMessageV2,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -70,7 +70,7 @@ export interface GetAgentResponse {
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  messages: string | string[] | CoreMessage[] | UIMessage[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -80,7 +80,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
 >;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  messages: string | string[] | CoreMessage[] | UIMessage[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -250,13 +250,17 @@ export interface GetMemoryThreadMessagesParams {
    * Limit the number of messages to retrieve (default: 40)
    */
   limit?: number;
+  /**
+   * Format of UI messages to return (default: aiv5)
+   */
+  format?: 'aiv4' | 'aiv5';
 }
 
 export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
 
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
-  uiMessages: AiMessageType[];
+  uiMessages: UIMessage[];
 }
 
 export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {

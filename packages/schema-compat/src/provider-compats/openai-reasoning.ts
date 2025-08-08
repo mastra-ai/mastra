@@ -13,7 +13,6 @@ import {
   isString,
   isUnion,
 } from '../schema-compatibility';
-
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
     super(model);
@@ -35,7 +34,8 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
 
   shouldApply(): boolean {
     if (
-      (this.getModel().supportsStructuredOutputs || this.isReasoningModel()) &&
+      // (this.getModel().supportsStructuredOutputs || this.isReasoningModel()) && // <- supportsStructuredOutputs no longer exists
+      this.isReasoningModel() &&
       (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
     ) {
       return true;

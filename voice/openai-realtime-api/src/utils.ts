@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
+import type z from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export type OpenAIExecuteFunction = (args: any) => Promise<any>;
@@ -30,7 +31,7 @@ export const transformTools = (tools?: TTools) => {
         parameters = zodToJsonSchema(tool.parameters);
         delete parameters.$schema;
       } else {
-        parameters = tool.parameters;
+        parameters = tool.parameters!;
       }
     } else {
       console.warn(`Tool ${name} has neither inputSchema nor parameters, skipping`);
@@ -50,19 +51,14 @@ export const transformTools = (tools?: TTools) => {
           if (!tool.execute) {
             throw new Error(`Tool ${name} has no execute function`);
           }
-
+          // Create a minimal ToolExecutionOptions object with required properties
+          const options = {
+            toolCallId: 'unknown',
+            messages: [],
+          };
           // For ToolAction, the first argument is a context object with the args in a 'context' property
           if ('inputSchema' in tool) {
-            return await tool.execute({ context: args });
-          }
-          // For VercelTool, pass args directly
-          else {
-            // Create a minimal ToolExecutionOptions object with required properties
-            const options = {
-              toolCallId: 'unknown',
-              messages: [],
-            };
-            return await tool.execute(args, options);
+            return await tool.execute({ context: args }, options);
           }
         } catch (error) {
           console.error(`Error executing tool ${name}:`, error);
@@ -87,12 +83,12 @@ export const isReadableStream = (obj: unknown) => {
   );
 };
 
-function isZodObject(schema: unknown) {
+function isZodObject(schema: unknown): schema is z.ZodObject<any> {
   return (
     !!schema &&
     typeof schema === 'object' &&
     '_def' in schema &&
-    schema._def &&
+    !!schema._def &&
     typeof schema._def === 'object' &&
     'typeName' in schema._def &&
     schema._def.typeName === 'ZodObject'

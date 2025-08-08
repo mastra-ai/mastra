@@ -20,6 +20,8 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const model = openai('gpt-4o');
+
 vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
 
 describe('MDocument', () => {
@@ -46,6 +48,7 @@ describe('MDocument', () => {
         maxSize: 1500,
         overlap: 0,
         extract: {
+          llm: model,
           keywords: true,
         },
       });
@@ -1874,6 +1877,7 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'markdown',
         extract: {
+          llm: model,
           title: true,
           summary: true,
           keywords: true,
@@ -1895,20 +1899,25 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'markdown',
         extract: {
+          llm: model,
           title: {
+            llm: model,
             nodes: 2,
             nodeTemplate: 'Generate a title for this: {context}',
             combineTemplate: 'Combine these titles: {context}',
           },
           summary: {
+            llm: model,
             summaries: ['self'],
             promptTemplate: 'Summarize this: {context}',
           },
           questions: {
+            llm: model,
             questions: 2,
             promptTemplate: 'Generate {numQuestions} questions about: {context}',
           },
           keywords: {
+            llm: model,
             keywords: 3,
             promptTemplate: 'Extract {maxKeywords} key terms from: {context}',
           },
@@ -1932,7 +1941,9 @@ describe('MDocument', () => {
       await expect(
         doc.chunk({
           extract: {
+            llm: model,
             summary: {
+              llm: model,
               summaries: ['invalid'],
             },
           },
@@ -1947,7 +1958,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with KeywordExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { llm: model, keywords: true } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1956,7 +1967,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with SummaryExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { summary: true } });
+      const chunks = await doc.chunk({ extract: { llm: model, summary: true } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1965,7 +1976,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with QuestionsAnsweredExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { questions: true } });
+      const chunks = await doc.chunk({ extract: { llm: model, questions: true } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1974,7 +1985,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with TitleExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { title: true } });
+      const chunks = await doc.chunk({ extract: { llm: model, title: true } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1985,6 +1996,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
       const chunks = await doc.chunk({
         extract: {
+          llm: model,
           keywords: true,
           summary: true,
           questions: true,
@@ -2007,7 +2019,7 @@ describe('MDocument', () => {
         separator: '\n\n',
         maxSize: 20,
         overlap: 0,
-        extract: { keywords: true },
+        extract: { llm: model, keywords: true },
       });
       expect(chunks.length).toBeGreaterThan(1);
       for (const chunk of chunks) {
@@ -2024,7 +2036,7 @@ describe('MDocument', () => {
         unrelatedField: 'should stay',
         source: 'unit-test',
       });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { llm: model, keywords: true } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.unrelatedField).toBe('should stay');
@@ -2042,7 +2054,7 @@ describe('MDocument', () => {
         type: 'text',
       });
 
-      await doc.extractMetadata({ title: true });
+      await doc.extractMetadata({ llm: model, title: true });
       const chunks = doc.getDocs();
 
       const titleA1 = chunks[0].metadata.documentTitle;

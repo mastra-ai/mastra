@@ -1,6 +1,6 @@
 import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
-import type { UIMessageWithMetadata } from '../agent';
+import type { UIMessage as AIV4UIMessage } from '../agent/message-list/ai-sdk-4/types';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
@@ -105,10 +105,10 @@ export type ScorerOptions = {
 };
 
 export type ScorerRunInputForAgent = {
-  inputMessages: UIMessageWithMetadata[];
-  rememberedMessages: UIMessageWithMetadata[];
+  inputMessages: AIV4UIMessage[];
+  rememberedMessages: AIV4UIMessage[];
   systemMessages: CoreMessage[];
   taggedSystemMessages: Record<string, CoreSystemMessage[]>;
 };
 
-export type ScorerRunOutputForAgent = UIMessageWithMetadata[];
+export type ScorerRunOutputForAgent = AIV4UIMessage[];

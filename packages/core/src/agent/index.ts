@@ -1,16 +1,19 @@
+export { MessageList } from './message-list';
+export * from './types';
+export { getToolName } from './message-list/ai-sdk-5/index';
+export * from './v5-to-v4-stream';
 import { randomUUID } from 'crypto';
-import type { ReadableStream, WritableStream } from 'stream/web';
+import type { WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, StreamTextResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z } from 'zod';
+import type { JSONSchema7, JSONSchema7Type } from 'json-schema';
+import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import { MastraLLM } from '../llm/model';
-import type { MastraLLMBase } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
   GenerateTextWithMessagesArgs,
@@ -36,7 +39,7 @@ import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
-import type { CoreTool } from '../tools/types';
+import type { ConvertedCoreTool, CoreTool, ToolParameters } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
@@ -47,7 +50,7 @@ import type { AgentVNextStreamOptions } from './agent.types';
 import type { InputProcessor } from './input-processor';
 import { runInputProcessors } from './input-processor/runner';
 import { MessageList } from './message-list';
-import type { MessageInput, UIMessageWithMetadata } from './message-list';
+import type { MessageInput } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -64,7 +67,6 @@ export type { ChunkType } from '../stream/types';
 export type { MastraAgentStream } from '../stream/MastraAgentStream';
 export * from './input-processor';
 export { TripWire };
-export { MessageList };
 export * from './types';
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
@@ -564,7 +566,7 @@ export class Agent<
   }: {
     runtimeContext?: RuntimeContext;
     model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
-  } = {}): MastraLLMBase | Promise<MastraLLMBase> {
+  } = {}): MastraLLM | Promise<MastraLLM> {
     // If model is provided, resolve it; otherwise use the agent's model
     const modelToUse = model
       ? typeof model === 'function'
@@ -686,7 +688,7 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
     if (!normMessage) {
       throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
     }
@@ -695,15 +697,15 @@ export class Agent<
     for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
-      } else if (part.type === `source`) {
+      } else if (part.type === `source-url`) {
         partsToGen.push({
           type: 'text',
-          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+          text: `User added URL: ${part.url.toString().substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
         partsToGen.push({
           type: 'text',
-          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+          text: `User added ${part.mediaType} file: ${part.url.toString().substring(0, 100)}`,
         });
       }
     }
@@ -730,7 +732,7 @@ export class Agent<
     return cleanedText;
   }
 
-  getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>) {
+  getMostRecentUserMessage(messages: Array<UIMessage>) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
   }
@@ -743,7 +745,7 @@ export class Agent<
   ) {
     try {
       if (userMessage) {
-        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.aiV5.ui().at(-1);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
@@ -874,7 +876,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
   }) {
-    let convertedMemoryTools: Record<string, CoreTool> = {};
+    let convertedMemoryTools: Record<string, ConvertedCoreTool> = {};
     // Get memory tools if available
     const memory = await this.getMemory({ runtimeContext });
     const memoryTools = memory?.getTools?.();
@@ -900,7 +902,7 @@ export class Agent<
           runtimeContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options);
+        const convertedToCoreTool = makeCoreTool<Exclude<ToolParameters, JSONSchema7Type>>(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
@@ -1019,7 +1021,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     writableStream?: WritableStream<ChunkType>;
   }) {
-    let toolsForRequest: Record<string, CoreTool> = {};
+    let toolsForRequest: Record<string, ConvertedCoreTool> = {};
 
     this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
 
@@ -1051,12 +1053,13 @@ export class Agent<
           writableStream,
         };
 
+        // @ts-ignore
         return [k, makeCoreTool(tool, options)];
       }),
     );
 
     const assignedToolEntriesConverted = Object.fromEntries(
-      assignedCoreToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
+      assignedCoreToolEntries.filter((entry): entry is [string, ConvertedCoreTool] => Boolean(entry)),
     );
 
     toolsForRequest = {
@@ -1081,7 +1084,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
   }) {
-    let toolsForRequest: Record<string, CoreTool> = {};
+    let toolsForRequest: Record<string, ConvertedCoreTool> = {};
 
     const memory = await this.getMemory({ runtimeContext });
     const toolsFromToolsets = Object.values(toolsets || {});
@@ -1105,7 +1108,11 @@ export class Agent<
             runtimeContext,
             model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+          const convertedToCoreTool = makeCoreTool<Exclude<ToolParameters, JSONSchema7Type>>(
+            toolObj,
+            options,
+            'toolset',
+          );
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -1129,7 +1136,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
   }) {
-    let toolsForRequest: Record<string, CoreTool> = {};
+    let toolsForRequest: Record<string, ConvertedCoreTool> = {};
     const memory = await this.getMemory({ runtimeContext });
     // Convert client tools
     const clientToolsForInput = Object.entries(clientTools || {});
@@ -1151,7 +1158,11 @@ export class Agent<
           runtimeContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+        const convertedToCoreTool = makeCoreTool<Exclude<ToolParameters, JSONSchema7Type>>(
+          rest,
+          options,
+          'client-tool',
+        );
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -1170,14 +1181,15 @@ export class Agent<
     resourceId?: string;
     runtimeContext: RuntimeContext;
   }) {
-    let convertedWorkflowTools: Record<string, CoreTool> = {};
+    let convertedWorkflowTools: Record<string, ConvertedCoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
     if (Object.keys(workflows).length > 0) {
       convertedWorkflowTools = Object.entries(workflows).reduce(
         (memo, [workflowName, workflow]) => {
           memo[workflowName] = {
             description: workflow.description || `Workflow: ${workflowName}`,
-            parameters: workflow.inputSchema || { type: 'object', properties: {} },
+            inputSchema: workflow.inputSchema || { type: 'object', properties: {} },
+            __isMastraTool: true,
             execute: async (args: any) => {
               try {
                 this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
@@ -1217,10 +1229,10 @@ export class Agent<
                 throw mastraError;
               }
             },
-          };
+          } satisfies CoreTool<Exclude<ToolParameters, JSONSchema7Type>>;
           return memo;
         },
-        {} as Record<string, CoreTool>,
+        {} as typeof convertedWorkflowTools,
       );
     }
 
@@ -1399,7 +1411,7 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+    messages: string | string[] | CoreMessage[] | AiMessageType[];
     runtimeContext: RuntimeContext;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
@@ -1692,10 +1704,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           _agentNetworkAppend: this._agentNetworkAppend,
         })
           .add(result.response.messages, 'response')
-          .get.all.core();
+          .get.all.aiV5.model();
 
         const usedWorkingMemory = messageListResponses?.some(
-          m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
+          m =>
+            m.role === 'tool' && Array.isArray(m.content) && m.content.some(c => c.toolName === 'updateWorkingMemory'),
         );
         // working memory updates the thread, so we need to get the latest thread if we used it
         const memory = await this.getMemory({ runtimeContext });
@@ -1747,7 +1760,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
               const config = memory.getMergedThreadConfig(memoryConfig);
-              const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+              const userMessage = this.getMostRecentUserMessage(messageList.get.all.aiV5.ui());
 
               const {
                 shouldGenerate,
@@ -1844,7 +1857,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     structuredOutput?: boolean;
   }) {
     const agentName = this.name;
-    const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+    const userInputMessages = messageList.get.all.aiV5.model().filter(m => m.role === 'user');
     const input = userInputMessages
       .map(message => (typeof message.content === 'string' ? message.content : ''))
       .join('\n');
@@ -1866,13 +1879,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const scorers = await this.getScorers({ runtimeContext });
 
     const scorerInput: ScorerRunInputForAgent = {
-      inputMessages: messageList.getPersisted.input.ui(),
-      rememberedMessages: messageList.getPersisted.remembered.ui(),
+      inputMessages: messageList.getPersisted.input.aiV4.ui(),
+      rememberedMessages: messageList.getPersisted.remembered.aiV4.ui(),
       systemMessages: messageList.getSystemMessages(),
       taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
-    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.aiV4.ui();
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorers)) {
@@ -1900,7 +1913,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     options: AgentGenerateOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1919,14 +1932,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
     }) => Promise<void>;
-    llm: MastraLLMBase;
+    llm: MastraLLM;
   }>;
   private prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     options: AgentStreamOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1945,14 +1958,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
     }) => Promise<void>;
-    llm: MastraLLMBase;
+    llm: MastraLLM;
   }>;
   private async prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
     },
@@ -1986,7 +1999,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
           outputText: string;
         }) => Promise<void>);
-    llm: MastraLLMBase;
+    llm: MastraLLM;
   }> {
     const {
       context,
@@ -2115,6 +2128,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               });
             }
 
+            // Tool calls are handled separately in the agent flow
+
             return onStepFinish?.({ ...props, runId });
           },
           ...(beforeResult.tripwire && {
@@ -2153,15 +2168,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   }
 
   async generate(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
   async generate<OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
   async generate<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2171,7 +2186,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
@@ -2237,6 +2252,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         : GenerateObjectResult<OUTPUT>;
     }
 
+    // @ts-ignore
     const result = await llm.__textObject<NonNullable<OUTPUT>>({
       ...llmOptions,
       structuredOutput: output as NonNullable<OUTPUT>,
@@ -2260,21 +2276,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
   ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2295,7 +2311,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
@@ -2408,8 +2424,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runId,
     });
 
+    // Extract onError separately and wrap it to ensure proper type
+    const { onError, ...restLlmOptions } = llmOptions;
+
     return llm.__streamObject({
-      ...llmOptions,
+      ...restLlmOptions,
+      ...(onError && {
+        onError: async event => {
+          const result = onError(event);
+          // Ensure we always return a Promise<void> for streamObject
+          return result instanceof Promise ? result : Promise.resolve(result);
+        },
+      }),
       onFinish: async result => {
         try {
           const outputText = JSON.stringify(result.object);
@@ -2435,7 +2461,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | undefined = undefined,
     StructuredOutput extends ZodSchema | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
   ): MastraAgentStream<
     Output extends ZodSchema
@@ -2467,6 +2493,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runId: defaultStreamOptions.runId!,
         };
       },
+      // @ts-ignore
       createStream: async (writer: WritableStream<ChunkType>, onResult: (result: ResolvedOutput) => void) => {
         const defaultStreamOptions = await defaultStreamOptionsPromise;
         const mergedStreamOptions: AgentVNextStreamOptions<Output, StructuredOutput> & {
@@ -2481,8 +2508,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const { onFinish, runId, output, experimental_output, ...llmOptions } = await before();
 
         if (output) {
+          // Extract onError separately and wrap it to ensure proper type
+          const { onError, ...restLlmOptions } = llmOptions;
+
           const streamResult = llm.__streamObject({
-            ...llmOptions,
+            ...restLlmOptions,
+            ...(onError && {
+              onError: async event => {
+                const result = onError(event);
+                // Ensure we always return a Promise<void> for streamObject
+                return result instanceof Promise ? result : Promise.resolve(result);
+              },
+            }),
             onFinish: async result => {
               onResult(result.object as ResolvedOutput);
               try {

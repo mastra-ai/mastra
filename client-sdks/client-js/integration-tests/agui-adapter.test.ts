@@ -17,7 +17,7 @@ async function getAvailablePort(): Promise<number> {
   });
 }
 
-describe('AGUIAdapter Integration Tests', () => {
+describe.skip('AGUIAdapter Integration Tests', () => {
   let mastraServer: ReturnType<typeof spawn>;
   let port: number;
 

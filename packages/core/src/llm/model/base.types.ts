@@ -43,6 +43,7 @@ type MastraCustomLLMOptions = {
   resourceId?: string;
   runtimeContext: RuntimeContext;
   runId?: string;
+  maxSteps?: number;
 };
 type MastraCustomLLMOptionsKeys = keyof MastraCustomLLMOptions;
 
@@ -98,7 +99,7 @@ export type GenerateTextResult<
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   | Parameters<typeof generateObject<inferOutput<Output>>>[0]
   | (Parameters<typeof generateObject<inferOutput<Output>>>[0] & { output: 'array' })
-  | (Parameters<typeof generateObject<string>>[0] & { output: 'enum' })
+  | (Parameters<typeof generateObject<any>>[0] & { output: 'enum' })
   | (Parameters<typeof generateObject>[0] & { output: 'no-schema' });
 
 type GenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
@@ -158,7 +159,7 @@ export type StreamTextResult<
 export type OriginalStreamObjectOptions<Output extends ZodSchema | JSONSchema7> =
   | Parameters<typeof streamObject<inferOutput<Output>>>[0]
   | (Parameters<typeof streamObject<inferOutput<Output>>>[0] & { output: 'array' })
-  | (Parameters<typeof streamObject<string>>[0] & { output: 'enum' })
+  | (Parameters<typeof streamObject<any>>[0] & { output: 'enum' })
   | (Parameters<typeof streamObject>[0] & { output: 'no-schema' });
 
 type StreamObjectOptions<Output extends ZodSchema | JSONSchema7> = Omit<

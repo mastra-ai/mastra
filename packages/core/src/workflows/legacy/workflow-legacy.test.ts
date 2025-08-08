@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -17,6 +17,14 @@ import { LegacyStep as Step } from './step';
 import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { WhenConditionReturnValue } from './types';
 import { LegacyWorkflow } from './workflow';
+
+const usage = {
+  completionTokens: 10,
+  promptTokens: 3,
+  inputTokens: 10,
+  outputTokens: 100,
+  totalTokens: 200,
+};
 
 const storage = new MockStore();
 
@@ -3245,12 +3253,13 @@ describe('LegacyWorkflow', async () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
+            content: [{ type: 'text', text: 'Paris' }],
+            warnings: [],
+            usage,
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
           }),
         }),
       });
@@ -3258,12 +3267,13 @@ describe('LegacyWorkflow', async () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
+            content: [{ type: 'text', text: 'London' }],
+            warnings: [],
+            usage,
           }),
         }),
       });
@@ -3327,12 +3337,13 @@ describe('LegacyWorkflow', async () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
+            content: [{ type: 'text', text: 'Paris' }],
+            warnings: [],
+            usage,
           }),
         }),
       });
@@ -3340,12 +3351,13 @@ describe('LegacyWorkflow', async () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
+            content: [{ type: 'text', text: 'London' }],
+            warnings: [],
+            usage,
           }),
         }),
       });

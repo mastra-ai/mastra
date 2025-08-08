@@ -1,9 +1,9 @@
-import type { LanguageModelV1ProviderMetadata } from '@ai-sdk/provider';
-import type { IDGenerator, Message, TelemetrySettings } from 'ai';
+import type { ProviderMetadata, TelemetrySettings, UIMessage } from 'ai';
 import type { ZodSchema } from 'zod';
 import type { CoreMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { RuntimeContext } from '../runtime-context';
+import type { IDGenerator } from './message-list/ai-sdk-4/provider-utils';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput } from './types';
 
 export type CallSettings = {
@@ -92,7 +92,7 @@ A simple text prompt. You can either use `prompt` or `messages` but not both.
   /**
 A list of messages. You can either use `prompt` or `messages` but not both.
    */
-  messages?: Array<CoreMessage> | Array<Omit<Message, 'id'>>;
+  messages?: Array<CoreMessage> | Array<Omit<UIMessage, 'id'>>;
 };
 
 /**
@@ -131,7 +131,7 @@ export type AgentVNextStreamOptions<
     to the provider from the AI SDK and enable provider-specific
     functionality that can be fully encapsulated in the provider.
    */
-  providerOptions?: LanguageModelV1ProviderMetadata;
+  providerOptions?: ProviderMetadata;
 
   /** Whether to save messages incrementally on step finish */
   savePerStep?: boolean;

@@ -2,9 +2,9 @@
  * This file is an adaptation of https://github.com/vercel/ai/blob/e14c066bf4d02c5ee2180c56a01fa0e5216bc582/packages/ai/core/prompt/convert-to-core-messages.ts
  * But has been modified to work with Mastra storage adapter messages (MastraMessageV1)
  */
-import type { AssistantContent, ToolResultPart } from 'ai';
 import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
+import type * as AIV4 from '../ai-sdk-4/';
 import { attachmentsToParts } from './attachments-to-parts';
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
@@ -63,6 +63,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
+
     const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
     const { role } = message;
 
@@ -133,7 +134,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           let block: MastraMessageContentV2['parts'] = [];
 
           function processBlock() {
-            const content: AssistantContent = [];
+            const content: AIV4.AssistantContent = [];
 
             for (const part of block) {
               switch (part.type) {
@@ -204,7 +205,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 role: 'tool',
                 ...fields,
                 type: 'tool-result',
-                content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                content: invocationsWithResults.map((toolInvocation): AIV4.ToolContent[0] => {
                   const { toolCallId, toolName, result } = toolInvocation;
                   return {
                     type: 'tool-result',
@@ -309,7 +310,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                     role: 'tool',
                     ...fields,
                     type: 'tool-result',
-                    content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+                    content: invocationsWithResults.map((toolInvocation): AIV4.ToolContent[0] => {
                       const { toolCallId, toolName, result } = toolInvocation;
                       return {
                         type: 'tool-result',
@@ -371,13 +372,13 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
               role: 'tool',
               ...fields,
               type: 'tool-result',
-              content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
+              content: invocationsWithResults.map((toolInvocation): AIV4.ToolContent[0] => {
                 const { toolCallId, toolName, result } = toolInvocation;
                 return {
                   type: 'tool-result',
+                  result,
                   toolCallId,
                   toolName,
-                  result,
                 };
               }),
             });

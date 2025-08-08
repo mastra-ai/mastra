@@ -26,7 +26,7 @@ interface NewAgentNetworkConfig {
   defaultAgent?: DynamicArgument<Agent>;
 }
 
-const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
+const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);
 
 export class NewAgentNetwork extends MastraBase {
   id: string;
@@ -79,7 +79,7 @@ export class NewAgentNetwork extends MastraBase {
       const lastMessage = messages[messages.length - 1];
       if (typeof lastMessage === 'string') {
         message = lastMessage;
-      } else if (lastMessage?.content) {
+      } else if (lastMessage && 'content' in lastMessage && lastMessage.content) {
         const lastMessageContent = lastMessage.content;
         if (typeof lastMessageContent === 'string') {
           message = lastMessageContent;
@@ -638,21 +638,20 @@ export class NewAgentNetwork extends MastraBase {
 
         for await (const chunk of fullStream) {
           switch (chunk.type) {
-            case 'text-delta':
+            case 'tool-input-delta':
               await emitter.emit('watch-v2', {
                 type: 'tool-call-delta',
                 ...toolData,
-                argsTextDelta: chunk.textDelta,
+                argsTextDelta: chunk.delta,
               });
               break;
 
-            case 'step-start':
-            case 'step-finish':
+            case 'start-step':
+            case 'finish-step':
             case 'finish':
             case 'tool-call':
             case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
+            case 'tool-input-start':
               break;
             case 'source':
             case 'file':

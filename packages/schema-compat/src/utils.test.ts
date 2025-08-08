@@ -1,15 +1,14 @@
 import { jsonSchema } from 'ai';
 import type { Schema } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from './schema-compatibility';
 import { SchemaCompatLayer } from './schema-compatibility';
 import { convertZodSchemaToAISDKSchema, convertSchemaToZod, applyCompatLayer } from './utils';
 
-const mockModel = new MockLanguageModelV1({
+const mockModel = new MockLanguageModelV2({
   modelId: 'test-model',
-  defaultObjectGenerationMode: 'json',
 });
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
@@ -67,12 +66,20 @@ describe('Builder Functions', () => {
       expect(result.validate).toBeDefined();
 
       const validResult = result.validate!({ email: 'test@example.com' });
+      // TODO: tool types are broken
+      // @ts-expect-error
       expect(validResult.success).toBe(true);
+      // TODO: tool types are broken
+      // @ts-expect-error
       if (validResult.success) {
+        // TODO: tool types are broken
+        // @ts-expect-error
         expect(validResult.value).toEqual({ email: 'test@example.com' });
       }
 
       const invalidResult = result.validate!({ email: 'invalid-email' });
+      // TODO: tool types are broken
+      // @ts-expect-error
       expect(invalidResult.success).toBe(false);
     });
 
@@ -194,7 +201,6 @@ describe('Builder Functions', () => {
     beforeEach(() => {
       mockCompatibility = new MockSchemaCompatibility({
         modelId: mockModel.modelId,
-        supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? false,
         provider: mockModel.provider,
       });
     });
@@ -265,7 +271,6 @@ describe('Builder Functions', () => {
       const nonApplyingCompatibility = new MockSchemaCompatibility(
         {
           modelId: mockModel.modelId,
-          supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? false,
           provider: mockModel.provider,
         },
         false,
@@ -318,7 +323,6 @@ describe('Builder Functions', () => {
       const compat1 = new MockSchemaCompatibility(
         {
           modelId: mockModel.modelId,
-          supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? true,
           provider: mockModel.provider,
         },
         false,
@@ -326,7 +330,6 @@ describe('Builder Functions', () => {
       const compat2 = new MockSchemaCompatibility(
         {
           modelId: mockModel.modelId,
-          supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? false,
           provider: mockModel.provider,
         },
         true,

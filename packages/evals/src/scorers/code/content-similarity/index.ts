@@ -16,8 +16,32 @@ export function createContentSimilarityScorer(
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
   })
     .preprocess(async ({ run }) => {
-      let processedInput = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
-      let processedOutput = run.output.map((i: { content: string }) => i.content).join(', ') || '';
+      let processedInput =
+        run.input?.inputMessages
+          .map((message: any) => {
+            if (typeof message.content === 'string') return message.content;
+            if (Array.isArray(message.content)) {
+              return message.content
+                .filter((part: any) => part.type === 'text')
+                .map((part: any) => part.text)
+                .join('');
+            }
+            return '';
+          })
+          .join(', ') || '';
+      let processedOutput =
+        run.output
+          .map((message: any) => {
+            if (typeof message.content === 'string') return message.content;
+            if (Array.isArray(message.content)) {
+              return message.content
+                .filter((part: any) => part.type === 'text')
+                .map((part: any) => part.text)
+                .join('');
+            }
+            return '';
+          })
+          .join(', ') || '';
 
       if (ignoreCase) {
         processedInput = processedInput.toLowerCase();

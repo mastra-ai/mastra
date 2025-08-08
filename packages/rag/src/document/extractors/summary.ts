@@ -1,10 +1,11 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { generateText } from 'ai';
 import { PromptTemplate, defaultSummaryPrompt } from '../prompts';
 import type { SummaryPrompt } from '../prompts';
 import type { BaseNode } from '../schema';
 import { TextNode } from '../schema';
 import { BaseExtractor } from './base';
-import { baseLLM, STRIP_REGEX } from './types';
+import { STRIP_REGEX } from './types';
 import type { SummaryExtractArgs } from './types';
 
 type ExtractSummary = {
@@ -27,26 +28,26 @@ export class SummaryExtractor extends BaseExtractor {
   private selfSummary: boolean;
   private prevSummary: boolean;
   private nextSummary: boolean;
-  constructor(options?: SummaryExtractArgs) {
-    const summaries = options?.summaries ?? ['self'];
+  constructor(options: SummaryExtractArgs) {
+    const summaries = options.summaries ?? ['self'];
 
     if (summaries && !summaries.some(s => ['self', 'prev', 'next'].includes(s)))
       throw new Error("Summaries must be one of 'self', 'prev', 'next'");
 
     super();
 
-    this.llm = options?.llm ?? baseLLM;
+    this.llm = options.llm;
     this.summaries = summaries;
-    this.promptTemplate = options?.promptTemplate
+    this.promptTemplate = options.promptTemplate
       ? new PromptTemplate({
           templateVars: ['context'],
           template: options.promptTemplate,
         })
       : defaultSummaryPrompt;
 
-    this.selfSummary = summaries?.includes('self') ?? false;
-    this.prevSummary = summaries?.includes('prev') ?? false;
-    this.nextSummary = summaries?.includes('next') ?? false;
+    this.selfSummary = summaries.includes('self') ?? false;
+    this.prevSummary = summaries.includes('prev') ?? false;
+    this.nextSummary = summaries.includes('next') ?? false;
   }
 
   /**
@@ -68,23 +69,17 @@ export class SummaryExtractor extends BaseExtractor {
       context,
     });
 
-    const result = await this.llm.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
-      prompt: [
+    const result = await generateText({
+      model: this.llm,
+      messages: [
         {
           role: 'user',
-          content: [{ type: 'text', text: prompt }],
+          content: prompt,
         },
       ],
     });
 
-    let summary = '';
-    if (typeof result.text === 'string') {
-      summary = result.text.trim();
-    } else {
-      console.warn('Summary extraction LLM output was not a string:', result.text);
-    }
+    const summary = result.text.trim();
 
     return summary.replace(STRIP_REGEX, '');
   }

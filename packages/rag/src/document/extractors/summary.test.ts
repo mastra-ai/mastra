@@ -20,7 +20,7 @@ describe('SummaryExtractor', () => {
     expect(summary.length).toBeGreaterThan(0);
   });
   it('extracts summary from normal text', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: 'This is a test document.' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');
@@ -28,14 +28,14 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles empty input gracefully', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: '' });
     const summary = await extractor.generateNodeSummary(node);
     expect(summary).toBe('');
   });
 
   it('supports prompt customization', async () => {
-    const extractor = new SummaryExtractor({ promptTemplate: 'Summarize: {context}' });
+    const extractor = new SummaryExtractor({ llm: model, promptTemplate: 'Summarize: {context}' });
     const node = new TextNode({ text: 'Test document for prompt customization.' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');
@@ -43,7 +43,7 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles very long input', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const longText = 'A'.repeat(1000);
     const node = new TextNode({ text: longText });
     const summary = await extractor.generateNodeSummary(node);
@@ -51,14 +51,14 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles whitespace only input', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: '    ' });
     const summary = await extractor.generateNodeSummary(node);
     expect(summary).toBe('');
   });
 
   it('handles special characters and emojis', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: '🚀✨🔥' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');
@@ -66,7 +66,7 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles numbers only', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: '1234567890' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');
@@ -74,7 +74,7 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles HTML tags', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: '<h1>Test</h1>' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');
@@ -82,7 +82,7 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles non-English text', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: '这是一个测试文档。' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');
@@ -90,7 +90,7 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles duplicate/repeated text', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: 'repeat repeat repeat' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');
@@ -98,7 +98,7 @@ describe('SummaryExtractor', () => {
   });
 
   it('handles only punctuation', async () => {
-    const extractor = new SummaryExtractor();
+    const extractor = new SummaryExtractor({ llm: model });
     const node = new TextNode({ text: '!!!???...' });
     const summary = await extractor.generateNodeSummary(node);
     expect(typeof summary).toBe('string');

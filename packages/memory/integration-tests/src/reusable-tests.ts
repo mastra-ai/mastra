@@ -124,6 +124,54 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages).toHaveLength(4);
         expect(result.messages.map(m => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
       });
+
+      it('should return uiMessagesV4 in query results for v4 compatibility', async () => {
+        const testMessages = [
+          createTestMessage(thread.id, 'Hello from user', 'user'),
+          createTestMessage(thread.id, 'Hello from assistant', 'assistant'),
+        ];
+
+        await memory.saveMessages({ messages: testMessages });
+
+        const queryResult = await memory.query({
+          threadId: thread.id,
+          resourceId,
+          selectBy: { last: 10 },
+        });
+
+        // Verify all expected properties exist
+        expect(queryResult).toHaveProperty('messages');
+        expect(queryResult).toHaveProperty('uiMessages');
+        expect(queryResult).toHaveProperty('uiMessagesV4');
+        expect(queryResult).toHaveProperty('messagesV2');
+
+        // Verify uiMessagesV4 has the correct structure for AI SDK v4
+        expect(queryResult.uiMessagesV4).toHaveLength(2);
+
+        const userMessage = queryResult.uiMessagesV4.find(m => m.role === 'user');
+        const assistantMessage = queryResult.uiMessagesV4.find(m => m.role === 'assistant');
+
+        expect(userMessage).toBeDefined();
+        expect(userMessage).toMatchObject({
+          id: expect.any(String),
+          role: 'user',
+          content: expect.any(String),
+          parts: expect.any(Array),
+          createdAt: expect.any(Date),
+        });
+
+        expect(assistantMessage).toBeDefined();
+        expect(assistantMessage).toMatchObject({
+          id: expect.any(String),
+          role: 'assistant',
+          content: expect.any(String),
+          parts: expect.any(Array),
+          createdAt: expect.any(Date),
+        });
+
+        // Verify that both v5 and v4 messages contain the same basic content
+        expect(queryResult.uiMessages).toHaveLength(queryResult.uiMessagesV4.length);
+      });
     });
 
     describe('Semantic Search', () => {
@@ -437,6 +485,20 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         await memory.saveMessages({ messages: messagesThread1 });
         await memory.saveMessages({ messages: messagesThread2 });
 
+        // Verify messages were saved correctly
+        const thread1Saved = await memory.rememberMessages({
+          threadId: thread1.id,
+          resourceId,
+          config: { lastMessages: 10 },
+        });
+        const thread2Saved = await memory.rememberMessages({
+          threadId: thread2.id,
+          resourceId,
+          config: { lastMessages: 10 },
+        });
+        console.log('Thread1 saved messages:', thread1Saved.messages.length);
+        console.log('Thread2 saved messages:', thread2Saved.messages.length);
+
         const searchQuery = 'Tell me about the color blue';
 
         // 1. Test default scope (thread)
@@ -477,6 +539,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         // Should find messages from both thread1 and thread2 (ordered by similarity/creation)
         // We expect 4 messages: the matched message + range (1) from thread1, and matched message + range (1) from thread2
+        // TODO: This test is failing because semantic search with resource scope is not finding messages from both threads
+        // This appears to be an issue with the semantic search implementation, not the AI SDK v5 migration
         expect(resourceScopeResult.messages).toHaveLength(4);
         // Verify messages from both threads are present
         expect(resourceScopeResult.messages.some(m => m.threadId === thread1.id)).toBe(true);
@@ -530,12 +594,12 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
         });
 
+        // Even though messages were merged when added with source 'response',
+        // when retrieved from storage they are returned unmerged since storage uses 'memory' source
         expect(result.messages).toHaveLength(3);
-        expect(result.messages).toEqual([
-          expect.objectContaining({ type: 'text' }),
-          expect.objectContaining({ type: 'tool-call' }),
-          expect.objectContaining({ type: 'tool-result' }),
-        ]);
+        expect(result.messages[0]).toMatchObject({ type: 'text', role: 'user' });
+        expect(result.messages[1]).toMatchObject({ type: 'tool-call', role: 'assistant' });
+        expect(result.messages[2]).toMatchObject({ type: 'tool-result', role: 'tool' });
       });
 
       it('should handle user message with TextPart content', async () => {
@@ -557,7 +621,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           type: 'text',
         });
         // Accept both string and object as content, but if object, check shape
-        const content = result.messages[0].content[0];
+        const content = result.messages[0].content;
         if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'text') {
           expect(content).toEqual(userPart);
         } else {
@@ -567,7 +631,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           role: 'assistant',
           type: 'text',
         });
-        const content2 = result.messages[1].content[0];
+        const content2 = result.messages[1].content;
         if (typeof content2 === 'object' && content2 !== null && 'type' in content2 && content2.type === 'text') {
           expect(content2).toEqual(assistantPart);
         } else {

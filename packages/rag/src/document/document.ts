@@ -38,23 +38,27 @@ export class MDocument {
     this.type = type;
   }
 
-  async extractMetadata({ title, summary, questions, keywords }: ExtractParams): Promise<MDocument> {
+  async extractMetadata({ llm, title, summary, questions, keywords }: ExtractParams): Promise<MDocument> {
+    if (!llm) {
+      throw new Error('LLM is required for metadata extraction. Please provide an llm parameter.');
+    }
+
     const transformations = [];
 
     if (typeof summary !== 'undefined') {
-      transformations.push(new SummaryExtractor(typeof summary === 'boolean' ? {} : summary));
+      transformations.push(new SummaryExtractor(typeof summary === 'boolean' ? { llm } : summary));
     }
 
     if (typeof questions !== 'undefined') {
-      transformations.push(new QuestionsAnsweredExtractor(typeof questions === 'boolean' ? {} : questions));
+      transformations.push(new QuestionsAnsweredExtractor(typeof questions === 'boolean' ? { llm } : questions));
     }
 
     if (typeof keywords !== 'undefined') {
-      transformations.push(new KeywordExtractor(typeof keywords === 'boolean' ? {} : keywords));
+      transformations.push(new KeywordExtractor(typeof keywords === 'boolean' ? { llm } : keywords));
     }
 
     if (typeof title !== 'undefined') {
-      transformations.push(new TitleExtractor(typeof title === 'boolean' ? {} : title));
+      transformations.push(new TitleExtractor(typeof title === 'boolean' ? { llm } : title));
       this.chunks = this.chunks.map(doc =>
         doc?.metadata?.docId
           ? new Chunk({

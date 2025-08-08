@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import z from 'zod';
 import { createScorer } from './base';
 
@@ -174,16 +174,26 @@ export const PromptBasedScorerBuilders = {
   })
     .analyze({
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                         "inputLength": 10,
                         "outputLength": 11
                     }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -209,16 +219,26 @@ export const PromptBasedScorerBuilders = {
   })
     .preprocess({
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                               "reformattedInput": "TEST INPUT",
                               "reformattedOutput": "TEST OUTPUT"
                           }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -242,16 +262,26 @@ export const PromptBasedScorerBuilders = {
         return `Test Analyze prompt`;
       },
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                           "inputLength": 10,
                           "outputLength": 11
                       }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -277,16 +307,26 @@ export const PromptBasedScorerBuilders = {
         return `Test Analyze prompt`;
       },
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                           "inputLength": 10,
                           "outputLength": 11
                       }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -299,12 +339,18 @@ export const PromptBasedScorerBuilders = {
     })
     .generateReason({
       judge: {
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `This is a test reason`,
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [{ type: 'text', text: 'This is a test reason' }],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -322,13 +368,18 @@ export const PromptBasedScorerBuilders = {
     .generateScore({
       description: 'Generate a score',
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{"score": 1}`,
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [{ type: 'text', text: '{"score": 1}' }],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -347,16 +398,26 @@ export const PromptBasedScorerBuilders = {
   })
     .preprocess({
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                               "reformattedInput": "TEST INPUT",
                               "reformattedOutput": "TEST OUTPUT"
                           }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -380,16 +441,26 @@ export const PromptBasedScorerBuilders = {
         return `Test Analyze prompt`;
       },
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                           "inputLength": 10,
                           "outputLength": 11
                       }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -402,13 +473,18 @@ export const PromptBasedScorerBuilders = {
     })
     .generateReason({
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `this is a reason.`,
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [{ type: 'text', text: 'this is a reason.' }],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -431,16 +507,26 @@ export const MixedScorerBuilders = {
     }))
     .analyze({
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                           "inputLength": 10,
                           "outputLength": 11
                       }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -466,16 +552,26 @@ export const MixedScorerBuilders = {
   })
     .preprocess({
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                               "reformattedInput": "TEST INPUT from preprocess prompt!",
                               "reformattedOutput": "TEST OUTPUT from preprocess prompt!"
                           }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -518,16 +614,26 @@ export const MixedScorerBuilders = {
         return `Test Analyze prompt`;
       },
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `{
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [
+              {
+                type: 'text',
+                text: `{
                           "inputLength": 10,
                           "outputLength": 11
                       }`,
+              },
+            ],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -558,12 +664,18 @@ export const MixedScorerBuilders = {
     })
     .generateReason({
       judge: {
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `This is the reason.`,
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [{ type: 'text', text: 'This is the reason.' }],
+            warnings: [],
           }),
         }),
         instructions: `Test instructions`,
@@ -621,16 +733,26 @@ export const AsyncFunctionBasedScorerBuilders = {
         outputFromAnalyze: z.string(),
       }),
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            text: `{
+            content: [
+              {
+                type: 'text',
+                text: `{
                 "inputFromAnalyze": "TEST INPUT",
                 "outputFromAnalyze": "TEST OUTPUT"
               }`,
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
+              },
+            ],
+            warnings: [],
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
           }),
         }),
         instructions: 'Analyze the input and output',
@@ -660,16 +782,26 @@ export const AsyncFunctionBasedScorerBuilders = {
         reformattedOutput: z.string(),
       }),
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            text: `{
+            content: [
+              {
+                type: 'text',
+                text: `{
               "reformattedInput": "TEST INPUT",
               "reformattedOutput": "TEST OUTPUT"
             }`,
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
+              },
+            ],
+            warnings: [],
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
           }),
         }),
         instructions: 'Analyze the input and output',
@@ -706,16 +838,26 @@ export const AsyncFunctionBasedScorerBuilders = {
         reformattedOutput: z.string(),
       }),
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            text: `{
+            content: [
+              {
+                type: 'text',
+                text: `{
               "reformattedInput": "ASYNC TEST INPUT",
               "reformattedOutput": "ASYNC TEST OUTPUT"
             }`,
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
+              },
+            ],
+            warnings: [],
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
           }),
         }),
         instructions: 'Analyze the input and output',
@@ -754,16 +896,26 @@ export const AsyncFunctionBasedScorerBuilders = {
         outputFromAnalyze: z.string(),
       }),
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            text: `{
+            content: [
+              {
+                type: 'text',
+                text: `{
               "inputFromAnalyze": "ASYNC ANALYZE INPUT",
               "outputFromAnalyze": "ASYNC ANALYZE OUTPUT"
             }`,
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
+              },
+            ],
+            warnings: [],
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
           }),
         }),
         instructions: 'Analyze the input and output',
@@ -802,13 +954,18 @@ export const AsyncFunctionBasedScorerBuilders = {
     .generateScore({
       description: 'Generate score with async createPrompt',
       judge: {
-        model: new MockLanguageModelV1({
-          defaultObjectGenerationMode: 'json',
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            text: `{"score": 0.85}`,
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
+            content: [{ type: 'text', text: '{"score": 0.85}' }],
+            warnings: [],
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
           }),
         }),
         instructions: 'Generate a score',
@@ -847,12 +1004,18 @@ export const AsyncFunctionBasedScorerBuilders = {
     .generateReason({
       description: 'Generate reason with async createPrompt',
       judge: {
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            text: 'This is an async reason for the score',
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
+            content: [{ type: 'text', text: 'This is an async reason for the score' }],
+            warnings: [],
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
           }),
         }),
         instructions: 'Generate a reason',

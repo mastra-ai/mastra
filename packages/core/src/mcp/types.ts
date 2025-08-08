@@ -7,10 +7,10 @@ import type { Workflow } from '../workflows';
 export type ConvertedTool = {
   name: string;
   description?: string;
-  parameters: InternalCoreTool['parameters'];
+  inputSchema: InternalCoreTool['inputSchema'];
   execute: InternalCoreTool['execute'];
   toolType?: MCPToolType;
-  outputSchema?: InternalCoreTool['parameters'];
+  outputSchema?: InternalCoreTool['outputSchema'];
 };
 
 interface MCPServerSSEOptionsBase {

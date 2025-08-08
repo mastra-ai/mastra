@@ -1,4 +1,4 @@
-import type { LanguageModelV1StreamPart } from 'ai';
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 
 export type ChunkType = {
   type: string;
@@ -14,7 +14,7 @@ export type OnResult = (result: {
 }) => void;
 
 export type CreateStream = () => Promise<{
-  stream: ReadableStream<LanguageModelV1StreamPart | Record<string, any>>;
+  stream: ReadableStream<LanguageModelV2StreamPart | Record<string, any>>;
   warnings: Record<string, any>;
   request: Record<string, any>;
   rawResponse?: Record<string, any>;

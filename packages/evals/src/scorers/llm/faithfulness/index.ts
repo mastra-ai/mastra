@@ -43,12 +43,23 @@ export function createFaithfulnessScorer({
       outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
       createPrompt: ({ results, run }) => {
         // Use the context provided by the user, or the context from the tool invocations
-        const context =
-          options?.context ??
-          run.output
-            .find(({ role }) => role === 'assistant')
-            ?.toolInvocations?.map(toolCall => (toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '')) ??
-          [];
+        let context = options?.context ?? [];
+
+        // Extract context from tool invocations in the output messages
+        if (!options?.context && run.output) {
+          const toolContexts: string[] = [];
+          for (const message of run.output) {
+            if (message.toolInvocations) {
+              for (const invocation of message.toolInvocations) {
+                if (invocation.state === 'result' && invocation.result) {
+                  toolContexts.push(JSON.stringify(invocation.result));
+                }
+              }
+            }
+          }
+          context = toolContexts;
+        }
+
         const prompt = createFaithfulnessAnalyzePrompt({
           claims: results.preprocessStepResult || [],
           context,
@@ -71,13 +82,26 @@ export function createFaithfulnessScorer({
     .generateReason({
       description: 'Reason about the results',
       createPrompt: ({ run, results, score }) => {
+        // Extract context from tool invocations
+        let context: string[] = options?.context ?? [];
+        if (!options?.context && run.output) {
+          const toolContexts: string[] = [];
+          for (const message of run.output) {
+            if (message.toolInvocations) {
+              for (const invocation of message.toolInvocations) {
+                if (invocation.state === 'result' && invocation.result) {
+                  toolContexts.push(JSON.stringify(invocation.result));
+                }
+              }
+            }
+          }
+          context = toolContexts;
+        }
+
         const prompt = createFaithfulnessReasonPrompt({
           input: getUserMessageFromRunInput(run.input) ?? '',
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
-          context:
-            run.output
-              .find(({ role }) => role === 'assistant')
-              ?.toolInvocations?.map(toolCall => JSON.stringify(toolCall)) || [],
+          context,
           score,
           scale: options?.scale || 1,
           verdicts: results.analyzeStepResult?.verdicts || [],

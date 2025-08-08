@@ -16,7 +16,19 @@ export function createToneScorer(config: ToneScorerConfig = {}) {
   })
     .preprocess(async ({ run }) => {
       const sentiment = new Sentiment();
-      const agentMessage: string = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const agentMessage: string =
+        run.output
+          ?.map((message: any) => {
+            if (typeof message.content === 'string') return message.content;
+            if (Array.isArray(message.content)) {
+              return message.content
+                .filter((part: any) => part.type === 'text')
+                .map((part: any) => part.text)
+                .join('');
+            }
+            return '';
+          })
+          .join(', ') || '';
       const responseSentiment = sentiment.analyze(agentMessage);
 
       if (referenceTone) {

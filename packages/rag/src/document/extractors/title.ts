@@ -1,10 +1,10 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { generateText } from 'ai';
 import { defaultTitleCombinePromptTemplate, defaultTitleExtractorPromptTemplate, PromptTemplate } from '../prompts';
 import type { TitleCombinePrompt, TitleExtractorPrompt } from '../prompts';
 import { TextNode } from '../schema';
 import type { BaseNode } from '../schema';
 import { BaseExtractor } from './base';
-import { baseLLM } from './types';
 import type { TitleExtractorsArgs } from './types';
 
 type ExtractTitle = {
@@ -21,20 +21,20 @@ export class TitleExtractor extends BaseExtractor {
   nodeTemplate: TitleExtractorPrompt;
   combineTemplate: TitleCombinePrompt;
 
-  constructor(options?: TitleExtractorsArgs) {
+  constructor(options: TitleExtractorsArgs) {
     super();
 
-    this.llm = options?.llm ?? baseLLM;
-    this.nodes = options?.nodes ?? 5;
+    this.llm = options.llm;
+    this.nodes = options.nodes ?? 5;
 
-    this.nodeTemplate = options?.nodeTemplate
+    this.nodeTemplate = options.nodeTemplate
       ? new PromptTemplate({
           templateVars: ['context'],
           template: options.nodeTemplate,
         })
       : defaultTitleExtractorPromptTemplate;
 
-    this.combineTemplate = options?.combineTemplate
+    this.combineTemplate = options.combineTemplate
       ? new PromptTemplate({
           templateVars: ['context'],
           template: options.combineTemplate,
@@ -110,30 +110,19 @@ export class TitleExtractor extends BaseExtractor {
     for (const [key, nodes] of Object.entries(nodesByDocument)) {
       const titleCandidates = await this.getTitlesCandidates(nodes);
       const combinedTitles = titleCandidates.join(', ');
-      const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
-        prompt: [
+      const { text } = await generateText({
+        model: this.llm,
+        messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: this.combineTemplate.format({
-                  context: combinedTitles,
-                }),
-              },
-            ],
+            content: this.combineTemplate.format({
+              context: combinedTitles,
+            }),
           },
         ],
       });
 
-      let title = '';
-      if (typeof completion.text === 'string') {
-        title = completion.text.trim();
-      } else {
-        console.warn('Title extraction LLM output was not a string:', completion.text);
-      }
+      const title = text.trim();
       titlesByDocument[key] = title;
     }
 
@@ -142,30 +131,19 @@ export class TitleExtractor extends BaseExtractor {
 
   private async getTitlesCandidates(nodes: BaseNode[]): Promise<string[]> {
     const titleJobs = nodes.map(async node => {
-      const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
-        prompt: [
+      const { text } = await generateText({
+        model: this.llm,
+        messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: this.nodeTemplate.format({
-                  context: node.getContent(),
-                }),
-              },
-            ],
+            content: this.nodeTemplate.format({
+              context: node.getContent(),
+            }),
           },
         ],
       });
 
-      if (typeof completion.text === 'string') {
-        return completion.text.trim();
-      } else {
-        console.warn('Title candidate extraction LLM output was not a string:', completion.text);
-        return '';
-      }
+      return text.trim();
     });
 
     return await Promise.all(titleJobs);
