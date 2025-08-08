@@ -13,8 +13,6 @@ type TemplateInfoProps = {
 };
 
 export function TemplateInfo({ title, description, imageURL, githubUrl, isLoading, infoData }: TemplateInfoProps) {
-  console.log({ isLoading });
-
   return (
     <>
       <div className={cn('grid grid-cols-[1fr_1fr] gap-x-[6rem] mt-[2rem] min-h-[4rem] items-center')}>

@@ -28,9 +28,6 @@ export default function Template() {
     owner: 'mastra-ai',
   });
 
-  // const template = undefined;
-  // const isLoadingTemplate = true;
-
   const { data: templateEnvVars, isLoading: isLoadingEnvVars } = useTemplateRepoEnvVars({
     repo: `template-${templateSlug}`,
     owner: 'mastra-ai',
