@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- Updated dependencies [a239d41]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

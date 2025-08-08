@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- ec510e7: Tool input validation now returns errors as tool results instead of throwing, allowing agents to understand validation failures and retry with corrected parameters.
+- Updated dependencies [ae2eb63]
+  - @mastra/schema-compat@0.10.7-alpha.1
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

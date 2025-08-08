@@ -1,5 +1,16 @@
 # @mastra/deployer
 
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- Updated dependencies [a239d41]
+- Updated dependencies [ec510e7]
+  - @mastra/server@0.13.2-alpha.2
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

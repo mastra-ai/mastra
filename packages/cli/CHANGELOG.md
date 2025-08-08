@@ -1,5 +1,19 @@
 # mastra
 
+## 0.10.21-alpha.2
+
+### Patch Changes
+
+- 77b6cfe: Use just modelId for gpt-5 check
+- 33da97c: Set temperature to 1 for gpt-5 model in playground
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- Updated dependencies [a239d41]
+- Updated dependencies [c6d2603]
+- Updated dependencies [ec510e7]
+  - @mastra/deployer@0.13.2-alpha.2
+  - @mastra/core@0.13.2-alpha.2
+  - @mastra/mcp@0.10.11-alpha.0
+
 ## 0.10.21-alpha.1
 
 ### Patch Changes

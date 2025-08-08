@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "0.10.10",
+  "version": "0.10.11-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",

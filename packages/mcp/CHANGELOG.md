@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- ec510e7: Tool input validation now returns errors as tool results instead of throwing, allowing agents to understand validation failures and retry with corrected parameters.
+- Updated dependencies [a239d41]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.10.10
 
 ### Patch Changes

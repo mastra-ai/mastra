@@ -1,5 +1,15 @@
 # @mastra/playground-ui
 
+## 5.1.20-alpha.1
+
+### Patch Changes
+
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- Updated dependencies [a239d41]
+- Updated dependencies [ec510e7]
+  - @mastra/client-js@0.10.21-alpha.2
+  - @mastra/core@0.13.2-alpha.2
+
 ## 5.1.20-alpha.0
 
 ### Patch Changes
