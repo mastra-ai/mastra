@@ -194,6 +194,8 @@ export class StoreMemoryLance extends MemoryStorage {
     format,
     threadConfig,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     try {
       if (threadConfig) {
         throw new Error('ThreadConfig is not supported by LanceDB storage');
@@ -467,13 +469,10 @@ export class StoreMemoryLance extends MemoryStorage {
   async getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     try {
-      const { threadId, resourceId, selectBy, format = 'v1' } = args;
-
-      if (!threadId) {
-        throw new Error('Thread ID is required for getMessagesPaginated');
-      }
-
       // Extract pagination and dateRange from selectBy.pagination
       const page = selectBy?.pagination?.page ?? 0;
       const perPage = selectBy?.pagination?.perPage ?? 10;

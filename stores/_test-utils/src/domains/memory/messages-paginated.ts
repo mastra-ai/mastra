@@ -484,5 +484,12 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       // The content should be the updated one
       expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
     });
+
+    it.only('should throw if threadId is an empty string', async () => {
+      await expect(storage.getMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+      await expect(storage.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
+        'threadId must be a non-empty string',
+      );
+    });
   });
 }

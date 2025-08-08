@@ -210,3 +210,17 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
   });
 });
+
+describe('InMemoryStore', async () => {
+  const store = new InMemoryStore();
+
+  it('getMessages should throw when threadId is an empty string', async () => {
+    await expect(() => store.getMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+  });
+
+  it('getMessagesPaginated should throw when threadId is an empty string', async () => {
+    await expect(() => store.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
+      'threadId must be a non-empty string',
+    );
+  });
+});

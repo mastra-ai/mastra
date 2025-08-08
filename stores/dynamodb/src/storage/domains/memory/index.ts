@@ -272,6 +272,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     this.logger.debug('Getting messages', { threadId, selectBy });
+    if (!threadId) throw new Error('threadId must be a non-empty string');
 
     try {
       const messages: MastraMessageV2[] = [];
@@ -509,6 +510,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
 
     this.logger.debug('Getting messages with pagination', { threadId, page, perPage, fromDate, toDate, limit });
+    if (!threadId) throw new Error('threadId must be a non-empty string');
 
     try {
       let messages: MastraMessageV2[] = [];

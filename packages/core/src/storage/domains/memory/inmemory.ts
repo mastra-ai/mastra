@@ -109,6 +109,8 @@ export class InMemoryMemory extends MemoryStorage {
   async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
 
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     // Handle include messages first
     const messages: MastraMessageV2[] = [];
 
@@ -421,6 +423,8 @@ export class InMemoryMemory extends MemoryStorage {
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
     this.logger.debug(`MockStore: getMessagesPaginated called for thread ${threadId}`);
+
+    if (!threadId) throw new Error('threadId must be a non-empty string');
 
     const { page = 0, perPage = 40 } = selectBy?.pagination || {};
 

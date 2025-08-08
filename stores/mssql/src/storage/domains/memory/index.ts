@@ -357,6 +357,8 @@ export class MemoryMSSQL extends MemoryStorage {
     selectBy: StorageGetMessagesArg['selectBy'];
     orderByStatement: string;
   }) {
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 
@@ -449,6 +451,8 @@ export class MemoryMSSQL extends MemoryStorage {
     },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const { threadId, format, selectBy } = args;
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
     const orderByStatement = `ORDER BY [seq_id] DESC`;
     const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
@@ -509,19 +513,12 @@ export class MemoryMSSQL extends MemoryStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy } = args;
-    const { page = 0, perPage: perPageInput } = selectBy?.pagination || {};
-    const orderByStatement = `ORDER BY [seq_id] DESC`;
-    let messages: any[] = [];
-    if (selectBy?.include?.length) {
-      const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
-      if (includeMessages) {
-        messages.push(...includeMessages);
-      }
-    }
+    const { threadId, format, selectBy } = args;
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
+    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
+
     try {
-      const { threadId, format, selectBy } = args;
-      const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
       const fromDate = dateRange?.start;
       const toDate = dateRange?.end;
 
