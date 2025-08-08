@@ -1,4 +1,15 @@
-import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon } from '@mastra/playground-ui';
+import {
+  AgentIcon,
+  Breadcrumb,
+  Crumb,
+  Header,
+  MainContentLayout,
+  WorkflowIcon,
+  PlaygroundTabs,
+  Tab,
+  TabContent,
+  TabList,
+} from '@mastra/playground-ui';
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -8,6 +19,7 @@ import { Fragment, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
 import type { ScoreRowData } from '@mastra/core/scores';
+import { ScoringSource } from '@mastra/core/scores';
 
 import * as Dialog from '@radix-ui/react-dialog';
 
@@ -28,6 +40,7 @@ export default function Scorer() {
 
   const [selectedScore, setSelectedScore] = useState<any>(null);
   const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'live' | 'test'>('live');
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {
@@ -53,17 +66,25 @@ export default function Scorer() {
   const [scoresPage, setScoresPage] = useState<number>(0);
   const [filteredByEntity, setFilteredByEntity] = useState<string>('');
 
-  const { scores: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
+  // Fetch scores by source type
+  const { scores: liveScoresData, isLoading: liveScoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
     entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : undefined,
     entityType: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : undefined,
+    source: 'LIVE' as ScoringSource,
   });
 
-  const scores = scoresData?.scores || [];
-  const scoresTotal = scoresData?.pagination.total;
-  const scoresHasMore = scoresData?.pagination.hasMore;
-  const scoresPerPage = scoresData?.pagination.perPage;
+  const { scores: testScoresData, isLoading: testScoresLoading } = useScoresByScorerId({
+    scorerId,
+    page: scoresPage,
+    entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : undefined,
+    entityType: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : undefined,
+    source: 'TEST' as ScoringSource,
+  });
+
+  const scores = activeTab === 'live' ? liveScoresData?.scores || [] : testScoresData?.scores || [];
+  const scoresHasMore = activeTab === 'live' ? liveScoresData?.pagination.hasMore : testScoresData?.pagination.hasMore;
 
   const handleFilterChange = (value: string) => {
     if (value === 'all') {
@@ -141,23 +162,56 @@ export default function Scorer() {
           <div className={cn(`h-full overflow-y-scroll `)}>
             <div className={cn('max-w-[100rem] px-[3rem] mx-auto')}>
               <ScorerHeader scorer={scorer} agents={scorerAgents} workflows={scorerWorkflows} />
-              <ScoreListHeader
-                filteredByEntity={filteredByEntity}
-                onFilterChange={handleFilterChange}
-                scorerEntities={scorerEntities}
-              />
-              <ScoreList
-                scores={scores || []}
-                selectedScore={selectedScore}
-                onItemClick={handleOnListItemClick}
-                isLoading={scoresLoading}
-                total={scoresTotal}
-                page={scoresPage}
-                perPage={scoresPerPage}
-                hasMore={scoresHasMore}
-                onNextPage={handleNextPage}
-                onPrevPage={handlePrevPage}
-              />
+              <PlaygroundTabs
+                defaultTab="live"
+                value={activeTab}
+                onValueChange={(value: string) => setActiveTab(value as 'live' | 'test')}
+              >
+                <TabList>
+                  <Tab value="live">Live</Tab>
+                  <Tab value="test">Test</Tab>
+                </TabList>
+
+                <TabContent value="live">
+                  <ScoreListHeader
+                    filteredByEntity={filteredByEntity}
+                    onFilterChange={handleFilterChange}
+                    scorerEntities={scorerEntities}
+                  />
+                  <ScoreList
+                    scores={liveScoresData?.scores || []}
+                    selectedScore={selectedScore}
+                    onItemClick={handleOnListItemClick}
+                    isLoading={liveScoresLoading}
+                    total={liveScoresData?.pagination.total}
+                    page={scoresPage}
+                    perPage={liveScoresData?.pagination.perPage}
+                    hasMore={liveScoresData?.pagination.hasMore}
+                    onNextPage={handleNextPage}
+                    onPrevPage={handlePrevPage}
+                  />
+                </TabContent>
+
+                <TabContent value="test">
+                  <ScoreListHeader
+                    filteredByEntity={filteredByEntity}
+                    onFilterChange={handleFilterChange}
+                    scorerEntities={scorerEntities}
+                  />
+                  <ScoreList
+                    scores={testScoresData?.scores || []}
+                    selectedScore={selectedScore}
+                    onItemClick={handleOnListItemClick}
+                    isLoading={testScoresLoading}
+                    total={testScoresData?.pagination.total}
+                    page={scoresPage}
+                    perPage={testScoresData?.pagination.perPage}
+                    hasMore={testScoresData?.pagination.hasMore}
+                    onNextPage={handleNextPage}
+                    onPrevPage={handlePrevPage}
+                  />
+                </TabContent>
+              </PlaygroundTabs>
             </div>
           </div>
           <ScoreDetails

@@ -41,6 +41,21 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       expect(nonExistentScores?.scores).toHaveLength(0);
     });
 
+    it('should retrieve scores by source', async () => {
+      const scorerId = `scorer-${randomUUID()}`;
+      const score1 = createSampleScore({ scorerId, source: 'TEST' });
+      const score2 = createSampleScore({ scorerId, source: 'LIVE' });
+      await storage.saveScore(score1);
+      await storage.saveScore(score2);
+      const scoresBySource = await storage.getScoresByScorerId({
+        scorerId,
+        pagination: { page: 0, perPage: 10 },
+        source: 'TEST',
+      });
+      expect(scoresBySource?.scores).toHaveLength(1);
+      expect(scoresBySource?.scores.map(s => s.source)).toEqual(['TEST']);
+    });
+
     it('should save scorer', async () => {
       const scorerId = `scorer-${randomUUID()}`;
       const scorer = createSampleScore({ scorerId });

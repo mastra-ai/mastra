@@ -1,5 +1,5 @@
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type { MastraScorerEntry, ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
 import type { Context } from '../types';
 import { handleError } from './error';
@@ -111,7 +111,14 @@ export async function getScoresByScorerIdHandler({
   pagination,
   entityId,
   entityType,
-}: Context & { scorerId: string; pagination: StoragePagination; entityId?: string; entityType?: string }) {
+  source,
+}: Context & {
+  scorerId: string;
+  pagination: StoragePagination;
+  entityId?: string;
+  entityType?: string;
+  source?: ScoringSource;
+}) {
   try {
     const scores =
       (await mastra.getStorage()?.getScoresByScorerId?.({
@@ -119,6 +126,7 @@ export async function getScoresByScorerIdHandler({
         pagination,
         entityId,
         entityType,
+        source,
       })) || [];
     return scores;
   } catch (error) {

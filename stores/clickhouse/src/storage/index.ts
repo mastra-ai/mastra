@@ -3,7 +3,7 @@ import { createClient } from '@clickhouse/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_SCHEMAS,
@@ -391,11 +391,17 @@ export class ClickhouseStore extends MastraStorage {
   async getScoresByScorerId({
     scorerId,
     pagination,
+    entityId,
+    entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
   async close(): Promise<void> {

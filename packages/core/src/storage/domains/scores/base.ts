@@ -1,5 +1,5 @@
 import { MastraBase } from '../../../base';
-import type { ScoreRowData } from '../../../scores/types';
+import type { ScoreRowData, ScoringSource } from '../../../scores/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 
 export abstract class ScoresStorage extends MastraBase {
@@ -19,11 +19,13 @@ export abstract class ScoresStorage extends MastraBase {
     pagination,
     entityId,
     entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
   abstract getScoresByRunId({

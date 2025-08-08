@@ -21,8 +21,6 @@ export * from './domains/evals/data';
 export * from './domains/scores/data';
 export * from './domains/traces/data';
 
-const STORES_WITH_RUN_SCORES_TESTS = ['MongoDBStore'];
-
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
     beforeAll(async () => {
@@ -56,8 +54,6 @@ export function createTestSuite(storage: MastraStorage) {
 
     createMemoryTest({ storage });
 
-    if (STORES_WITH_RUN_SCORES_TESTS.includes(storage.constructor.name)) {
-      createScoresTest({ storage });
-    }
+    createScoresTest({ storage });
   });
 }

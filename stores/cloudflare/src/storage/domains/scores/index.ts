@@ -1,23 +1,23 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let input = undefined;
+  const deserialized: Record<string, any> = { ...row };
 
-  if (row.input) {
-    try {
-      input = JSON.parse(row.input);
-    } catch {
-      input = row.input;
-    }
-  }
-  return {
-    ...row,
-    input,
-  } as ScoreRowData;
+  deserialized.input = safelyParseJSON(row.input);
+  deserialized.output = safelyParseJSON(row.output);
+  deserialized.scorer = safelyParseJSON(row.scorer);
+  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
+  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
+  deserialized.metadata = safelyParseJSON(row.metadata);
+  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
+  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
+  deserialized.entity = safelyParseJSON(row.entity);
+
+  return deserialized as ScoreRowData;
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {
@@ -53,6 +53,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
   async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      const id = crypto.randomUUID();
       const { input, ...rest } = score;
 
       // Serialize all object values to JSON strings
@@ -69,13 +70,13 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         }
       }
 
-      serializedRecord.input = JSON.stringify(input);
+      serializedRecord.id = id;
       serializedRecord.createdAt = new Date().toISOString();
       serializedRecord.updatedAt = new Date().toISOString();
 
       await this.operations.putKV({
         tableName: TABLE_SCORERS,
-        key: score.id,
+        key: id,
         value: serializedRecord,
       });
 
@@ -99,9 +100,15 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
@@ -110,6 +117,17 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
       for (const { name: key } of keys) {
         const score = await this.operations.getKV(TABLE_SCORERS, key);
+
+        if (entityId && score.entityId !== entityId) {
+          continue;
+        }
+        if (entityType && score.entityType !== entityType) {
+          continue;
+        }
+        if (source && score.source !== source) {
+          continue;
+        }
+
         if (score && score.scorerId === scorerId) {
           scores.push(transformScoreRow(score));
         }
