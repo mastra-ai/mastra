@@ -26,6 +26,9 @@ import {
 } from './managers';
 
 
+// Narrow event keys to strings for the typed EventManager
+type GeminiEventName = Extract<keyof GeminiLiveEventMap, string>;
+
 /**
  * Default configuration values
  */
@@ -191,7 +194,7 @@ export class GeminiLiveVoice extends MastraVoice<
     // Initialize AudioStreamManager
     this.audioStreamManager = new AudioStreamManager(this.audioConfig, this.debug);
     
-    this.eventManager = new EventManager({ debug: this.debug });
+    this.eventManager = new EventManager<GeminiLiveEventMap>({ debug: this.debug });
     this.connectionManager = new ConnectionManager({ debug: this.debug, timeoutMs: 30000 });
     this.contextManager = new ContextManager({
       maxEntries: 100,
@@ -250,7 +253,7 @@ export class GeminiLiveVoice extends MastraVoice<
     callback: (data: E extends keyof GeminiLiveEventMap ? GeminiLiveEventMap[E] : unknown) => void,
   ): void {
     try {
-      this.eventManager.on(event as unknown as keyof GeminiLiveEventMap, callback as any);
+      this.eventManager.on(event as GeminiEventName, callback as any);
       this.log(`Event listener registered for: ${event}`);
     } catch (error) {
       this.log(`Failed to register event listener for ${event}:`, error);
@@ -268,7 +271,7 @@ export class GeminiLiveVoice extends MastraVoice<
     callback: (data: E extends keyof GeminiLiveEventMap ? GeminiLiveEventMap[E] : unknown) => void,
   ): void {
     try {
-      this.eventManager.off(event as unknown as keyof GeminiLiveEventMap, callback as any);
+      this.eventManager.off(event as GeminiEventName, callback as any);
       this.log(`Event listener removed for: ${event}`);
     } catch (error) {
       this.log(`Failed to remove event listener for ${event}:`, error);
@@ -285,7 +288,7 @@ export class GeminiLiveVoice extends MastraVoice<
     callback: (data: E extends keyof GeminiLiveEventMap ? GeminiLiveEventMap[E] : unknown) => void,
   ): void {
     try {
-      this.eventManager.once(event as unknown as keyof GeminiLiveEventMap, callback as any);
+      this.eventManager.once(event as GeminiEventName, callback as any);
       this.log(`One-time event listener registered for: ${event}`);
     } catch (error) {
       this.log(`Failed to register one-time event listener for ${event}:`, error);
@@ -307,7 +310,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log(`No listeners for event: ${String(event)}`);
       }
       
-      const result = this.eventManager.emit(event, data);
+      const result = this.eventManager.emit(event as GeminiEventName, data as any);
       
       if (this.debug && listenerCount > 0) {
         this.log(`Emitted event: ${String(event)} to ${listenerCount} listeners`);
@@ -769,12 +772,12 @@ export class GeminiLiveVoice extends MastraVoice<
     this.sessionHandle = handle;
     this.isResuming = true;
 
-    // Restore context history if provided
-    if (context) {
-      this.contextHistory = context.map(item => ({
-        ...item,
-        timestamp: Date.now(),
-      }));
+    // Restore context history if provided using ContextManager
+    if (context && context.length > 0) {
+      this.contextManager.clearContext();
+      for (const item of context) {
+        this.contextManager.addEntry(item.role as 'user' | 'assistant', item.content);
+      }
     }
 
     try {

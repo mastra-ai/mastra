@@ -1,11 +1,12 @@
 import { EventEmitter } from 'events';
-import { GeminiLiveEventMap } from '../types';
+// Make the event manager generic over an event map
+export type EventMap = Record<string, unknown>;
 
 export interface EventConfig {
   debug: boolean;
 }
 
-export class EventManager {
+export class EventManager<TEvents extends EventMap = Record<string, unknown>> {
   private eventEmitter: EventEmitter;
   private readonly debug: boolean;
   private eventCounts: Record<string, number> = {};
@@ -18,9 +19,9 @@ export class EventManager {
   /**
    * Emit an event with data
    */
-  emit<K extends keyof GeminiLiveEventMap>(
+  emit<K extends Extract<keyof TEvents, string>>(
     event: K,
-    data: GeminiLiveEventMap[K]
+    data: TEvents[K]
   ): boolean {
     this.incrementEventCount(event);
     const result = this.eventEmitter.emit(event, data);
@@ -35,9 +36,9 @@ export class EventManager {
   /**
    * Add event listener
    */
-  on<E extends keyof GeminiLiveEventMap>(
+  on<E extends Extract<keyof TEvents, string>>(
     event: E,
-    callback: (data: GeminiLiveEventMap[E]) => void
+    callback: (data: TEvents[E]) => void
   ): void {
     this.eventEmitter.on(event, callback);
     
@@ -49,9 +50,9 @@ export class EventManager {
   /**
    * Remove event listener
    */
-  off<E extends keyof GeminiLiveEventMap>(
+  off<E extends Extract<keyof TEvents, string>>(
     event: E,
-    callback: (data: GeminiLiveEventMap[E]) => void
+    callback: (data: TEvents[E]) => void
   ): void {
     this.eventEmitter.off(event, callback);
     
@@ -63,9 +64,9 @@ export class EventManager {
   /**
    * Add one-time event listener
    */
-  once<E extends keyof GeminiLiveEventMap>(
+  once<E extends Extract<keyof TEvents, string>>(
     event: E,
-    callback: (data: GeminiLiveEventMap[E]) => void
+    callback: (data: TEvents[E]) => void
   ): void {
     this.eventEmitter.once(event, callback);
     

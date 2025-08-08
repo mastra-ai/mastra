@@ -26,7 +26,7 @@ export class SessionManager {
   // Session state
   private sessionId?: string;
   private sessionHandle?: string;
-  private sessionStartTime?: number;
+  private sessionStartTime?: Date;
   private isResuming = false;
   private sessionDurationTimeout?: NodeJS.Timeout;
 
