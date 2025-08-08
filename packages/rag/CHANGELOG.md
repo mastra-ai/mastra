@@ -1,5 +1,129 @@
 # @mastra/rag
 
+## 1.0.8-alpha.0
+
+### Patch Changes
+
+- 1be6004: Added semantic markdown chunking strategy.
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+  - @mastra/core@0.13.2-alpha.0
+
+## 1.0.7
+
+### Patch Changes
+
+- 351b36e: update evals and rag ai sdk package versions
+- ccd519c: Add sentence chunking strategy and strategy-specific parameter validation for all existing strategies.
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+
+## 1.0.7-alpha.1
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
+## 1.0.7-alpha.0
+
+### Patch Changes
+
+- 351b36e: update evals and rag ai sdk package versions
+- ccd519c: Add sentence chunking strategy and strategy-specific parameter validation for all existing strategies.
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
+## 1.0.6
+
+### Patch Changes
+
+- 613eec3: dependencies updates:
+  - Updated dependency [`node-html-better-parser@^1.5.2` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.5.2) (from `^1.5.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 1.0.6-alpha.0
+
+### Patch Changes
+
+- 613eec3: dependencies updates:
+  - Updated dependency [`node-html-better-parser@^1.5.2` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.5.2) (from `^1.5.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
+## 1.0.5
+
+### Patch Changes
+
+- fc437d9: dependencies updates:
+  - Updated dependency [`node-html-better-parser@^1.5.1` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.5.1) (from `^1.4.11`, in `dependencies`)
+- b5a6da2: Allow vector query tool to be used without a Mastra server
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 1.0.5-alpha.1
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
 ## 1.0.5-alpha.0
 
 ### Patch Changes

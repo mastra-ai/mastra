@@ -1,11 +1,13 @@
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
+import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2 } from '../agent/types';
 import { MastraError } from '../error';
 import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
 import { MastraMemory } from '../memory/memory';
-import type { StorageGetMessagesArg } from '../storage';
+import { RuntimeContext } from '../runtime-context';
+import type { StorageGetMessagesArg, PaginationInfo, ThreadSortOptions } from '../storage';
 import { Mastra } from './index';
 
 // Mock Memory class for testing
@@ -92,13 +94,21 @@ class MockMemory extends MastraMemory {
     return [];
   }
 
-  async query() {
-    return { messages: [], uiMessages: [] };
+  async query({ threadId, resourceId }: StorageGetMessagesArg) {
+    let results = Array.from(this.messages.values());
+    if (threadId) results = results.filter(m => m.threadId === threadId);
+    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
+
+    // Convert MastraMessageV1 to CoreMessage format
+    const coreMessages = results.map(msg => ({
+      role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+      content: msg.content,
+    }));
+
+    return { messages: coreMessages as any, uiMessages: [] };
   }
 
-  async deleteThread(threadId: string) {
-    delete this.threads[threadId];
-  }
+  async deleteThread() {}
 
   async getWorkingMemory() {
     return null;
@@ -106,6 +116,18 @@ class MockMemory extends MastraMemory {
 
   async getWorkingMemoryTemplate() {
     return null;
+  }
+
+  async getThreadsByResourceIdPaginated(
+    args: { resourceId: string; page: number; perPage: number } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    return {
+      threads: [],
+      total: 0,
+      page: args.page,
+      perPage: args.perPage,
+      hasMore: false,
+    };
   }
 
   getMergedThreadConfig(config?: MemoryConfig) {
@@ -142,20 +164,19 @@ class MockMemory extends MastraMemory {
     // Mock implementation
     return { success: true, reason: 'Mock implementation' };
   }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    // Mock implementation - remove messages by ID
+    for (const messageId of messageIds) {
+      this.messages.delete(messageId);
+    }
+  }
 }
 
 // Helper function to create a Mastra instance with proper memory registration
 function createMastraWithMemory(idGenerator?: () => string) {
-  const mastra = new Mastra({
-    idGenerator,
-    logger: false,
-  });
-
   // Create a mock memory instance
   const memory = new MockMemory();
-
-  // Register the memory with Mastra
-  memory.__registerMastra(mastra);
 
   // Create an agent with the registered memory
   const agent = new Agent({
@@ -172,8 +193,13 @@ function createMastraWithMemory(idGenerator?: () => string) {
     memory,
   });
 
-  // Register the agent with Mastra
-  agent.__registerMastra(mastra);
+  const mastra = new Mastra({
+    idGenerator,
+    logger: false,
+    agents: {
+      testAgent: agent,
+    },
+  });
 
   return { mastra, agent, memory };
 }
@@ -191,7 +217,7 @@ describe('Mastra ID Generator', () => {
     vi.clearAllMocks();
   });
 
-  describe('Basic ID Generator Functionality', () => {
+  describe('Core ID Generator Functionality', () => {
     it('should use custom ID generator when provided', () => {
       const mastra = new Mastra({
         idGenerator: customIdGenerator,
@@ -236,40 +262,7 @@ describe('Mastra ID Generator', () => {
 
       expect(mastra.getIdGenerator()).toBeUndefined();
     });
-  });
 
-  describe('Component Integration', () => {
-    it('should use custom ID generator when components are registered with Mastra', () => {
-      const mastra = new Mastra({
-        idGenerator: customIdGenerator,
-        logger: false,
-      });
-
-      // Test that the ID generator is available to components
-      expect(mastra.getIdGenerator()).toBe(customIdGenerator);
-
-      // Test direct ID generation
-      const id = mastra.generateId();
-      expect(customIdGenerator).toHaveBeenCalled();
-      expect(id).toBe('custom-id-1');
-    });
-
-    it('should use fallback ID generator when components are registered without custom generator', () => {
-      const mastra = new Mastra({
-        logger: false,
-      });
-
-      // Test that no custom ID generator is available
-      expect(mastra.getIdGenerator()).toBeUndefined();
-
-      // Test direct ID generation
-      const id = mastra.generateId();
-      expect(customIdGenerator).not.toHaveBeenCalled();
-      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    });
-  });
-
-  describe('Complex Integration Scenarios', () => {
     it('should maintain ID uniqueness across multiple generations', () => {
       const mastra = new Mastra({
         idGenerator: customIdGenerator,
@@ -277,50 +270,30 @@ describe('Mastra ID Generator', () => {
       });
 
       const ids = new Set<string>();
-
-      // Generate multiple IDs
       for (let i = 0; i < 10; i++) {
-        const id = mastra.generateId();
-        ids.add(id);
+        ids.add(mastra.generateId());
       }
 
-      // All IDs should be unique
       expect(ids.size).toBe(10);
       expect(customIdGenerator).toHaveBeenCalledTimes(10);
     });
 
-    it('should handle ID generator that returns the same value', () => {
-      const staticIdGenerator = vi.fn(() => 'static-id');
-
+    it('should handle concurrent ID generation', async () => {
       const mastra = new Mastra({
-        idGenerator: staticIdGenerator,
+        idGenerator: customIdGenerator,
         logger: false,
       });
 
-      const id1 = mastra.generateId();
-      const id2 = mastra.generateId();
+      const promises = Array.from({ length: 10 }, () => Promise.resolve(mastra.generateId()));
+      const ids = await Promise.all(promises);
 
-      expect(id1).toBe('static-id');
-      expect(id2).toBe('static-id');
-      expect(staticIdGenerator).toHaveBeenCalledTimes(2);
-    });
-
-    it('should handle ID generator that throws an error', () => {
-      const errorIdGenerator = vi.fn(() => {
-        throw new Error('ID generation failed');
-      });
-
-      const mastra = new Mastra({
-        idGenerator: errorIdGenerator,
-        logger: false,
-      });
-
-      expect(() => mastra.generateId()).toThrow('ID generation failed');
-      expect(errorIdGenerator).toHaveBeenCalledTimes(1);
+      expect(customIdGenerator).toHaveBeenCalledTimes(10);
+      expect(ids.length).toBe(10);
+      expect(new Set(ids).size).toBe(10);
     });
   });
 
-  describe('Edge Cases', () => {
+  describe('Error Handling and Edge Cases', () => {
     it('should handle null ID generator gracefully', () => {
       const mastra = new Mastra({
         idGenerator: null as any,
@@ -353,154 +326,592 @@ describe('Mastra ID Generator', () => {
       expect(() => mastra.generateId()).toThrow('ID generator returned an empty string, which is not allowed');
       expect(emptyIdGenerator).toHaveBeenCalledTimes(2);
     });
+
+    it('should handle ID generator that returns the same value', () => {
+      const staticIdGenerator = vi.fn(() => 'static-id');
+
+      const mastra = new Mastra({
+        idGenerator: staticIdGenerator,
+        logger: false,
+      });
+
+      const id1 = mastra.generateId();
+      const id2 = mastra.generateId();
+
+      expect(id1).toBe('static-id');
+      expect(id2).toBe('static-id');
+      expect(staticIdGenerator).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle ID generator that throws an error', () => {
+      const errorIdGenerator = vi.fn(() => {
+        throw new Error('ID generation failed');
+      });
+
+      const mastra = new Mastra({
+        idGenerator: errorIdGenerator,
+        logger: false,
+      });
+
+      expect(() => mastra.generateId()).toThrow('ID generation failed');
+      expect(errorIdGenerator).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle ID generator that returns null', () => {
+      const nullIdGenerator = vi.fn(() => null as any);
+
+      const mastra = new Mastra({
+        idGenerator: nullIdGenerator,
+        logger: false,
+      });
+
+      expect(() => mastra.generateId()).toThrow(MastraError);
+      expect(() => mastra.generateId()).toThrow('ID generator returned an empty string, which is not allowed');
+    });
+
+    it('should handle ID generator that returns undefined', () => {
+      const undefinedIdGenerator = vi.fn(() => undefined as any);
+
+      const mastra = new Mastra({
+        idGenerator: undefinedIdGenerator,
+        logger: false,
+      });
+
+      expect(() => mastra.generateId()).toThrow(MastraError);
+      expect(() => mastra.generateId()).toThrow('ID generator returned an empty string, which is not allowed');
+    });
   });
 
-  describe('Performance and Concurrency', () => {
-    it('should handle rapid successive ID generation calls', () => {
+  describe('MessageList Integration', () => {
+    it('should use custom ID generator for message creation', () => {
       const mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
       });
 
-      const ids: string[] = [];
+      const messageList = new MessageList({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        generateMessageId: mastra.generateId.bind(mastra),
+      });
 
-      // Generate many IDs rapidly
-      for (let i = 0; i < 100; i++) {
-        ids.push(mastra.generateId());
-      }
+      messageList.add('User message', 'user');
+      messageList.add({ role: 'assistant', content: 'Assistant message' }, 'response');
+      messageList.addSystem('System message', 'system'); // System messages don't get IDs
 
-      expect(customIdGenerator).toHaveBeenCalledTimes(100);
-      expect(ids.length).toBe(100);
-
-      // All IDs should be unique (since our custom generator increments)
-      const uniqueIds = new Set(ids);
-      expect(uniqueIds.size).toBe(100);
+      expect(customIdGenerator).toHaveBeenCalledTimes(2); // Only user and assistant messages
     });
 
-    it('should handle concurrent ID generation', async () => {
+    it('should fallback to randomUUID when no custom ID generator provided', () => {
+      const messageList = new MessageList({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      });
+
+      messageList.add('Test message', 'user');
+      expect(customIdGenerator).not.toHaveBeenCalled();
+    });
+
+    it('should handle context binding issues properly', () => {
       const mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
       });
 
-      const promises = Array.from({ length: 10 }, () => Promise.resolve(mastra.generateId()));
+      // Test unbound function (should fail)
+      const unboundGenerator = mastra.generateId;
+      const messageList1 = new MessageList({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        generateMessageId: unboundGenerator,
+      });
+      expect(() => messageList1.add('Test message', 'user')).toThrow('Cannot read private member #idGenerator');
 
-      const ids = await Promise.all(promises);
-
-      expect(customIdGenerator).toHaveBeenCalledTimes(10);
-      expect(ids.length).toBe(10);
-
-      // All IDs should be unique
-      const uniqueIds = new Set(ids);
-      expect(uniqueIds.size).toBe(10);
+      // Test properly bound function (should work)
+      const messageList2 = new MessageList({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        generateMessageId: mastra.generateId.bind(mastra),
+      });
+      messageList2.add('Test message', 'user');
+      expect(customIdGenerator).toHaveBeenCalled();
     });
   });
 
-  describe('Agent ID Generation', () => {
-    it('should use custom ID generator for agent message IDs', async () => {
+  describe('Agent Integration with Memory', () => {
+    it('should use custom ID generator in agent operations', async () => {
       const { mastra: _mastra, agent } = createMastraWithMemory(customIdGenerator);
 
-      // Test that the agent uses the custom ID generator for run IDs when not provided
-      const _result = await agent.generate('Hello');
-
-      // The agent should have used the custom ID generator for run IDs
-      expect(customIdGenerator).toHaveBeenCalled();
-    });
-
-    it('should use fallback ID generator for agent message IDs when no custom generator is provided', async () => {
-      const { mastra: _mastra, agent } = createMastraWithMemory();
-
-      // Mock the LLM to avoid actual API calls
-      vi.spyOn(agent, 'generate').mockResolvedValue({
-        text: 'Test response',
-        messages: [],
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      } as any);
-
       await agent.generate('Hello');
-
-      // The agent should not have used the custom ID generator
-      expect(customIdGenerator).not.toHaveBeenCalled();
+      expect(customIdGenerator).toHaveBeenCalled();
     });
-  });
 
-  describe('Memory ID Generation', () => {
-    it('should use custom ID generator for memory operations', async () => {
-      const { mastra: _mastra, agent, memory: _memory } = createMastraWithMemory(customIdGenerator);
+    it('should use custom ID generator for agent memory operations', async () => {
+      const { mastra: _mastra, agent } = createMastraWithMemory(customIdGenerator);
 
-      // Test memory ID generation through agent
       const agentMemory = await agent.getMemory();
       if (!agentMemory) throw new Error('Memory not found');
-      const id = agentMemory.generateId();
 
+      const id = agentMemory.generateId();
       expect(customIdGenerator).toHaveBeenCalled();
       expect(id).toMatch(/^custom-id-\d+$/);
     });
 
-    it('should use fallback ID generator for memory operations when no custom generator is provided', async () => {
-      const { mastra: _mastra, agent, memory: _memory } = createMastraWithMemory();
+    it('should use custom ID generator across multiple agents', async () => {
+      const memory1 = new MockMemory();
+      const agent1 = new Agent({
+        name: 'agent1',
+        instructions: 'You are agent 1',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Response 1',
+          }),
+        }),
+        memory: memory1,
+      });
 
-      // Test memory ID generation through agent
-      const agentMemory = await agent.getMemory();
-      if (!agentMemory) throw new Error('Memory not found');
-      const id = agentMemory.generateId();
+      const memory2 = new MockMemory();
+      const agent2 = new Agent({
+        name: 'agent2',
+        instructions: 'You are agent 2',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Response 2',
+          }),
+        }),
+        memory: memory2,
+      });
 
-      expect(customIdGenerator).not.toHaveBeenCalled();
-      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      const _mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { agent1, agent2 },
+      });
+
+      await agent1.generate('Hello from agent 1');
+      await agent2.generate('Hello from agent 2');
+
+      expect(customIdGenerator).toHaveBeenCalled();
     });
 
-    it('should use custom ID generator when creating threads and messages', async () => {
-      const { mastra: _mastra, agent, memory: _memory } = createMastraWithMemory(customIdGenerator);
+    it('should use custom ID generator in streaming operations', async () => {
+      const { mastra: _mastra, agent } = createMastraWithMemory(customIdGenerator);
 
-      const agentMemory = await agent.getMemory();
-      if (!agentMemory) throw new Error('Memory not found');
+      await agent.stream('Hello', {
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      });
 
-      // Test memory ID generation directly
-      const id = agentMemory.generateId();
-
-      // The memory should have used the custom ID generator
       expect(customIdGenerator).toHaveBeenCalled();
-      expect(id).toMatch(/^custom-id-\d+$/);
     });
   });
 
-  describe('Agent with Memory ID Generation', () => {
-    it('should use custom ID generator for both agent and memory operations', async () => {
-      const { mastra, agent, memory: _memory } = createMastraWithMemory(customIdGenerator);
+  describe('Dynamic Memory Creation', () => {
+    it('should pass Mastra instance and runtime context to dynamic memory function', async () => {
+      let receivedMastraInstance: Mastra | undefined;
+      let receivedRuntimeContext: RuntimeContext | undefined;
+
+      const agent = new Agent({
+        name: 'testAgent',
+        instructions: 'You are a test agent',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Test response',
+          }),
+        }),
+        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+          receivedMastraInstance = mastraInstance;
+          receivedRuntimeContext = runtimeContext;
+
+          // Verify the Mastra instance has the custom ID generator
+          if (mastraInstance) {
+            expect(mastraInstance.getIdGenerator()).toBe(customIdGenerator);
+          }
+
+          return new MockMemory();
+        },
+      });
+
+      const mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { testAgent: agent },
+      });
 
       const agentMemory = await agent.getMemory();
       if (!agentMemory) throw new Error('Memory not found');
 
-      // Test agent ID generation
-      const agentId = mastra.generateId();
-      expect(customIdGenerator).toHaveBeenCalled();
+      expect(receivedMastraInstance).toBe(mastra);
+      expect(receivedRuntimeContext).toBeDefined();
+      expect(typeof receivedRuntimeContext?.get).toBe('function');
+      expect(typeof receivedRuntimeContext?.set).toBe('function');
 
-      // Test memory ID generation
       const memoryId = agentMemory.generateId();
       expect(customIdGenerator).toHaveBeenCalled();
-
-      // Both should use the same custom ID generator
-      expect(agentId).toMatch(/^custom-id-\d+$/);
       expect(memoryId).toMatch(/^custom-id-\d+$/);
     });
 
-    it('should use fallback ID generator for both agent and memory operations when no custom generator is provided', async () => {
-      const { mastra, agent, memory: _memory } = createMastraWithMemory();
+    it('should handle dynamic memory creation with runtime context data', async () => {
+      let contextUserId: string | undefined;
+      let contextSessionId: string | undefined;
+
+      const agent = new Agent({
+        name: 'testAgent',
+        instructions: 'You are a context-aware agent',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Context-aware response',
+          }),
+        }),
+        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+          contextUserId = runtimeContext.get('userId');
+          contextSessionId = runtimeContext.get('sessionId');
+
+          // Verify access to custom ID generator
+          expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
+
+          const memory = new MockMemory();
+          // Customize memory based on context
+          if (contextUserId && contextSessionId) {
+            memory.name = `memory-${contextUserId}-${contextSessionId}`;
+          }
+          return memory;
+        },
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { testAgent: agent },
+      });
+
+      // Create runtime context with user data
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user-123');
+      runtimeContext.set('sessionId', 'session-456');
+
+      const agentMemory = await agent.getMemory({ runtimeContext });
+      if (!agentMemory) throw new Error('Memory not found');
+
+      expect(contextUserId).toBe('user-123');
+      expect(contextSessionId).toBe('session-456');
+      expect(agentMemory.name).toBe('memory-user-123-session-456');
+
+      const memoryId = agentMemory.generateId();
+      expect(customIdGenerator).toHaveBeenCalled();
+      expect(memoryId).toMatch(/^custom-id-\d+$/);
+    });
+
+    it('should create different memory instances for different runtime contexts', async () => {
+      const memoryInstances: MockMemory[] = [];
+
+      const agent = new Agent({
+        name: 'testAgent',
+        instructions: 'You are a multi-context agent',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Multi-context response',
+          }),
+        }),
+        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+          const userId = runtimeContext.get('userId');
+          expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
+
+          const memory = new MockMemory();
+          memory.name = `memory-${userId}`;
+          memoryInstances.push(memory);
+          return memory;
+        },
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { testAgent: agent },
+      });
+
+      // Create different runtime contexts
+      const context1 = new RuntimeContext();
+      context1.set('userId', 'user-1');
+
+      const context2 = new RuntimeContext();
+      context2.set('userId', 'user-2');
+
+      const memory1 = await agent.getMemory({ runtimeContext: context1 });
+      const memory2 = await agent.getMemory({ runtimeContext: context2 });
+
+      expect(memory1).not.toBe(memory2);
+      expect(memory1?.name).toBe('memory-user-1');
+      expect(memory2?.name).toBe('memory-user-2');
+      expect(memoryInstances).toHaveLength(2);
+
+      // Both should use the same custom ID generator
+      const id1 = memory1?.generateId();
+      const id2 = memory2?.generateId();
+      expect(customIdGenerator).toHaveBeenCalled();
+      expect(id1).toMatch(/^custom-id-\d+$/);
+      expect(id2).toMatch(/^custom-id-\d+$/);
+    });
+
+    it('should handle dynamic memory creation errors gracefully', async () => {
+      const agent = new Agent({
+        name: 'testAgent',
+        instructions: 'You are a test agent',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Test response',
+          }),
+        }),
+        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+          // Verify the ID generator is available even when memory creation might fail
+          expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
+
+          const shouldFail = runtimeContext.get('shouldFail');
+          if (shouldFail) {
+            throw new Error('Memory creation failed');
+          }
+          return new MockMemory();
+        },
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { testAgent: agent },
+      });
+
+      // Test successful memory creation
+      const successContext = new RuntimeContext();
+      successContext.set('shouldFail', false);
+      const successMemory = await agent.getMemory({ runtimeContext: successContext });
+      expect(successMemory).toBeDefined();
+
+      // Test failed memory creation
+      const failContext = new RuntimeContext();
+      failContext.set('shouldFail', true);
+      await expect(agent.getMemory({ runtimeContext: failContext })).rejects.toThrow('Memory creation failed');
+    });
+  });
+
+  describe('ID Generator Lifecycle and Consistency', () => {
+    it('should maintain consistency across all components', async () => {
+      const { mastra, agent } = createMastraWithMemory(customIdGenerator);
 
       const agentMemory = await agent.getMemory();
       if (!agentMemory) throw new Error('Memory not found');
 
-      // Test agent ID generation
-      const agentId = mastra.generateId();
-      expect(customIdGenerator).not.toHaveBeenCalled();
-
-      // Test memory ID generation
+      // Test all components use the same generator
+      const mastraId = mastra.generateId();
       const memoryId = agentMemory.generateId();
-      expect(customIdGenerator).not.toHaveBeenCalled();
 
-      // Both should use the fallback UUID generator
-      expect(agentId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-      expect(memoryId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      const messageList = new MessageList({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        generateMessageId: mastra.generateId.bind(mastra),
+      });
+      messageList.add('Test message', 'user');
+
+      expect(customIdGenerator).toHaveBeenCalled();
+      expect(mastraId).toMatch(/^custom-id-\d+$/);
+      expect(memoryId).toMatch(/^custom-id-\d+$/);
+    });
+
+    it('should allow changing ID generator after creation', () => {
+      const mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+      });
+
+      const newIdGenerator = vi.fn(() => `new-id-${++idCounter}`);
+      mastra.setIdGenerator(newIdGenerator);
+
+      expect(mastra.getIdGenerator()).toBe(newIdGenerator);
+      expect(mastra.generateId()).toBe('new-id-1');
+    });
+
+    it('should propagate ID generator changes to components', async () => {
+      const { mastra, agent } = createMastraWithMemory(customIdGenerator);
+
+      const agentMemory = await agent.getMemory();
+      if (!agentMemory) throw new Error('Memory not found');
+
+      const newIdGenerator = vi.fn(() => `new-id-${++idCounter}`);
+      mastra.setIdGenerator(newIdGenerator);
+
+      const memoryId = agentMemory.generateId();
+      expect(newIdGenerator).toHaveBeenCalled();
+      expect(memoryId).toMatch(/^new-id-\d+$/);
+    });
+  });
+
+  describe('End-to-End User Workflows', () => {
+    it('should handle complete user conversation workflow', async () => {
+      const memory = new MockMemory();
+      const agent = new Agent({
+        name: 'helpAgent',
+        instructions: 'You are a helpful assistant',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'I can help you with that!',
+          }),
+        }),
+        memory,
+      });
+
+      const mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { helpAgent: agent },
+      });
+
+      // Simulate user conversation
+      await agent.generate('Hello, can you help me?', {
+        threadId: 'user-conversation',
+        resourceId: 'user-session',
+      });
+
+      expect(customIdGenerator).toHaveBeenCalled();
+      expect(mastra.getIdGenerator()).toBe(customIdGenerator);
+    });
+
+    it('should handle multi-user concurrent conversations', async () => {
+      const memory = new MockMemory();
+      const agent = new Agent({
+        name: 'multiUserAgent',
+        instructions: 'You are a multi-user assistant',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Hello! I can help multiple users.',
+          }),
+        }),
+        memory,
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { multiUserAgent: agent },
+      });
+
+      // Simulate concurrent conversations
+      const conversations = [
+        { threadId: 'user1-thread', resourceId: 'user1-session', message: 'Hello from user 1' },
+        { threadId: 'user2-thread', resourceId: 'user2-session', message: 'Hello from user 2' },
+        { threadId: 'user3-thread', resourceId: 'user3-session', message: 'Hello from user 3' },
+      ];
+
+      const results = await Promise.all(
+        conversations.map(conv =>
+          agent.generate(conv.message, {
+            threadId: conv.threadId,
+            resourceId: conv.resourceId,
+          }),
+        ),
+      );
+
+      expect(customIdGenerator).toHaveBeenCalled();
+      expect(results).toHaveLength(3);
+    });
+
+    it('should handle complex workflow with memory operations', async () => {
+      const memory = new MockMemory();
+      const agent = new Agent({
+        name: 'workflowAgent',
+        instructions: 'You are a workflow assistant',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Workflow step completed.',
+          }),
+        }),
+        memory,
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { workflowAgent: agent },
+      });
+
+      const agentMemory = await agent.getMemory();
+      if (!agentMemory) throw new Error('Memory not found');
+
+      // Create workflow thread
+      const thread = await agentMemory.createThread({
+        threadId: 'workflow-thread',
+        resourceId: 'workflow-resource',
+        title: 'Multi-step Workflow',
+      });
+
+      // Add workflow steps
+      const steps = ['Initialize', 'Process', 'Validate', 'Complete'];
+      for (const step of steps) {
+        await agentMemory.addMessage({
+          threadId: thread.id,
+          resourceId: 'workflow-resource',
+          content: `${step} workflow step`,
+          role: 'user',
+          type: 'text',
+        });
+      }
+
+      expect(customIdGenerator).toHaveBeenCalled();
+    });
+
+    it('should handle streaming operations with memory persistence', async () => {
+      const memory = new MockMemory();
+      const agent = new Agent({
+        name: 'streamingAgent',
+        instructions: 'You are a streaming assistant',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Streaming response content.',
+          }),
+        }),
+        memory,
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: customIdGenerator,
+        logger: false,
+        agents: { streamingAgent: agent },
+      });
+
+      await agent.stream('Please provide a streaming response', {
+        threadId: 'streaming-thread',
+        resourceId: 'streaming-resource',
+      });
+
+      expect(customIdGenerator).toHaveBeenCalled();
     });
   });
 });

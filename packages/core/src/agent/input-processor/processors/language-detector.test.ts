@@ -24,13 +24,15 @@ function createMockLanguageResult(
   isTarget: boolean,
   translation?: TranslationResult,
 ): LanguageDetectionResult {
+  // For target languages, return empty object (minimal tokens)
+  if (isTarget) {
+    return {};
+  }
+
   return {
-    detected_language: language,
     iso_code: isoCode,
     confidence,
-    is_target_language: isTarget,
-    translation,
-    reason: `Detected ${language} with ${confidence} confidence`,
+    ...(translation && { translated_text: translation.translated_text }),
   };
 }
 
@@ -310,7 +312,7 @@ describe('LanguageDetector', () => {
       expect((result[0].content.metadata as any)?.language_detection?.translation).toEqual({
         original_language: 'French',
         target_language: 'English',
-        translation_confidence: 0.93,
+        translation_confidence: 0.91,
       });
       expect((result[0].content.metadata as any)?.language_detection?.original_content).toBe('Bonjour le monde');
       expect(consoleInfoSpy).toHaveBeenCalledWith(expect.stringContaining('[LanguageDetector] Translated from French'));

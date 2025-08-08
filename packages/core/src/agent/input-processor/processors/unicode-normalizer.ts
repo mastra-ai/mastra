@@ -61,8 +61,9 @@ export class UnicodeNormalizer implements InputProcessor {
               : message.content.content,
         },
       }));
-    } catch (error) {
-      args.abort(`Unicode normalization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch {
+      // do nothing, this isn't a critical processor
+      return args.messages;
     }
   }
 

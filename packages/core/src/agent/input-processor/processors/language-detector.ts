@@ -2,6 +2,7 @@ import z from 'zod';
 import type { MastraLanguageModel } from '../../index';
 import { Agent } from '../../index';
 import type { MastraMessageV2 } from '../../message-list';
+import { TripWire } from '../../trip-wire';
 import type { InputProcessor } from '../index';
 
 /**
@@ -25,15 +26,12 @@ export interface TranslationResult {
 }
 
 /**
- * Language detection and translation result
+ * Language detection and translation result (simplified for minimal tokens)
  */
 export interface LanguageDetectionResult {
-  detected_language: string;
-  iso_code: string;
-  confidence: number;
-  is_target_language: boolean;
-  translation?: TranslationResult;
-  reason?: string;
+  iso_code?: string;
+  confidence?: number;
+  translated_text?: string;
 }
 
 /**
@@ -48,7 +46,7 @@ export interface LanguageDetectorOptions {
    * If content is detected in a different language, it may be translated.
    * Can be language name ('English') or ISO code ('en')
    */
-  targetLanguages?: string[];
+  targetLanguages: string[];
 
   /**
    * Confidence threshold for language detection (0-1, default: 0.7)
@@ -198,9 +196,28 @@ export class LanguageDetector implements InputProcessor {
 
         const detectionResult = await this.detectLanguage(textContent);
 
-        if (detectionResult.confidence < this.threshold) {
-          // Detection confidence too low, proceed with original
+        // Check if confidence meets threshold
+        if (detectionResult.confidence && detectionResult.confidence < this.threshold) {
+          // Detection confidence too low, proceed with original (no metadata)
           processedMessages.push(message);
+          continue;
+        }
+
+        // If no detection result or target language, assume target language and add minimal metadata
+        if (!this.isNonTargetLanguage(detectionResult)) {
+          const targetLanguageCode = this.getLanguageCode(this.targetLanguages[0]!);
+          const targetMessage = this.addLanguageMetadata(message, {
+            iso_code: targetLanguageCode,
+            confidence: 0.95,
+          });
+
+          if (this.includeDetectionDetails) {
+            console.info(
+              `[LanguageDetector] Content in target language: Language detected: ${this.getLanguageName(targetLanguageCode)} (${targetLanguageCode}) with confidence 0.95`,
+            );
+          }
+
+          processedMessages.push(targetMessage);
           continue;
         }
 
@@ -216,7 +233,7 @@ export class LanguageDetector implements InputProcessor {
 
       return processedMessages;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Tripwire')) {
+      if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
       args.abort(`Language detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -232,36 +249,41 @@ export class LanguageDetector implements InputProcessor {
     try {
       const response = await this.detectionAgent.generate(prompt, {
         output: z.object({
-          detected_language: z.string(),
-          iso_code: z.string(),
-          confidence: z.number().min(0).max(1),
-          is_target_language: z.boolean(),
-          translation: z
-            .object({
-              original_text: z.string(),
-              original_language: z.string(),
-              translated_text: z.string(),
-              target_language: z.string(),
-              confidence: z.number().min(0).max(1),
-            })
-            .optional(),
-          reason: z.string().optional(),
+          iso_code: z.string().optional(),
+          confidence: z.number().min(0).max(1).optional(),
+          translated_text: z.string().optional(),
         }),
         temperature: 0,
       });
+
+      if (response.object.translated_text && !response.object.confidence) {
+        response.object.confidence = 0.95;
+      }
 
       return response.object;
     } catch (error) {
       console.warn('[LanguageDetector] Detection agent failed, assuming target language:', error);
       // Fail open - assume target language if detection fails
-      return {
-        detected_language: this.targetLanguages[0] || 'English',
-        iso_code: this.getLanguageCode(this.targetLanguages[0] || 'English'),
-        confidence: 0.5,
-        is_target_language: true,
-        reason: 'Detection agent failed, assumed target language',
-      };
+      return {};
     }
+  }
+
+  /**
+   * Determine if language detection indicates non-target language
+   */
+  private isNonTargetLanguage(result: LanguageDetectionResult): boolean {
+    // If we got back iso_code and confidence, check if it's non-target
+    if (result.iso_code && result.confidence && result.confidence >= this.threshold) {
+      return !this.isTargetLanguage(result.iso_code);
+    }
+    return false;
+  }
+
+  /**
+   * Get detected language name from ISO code
+   */
+  private getLanguageName(isoCode: string): string {
+    return LanguageDetector.LANGUAGE_MAP[isoCode.toLowerCase()] || isoCode;
   }
 
   /**
@@ -273,17 +295,8 @@ export class LanguageDetector implements InputProcessor {
     strategy: 'detect' | 'translate' | 'block' | 'warn',
     abort: (reason?: string) => never,
   ): Promise<MastraMessageV2 | null> {
-    const alertMessage = `Language detected: ${result.detected_language} (${result.iso_code}) with confidence ${result.confidence.toFixed(2)}${
-      result.reason ? `. ${result.reason}` : ''
-    }${this.includeDetectionDetails ? `. Target languages: ${this.targetLanguages.join(', ')}` : ''}`;
-
-    // If already in target language, return as-is
-    if (result.is_target_language) {
-      if (this.includeDetectionDetails) {
-        console.info(`[LanguageDetector] Content in target language: ${alertMessage}`);
-      }
-      return this.addLanguageMetadata(message, result);
-    }
+    const detectedLanguage = result.iso_code ? this.getLanguageName(result.iso_code) : 'Unknown';
+    const alertMessage = `Language detected: ${detectedLanguage} (${result.iso_code}) with confidence ${result.confidence?.toFixed(2)}`;
 
     // Handle non-target language based on strategy
     switch (strategy) {
@@ -299,11 +312,10 @@ export class LanguageDetector implements InputProcessor {
         const blockMessage = `Non-target language detected: ${alertMessage}`;
         console.info(`[LanguageDetector] Blocking: ${blockMessage}`);
         abort(blockMessage);
-        return null; // Never reached
 
       case 'translate':
-        if (result.translation) {
-          console.info(`[LanguageDetector] Translated from ${result.detected_language}: ${alertMessage}`);
+        if (result.translated_text) {
+          console.info(`[LanguageDetector] Translated from ${detectedLanguage}: ${alertMessage}`);
           return this.createTranslatedMessage(message, result);
         } else {
           console.warn(`[LanguageDetector] No translation available, keeping original: ${alertMessage}`);
@@ -319,7 +331,7 @@ export class LanguageDetector implements InputProcessor {
    * Create a translated message with original preserved in metadata
    */
   private createTranslatedMessage(originalMessage: MastraMessageV2, result: LanguageDetectionResult): MastraMessageV2 {
-    if (!result.translation) {
+    if (!result.translated_text) {
       return this.addLanguageMetadata(originalMessage, result);
     }
 
@@ -327,8 +339,8 @@ export class LanguageDetector implements InputProcessor {
       ...originalMessage,
       content: {
         ...originalMessage.content,
-        parts: [{ type: 'text', text: result.translation.translated_text }],
-        content: result.translation.translated_text,
+        parts: [{ type: 'text', text: result.translated_text }],
+        content: result.translated_text,
       },
     };
 
@@ -343,19 +355,23 @@ export class LanguageDetector implements InputProcessor {
     result: LanguageDetectionResult,
     originalMessage?: MastraMessageV2,
   ): MastraMessageV2 {
+    const isTargetLanguage = this.isTargetLanguage(result.iso_code);
+
     const metadata = {
       ...message.content.metadata,
       language_detection: {
-        detected_language: result.detected_language,
-        iso_code: result.iso_code,
-        confidence: result.confidence,
-        is_target_language: result.is_target_language,
+        ...(result.iso_code && {
+          detected_language: this.getLanguageName(result.iso_code),
+          iso_code: result.iso_code,
+        }),
+        ...(result.confidence && { confidence: result.confidence }),
+        is_target_language: isTargetLanguage,
         target_languages: this.targetLanguages,
-        ...(result.translation && {
+        ...(result.translated_text && {
           translation: {
-            original_language: result.translation.original_language,
-            target_language: result.translation.target_language,
-            translation_confidence: result.translation.confidence,
+            original_language: result.iso_code ? this.getLanguageName(result.iso_code) : 'Unknown',
+            target_language: this.targetLanguages[0],
+            ...(result.confidence && { translation_confidence: result.confidence }),
           },
         }),
         ...(this.preserveOriginal &&
@@ -372,6 +388,20 @@ export class LanguageDetector implements InputProcessor {
         metadata,
       },
     };
+  }
+
+  /**
+   * Check if detected language is a target language
+   */
+  private isTargetLanguage(isoCode?: string): boolean {
+    if (!isoCode) return true; // Assume target if no detection
+
+    return this.targetLanguages.some(target => {
+      const targetCode = this.getLanguageCode(target);
+      return (
+        targetCode === isoCode.toLowerCase() || target.toLowerCase() === this.getLanguageName(isoCode).toLowerCase()
+      );
+    });
   }
 
   /**
@@ -421,76 +451,22 @@ export class LanguageDetector implements InputProcessor {
    * Create default detection and translation instructions
    */
   private createDefaultInstructions(): string {
-    return `You are a language detection and translation specialist. Your job is to identify the language of text content and optionally translate it.
+    return `You are a language detection specialist. Identify the language of text content and translate if needed.
 
-**Target Languages**: ${this.targetLanguages.join(', ')}
-
-**Detection Guidelines**:
-1. Identify the primary language of the input text
-2. Provide the language name and ISO 639-1/639-2 code
-3. Give a confidence score between 0-1 (1 = definitely this language)
-4. Determine if the detected language matches any target language
-5. Consider context, script, common words, and grammatical patterns
-
-**Translation Guidelines** (when strategy is 'translate'):
-1. If the content is NOT in a target language, translate it to the primary target language
-2. Preserve meaning, tone, and intent as much as possible
-3. Handle technical terms, proper nouns, and cultural references appropriately
-4. Maintain formatting and structure where possible
-5. Provide translation confidence score
-
-**Quality Level**: ${this.translationQuality}
-- speed: Quick translation, may sacrifice some nuance
-- quality: Careful translation preserving all nuances
-- balanced: Good balance of speed and accuracy
-
-**Language Coverage**: Support for 100+ languages including:
-- Major languages: English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese, Arabic, Hindi
-- European: Dutch, Swedish, Polish, Czech, Hungarian, Romanian, Greek, Finnish, etc.
-- Asian: Thai, Vietnamese, Indonesian, Malay, Tagalog, Bengali, Tamil, etc.
-- Others: Turkish, Hebrew, Ukrainian, Bulgarian, Croatian, etc.
-
-**Response Format**:
-- detected_language: Full language name (e.g., "Spanish", "Japanese")
-- iso_code: Standard language code (e.g., "es", "ja", "zh-cn")
-- confidence: Detection confidence (0-1)
-- is_target_language: Boolean indicating if it matches target languages
-- translation: Optional translation object if content needs translation
-- reason: Brief explanation of detection
-
-**Detection Examples**:
-- "Hello, how are you?" → English (en), confidence: 0.95
-- "Bonjour, comment allez-vous?" → French (fr), confidence: 0.92  
-- "こんにちは、元気ですか？" → Japanese (ja), confidence: 0.98
-- "Hola, ¿cómo estás?" → Spanish (es), confidence: 0.90
-
-**Translation Examples** (when needed):
-- French "Bonjour le monde" → English "Hello world"
-- Spanish "¿Cómo está usted?" → English "How are you?"
-- Japanese "ありがとうございます" → English "Thank you"
-
-Be accurate with language detection and natural with translations.`;
+IMPORTANT: IF CONTENT IS ALREADY IN TARGET LANGUAGE, RETURN AN EMPTY OBJECT. Do not include any zeros or false values.`;
   }
 
   /**
    * Create detection prompt for the agent
    */
   private createDetectionPrompt(content: string): string {
-    const needsTranslation = this.strategy === 'translate' ? ' and translate if needed' : '';
+    const translate =
+      this.strategy === 'translate'
+        ? `. If not in ${this.targetLanguages[0]}, translate to ${this.targetLanguages[0]}`
+        : '';
 
-    return `Analyze the following text for language detection${needsTranslation}:
+    return `Detect language of: "${content}"
 
-Content: "${content}"
-
-Target languages: ${this.targetLanguages.join(', ')}
-Translation quality: ${this.translationQuality}
-Strategy: ${this.strategy}
-
-Provide:
-1. Language detection with confidence score
-2. Whether it matches any target language
-${this.strategy === 'translate' ? '3. Translation to primary target language if not already in target language' : ''}
-
-Focus on accuracy for detection and natural translation if needed.`;
+Target: ${this.targetLanguages.join('/')}${translate}`;
   }
 }

@@ -13,8 +13,8 @@ export const ReferenceCards = () => {
         "Memory",
         "Storage",
         "RAG",
-        "Evals (Legacy)",
-        "Scorers",
+        "Evals",
+        "Scorers (Experimental)",
         "Voice",
         "Observability",
         "Client SDK",
@@ -359,7 +359,7 @@ export const ReferenceCards = () => {
             href: "/reference/rag/lance",
           },
         ],
-        "Evals (Legacy)": [
+        Evals: [
           {
             title: "AnswerRelevancy",
             href: "/reference/evals/answer-relevancy",
@@ -425,7 +425,7 @@ export const ReferenceCards = () => {
             href: "/reference/evals/toxicity",
           },
         ],
-        Scorers: [
+        "Scorers (Experimental)": [
           {
             title: "MastraScorer",
             href: "/reference/scorers/mastra-scorer",

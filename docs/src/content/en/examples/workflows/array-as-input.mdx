@@ -5,369 +5,66 @@ description: Example of using Mastra to process an array using .foreach() in a w
 
 # Array as Input
 
-This example demonstrates how to process an array input in a workflow. Mastra provides a `.foreach()` helper function that executes a step for each item in the array.
+Some workflows need to perform the same operation on every item in an array. This example demonstrates how to use `.foreach()` to iterate over a list of strings and apply the same step to each one, producing a transformed array as the output.
 
-## Setup
+## Repeating with `.foreach()`
 
-```sh copy
-npm install @ai-sdk/openai @mastra/core simple-git
-```
+In this example, the workflow uses `.foreach()` to apply the `mapStep` step to each string in the input array. For each item, it appends the text `" mapStep"` to the original value. After all items are processed, `step2` runs to pass the updated array to the output.
 
-## Define Docs Generator Agent
-
-Define a docs generator agent that leverages an LLM call to generate a documentation given a code file or a summary of a code file.
-
-```ts showLineNumbers copy filename="agents/docs-generator-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-
-// Create a documentation generator agent for code analysis
-const docGeneratorAgent = new Agent({
-  name: "doc_generator_agent",
-  instructions: `You are a technical documentation expert. You will analyze the provided code files and generate a comprehensive documentation summary.
-            For each file:
-            1. Identify the main purpose and functionality
-            2. Document key components, classes, functions, and interfaces
-            3. Note important dependencies and relationships between components
-            4. Highlight any notable patterns or architectural decisions
-            5. Include relevant code examples where helpful
-
-            Format the documentation in a clear, organized manner using markdown with:
-            - File overviews
-            - Component breakdowns
-            - Code examples
-            - Cross-references between related components
-
-            Focus on making the documentation clear and useful for developers who need to understand and work with this codebase.`,
-  model: openai("gpt-4o"),
-});
-
-export { docGeneratorAgent };
-```
-
-## Define File Summary Workflow
-
-Define the file summary workflow with 2 steps: one to fetch the code of a particular file and another to generate a readme for that particular code file.
-
-```ts showLineNumbers copy filename="workflows/file-summary-workflow.ts"
+```typescript filename="src/mastra/workflows/example-looping-foreach.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { docGeneratorAgent } from "../agents/docs-generator-agent";
 import { z } from "zod";
-import fs from "fs";
 
-// Step 1: Read the code content from a file
-const scrapeCodeStep = createStep({
-  id: "scrape_code",
-  description: "Scrape the code from a single file",
+const mapStep = createStep({
+  id: "map-step",
+  description: "adds mapStep suffix to input value",
   inputSchema: z.string(),
   outputSchema: z.object({
-    path: z.string(),
-    content: z.string(),
+    value: z.string()
   }),
   execute: async ({ inputData }) => {
-    const filePath = inputData;
-    const content = fs.readFileSync(filePath, "utf-8");
     return {
-      path: filePath,
-      content,
+      value: `${inputData} mapStep`
     };
-  },
+  }
 });
 
-// Step 2: Generate documentation for a single file
-const generateDocForFileStep = createStep({
-  id: "generateDocForFile",
-  inputSchema: z.object({
-    path: z.string(),
-    content: z.string(),
-  }),
-  outputSchema: z.object({
-    path: z.string(),
-    documentation: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    const docs = await docGeneratorAgent.generate(
-      `Generate documentation for the following code: ${inputData.content}`,
-    );
-    return {
-      path: inputData.path,
-      documentation: docs.text.toString(),
-    };
-  },
-});
-
-const generateSummaryWorkflow = createWorkflow({
-  id: "generate-summary",
-  inputSchema: z.string(),
-  outputSchema: z.object({
-    path: z.string(),
-    documentation: z.string(),
-  }),
-  steps: [scrapeCodeStep, generateDocForFileStep],
-})
-  .then(scrapeCodeStep)
-  .then(generateDocForFileStep)
-  .commit();
-
-export { generateSummaryWorkflow };
-```
-
-## Define Readme Generator Workflow
-
-Define a readme generator workflow with 4 steps: one to clone the github repository, one to suspend the workflow and get user input on what all folders to consider while generating a readme, one to generate a summary of all the files inside the folder, and another to collate all the documentation generated for each file into a single readme.
-
-```ts showLineNumbers copy filename="workflows/readme-generator-workflow.ts
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { docGeneratorAgent } from "../agents/docs-generator-agent";
-import { generateSummaryWorkflow } from "./file-summary-workflow";
-import { z } from "zod";
-import simpleGit from "simple-git";
-import fs from "fs";
-import path from "path";
-
-// Step 1: Clone a GitHub repository locally
-const cloneRepositoryStep = createStep({
-  id: "clone_repository",
-  description: "Clone the repository from the given URL",
-  inputSchema: z.object({
-    repoUrl: z.string(),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    message: z.string(),
-    data: z.object({
-      repoUrl: z.string(),
-    }),
-  }),
-  execute: async ({
-    inputData,
-    mastra,
-    getStepResult,
-    getInitData,
-    runtimeContext,
-  }) => {
-    const git = simpleGit();
-    // Skip cloning if repo already exists
-    if (fs.existsSync("./temp")) {
-      return {
-        success: true,
-        message: "Repository already exists",
-        data: {
-          repoUrl: inputData.repoUrl,
-        },
-      };
-    }
-    try {
-      // Clone the repository to the ./temp directory
-      await git.clone(inputData.repoUrl, "./temp");
-      return {
-        success: true,
-        message: "Repository cloned successfully",
-        data: {
-          repoUrl: inputData.repoUrl,
-        },
-      };
-    } catch (error) {
-      throw new Error(`Failed to clone repository: ${error}`);
-    }
-  },
-});
-
-// Step 2: Get user input on which folders to analyze
-const selectFolderStep = createStep({
-  id: "select_folder",
-  description: "Select the folder(s) to generate the docs",
-  inputSchema: z.object({
-    success: z.boolean(),
-    message: z.string(),
-    data: z.object({
-      repoUrl: z.string(),
-    }),
-  }),
-  outputSchema: z.array(z.string()),
-  suspendSchema: z.object({
-    folders: z.array(z.string()),
-    message: z.string(),
-  }),
-  resumeSchema: z.object({
-    selection: z.array(z.string()),
-  }),
-  execute: async ({ resumeData, suspend }) => {
-    const tempPath = "./temp";
-    const folders = fs
-      .readdirSync(tempPath)
-      .filter((item) => fs.statSync(path.join(tempPath, item)).isDirectory());
-
-    if (!resumeData?.selection) {
-      await suspend({
-        folders,
-        message: "Please select folders to generate documentation for:",
-      });
-      return [];
-    }
-
-    // Gather all file paths from selected folders
-    const filePaths: string[] = [];
-    // Helper function to recursively read files from directories
-    const readFilesRecursively = (dir: string) => {
-      const items = fs.readdirSync(dir);
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        const stat = fs.statSync(fullPath);
-        if (stat.isDirectory()) {
-          readFilesRecursively(fullPath);
-        } else if (stat.isFile()) {
-          filePaths.push(fullPath.replace(tempPath + "/", ""));
-        }
-      }
-    };
-
-    for (const folder of resumeData.selection) {
-      readFilesRecursively(path.join(tempPath, folder));
-    }
-
-    return filePaths;
-  },
-});
-
-// Step 4: Combine all documentation into a single README
-const collateDocumentationStep = createStep({
-  id: "collate_documentation",
+const step2 = createStep({
+  id: "step-2",
+  description: "passes value from input to output",
   inputSchema: z.array(
     z.object({
-      path: z.string(),
-      documentation: z.string(),
-    }),
+      value: z.string()
+    })
   ),
-  outputSchema: z.string(),
+  outputSchema: z.array(
+    z.object({
+      value: z.string()
+    })
+  ),
   execute: async ({ inputData }) => {
-    const readme = await docGeneratorAgent.generate(
-      `Generate a README.md file for the following documentation: ${inputData.map((doc) => doc.documentation).join("\n")}`,
-    );
-
-    return readme.text.toString();
-  },
+    return inputData.map(({ value }) => ({
+      value: value
+    }));
+  }
 });
 
-const readmeGeneratorWorkflow = createWorkflow({
-  id: "readme-generator",
-  inputSchema: z.object({
-    repoUrl: z.string(),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    message: z.string(),
-    data: z.object({
-      repoUrl: z.string(),
-    }),
-  }),
-  steps: [
-    cloneRepositoryStep,
-    selectFolderStep,
-    generateSummaryWorkflow,
-    collateDocumentationStep,
-  ],
+export const loopingForeach = createWorkflow({
+  id: "foreach-workflow",
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(
+    z.object({
+      value: z.string()
+    })
+  )
 })
-  .then(cloneRepositoryStep)
-  .then(selectFolderStep)
-  .foreach(generateSummaryWorkflow)
-  .then(collateDocumentationStep)
+  .foreach(mapStep)
+  .then(step2)
   .commit();
 
-export { readmeGeneratorWorkflow };
 ```
 
-## Register Agent and Workflow instances with Mastra class
-
-Register the agents and workflow with the mastra instance. This is critical for enabling access to the agents within the workflow.
-
-```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
-import { docGeneratorAgent } from "./agents/docs-generator-agent";
-import { readmeGeneratorWorkflow } from "./workflows/readme-generator-workflow";
-import { generateSummaryWorkflow } from "./workflows/file-summary-workflow";
-
-// Create a new Mastra instance and register components
-const mastra = new Mastra({
-  agents: {
-    docGeneratorAgent,
-  },
-  workflows: {
-    readmeGeneratorWorkflow,
-    generateSummaryWorkflow,
-  },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-
-export { mastra };
-```
-
-## Execute the Readme Generator Workflow
-
-Here, we'll get the reamde generator workflow from the mastra instance, then create a run and execute the created run with the required inputData.
-
-```ts showLineNumbers copy filename="exec.ts"
-import { promptUserForFolders } from "./utils";
-import { mastra } from "./";
-
-// GitHub repository to generate documentation for
-const ghRepoUrl = "https://github.com/mastra-ai/mastra";
-const run = await mastra.getWorkflow("readmeGeneratorWorkflow").createRunAsync();
-
-// Start the workflow with the repository URL as input
-const res = await run.start({ inputData: { repoUrl: ghRepoUrl } });
-const { status, steps } = res;
-
-// Handle suspended workflow (waiting for user input)
-if (status === "suspended") {
-  // Get the suspended step data
-  const suspendedStep = steps["select_folder"];
-  let folderList: string[] = [];
-
-  // Extract the folder list from step data
-  if (
-    suspendedStep.status === "suspended" &&
-    "folders" in suspendedStep.payload
-  ) {
-    folderList = suspendedStep.payload.folders as string[];
-  } else if (suspendedStep.status === "success" && suspendedStep.output) {
-    folderList = suspendedStep.output;
-  }
-
-  if (!folderList.length) {
-    console.log("No folders available for selection.");
-    process.exit(1);
-  }
-
-  // Prompt user to select folders
-  const folders = await promptUserForFolders(folderList);
-
-  // Resume the workflow with user selections
-  const resumedResult = await run.resume({
-    resumeData: { selection: folders },
-    step: "select_folder",
-  });
-
-  // Print resumed result
-  if (resumedResult.status === "success") {
-    console.log(resumedResult.result);
-  } else {
-    console.log(resumedResult);
-  }
-  process.exit(1);
-}
-
-// Handle completed workflow
-if (res.status === "success") {
-  console.log(res.result ?? res);
-} else {
-  console.log(res);
-}
-```
+> Run this example with multiple string inputs.
 
 ## Workflows (Legacy)
 

@@ -4,8 +4,11 @@ description: Example of creating a custom LLM-based evaluation metric.
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from "@/components/scorer-callout";
 
 # LLM as a Judge Evaluation
+
+<ScorerCallout />
 
 This example shows how to create a custom LLM-based evaluation metric to determine real countries of the world. The metric accepts a `query` and a `response`, and returns a score and reason based on how accurately the response matches the query.
 

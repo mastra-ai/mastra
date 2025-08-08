@@ -198,16 +198,16 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: MastraMessageV1[];
+  messages: (MastraMessageV1 | MastraMessageV2)[];
   agentId: string;
 }
 
 export interface SaveNetworkMessageToMemoryParams {
-  messages: MastraMessageV1[];
+  messages: (MastraMessageV1 | MastraMessageV2)[];
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = MastraMessageV1[];
+export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
 
 export interface CreateMemoryThreadParams {
   title?: string;

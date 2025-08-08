@@ -153,7 +153,7 @@ import { LanguageDetector } from "@mastra/core/agent/input-processor/processors"
 const agent = new Agent({
   inputProcessors: [
     new LanguageDetector({
-      model: openai("gpt-4o"),
+      model: openai("gpt-4o-mini"),
       targetLanguages: ['English', 'en'], // Accept English content
       strategy: 'translate', // Auto-translate non-English content
       threshold: 0.8, // High confidence threshold
@@ -210,7 +210,7 @@ const secureAgent = new Agent({
 You can create custom processors by implementing the `InputProcessor` interface.
 
 ```typescript copy showLineNumbers {4-19,23-26}
-import type { InputProcessor, MastraMessageV2 } from "@mastra/core/agent";
+import type { InputProcessor, MastraMessageV2, TripWire } from "@mastra/core/agent";
 
 class MessageLengthLimiter implements InputProcessor {
   readonly name = 'message-length-limiter';
@@ -222,14 +222,21 @@ class MessageLengthLimiter implements InputProcessor {
     abort: (reason?: string) => never 
   }): MastraMessageV2[] {
     // Check total message length
-    const totalLength = messages.reduce((sum, msg) => {
-      return sum + msg.content.parts
-        .filter(part => part.type === 'text')
-        .reduce((partSum, part) => partSum + (part as any).text.length, 0);
-    }, 0);
-    
-    if (totalLength > this.maxLength) {
-      abort(`Message too long: ${totalLength} characters (max: ${this.maxLength})`);
+    try {
+      const totalLength = messages.reduce((sum, msg) => {
+        return sum + msg.content.parts
+          .filter(part => part.type === 'text')
+          .reduce((partSum, part) => partSum + (part as any).text.length, 0);
+      }, 0);
+      
+      if (totalLength > this.maxLength) {
+        abort(`Message too long: ${totalLength} characters (max: ${this.maxLength})`); // throws a TripWire error
+      }
+    } catch (error) {
+      if (error instanceof TripWire) {
+        throw error; // Re-throw tripwire errors
+      }
+      throw new Error(`Length validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); // application level throw a standard error
     }
     
     return messages;
@@ -246,9 +253,10 @@ const agent = new Agent({
 
 When creating custom processors:
 - Always return the `messages` array (potentially modified)
-- Use `abort(reason)` to terminate processing early
-- Mutate the input messages directly
+- Use `abort(reason)` to terminate processing early. Abort is used to simulate blocking a message. errors thrown with `abort` will be an instance of TripWire. For code/application level errors, throw standard errors.
+- Mutate the input messages directly, make sure to mutate both the parts and content of a message.
 - Keep processors focused on a single responsibility
+- If using an agent inside your processor, use a fast model, limit the size of the response from it as much as possible (every token slows down the response exponentially), and make the system prompt as concise as possible, these are both latency bottlenecks.
 
 ## Integration with Agent Methods
 
@@ -265,4 +273,4 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-If any processor calls `abort()`, the request terminates immediately and subsequent processors are not executed. The agent returns an error response with details about why the request was blocked. 
+If any processor calls `abort()`, the request terminates immediately and subsequent processors are not executed. The agent returns a 200 response with details (`result.tripwireReason`) about why the request was blocked. 

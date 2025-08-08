@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorers } from '../scores';
-import type { ChunkType } from '../stream/MastraWorkflowStream';
+import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { EMITTER_SYMBOL } from './constants';

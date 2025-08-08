@@ -4,8 +4,11 @@ description: Example of using the Textual Difference metric to evaluate similari
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Textual Difference Evaluation
+
+<ScorerCallout />
 
 Use `TextualDifferenceMetric` to evaluate the similarity between two text strings by analyzing sequence differences and edit operations. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing confidence, ratio, number of changes, and length difference.
 

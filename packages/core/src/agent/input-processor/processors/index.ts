@@ -3,14 +3,12 @@ export {
   ModerationInputProcessor,
   type ModerationOptions,
   type ModerationResult,
-  type ModerationCategories,
   type ModerationCategoryScores,
 } from './moderation';
 export {
   PromptInjectionDetector,
   type PromptInjectionOptions,
   type PromptInjectionResult,
-  type PromptInjectionCategories,
   type PromptInjectionCategoryScores,
 } from './prompt-injection-detector';
 export {

@@ -1,0 +1,77 @@
+---
+title: "Example: Using a Tool as a Step | Workflows | Mastra Docs"
+description: Example of using Mastra to integrate a tool as a step in a workflow.
+---
+
+# Tool as a step
+
+Workflows can include tools as steps. This example shows how to define an tool as a step using `createStep()`.
+
+## Creating a tool
+
+Create a simple tool that takes a string input and returns the reversed version.
+
+```typescript filename="src/mastra/tools/example-reverse-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const reverseTool = createTool({
+  id: "reverse-tool",
+  description: "Reverse the input string",
+  inputSchema: z.object({
+    input: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+  execute: async ({ context }) => {
+    const { input } = context;
+    const reversed = input.split("").reverse().join("");
+
+    return {
+      output: reversed
+    };
+  }
+});
+```
+
+## Tool as step
+
+Use a tool as a step by passing it directly to `createStep()`. Using `.map()` is optional because tools define their own input and output schemas, but can be helpful when the workflow `inputSchema` doesn't match the tool's `inputSchema`.
+
+In this example, the workflow accepts a `word`, which is mapped to the tool's `input`. The tool returns an `output` string, which is passed directly to the workflow's `reversed` output without any extra transformation.
+
+```typescript filename="src/mastra/workflows/example-tool-step.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+import { reverseTool } from "../tools/example-reverse-tool";
+
+const step1 = createStep(reverseTool);
+
+export const toolAsStep = createWorkflow({
+  id: "tool-step-workflow",
+  inputSchema: z.object({
+    word: z.string()
+  }),
+  outputSchema: z.object({
+    reversed: z.string()
+  })
+})
+  .map(async ({ inputData }) => {
+    const { word } = inputData;
+
+    return {
+      input: word
+    };
+  })
+  .then(step1)
+  .commit();
+```
+
+## Workflows (Legacy)
+
+The following links provide example documentation for legacy workflows:
+
+- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
+- [Tool as a Workflow step (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)

@@ -26,11 +26,11 @@ export async function runInputProcessors(
     ctx.abort = abort;
 
     if (!telemetry) {
-      processableMessages = await processor.process({ messages: userMessages, abort: ctx.abort });
+      processableMessages = await processor.process({ messages: processableMessages, abort: ctx.abort });
     } else {
       await telemetry.traceMethod(
         async () => {
-          processableMessages = await processor.process({ messages: userMessages, abort: ctx.abort });
+          processableMessages = await processor.process({ messages: processableMessages, abort: ctx.abort });
           return processableMessages;
         },
         {

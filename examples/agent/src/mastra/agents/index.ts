@@ -6,8 +6,14 @@ import { Memory } from '@mastra/memory';
 import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
-import { PIIDetector, LanguageDetector, PromptInjectionDetector } from '@mastra/core/agent/input-processor/processors';
+import {
+  PIIDetector,
+  LanguageDetector,
+  PromptInjectionDetector,
+  ModerationInputProcessor,
+} from '@mastra/core/agent/input-processor/processors';
 import { MCPClient } from '@mastra/mcp';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const memory = new Memory();
 
@@ -121,13 +127,9 @@ const promptInjectionDetector = new PromptInjectionDetector({
   strategy: 'block',
 });
 
-const mcpInstance = new MCPClient({
-  id: 'myMcpServerTwo',
-  servers: {
-    myMcpServerTwo: {
-      url: new URL(`http://localhost:4111/api/mcp/myMcpServerTwo/mcp`),
-    },
-  },
+const moderationDetector = new ModerationInputProcessor({
+  model: google('gemini-2.0-flash-001'),
+  strategy: 'block',
 });
 
 export const chefAgentResponses = new Agent({
@@ -140,7 +142,6 @@ export const chefAgentResponses = new Agent({
   model: openai.responses('gpt-4o'),
   tools: async () => {
     return {
-      ...(await mcpInstance.getTools()),
       web_search_preview: openai.tools.webSearchPreview(),
     };
   },
@@ -148,10 +149,11 @@ export const chefAgentResponses = new Agent({
     myWorkflow,
   },
   inputProcessors: [
-    piiDetector,
-    vegetarianProcessor,
+    // piiDetector,
+    // vegetarianProcessor,
     languageDetector,
-    promptInjectionDetector,
+    // promptInjectionDetector,
+    // moderationDetector,
     {
       name: 'no-soup-for-you',
       process: async ({ messages, abort }) => {
@@ -186,4 +188,33 @@ export const chefAgentResponses = new Agent({
       },
     },
   ],
+});
+
+const answerRelevance = createAnswerRelevancyScorer({
+  model: openai('gpt-4o'),
+});
+
+console.log(`answerRelevance`, answerRelevance);
+
+export const evalAgent = new Agent({
+  name: 'Eval Agent',
+  instructions: `
+    You are a helpful assistant with a weather tool.
+    `,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherInfo,
+  },
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+  scorers: {
+    answerRelevance: {
+      scorer: answerRelevance,
+    },
+  },
 });

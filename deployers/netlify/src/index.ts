@@ -32,7 +32,7 @@ export class NetlifyDeployer extends Deployer {
     await super.prepare(outputDirectory);
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
@@ -114,7 +114,7 @@ export class NetlifyDeployer extends Deployer {
 `;
   }
 
-  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
     // Lint for netlify support

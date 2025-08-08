@@ -73,6 +73,28 @@ export const scoreEntity = new Entity({
         return value;
       },
     },
+    preprocessStepResult: {
+      type: 'string',
+      required: false,
+      set: (value?: Record<string, unknown> | string) => {
+        if (value && typeof value !== 'string') {
+          return JSON.stringify(value);
+        }
+        return value;
+      },
+      get: (value?: string) => {
+        if (value && typeof value === 'string') {
+          try {
+            if (value.startsWith('{') || value.startsWith('[')) {
+              return JSON.parse(value);
+            }
+          } catch {
+            return value;
+          }
+        }
+        return value;
+      },
+    },
     analyzeStepResult: {
       type: 'string',
       required: false,
@@ -111,7 +133,17 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+
+    // Deprecated in favor of generateReasonPrompt
     reasonPrompt: {
+      type: 'string',
+      required: false,
+    },
+    generateScorePrompt: {
+      type: 'string',
+      required: false,
+    },
+    generateReasonPrompt: {
       type: 'string',
       required: false,
     },
