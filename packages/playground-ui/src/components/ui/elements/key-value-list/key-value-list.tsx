@@ -47,6 +47,7 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
           <>
             <dt
               className={cn('text-icon3 text-[0.875rem] flex items-center gap-[2rem] justify-between min-h-[2.25rem] ')}
+              key={label + index}
             >
               <span
                 className={cn(

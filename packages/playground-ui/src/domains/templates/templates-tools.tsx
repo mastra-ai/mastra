@@ -14,6 +14,7 @@ type TemplatesToolsProps = {
   onSearchChange?: (value: string) => void;
   onReset?: () => void;
   className?: string;
+  isLoading?: boolean;
 };
 
 export function TemplatesTools({
@@ -27,7 +28,22 @@ export function TemplatesTools({
   onSearchChange,
   onReset,
   className,
+  isLoading,
 }: TemplatesToolsProps) {
+  if (isLoading) {
+    return (
+      <div
+        className={cn(
+          'h-[6.5rem] flex items-center gap-[2rem]',
+          '[&>div]:bg-surface3 [&>div]:w-[12rem] [&>div]:h-[2rem] [&>div]:animate-pulse',
+          className,
+        )}
+      >
+        <div /> <div /> <div />
+      </div>
+    );
+  }
+
   return (
     <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-[2rem] bg-surface2 py-[2rem]', className)}>
       <SearchField
