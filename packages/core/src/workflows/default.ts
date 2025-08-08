@@ -3,7 +3,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { ChunkType } from '../stream/MastraAgentStream';
+import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';

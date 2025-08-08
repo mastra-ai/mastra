@@ -1,12 +1,6 @@
 import { ReadableStream } from 'stream/web';
 import type { Run } from '../workflows';
-
-export type ChunkType = {
-  type: string;
-  runId: string;
-  from: string;
-  payload: Record<string, any>;
-};
+import type { ChunkType } from './types';
 
 export class MastraWorkflowStream extends ReadableStream<ChunkType> {
   #usageCount = {

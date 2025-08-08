@@ -12,6 +12,7 @@ overrides:
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
   '@mastra/libsql': link:../../stores/libsql
+  '@mastra/evals': link:../../packages/evals
   mastra: link:../../packages/cli
 
 importers:
@@ -30,6 +31,9 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/evals':
+        specifier: link:../../packages/evals
+        version: link:../../packages/evals
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
