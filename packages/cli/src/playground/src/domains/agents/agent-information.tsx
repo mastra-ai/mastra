@@ -34,7 +34,7 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
   };
 
   useEffect(() => {
-    if (agent?.provider.includes('openai') && agent?.modelId === 'gpt-5') {
+    if (agent?.modelId?.includes('gpt-5')) {
       setSettings({
         ...(settings || {}),
         modelSettings: {
