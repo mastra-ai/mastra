@@ -31,8 +31,7 @@ export default function Template() {
   const { data: templateEnvVars, isLoading: isLoadingEnvVars } = useTemplateRepoEnvVars({
     repo: `template-${templateSlug}`,
     owner: 'mastra-ai',
-    branch: 'main',
-    llmProvider: selectedProvider,
+    branch: selectedProvider,
   });
 
   const providerOptions = [
