@@ -64,7 +64,7 @@ export function InputField({
           'placeholder:text-icon3 placeholder:text-[.8125rem]',
           {
             'cursor-not-allowed opacity-50': disabled,
-            'border-red-800  focus:border-[rgba(255,255,255,0.15)]': error || errorMsg,
+            'border-red-800 focus:border-[rgba(255,255,255,0.15)]': error || errorMsg,
           },
         )}
         data-testid={testId}
