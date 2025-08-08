@@ -63,7 +63,7 @@ export function createOnScorerHook(mastra: Mastra) {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTR_SCORER_FAILED_TO_RUN_HOOK',
+          id: 'MASTRA_SCORER_FAILED_TO_RUN_HOOK',
           domain: ErrorDomain.SCORER,
           category: ErrorCategory.USER,
           details: {

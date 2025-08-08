@@ -4,7 +4,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
 
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -475,12 +475,18 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   async getScoresByScorerId({
-    scorerId: _scorerId,
-    pagination: _pagination,
+    scorerId,
+    source,
+    entityId,
+    entityType,
+    pagination,
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId: _scorerId, pagination: _pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, source, entityId, entityType, pagination });
   }
 }
