@@ -3187,8 +3187,8 @@ importers:
   stores/turbopuffer:
     dependencies:
       '@turbopuffer/turbopuffer':
-        specifier: ^0.6.17
-        version: 0.6.17
+        specifier: ^0.10.11
+        version: 0.10.13
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9011,8 +9011,8 @@ packages:
   '@tsconfig/recommended@1.0.10':
     resolution: {integrity: sha512-cGvydvg03lONp5Z9yaplW493Vw9/um7k588mvDkm+VFPF2PZUVPx0uswq4PFpeEySsLbQRETrDRhzh4Dmxaslw==}
 
-  '@turbopuffer/turbopuffer@0.6.17':
-    resolution: {integrity: sha512-E658zBLNTMhUidAdFsNSbzBo0LzWLWO7x9G9BHIazgE6IiJVUHiSd4kBqcc9NnlZ7Yq4O63lqlQTQD+uLmPaXQ==}
+  '@turbopuffer/turbopuffer@0.10.13':
+    resolution: {integrity: sha512-Hz2YcunxJV7XBDJW58H10Uw6S9w5DFpdOiiuxTWF1Mjy7/Qmq9p9uesA/pcLe/dzRioAN74clKM5oQ+Wc5IPyw==}
 
   '@tybys/wasm-util@0.9.0':
     resolution: {integrity: sha512-6+7nlbMVX/PVDCwaIQ8nTOPveOcFLSt8GcXdx8hD0bt39uWxYT88uXzqTd4fTvqta7oeUJqudepapKNt2DYJFw==}
@@ -22862,10 +22862,10 @@ snapshots:
 
   '@tsconfig/recommended@1.0.10': {}
 
-  '@turbopuffer/turbopuffer@0.6.17':
+  '@turbopuffer/turbopuffer@0.10.13':
     dependencies:
       pako: 2.1.0
-      undici: 6.21.3
+      undici: 7.12.0
 
   '@tybys/wasm-util@0.9.0':
     dependencies:
