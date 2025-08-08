@@ -3,6 +3,32 @@
  */
 
 /**
+ * Helper class for consistent error handling across managers and provider
+ */
+export class GeminiLiveError extends Error {
+  public readonly code: string;
+  public readonly details?: unknown;
+  public readonly timestamp: number;
+
+  constructor(code: GeminiLiveErrorCode | string, message: string, details?: unknown) {
+    super(message);
+    this.name = 'GeminiLiveError';
+    this.code = code;
+    this.details = details;
+    this.timestamp = Date.now();
+  }
+
+  toEventData() {
+    return {
+      message: this.message,
+      code: this.code,
+      details: this.details,
+      timestamp: this.timestamp
+    };
+  }
+}
+
+/**
  * Available Gemini Live API models
  */
 export type GeminiVoiceModel = 
@@ -266,6 +292,7 @@ export interface AuthOptions {
 
 export enum GeminiLiveErrorCode {
   CONNECTION_FAILED = 'connection_failed',
+  CONNECTION_NOT_ESTABLISHED = 'connection_not_established',
   AUTHENTICATION_FAILED = 'authentication_failed',
   API_KEY_MISSING = 'api_key_missing',
   PROJECT_ID_MISSING = 'project_id_missing',
@@ -284,4 +311,39 @@ export enum GeminiLiveErrorCode {
   NOT_CONNECTED = 'not_connected',
   INVALID_STATE = 'invalid_state',
   UNKNOWN_ERROR = 'unknown_error'
+}
+
+export interface UpdateMessage {
+  type: string;
+  session: {
+    generation_config?: {
+      speech_config?: {
+        voice_config?: {
+          prebuilt_voice_config?: {
+            voice_name: string;
+          };
+        };
+      };
+    };
+    system_instruction?: {
+      parts: Array<{ text: string }>;
+    };
+    tools?: Array<{
+      function_declarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>;
+    vad?: {
+      enabled: boolean;
+      sensitivity?: number;
+      silence_duration_ms?: number;
+    };
+    interrupts?: {
+      enabled: boolean;
+      allow_user_interruption?: boolean;
+    };
+    context_compression?: boolean;
+  };
 }

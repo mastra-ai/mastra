@@ -35,7 +35,8 @@
     "@google/genai": "latest",
     "google-auth-library": "^10.2.1",
     "ws": "^8.18.3",
-    "zod": "^3.25.67"
+    "zod": "^3.25.67",
+    "zod-to-json-schema": "^3.23.5"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
