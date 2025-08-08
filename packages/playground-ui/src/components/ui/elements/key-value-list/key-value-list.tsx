@@ -40,7 +40,7 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
 
   return (
     <dl className={cn('grid grid-cols-[auto_1fr] gap-x-[1rem] items-start content-start', className)}>
-      {data.map(({ label, value, icon, separator }) => {
+      {data.map(({ label, value, icon, separator }, index) => {
         const isValueItemArray = Array.isArray(value);
 
         return (
