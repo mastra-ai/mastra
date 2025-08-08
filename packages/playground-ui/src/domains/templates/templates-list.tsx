@@ -22,10 +22,21 @@ type TemplatesListProps = {
   templates: Template[];
   linkComponent?: React.ElementType;
   className?: string;
+  isLoading?: boolean;
 };
 
-export function TemplatesList({ templates, linkComponent, className }: TemplatesListProps) {
+export function TemplatesList({ templates, linkComponent, className, isLoading }: TemplatesListProps) {
   const LinkComponent = linkComponent || 'a';
+
+  if (isLoading) {
+    return (
+      <div className={cn('grid gap-y-[1rem]', className)}>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="h-[4rem] bg-surface3 animate-pulse rounded-lg" />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={cn('grid gap-y-[1rem]', className)}>

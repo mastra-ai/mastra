@@ -6,7 +6,7 @@ import { Link } from 'react-router';
 import { useState } from 'react';
 
 export default function Templates() {
-  const { data } = useMastraTemplates();
+  const { data, isLoading } = useMastraTemplates();
   const { templates, tags, providers } = data ?? { templates: [], tags: [], providers: [] };
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
@@ -76,8 +76,14 @@ export default function Templates() {
           onSearchChange={handleSearch}
           onReset={isFiltered ? handleReset : undefined}
           className="max-w-[80rem]"
+          isLoading={isLoading}
         />
-        <TemplatesList templates={filteredTemplates} linkComponent={Link} className="max-w-[80rem] mx-auto" />
+        <TemplatesList
+          templates={filteredTemplates}
+          linkComponent={Link}
+          className="max-w-[80rem] mx-auto"
+          isLoading={isLoading}
+        />
       </div>
     </MainContentLayout>
   );
