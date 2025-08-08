@@ -40,7 +40,7 @@
     "@types/node": "^20.19.0",
     "dotenv": "^17.0.0",
     "eslint": "^9.30.1",
-    "miniflare": "^4.20250712.2",
+    "miniflare": "^4.20250803.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
