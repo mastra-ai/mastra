@@ -5,178 +5,67 @@ description: Documentation for the MastraScorer base class in Mastra, which prov
 
 # MastraScorer
 
-The `MastraScorer` class is the base class for all scorers in Mastra. It provides a standard `.run()` method for evaluating input/output pairs and supports multi-step scoring workflows. Most users will use `createScorer` or `createLLMScorer`, but advanced users can subclass or instantiate `MastraScorer` directly for full control.
+The `MastraScorer` class is the base class for all scorers in Mastra. It provides a standard `.run()` method for evaluating input/output pairs and supports multi-step scoring workflows with preprocess → analyze → generateScore → generateReason execution flow.
 
-## Constructor Options
+**Note:** Most users should use [`createScorer`](./create-scorer) to create scorer instances. Direct instantiation of `MastraScorer` is not recommended.
 
-<PropertiesTable
-  content={[
-    {
-      name: "name",
-      type: "string",
-      required: true,
-      description: "Name of the scorer.",
-    },
-    {
-      name: "description",
-      type: "string",
-      required: true,
-      description: "Description of what the scorer does.",
-    },
-    {
-      name: "extract",
-      type: "function",
-      required: false,
-      description: "Optional extraction step. See extract step signature below.",
-    },
-    {
-      name: "analyze",
-      type: "function",
-      required: true,
-      description: "Main scoring logic. See analyze step signature below.",
-    },
-    {
-      name: "reason",
-      type: "function",
-      required: false,
-      description: "Optional reason/explanation step. See reason step signature below.",
-    },
-    {
-      name: "metadata",
-      type: "object",
-      required: false,
-      description: "Optional metadata for the scorer.",
-    },
-    {
-      name: "isLLMScorer",
-      type: "boolean",
-      required: false,
-      description: "(Internal) Used to distinguish LLM scorers.",
-    },
-  ]}
-/>
+## How to Get a MastraScorer Instance
 
-## Step Function Signatures
+Use the `createScorer` factory function, which returns a `MastraScorer` instance:
 
-### extract
-<PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "Record<string, any>[]",
-      required: false,
-      description: "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
-    },
-    {
-      name: "output",
-      type: "Record<string, any>",
-      required: true,
-      description: "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
-    },
-  ]}
-/>
-Returns: `{ results: any }`  
-The method must return an object with a `results` property. The value of `results` will be passed to the analyze function as `extractStepResult`.
+```typescript
+const scorer = createScorer({
+  name: "My Custom Scorer",
+  description: "Evaluates responses based on custom criteria"
+})
+.generateScore(({ run, results }) => {
+  // scoring logic
+  return 0.85;
+});
 
-### analyze
-<PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "Record<string, any>[]",
-      required: true,
-      description: "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
-    },
-    {
-      name: "output",
-      type: "Record<string, any>",
-      required: true,
-      description: "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
-    },
-    {
-      name: "extractStepResult",
-      type: "object",
-      required: false,
-      description: "Result of the extract step, if defined (optional).",
-    },
-  ]}
-/>
-Returns: `{ score: number, results?: any }`  
-The method must return an object with a `score` property (required). Optionally, it may return a `results` property. The value of `results` will be passed to the reason function as `analyzeStepResult`.
+// scorer is now a MastraScorer instance
+```
 
-### reason
-<PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "Record<string, any>[]",
-      required: true,
-      description: "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
-    },
-    {
-      name: "output",
-      type: "Record<string, any>",
-      required: true,
-      description: "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
-    },
-    {
-      name: "score",
-      type: "number",
-      required: true,
-      description: "Score computed by the analyze step.",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      required: true,
-      description: "Result of the analyze step.",
-    },
-    {
-      name: "extractStepResult",
-      type: "object",
-      required: false,
-      description: "Result of the extract step, if defined (optional).",  
-    },
-  ]}
-/>
-Returns: `{ reason: string }`  
-The method must return an object with a `reason` property, which should be a string explaining the score.
+## .run() Method
 
-All step functions can be async.
+The `.run()` method is the primary way to execute your scorer and evaluate input/output pairs. It processes the data through your defined steps (preprocess → analyze → generateScore → generateReason) and returns a comprehensive result object with the score, reasoning, and intermediate results.
+
+```typescript
+const result = await scorer.run({
+  input: "What is machine learning?",
+  output: "Machine learning is a subset of artificial intelligence...",
+  runId: "optional-run-id",
+  runtimeContext: { /* optional context */ }
+});
+```
 
 ## .run() Input
 
 <PropertiesTable
   content={[
     {
-      name: "runId",
-      type: "string",
-      required: false,
-      description: "The id of the run (optional).",
-    },
-    {
       name: "input",
-      type: "Record<string, any>[]",
+      type: "any",
       required: true,
-      description: "An array of records. This should contain user messages or the data to be evaluated.",
+      description: "Input data to be evaluated. Can be any type depending on your scorer's requirements.",
     },
     {
       name: "output",
-      type: "Record<string, any>",
+      type: "any",
       required: true,
-      description: "A record. This should contain the output to be evaluated.",
+      description: "Output data to be evaluated. Can be any type depending on your scorer's requirements.",
     },
     {
-      name: "additionalContext",
-      type: "Record<string, any>",
+      name: "runId",
+      type: "string",
       required: false,
-      description: "Additional context for the run (optional).",
+      description: "Optional unique identifier for this scoring run.",
     },
     {
       name: "runtimeContext",
-      type: "Record<string, any>",
+      type: "any",
       required: false,
-      description: "Runtime context for the run (optional).",
+      description: "Optional runtime context from the agent or workflow step being evaluated.",
     },
   ]}
 />
@@ -188,31 +77,100 @@ All step functions can be async.
     {
       name: "runId",
       type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "extractStepResult",
-      type: "object",
-      description: "Result of the extract step, if defined (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Result of the analyze step (custom structure defined by your scorer).",
+      description: "The unique identifier for this scoring run.",
     },
     {
       name: "score",
       type: "number",
-      description: "Score computed by your analyze function.",
+      description: "Numerical score computed by the generateScore step.",
     },
     {
       name: "reason",
       type: "string",
-      description: "Reason/explanation for the score, if defined (optional).",
+      description: "Explanation for the score, if generateReason step was defined (optional).",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "any",
+      description: "Result of the preprocess step, if defined (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "any",
+      description: "Result of the analyze step, if defined (optional).",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "Preprocess prompt, if defined (optional).",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "Analyze prompt, if defined (optional).",
+    },
+    {
+      name: "generateScorePrompt",
+      type: "string",
+      description: "Generate score prompt, if defined (optional).",
+    },
+        {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "Generate reason prompt, if defined (optional).",
     },
   ]}
 />
 
+## Step Execution Flow
+
+When you call `.run()`, the MastraScorer executes the defined steps in this order:
+
+1. **preprocess** (optional) - Extracts or transforms data
+2. **analyze** (optional) - Processes the input/output and preprocessed data  
+3. **generateScore** (required) - Computes the numerical score
+4. **generateReason** (optional) - Provides explanation for the score
+
+Each step receives the results from previous steps, allowing you to build complex evaluation pipelines.
+
+## Usage Example
+
+```typescript
+const scorer = createScorer({
+  name: "Quality Scorer",
+  description: "Evaluates response quality"
+})
+.preprocess(({ run }) => {
+  // Extract key information
+  return { wordCount: run.output.split(' ').length };
+})
+.analyze(({ run, results }) => {
+  // Analyze the response
+  const hasSubstance = results.preprocessStepResult.wordCount > 10;
+  return { hasSubstance };
+})
+.generateScore(({ results }) => {
+  // Calculate score
+  return results.analyzeStepResult.hasSubstance ? 1.0 : 0.0;
+})
+.generateReason(({ score, results }) => {
+  // Explain the score
+  const wordCount = results.preprocessStepResult.wordCount;
+  return `Score: ${score}. Response has ${wordCount} words.`;
+});
+
+// Use the scorer
+const result = await scorer.run({
+  input: "What is machine learning?",
+  output: "Machine learning is a subset of artificial intelligence..."
+});
+
+console.log(result.score);  // 1.0
+console.log(result.reason); // "Score: 1.0. Response has 12 words."
+```
+
 ## Integration
 
 MastraScorer instances can be used for agents and workflow steps
+
+See the [createScorer reference](./create-scorer) for detailed information on defining custom scoring logic.

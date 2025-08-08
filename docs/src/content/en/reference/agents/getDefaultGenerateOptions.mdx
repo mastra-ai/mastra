@@ -1,0 +1,62 @@
+---
+title: "Reference: getDefaultGenerateOptions() | Agents | Mastra Docs"
+description: "Documentation for the `.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls."
+---
+
+# getDefaultGenerateOptions()
+
+The `.getDefaultGenerateOptions()` method retrieves the default generation options configured for an agent, resolving them if they're a function. These options are used as the base configuration for all `generate()` calls unless overridden.
+
+## Usage example
+
+```typescript showLineNumbers copy
+const defaultOptions = await agent.getDefaultGenerateOptions();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing runtime context.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+const defaultOptions = await agent.getDefaultGenerateOptions({
+  runtimeContext: new RuntimeContext()
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description: "Runtime context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      description: "The default generation options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>

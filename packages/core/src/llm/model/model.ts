@@ -87,13 +87,18 @@ export class MastraLLM extends MastraLLMBase {
     const schemaCompatLayers = [];
 
     if (model) {
+      const modelInfo = {
+        modelId: model.modelId,
+        supportsStructuredOutputs: model.supportsStructuredOutputs ?? false,
+        provider: model.provider,
+      };
       schemaCompatLayers.push(
-        new OpenAIReasoningSchemaCompatLayer(model),
-        new OpenAISchemaCompatLayer(model),
-        new GoogleSchemaCompatLayer(model),
-        new AnthropicSchemaCompatLayer(model),
-        new DeepSeekSchemaCompatLayer(model),
-        new MetaSchemaCompatLayer(model),
+        new OpenAIReasoningSchemaCompatLayer(modelInfo),
+        new OpenAISchemaCompatLayer(modelInfo),
+        new GoogleSchemaCompatLayer(modelInfo),
+        new AnthropicSchemaCompatLayer(modelInfo),
+        new DeepSeekSchemaCompatLayer(modelInfo),
+        new MetaSchemaCompatLayer(modelInfo),
       );
     }
 
