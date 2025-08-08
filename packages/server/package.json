@@ -39,6 +39,16 @@
         "default": "./dist/server/handlers/*.cjs"
       }
     },
+    "./a2a/store": {
+      "import": {
+        "types": "./dist/server/a2a/store.d.ts",
+        "default": "./dist/server/a2a/store.js"
+      },
+      "require": {
+        "types": "./dist/server/a2a/store.d.ts",
+        "default": "./dist/server/a2a/store.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
