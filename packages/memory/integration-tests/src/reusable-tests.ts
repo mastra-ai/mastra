@@ -778,7 +778,13 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(recall.messagesV2[0]?.content.content).toEqual(updatedContent);
       });
 
-      it.skip('should remove excess embeddings when an updated message has fewer chunks', async () => {
+      it('should remove excess embeddings when an updated message has fewer chunks', async () => {
+        if (!memory.vector) {
+          throw new Error('Memory must have a vector store');
+        }
+
+        const vectorQuerySpy = vi.spyOn(memory.vector, 'query');
+
         const thread1 = await memory.createThread({
           resourceId,
           title: 'Chunked Message Update Thread',
@@ -795,12 +801,12 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         if (!Array.isArray(originalVectorIds)) {
           throw new Error(`Vector IDs should be an array; received ${JSON.stringify(originalVectorIds)}`);
         }
-        // check the original message has multiple embeddings
+        // verify the original message has multiple embeddings
         expect(originalVectorIds.length).toBeGreaterThan(1);
 
-        const updatedContent = 'Message 1';
+        const updatedContent = 'This';
 
-        // replace firstMessage's content with the text we'll query for later
+        // replace the message's content with something shorter
         const updateResult = await memory.updateMessages(
           createMessageV2Updates(
             [
@@ -821,34 +827,24 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(updatedVectorIds).toHaveLength(1);
 
         // search for embeddings matching the original message text
-        // @ts-expect-error
-        const chunks = memory.chunkText(initialContent);
-        if (!memory.embedder || !memory.vector) {
-          throw new Error('Memory needs an embedding model and vector store');
-        }
-
-        const embeddingResults = await embedMany({
-          values: chunks,
-          model: memory.embedder,
-          maxRetries: 3,
+        await memory.rememberMessages({
+          threadId: thread1.id,
+          resourceId,
+          vectorMessageSearch: initialContent,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 10,
+              messageRange: 0,
+              scope: 'thread',
+            },
+          },
         });
 
-        // TODO: replace this logic
-        const dimensions = embeddingResults.embeddings[0].length;
-        const { indexSeparator } = memory.vector;
-        const defaultDimensions = 1536;
-        const isDefault = dimensions === defaultDimensions;
-        const usedDimensions = dimensions ?? defaultDimensions;
-        const separator = indexSeparator ?? '_';
-        const indexName = isDefault
-          ? `memory${separator}messages`
-          : `memory${separator}messages${separator}${usedDimensions}`;
-        const recall = await memory.vector.query({
-          indexName,
-          queryVector: embeddingResults.embeddings[0],
-        });
-
-        expect(recall).toHaveLength(1);
+        const vectorQueryResults = vectorQuerySpy.mock.settledResults;
+        const lastQueryResult = vectorQueryResults[vectorQueryResults.length - 1].value;
+        expect(lastQueryResult).toHaveLength(1);
+        expect(lastQueryResult[0].id).toEqual(updatedVectorIds[0]);
       });
     });
 

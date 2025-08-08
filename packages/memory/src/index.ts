@@ -1014,9 +1014,9 @@ ${
         const vector = this.vector;
         const promises: Promise<void | string[]>[] = [];
         // update embeddings
-        embeddingTextsAndVectorIds.forEach(async (textAndVectorId, embeddingIndex) => {
+        for (const [embeddingIndex, textAndVectorId] of embeddingTextsAndVectorIds.entries()) {
           const message = messages[embeddingIndex];
-          if (!textAndVectorId || !message?.content) return;
+          if (!textAndVectorId || !message?.content) continue;
 
           const storedMessage = storedMessagesById[message.id];
           if (!storedMessage) {
@@ -1031,9 +1031,9 @@ ${
           const storedVectorIds = storedMessage.content?.metadata?.vectorIds;
 
           if (Array.isArray(storedVectorIds)) {
-            storedVectorIds.forEach(vectorId => {
+            for (const vectorId of storedVectorIds) {
               promises.push(vector.deleteVector({ indexName, id: vectorId }));
-            });
+            }
           }
 
           promises.push(
@@ -1048,7 +1048,7 @@ ${
               })),
             }),
           );
-        });
+        }
 
         await Promise.all(promises);
       }
