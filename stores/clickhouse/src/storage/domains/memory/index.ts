@@ -32,7 +32,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      if (!threadId) throw new Error('threadId must be a non-empty string');
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
       const messages: any[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
@@ -669,7 +669,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, selectBy, format = 'v1' } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     try {
       const page = selectBy?.pagination?.page || 0;

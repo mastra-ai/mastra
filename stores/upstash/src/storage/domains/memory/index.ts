@@ -398,7 +398,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     threadId: string,
     selectBy: StorageGetMessagesArg['selectBy'],
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const messageIds = new Set<string>();
     const messageIdToThreadIds: Record<string, string> = {};
@@ -459,7 +459,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const threadMessagesKey = getThreadMessagesKey(threadId);
     try {
@@ -562,7 +562,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, selectBy, format } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
     const fromDate = dateRange?.start;

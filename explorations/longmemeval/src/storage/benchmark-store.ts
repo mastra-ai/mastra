@@ -183,7 +183,7 @@ export class BenchmarkStore extends MastraStorage {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     let messages: any[] = [];
     const includedMessageIds = new Set<string>();
@@ -454,7 +454,7 @@ export class BenchmarkStore extends MastraStorage {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, selectBy, format = 'v1' } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const { page = 0, perPage = 40 } = selectBy?.pagination || {};
 

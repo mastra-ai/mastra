@@ -639,7 +639,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }
 
   private async getRecentMessages(threadId: string, limit: number, messageIds: Set<string>): Promise<void> {
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     if (limit <= 0) return;
 
@@ -720,7 +720,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     console.log(`getMessages called with format: ${format}, threadId: ${threadId}`);
     // Ensure threadId is provided
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     // Default to v1 format if not specified
     const actualFormat = format || 'v1';
@@ -822,7 +822,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, selectBy, format = 'v1' } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     try {
       const { page = 0, perPage = 100 } = selectBy?.pagination || {};

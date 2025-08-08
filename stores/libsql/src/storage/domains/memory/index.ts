@@ -54,7 +54,7 @@ export class MemoryLibSQL extends MemoryStorage {
     threadId: string;
     selectBy: StorageGetMessagesArg['selectBy'];
   }) {
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const include = selectBy?.include;
     if (!include) return null;
@@ -115,7 +115,7 @@ export class MemoryLibSQL extends MemoryStorage {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      if (!threadId) throw new Error('threadId must be a non-empty string');
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
       const messages: MastraMessageV2[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
@@ -170,7 +170,7 @@ export class MemoryLibSQL extends MemoryStorage {
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, format, selectBy } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
     const perPage =

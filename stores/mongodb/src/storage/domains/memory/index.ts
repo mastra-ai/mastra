@@ -52,7 +52,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     threadId: string;
     selectBy: StorageGetMessagesArg['selectBy'];
   }) {
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const include = selectBy?.include;
     if (!include) return null;
@@ -107,7 +107,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }: StorageGetMessagesArg & {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     try {
       const messages: MastraMessageV2[] = [];
@@ -160,7 +160,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, format, selectBy } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
     const perPage =

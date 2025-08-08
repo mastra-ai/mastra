@@ -194,7 +194,7 @@ export class StoreMemoryLance extends MemoryStorage {
     format,
     threadConfig,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     try {
       if (threadConfig) {
@@ -470,7 +470,7 @@ export class StoreMemoryLance extends MemoryStorage {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
-    if (!threadId) throw new Error('threadId must be a non-empty string');
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     try {
       // Extract pagination and dateRange from selectBy.pagination
