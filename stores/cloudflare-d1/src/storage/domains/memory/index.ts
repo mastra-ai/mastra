@@ -523,6 +523,8 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   private async _getIncludedMessages(threadId: string, selectBy: StorageGetMessagesArg['selectBy']) {
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 

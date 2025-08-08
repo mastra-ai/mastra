@@ -398,6 +398,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
     threadId: string,
     selectBy: StorageGetMessagesArg['selectBy'],
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     const messageIds = new Set<string>();
     const messageIdToThreadIds: Record<string, string> = {};
 

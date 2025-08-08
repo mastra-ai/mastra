@@ -610,6 +610,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   // Helper method to get included messages with context
   private async _getIncludedMessages(threadId: string, selectBy: any): Promise<MastraMessageV2[]> {
+    if (!threadId) throw new Error('threadId must be a non-empty string');
+
     if (!selectBy?.include?.length) {
       return [];
     }
