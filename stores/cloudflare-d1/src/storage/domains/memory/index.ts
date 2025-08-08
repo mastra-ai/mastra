@@ -523,6 +523,8 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   private async _getIncludedMessages(threadId: string, selectBy: StorageGetMessagesArg['selectBy']) {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 
@@ -602,15 +604,16 @@ export class MemoryStorageD1 extends MemoryStorage {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
-    const limit = resolveMessageLimit({
-      last: selectBy?.last,
-      defaultLimit: 40,
-    });
-    const include = selectBy?.include || [];
-    const messages: any[] = [];
-
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
     try {
+      const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
+      const limit = resolveMessageLimit({
+        last: selectBy?.last,
+        defaultLimit: 40,
+      });
+      const include = selectBy?.include || [];
+      const messages: any[] = [];
+
       if (include.length) {
         const includeResult = await this._getIncludedMessages(threadId, selectBy);
         if (Array.isArray(includeResult)) messages.push(...includeResult);
@@ -685,6 +688,8 @@ export class MemoryStorageD1 extends MemoryStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const { dateRange, page = 0, perPage: perPageInput } = selectBy?.pagination || {};
     const { start: fromDate, end: toDate } = dateRange || {};
     const perPage =
