@@ -169,7 +169,6 @@ export class InternalMastraMCPClient extends MastraBase {
     // Set up log message capturing
     this.setupLogging();
 
-
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
     this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
@@ -318,7 +317,6 @@ export class InternalMastraMCPClient extends MastraBase {
             originalOnClose();
           }
         };
-
       } catch (e) {
         this.isConnected = null;
         reject(e);
@@ -466,12 +464,12 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
-    this.client.setRequestHandler(ElicitRequestSchema, async (request) => {
+    this.client.setRequestHandler(ElicitRequestSchema, async request => {
       this.log('debug', `Received elicitation request: ${request.params.message}`);
       return handler(request.params);
     });
   }
-  
+
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): Promise<z.ZodType> {
@@ -480,7 +478,7 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     try {
-      await $RefParser.dereference(inputSchema)
+      await $RefParser.dereference(inputSchema);
       return convertJsonSchemaToZod(inputSchema as JSONSchema);
     } catch (error: unknown) {
       let errorDetails: string | undefined;
@@ -511,13 +509,13 @@ export class InternalMastraMCPClient extends MastraBase {
   private async convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
   ): Promise<z.ZodType | undefined> {
-    if (!outputSchema) return
+    if (!outputSchema) return;
     if (isZodType(outputSchema)) {
       return outputSchema;
     }
 
     try {
-      await $RefParser.dereference(outputSchema)
+      await $RefParser.dereference(outputSchema);
       return convertJsonSchemaToZod(outputSchema as JSONSchema);
     } catch (error: unknown) {
       let errorDetails: string | undefined;

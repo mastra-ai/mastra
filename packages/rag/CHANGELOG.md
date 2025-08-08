@@ -1,5 +1,16 @@
 # @mastra/rag
 
+## 1.0.8-alpha.0
+
+### Patch Changes
+
+- 1be6004: Added semantic markdown chunking strategy.
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+  - @mastra/core@0.13.2-alpha.0
+
 ## 1.0.7
 
 ### Patch Changes
