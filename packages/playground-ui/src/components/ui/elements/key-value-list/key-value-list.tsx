@@ -84,8 +84,8 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                   {isValueItemArray ? (
                     value?.map(item => {
                       return item.path ? (
-                        <RelationWrapper description={item.description}>
-                          <Link href={item.path} key={item.id}>
+                        <RelationWrapper description={item.description} key={item.id}>
+                          <Link href={item.path}>
                             {item?.name}
                           </Link>
                         </RelationWrapper>
