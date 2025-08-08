@@ -533,10 +533,13 @@ export class Memory extends MastraMemory {
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
     const { embeddings } = await promise;
 
+    const dimension = embeddings[0]?.length;
+    this.dimension = dimension;
+
     const result = {
       embeddings,
       chunks,
-      dimension: embeddings[0]?.length,
+      dimension,
     };
     this.embeddingCache.set(key, result);
     return result;

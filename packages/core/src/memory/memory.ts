@@ -71,6 +71,7 @@ export abstract class MastraMemory extends MastraBase {
   protected _storage?: MastraStorage;
   vector?: MastraVector;
   embedder?: EmbeddingModel<string>;
+  protected dimension?: number;
   private processors: MemoryProcessor[] = [];
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
@@ -135,6 +136,11 @@ export abstract class MastraMemory extends MastraBase {
 
   public setEmbedder(embedder: EmbeddingModel<string>) {
     this.embedder = embedder;
+    this.dimension = undefined;
+  }
+
+  public getDimension() {
+    return this.dimension;
   }
 
   /**
