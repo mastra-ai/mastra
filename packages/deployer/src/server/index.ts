@@ -8,6 +8,7 @@ import type { Mastra } from '@mastra/core';
 import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Tool } from '@mastra/core/tools';
+import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -40,6 +41,7 @@ type Variables = {
   runtimeContext: RuntimeContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, Tool>;
+  taskStore: InMemoryTaskStore;
   playground: boolean;
   isDev: boolean;
 };
@@ -74,6 +76,7 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
+  const a2aTaskStore = new InMemoryTaskStore();
 
   // Middleware
   app.use('*', async function setTelemetryInfo(c, next) {
@@ -121,6 +124,7 @@ export async function createHonoServer(
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', options.tools);
+    c.set('taskStore', a2aTaskStore);
     c.set('playground', options.playground === true);
     c.set('isDev', options.isDev === true);
     return next();
@@ -216,7 +220,7 @@ export async function createHonoServer(
    */
 
   app.get(
-    '/.well-known/:agentId/agent.json',
+    '/.well-known/:agentId/agent-card.json',
     describeRoute({
       description: 'Get agent configuration',
       tags: ['agents'],
@@ -259,14 +263,14 @@ export async function createHonoServer(
               properties: {
                 method: {
                   type: 'string',
-                  enum: ['tasks/send', 'tasks/sendSubscribe', 'tasks/get', 'tasks/cancel'],
+                  enum: ['message/send', 'message/stream', 'tasks/get', 'tasks/cancel'],
                   description: 'The A2A protocol method to execute',
                 },
                 params: {
                   type: 'object',
                   oneOf: [
                     {
-                      // TaskSendParams
+                      // MessageSendParams
                       type: 'object',
                       properties: {
                         id: {
