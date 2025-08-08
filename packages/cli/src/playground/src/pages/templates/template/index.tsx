@@ -92,7 +92,7 @@ export default function Template() {
 
   useEffect(() => {
     if (templateEnvVars) {
-      setVariables(templateEnvVars || {});
+      setVariables(templateEnvVars);
     }
   }, [templateEnvVars]);
 
