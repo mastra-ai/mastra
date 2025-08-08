@@ -1,4 +1,4 @@
-  {
+{
   "name": "@mastra/agent-builder",
   "version": "0.0.1-alpha.0",
   "license": "Apache-2.0",
@@ -26,9 +26,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^1.3.0",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "semver": "^7.7.2",
     "zod": "^3.25.67"
   },
   "peerDependencies": {
@@ -38,6 +40,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@types/node": "^20.19.0",
+    "@types/semver": "^7.7.0",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
@@ -55,4 +58,4 @@
     "builder",
     "typescript"
   ]
-} 
+}

@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.node.json",
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "integration-tests/merge-template.temp.ts"],
   "exclude": ["node_modules", "**/*.test.ts"]
 }
