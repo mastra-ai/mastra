@@ -150,7 +150,11 @@ export default function Template() {
           </Crumb>
         </Breadcrumb>
       </Header>
-      <div className={cn('max-w-[80rem] w-full px-[3rem] mx-auto grid gap-y-[1rem] h-full overflow-y-scroll')}>
+      <div
+        className={cn(
+          'max-w-[80rem] w-full px-[1.5rem] lg:px-[3rem] mx-auto grid gap-y-[1rem] h-full overflow-y-scroll',
+        )}
+      >
         <div className="p-[1.5rem]">
           <TemplateInfo
             isLoading={isLoadingTemplate}

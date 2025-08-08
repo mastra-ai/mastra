@@ -42,12 +42,12 @@ export function TemplatesList({ templates, linkComponent, className }: Templates
           >
             <LinkComponent
               to={`/templates/${template.slug}`}
-              className={cn('grid  [&:hover_p]:text-icon5 ', {
-                'grid-cols-[12rem_1fr]': template.imageURL,
+              className={cn('grid [&:hover_p]:text-icon5', {
+                'grid-cols-[8rem_1fr] lg:grid-cols-[12rem_1fr]': template.imageURL,
               })}
             >
               {template.imageURL && (
-                <div className="relative overflow-hidden  ">
+                <div className={cn('relative overflow-hidden')}>
                   <div
                     className="w-full h-full bg-cover thumb transition-scale duration-150"
                     style={{
@@ -64,7 +64,7 @@ export function TemplatesList({ templates, linkComponent, className }: Templates
               >
                 <h2 className="text-[1rem] text-icon5">{template.title}</h2>
                 <p className="text-[0.875rem] text-icon4 transition-colors duration-500">{template.description}</p>
-                <div className="text-icon3 text-[0.875rem] flex items-center gap-[1rem] mt-[0.75rem]">
+                <div className="hidden 2xl:flex text-icon3 text-[0.875rem] flex-wrap items-center gap-[1rem] mt-[0.75rem]">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
@@ -112,7 +112,7 @@ export function TemplatesList({ templates, linkComponent, className }: Templates
             </LinkComponent>
             <a
               href={template.githubUrl}
-              className="group flex items-center gap-[0.5rem] text-[0.875rem] ml-auto pr-[1rem]"
+              className={cn('group items-center gap-[0.5rem] text-[0.875rem] ml-auto pr-[1rem] hidden', 'lg:flex')}
               target="_blank"
               rel="noopener noreferrer"
             >

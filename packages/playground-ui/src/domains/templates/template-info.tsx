@@ -15,7 +15,7 @@ type TemplateInfoProps = {
 export function TemplateInfo({ title, description, imageURL, githubUrl, isLoading, infoData }: TemplateInfoProps) {
   return (
     <>
-      <div className={cn('grid grid-cols-[1fr_1fr] gap-x-[6rem] mt-[2rem] min-h-[4rem] items-center')}>
+      <div className={cn('grid lg:grid-cols-[1fr_1fr] gap-x-[6rem] mt-[2rem] lg:min-h-[4rem] items-center ')}>
         <div
           className={cn(
             'text-[1.5rem] flex items-center gap-[0.75rem] ',
@@ -35,13 +35,13 @@ export function TemplateInfo({ title, description, imageURL, githubUrl, isLoadin
           </h2>
         </div>
         <div
-          className="w-full h-full bg-cover bg-center transition-scale duration-150 rounded-lg overflow-hidden"
+          className="w-full h-full bg-cover bg-center transition-scale duration-150 rounded-lg overflow-hidden min-h-[2rem] mt-[2rem] lg:mt-0"
           style={{
             backgroundImage: `url(${imageURL})`,
           }}
         />
       </div>
-      <div className="grid grid-cols-[1fr_1fr]  gap-x-[6rem] mt-[2rem] ">
+      <div className="grid lg:grid-cols-[1fr_1fr] gap-x-[6rem] mt-[2rem] ">
         <div className="grid">
           <p
             className={cn('mb-[1rem] text-[0.875rem] text-icon4 mt-[.5rem] leading-[1.75]', {
