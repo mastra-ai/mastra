@@ -15,6 +15,7 @@ export * from './components/ui/containers';
 export * from './components/threads';
 export * from './components/ui/entity-header';
 export * from './components/ui/playground-tabs';
+export * from './components/ui/elements';
 export * from './types';
 export * from './ds/components/Badge/index';
 export * from './ds/components/Button/index';

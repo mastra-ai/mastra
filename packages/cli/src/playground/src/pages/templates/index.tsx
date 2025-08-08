@@ -66,13 +66,13 @@ export default function Templates() {
 
       <div className={cn('overflow-y-scroll w-full h-full px-[2rem] pb-[3rem] z-[1]')}>
         <TemplatesTools
-          tagOptions={tagOptions}
           selectedTag={selectedTag}
-          providerOptions={providerOptions}
-          selectedProvider={selectedProvider}
-          searchTerm={searchTerm}
           onTagChange={value => handleFilterChange(value, 'tag')}
+          tagOptions={tagOptions}
+          selectedProvider={selectedProvider}
           onProviderChange={value => handleFilterChange(value, 'provider')}
+          providerOptions={providerOptions}
+          searchTerm={searchTerm}
           onSearchChange={handleSearch}
           onReset={isFiltered ? handleReset : undefined}
           className="max-w-[80rem]"

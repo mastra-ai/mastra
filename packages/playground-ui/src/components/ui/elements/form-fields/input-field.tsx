@@ -12,6 +12,7 @@ export type InputFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
   disabled?: boolean;
   value?: string;
   helpMsg?: string;
+  error?: boolean;
   errorMsg?: string;
 };
 
@@ -25,6 +26,7 @@ export function InputField({
   required,
   disabled,
   helpMsg,
+  error,
   errorMsg,
   ...props
 }: InputFieldProps) {
@@ -62,7 +64,7 @@ export function InputField({
           'placeholder:text-icon3 placeholder:text-[.8125rem]',
           {
             'cursor-not-allowed opacity-50': disabled,
-            'border-red-600': errorMsg,
+            'border-red-800  focus:border-[rgba(255,255,255,0.15)]': error || errorMsg,
           },
         )}
         data-testid={testId}
@@ -72,8 +74,8 @@ export function InputField({
       {errorMsg && (
         <p
           className={cn(
-            'text-[0.75rem] text-red-500 flex items-center gap-[.5rem]',
-            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-70',
+            'text-[0.75rem] text-icon4 flex items-center gap-[.5rem]',
+            '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:text-red-400',
           )}
         >
           <TriangleAlertIcon /> {errorMsg}
