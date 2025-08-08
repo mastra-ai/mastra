@@ -580,20 +580,31 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    let embeddingTextsAndIds: ({
+    let embeddingTextsAndVectorIds: ({
       textForEmbedding: string;
       vectorIds: string[];
     } | null)[] = [];
 
     let updatedMessages = v2Messages;
     if (this.vector && config.semanticRecall) {
-      embeddingTextsAndIds = this.getEmbeddingTextAndVectorIds(v2Messages);
+      embeddingTextsAndVectorIds = this.getEmbeddingTextAndVectorIds(v2Messages);
 
-      updatedMessages.forEach((message, i) => {
-        if (!embeddingTextsAndIds[i]) return;
-        message.content.metadata ||= {};
-        message.content.metadata.vectorIds = embeddingTextsAndIds[i].vectorIds;
-      });
+      const { textForEmbedding: firstEmbeddingText } =
+        embeddingTextsAndVectorIds.find(textAndId => typeof textAndId?.textForEmbedding === 'string') ?? {};
+      if (firstEmbeddingText) {
+        const dimension = this.dimension ?? (await this.embedMessageContent(firstEmbeddingText)).dimension;
+
+        if (!dimension) {
+          throw new Error(`Failed to get vector dimension for message content`);
+        }
+
+        updatedMessages.forEach((message, i) => {
+          if (!embeddingTextsAndVectorIds[i]) return;
+          message.content.metadata ||= {};
+          message.content.metadata.vectorIds = embeddingTextsAndVectorIds[i].vectorIds;
+          message.content.metadata.dimension = dimension;
+        });
+      }
     }
 
     const result = this.storage.saveMessages({
@@ -603,7 +614,7 @@ export class Memory extends MastraMemory {
 
     let indexName: string;
     await Promise.all(
-      embeddingTextsAndIds.map(async (el, i) => {
+      embeddingTextsAndVectorIds.map(async (el, i) => {
         if (!this.vector) {
           throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
         }
@@ -976,7 +987,6 @@ ${
         if (!this.vector) {
           throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
         }
-        embeddingTextsAndVectorIds = this.getEmbeddingTextAndVectorIds(messages);
         // fetch all passed messages to get stored vector chunk count
         storedMessages = (
           await this.storage.getMessages({
@@ -997,6 +1007,17 @@ ${
           (acc: Record<string, (typeof messages)[number]>, msg) => Object.assign(acc, { [msg.id]: msg }),
           {},
         );
+
+        embeddingTextsAndVectorIds = this.getEmbeddingTextAndVectorIds(messages);
+      }
+
+      const { textForEmbedding: firstEmbeddingText } =
+        embeddingTextsAndVectorIds.find(textAndId => typeof textAndId?.textForEmbedding === 'string') ?? {};
+      if (firstEmbeddingText && !this.dimension) {
+        await this.embedMessageContent(firstEmbeddingText);
+        if (!this.dimension) {
+          throw new Error(`Failed to get vector dimension for message content`);
+        }
       }
 
       const updatedMessages = messages.map((message, i) => {
@@ -1007,6 +1028,7 @@ ${
           content: {
             metadata: {
               vectorIds: embeddingTextsAndVectorIds[i].vectorIds,
+              dimension: this.dimension, // must be a number
             },
           },
         });
@@ -1026,18 +1048,19 @@ ${
             throw new Error(`Message with id ${message.id} not retrieved from storage`);
           }
 
-          const { textForEmbedding, vectorIds } = textAndVectorId;
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
-          const indexName = (await this.createEmbeddingIndex(dimension)).indexName;
-
           // delete embeddings that won't be replaced in the upsert
-          const storedVectorIds = storedMessage.content?.metadata?.vectorIds;
+          const { dimension: previousDimension, vectorIds: storedVectorIds } = storedMessage.content?.metadata ?? {};
 
-          if (Array.isArray(storedVectorIds)) {
+          if (typeof previousDimension === 'number' && Array.isArray(storedVectorIds)) {
+            const { indexName: previousIndexName } = await this.createEmbeddingIndex(previousDimension);
             for (const vectorId of storedVectorIds) {
-              promises.push(vector.deleteVector({ indexName, id: vectorId }));
+              promises.push(vector.deleteVector({ indexName: previousIndexName, id: vectorId }));
             }
           }
+
+          const { textForEmbedding, vectorIds } = textAndVectorId;
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
+          const { indexName } = await this.createEmbeddingIndex(dimension);
 
           promises.push(
             vector.upsert({
