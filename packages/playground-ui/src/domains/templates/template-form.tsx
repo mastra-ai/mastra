@@ -30,7 +30,7 @@ export function TemplateForm({
 }: TemplateFormProps) {
   return (
     <Container>
-      <div className="max-w-[40rem] my-[1rem] p-[2rem] mx-auto gap-[2rem] grid">
+      <div className="max-w-[40rem] my-[1rem] p-[1rem] lg:p-[2rem] mx-auto gap-[2rem] grid">
         <h2
           className={cn(
             'text-icon5 text-[1.125rem] font-semibold flex items-center gap-[0.5rem]',
@@ -64,7 +64,14 @@ export function TemplateForm({
               ) : (
                 Object.entries(variables).map(([key, value]) => (
                   <Fragment key={key}>
-                    <InputField name={`env-${key}`} labelIsHidden={true} label="Key" value={key} disabled />
+                    <InputField
+                      name={`env-${key}`}
+                      labelIsHidden={true}
+                      label="Key"
+                      value={key}
+                      disabled
+                      className="w-full"
+                    />
                     <InputField
                       name={key}
                       labelIsHidden={true}
@@ -73,6 +80,7 @@ export function TemplateForm({
                       onChange={handleVariableChange}
                       errorMsg={errors.includes(key) ? `Value is required.` : ''}
                       autoComplete="off"
+                      className="w-full"
                     />
                   </Fragment>
                 ))

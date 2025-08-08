@@ -29,7 +29,7 @@ export function TemplatesTools({
   className,
 }: TemplatesToolsProps) {
   return (
-    <div className={cn('flex  mx-auto sticky top-0 gap-[2rem] bg-surface2 py-[2rem]', className)}>
+    <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-[2rem] bg-surface2 py-[2rem]', className)}>
       <SearchField
         label="Search templates"
         value={searchTerm}
