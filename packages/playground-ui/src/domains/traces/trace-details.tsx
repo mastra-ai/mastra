@@ -18,7 +18,8 @@ export function TraceDetails() {
 
   if (!actualTrace || !trace) return null;
 
-  const hasFailure = trace.some(span => span.status.code !== 0);
+  // 2 = error
+  const hasFailure = trace.some(span => span.status.code === 2);
 
   return (
     <aside>

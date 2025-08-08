@@ -79,13 +79,13 @@ export function SpanDetail() {
         </Txt>
 
         <div className="flex flex-row gap-2 items-center">
-          {span.status.code === 0 ? (
-            <Badge icon={<LatencyIcon />} variant="success">
-              {toSigFigs(span.duration, 3)}ms
-            </Badge>
-          ) : (
+          {span.status.code === 2 ? (
             <Badge variant="error" icon={<X />}>
               Failed in {toSigFigs(span.duration, 3)}ms
+            </Badge>
+          ) : (
+            <Badge icon={<LatencyIcon />} variant="success">
+              {toSigFigs(span.duration, 3)}ms
             </Badge>
           )}
         </div>
