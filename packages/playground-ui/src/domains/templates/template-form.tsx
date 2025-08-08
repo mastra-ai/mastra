@@ -79,7 +79,7 @@ export function TemplateForm({
           <button
             className={cn(
               'flex items-center gap-[0.5rem] justify-center text-[0.875rem] w-full bg-surface5 min-h-[2.5rem] rounded-lg text-icon5 hover:bg-surface6 transition-colors',
-              '[&<svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
+              '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
             )}
             onClick={() => {
               handleInstallTemplate();
