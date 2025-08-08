@@ -9,6 +9,7 @@ import {
   TabList,
   AgentMetadata,
   AgentEntityHeader,
+  useAgentSettings,
 } from '@mastra/playground-ui';
 
 import { useMemory } from '@/hooks/use-memory';
@@ -19,6 +20,7 @@ import { AgentPromptEnhancer } from './agent-instructions-enhancer';
 export function AgentInformation({ agentId, chatInputValue }: { agentId: string; chatInputValue?: string }) {
   const { agent, isLoading } = useAgent(agentId);
   const { memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { settings, setSettings } = useAgentSettings();
 
   // Persist tab selection
   const STORAGE_KEY = 'agent-info-selected-tab';
@@ -30,6 +32,18 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
     setSelectedTab(value);
     sessionStorage.setItem(STORAGE_KEY, value);
   };
+
+  useEffect(() => {
+    if (agent?.provider.includes('openai') && agent?.modelId === 'gpt-5') {
+      setSettings({
+        ...(settings || {}),
+        modelSettings: {
+          ...(settings?.modelSettings || {}),
+          temperature: 1,
+        },
+      });
+    }
+  }, [agent]);
 
   // Switch away from memory tab if memory is disabled (not just loading)
   useEffect(() => {
@@ -44,7 +58,7 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
       <AgentEntityHeader agentId={agentId} isLoading={isMemoryLoading} agentName={agent?.name || ''} />
 
       <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
-        <PlaygroundTabs value={selectedTab} onValueChange={handleTabChange}>
+        <PlaygroundTabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
           <TabList>
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>
