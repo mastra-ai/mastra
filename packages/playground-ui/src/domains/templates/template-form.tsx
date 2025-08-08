@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import { Container } from './shared';
+import Spinner from '@/components/ui/spinner';
 
 type TemplateFormProps = {
   providerOptions: { value: string; label: string }[];
@@ -51,10 +52,15 @@ export function TemplateForm({
             <h3 className="text-icon3 text-[0.875rem]">Set required Environmental Variables</h3>
             <div className="grid grid-cols-[1fr_1fr] gap-[1rem] items-start">
               {isLoadingEnvVars ? (
-                <>
-                  <InputField name={`empty`} labelIsHidden={true} label="Key" value={'empty'} disabled />
-                  <InputField name={`empty`} labelIsHidden={true} label="Key" value={'empty'} disabled />
-                </>
+                <div
+                  className={cn(
+                    'flex items-center justify-center col-span-2 text-icon3 text-[0.75rem] gap-[1rem]',
+                    '[&_svg]:opacity-50 [&_svg]:w-[1.1em] [&_svg]:h-[1.1em]',
+                    'animate-in fade-in duration-300',
+                  )}
+                >
+                  <Spinner /> Loading variables...
+                </div>
               ) : (
                 Object.entries(variables).map(([key, value]) => (
                   <Fragment key={key}>
