@@ -668,7 +668,7 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.aiV4.ui().at(-1);
+    const normMessage = new MessageList().add(message, 'input').get.all.aiV4.ui().at(-1);
     if (!normMessage) {
       throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
     }
@@ -725,7 +725,7 @@ export class Agent<
   ) {
     try {
       if (userMessage) {
-        const normMessage = new MessageList().add(userMessage, 'user').get.all.aiV4.ui().at(-1);
+        const normMessage = new MessageList().add(userMessage, 'input').get.all.aiV4.ui().at(-1);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
@@ -832,11 +832,11 @@ export class Agent<
       const returnList = new MessageList()
         .addSystem(systemMessages)
         .add(processedMemoryMessages, 'memory')
-        .add(newMessages, 'user');
+        .add(newMessages, 'input');
 
       return {
         threadId: thread.id,
-        messages: returnList.get.all.prompt(),
+        messages: returnList.get.all.aiV4.prompt(),
       };
     }
 
@@ -1378,9 +1378,9 @@ export class Agent<
           .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
-          messageList.add(messages, 'user');
+          messageList.add(messages, 'input');
           return {
-            messageObjects: messageList.get.all.prompt(),
+            messageObjects: messageList.get.all.aiV4.prompt(),
             convertedTools,
             messageList,
           };
@@ -1442,7 +1442,7 @@ export class Agent<
                 this.getMemoryMessages({
                   resourceId,
                   threadId: threadObject.id,
-                  vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                  vectorMessageSearch: new MessageList().add(messages, `input`).getLatestUserContent() || '',
                   memoryConfig,
                   runtimeContext,
                 }),
@@ -1503,7 +1503,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
-          .add(messages as Parameters<typeof messageList.add>[0], 'user');
+          .add(messages as Parameters<typeof messageList.add>[0], 'input');
 
         const systemMessage =
           [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
@@ -1530,8 +1530,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.v2(), 'user')
-          .get.all.prompt();
+          .add(messageList.get.input.v2(), 'input')
+          .get.all.aiV4.prompt();
 
         return {
           convertedTools,

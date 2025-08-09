@@ -1,7 +1,8 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import type { Span } from '@opentelemetry/api';
-import type { TelemetrySettings } from 'ai-v5';
+import type { ReasoningUIPart, TelemetrySettings } from 'ai-v5';
+import type { MastraMessageV3 } from '../../../../agent/message-list';
 import { MastraBase } from '../../../../base';
 import type { ChunkType } from '../../../../stream/types';
 import { AISDKV4OutputStream, convertFullStreamChunkToAISDKv4 } from '../ai-sdk/v4';
@@ -37,24 +38,16 @@ interface BufferedByStep {
   msgCount: number;
 }
 
-function reasoningDetailsFromMessages(messages: any[]) {
+function reasoningDetailsFromMessages(messages: MastraMessageV3[]): ReasoningUIPart[] {
   return messages
-    ?.flatMap((msg: any) => {
-      return msg.content;
-    })
-    ?.filter((message: any) => message.type.includes('reasoning'))
-    ?.map((msg: any) => {
-      let type;
-      if (msg.type === 'reasoning') {
-        type = 'text';
-      } else if (msg.type === 'redacted-reasoning') {
-        type = 'redacted';
+    .flatMap(msg => {
+      // v3 messages have content.parts array
+      if (msg.content?.parts && Array.isArray(msg.content.parts)) {
+        return msg.content.parts;
       }
-      return {
-        ...msg,
-        type,
-      };
-    });
+      return [];
+    })
+    .filter(part => part.type === `reasoning`);
 }
 
 export class MastraModelOutput extends MastraBase {

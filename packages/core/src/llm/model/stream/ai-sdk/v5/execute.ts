@@ -1,6 +1,5 @@
 import { isAbortError } from '@ai-sdk/provider-utils';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MessageList } from '../../../../../agent';
+import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ExecutionProps } from '../../types';
 import { AISDKV5InputStream } from './input';
 import { prepareToolsAndToolChoice } from './prepare-tools';
@@ -16,8 +15,9 @@ export function executeV5({
   onResult,
   doStreamSpan,
   experimental_telemetry,
-}: ExecutionProps & {
+}: Omit<ExecutionProps, 'inputMessages'> & {
   model: LanguageModelV2;
+  inputMessages: LanguageModelV2Prompt;
   onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
 }) {
   const v5 = new AISDKV5InputStream({
@@ -41,13 +41,10 @@ export function executeV5({
     runId,
     onResult,
     createStream: async () => {
-      const messages = MessageList.fromArray(inputMessages);
-
       try {
         const stream = await model.doStream({
           ...toolsAndToolChoice,
-          // TODO: fix prompt type
-          prompt: messages.get.all.aiV5.model() as any,
+          prompt: inputMessages,
           providerOptions: providerMetadata,
           abortSignal: options?.abortSignal,
         });

@@ -14,8 +14,9 @@ export function executeV4({
   activeTools,
   toolChoice,
   onResult,
-}: ExecutionProps & {
+}: Omit<ExecutionProps, 'inputMessages'> & {
   model: LanguageModelV1;
+  inputMessages: LanguageModelV1Prompt;
   onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
 }) {
   const v4 = new AISDKV4InputStream({

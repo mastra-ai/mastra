@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import type { IDGenerator, LanguageModelV1, LanguageModelV1Prompt, streamText, ToolChoice, ToolSet } from 'ai';
 import type { CallSettings, TelemetrySettings, ToolSet as ToolSetV5, StopCondition } from 'ai-v5';
@@ -34,7 +34,7 @@ export type ExecuteOptions = {
 
 export type ExecutionProps = {
   model: LanguageModelV1 | LanguageModelV2;
-  inputMessages: LanguageModelV1Prompt;
+  inputMessages: LanguageModelV1Prompt | LanguageModelV2Prompt;
   runId: string;
   providerMetadata?: Record<string, any>;
   providerOptions?: Record<string, any>;

@@ -32,9 +32,9 @@ describe('SaveQueueManager', () => {
 
   it('batches saves with debounce', async () => {
     const list = new MessageList({ threadId: 'thread-1' });
-    list.add(makeTestMessage('m1', 'thread-1', 'user', 'Hello'), 'user');
+    list.add(makeTestMessage('m1', 'thread-1', 'user', 'Hello'), 'input');
     manager.batchMessages(list, 'thread-1');
-    list.add(makeTestMessage('m2', 'thread-1', 'user', 'Hello'), 'user');
+    list.add(makeTestMessage('m2', 'thread-1', 'user', 'Hello'), 'input');
     manager.batchMessages(list, 'thread-1');
     await new Promise(res => setTimeout(res, manager['debounceMs'] + 10));
     expect(saveCalls).toBe(1);
@@ -52,7 +52,7 @@ describe('SaveQueueManager', () => {
     const old = Date.now() - SaveQueueManager['MAX_STALENESS_MS'] - 100;
     const msg = makeTestMessage('m1', 'thread-5', 'user', 'Hello');
     msg.createdAt = new Date(old); // Ensure createdAt is stale
-    list.add(msg, 'user');
+    list.add(msg, 'input');
     await manager.batchMessages(list, 'thread-5');
     expect(saveCalls).toBe(1);
     expect(saved[0].id).toBe('m1');
@@ -60,7 +60,7 @@ describe('SaveQueueManager', () => {
 
   it('clearDebounce cancels pending debounce', async () => {
     const list = new MessageList({ threadId: 'thread-6' });
-    list.add(makeTestMessage('m1', 'thread-6', 'user', 'Hello'), 'user');
+    list.add(makeTestMessage('m1', 'thread-6', 'user', 'Hello'), 'input');
     manager.batchMessages(list, 'thread-6');
     manager.clearDebounce('thread-6');
     await new Promise(res => setTimeout(res, manager['debounceMs'] + 10));
@@ -89,7 +89,7 @@ describe('SaveQueueManager', () => {
     // Add and trigger saves rapidly
     const savePromises: Promise<void>[] = [];
     for (let i = 0; i < 10; i++) {
-      list.add(makeTestMessage(`m${i}`, threadId, 'user', `message ${i}`), 'user');
+      list.add(makeTestMessage(`m${i}`, threadId, 'user', `message ${i}`), 'input');
       savePromises.push(manager.flushMessages(list, threadId));
     }
     await Promise.all(savePromises);
@@ -109,9 +109,9 @@ describe('SaveQueueManager', () => {
     const list = new MessageList({ threadId: 'thread-drain' });
     const threadId = 'thread-drain';
 
-    list.add(makeTestMessage('m1', threadId, 'user', 'Hello'), 'user');
+    list.add(makeTestMessage('m1', threadId, 'user', 'Hello'), 'input');
     list.add(makeTestMessage('m2', threadId, 'assistant', 'Hi there!'), 'response');
-    list.add(makeTestMessage('m3', threadId, 'user', 'How are you?'), 'user');
+    list.add(makeTestMessage('m3', threadId, 'user', 'How are you?'), 'input');
 
     expect(savedMessages.length).toBe(0);
 
