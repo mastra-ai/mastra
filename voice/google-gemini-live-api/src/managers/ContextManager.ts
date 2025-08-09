@@ -37,7 +37,7 @@ export class ContextManager {
     const entry: ContextEntry = {
       role,
       content,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     this.contextHistory.push(entry);
@@ -61,7 +61,7 @@ export class ContextManager {
   getContextArray(): Array<{ role: string; content: string }> {
     return this.contextHistory.map(entry => ({
       role: entry.role,
-      content: entry.content
+      content: entry.content,
     }));
   }
 
@@ -98,7 +98,7 @@ export class ContextManager {
       const compressedEntry: ContextEntry = {
         role: 'assistant',
         content: `[Compressed ${middleEntries.length} previous messages]`,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
       this.contextHistory = [...firstEntries, compressedEntry, ...lastEntries];
@@ -130,7 +130,7 @@ export class ContextManager {
         userEntries: 0,
         assistantEntries: 0,
         oldestTimestamp: null,
-        newestTimestamp: null
+        newestTimestamp: null,
       };
     }
 
@@ -143,7 +143,7 @@ export class ContextManager {
       userEntries,
       assistantEntries,
       oldestTimestamp: Math.min(...timestamps),
-      newestTimestamp: Math.max(...timestamps)
+      newestTimestamp: Math.max(...timestamps),
     };
   }
 
@@ -152,11 +152,11 @@ export class ContextManager {
    */
   searchContext(query: string, role?: 'user' | 'assistant'): ContextEntry[] {
     const searchQuery = query.toLowerCase();
-    
+
     return this.contextHistory.filter(entry => {
       const matchesRole = role ? entry.role === role : true;
       const matchesContent = entry.content.toLowerCase().includes(searchQuery);
-      
+
       return matchesRole && matchesContent;
     });
   }

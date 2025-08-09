@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events';
-import { GeminiLiveError, GeminiLiveErrorCode } from '../types';
 
 export interface SessionConfig {
   debug: boolean;
@@ -170,7 +169,7 @@ export class SessionManager {
       duration,
       state: this.getSessionState(),
       config: undefined, // TODO: Add session config when available
-      contextSize: 0 // TODO: Add context size tracking
+      contextSize: 0, // TODO: Add context size tracking
     };
   }
 
@@ -192,7 +191,7 @@ export class SessionManager {
     this.sessionHandle = undefined;
     this.sessionStartTime = undefined;
     this.isResuming = false;
-    
+
     if (this.sessionDurationTimeout) {
       clearTimeout(this.sessionDurationTimeout);
       this.sessionDurationTimeout = undefined;

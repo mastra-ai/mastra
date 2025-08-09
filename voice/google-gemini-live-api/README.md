@@ -59,6 +59,7 @@ const voice = new GeminiLiveVoice({
 ### Required Permissions for Vertex AI
 
 When using Vertex AI, ensure your service account or user has these IAM roles:
+
 - `aiplatform.user` or specific permissions:
   - `aiplatform.endpoints.predict`
   - `aiplatform.models.predict`
@@ -87,9 +88,14 @@ const voice = new GeminiLiveVoice({
 await voice.connect();
 
 // Listen for responses
-voice.on('speaking', ({ audio }) => {
-  // Handle audio response (Int16Array)
-  playAudio(audio);
+voice.on('speaking', ({ audioData }) => {
+  // Handle audio response as Int16Array
+  playAudio(audioData);
+});
+
+// Or subscribe to a concatenated audio stream per response
+voice.on('speaker', (audioStream) => {
+  audioStream.pipe(playbackDevice);
 });
 
 voice.on('writing', ({ text, role }) => {
@@ -117,6 +123,7 @@ voice.disconnect();
 Creates a new GeminiLiveVoice instance.
 
 **Parameters:**
+
 - `options` (optional): Configuration object
   - `apiKey?: string` - Google API key (falls back to GOOGLE_API_KEY env var)
   - `model?: GeminiVoiceModel` - Model to use (default: 'gemini-2.0-flash-exp')
@@ -152,7 +159,7 @@ Disconnects from the Gemini Live API and cleans up resources.
 
 ---
 
-**`getConnectionState(): 'disconnected' | 'connecting' | 'connected' | 'disconnecting'`**
+**`getConnectionState(): 'disconnected' | 'connected'`**
 
 Gets the current connection state.
 
@@ -168,19 +175,13 @@ Checks if currently connected to the API.
 
 ---
 
-**`isConnecting(): boolean`**
+Connection lifecycle transitions such as "connecting", "disconnecting", and "updated" are emitted via the `session` event:
 
-Checks if currently in the process of connecting.
-
-**Returns:** true if connecting, false otherwise
-
----
-
-**`isDisconnecting(): boolean`**
-
-Checks if currently in the process of disconnecting.
-
-**Returns:** true if disconnecting, false otherwise
+```ts
+voice.on('session', data => {
+  // data.state is one of: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated'
+});
+```
 
 ### Audio and Speech
 
@@ -189,6 +190,7 @@ Checks if currently in the process of disconnecting.
 Converts text to speech and sends it to the model.
 
 **Parameters:**
+
 - `input: string | NodeJS.ReadableStream` - Text to convert to speech
 - `options?: GeminiLiveVoiceOptions` - Optional speech options
   - `speaker?: GeminiVoiceName` - Override the default speaker
@@ -206,6 +208,7 @@ Converts text to speech and sends it to the model.
 Sends audio data for real-time processing.
 
 **Parameters:**
+
 - `audioData: NodeJS.ReadableStream | Int16Array` - Audio data to send
 
 **Returns:** Promise that resolves when audio is sent
@@ -219,6 +222,7 @@ Sends audio data for real-time processing.
 Processes audio stream for speech-to-text transcription.
 
 **Parameters:**
+
 - `audioStream: NodeJS.ReadableStream` - Audio stream to transcribe
 - `options?: GeminiLiveVoiceOptions` - Optional transcription options
 
@@ -241,11 +245,12 @@ Gets the current concatenated audio stream for the active response.
 Updates session configuration during an active session.
 
 **Parameters:**
+
 - `config: Partial<GeminiLiveVoiceConfig>` - Configuration to update
   - `speaker?: GeminiVoiceName` - Change voice/speaker
   - `instructions?: string` - Update system instructions
   - `tools?: GeminiToolConfig[]` - Update available tools
-  - `sessionConfig?: GeminiSessionConfig` - Update session settings
+  - `sessionConfig?: GeminiSessionConfig` - Update session settings (e.g. `vad`, `interrupts`, `contextCompression`)
 
 **Returns:** Promise that resolves when configuration is updated
 
@@ -258,6 +263,7 @@ Updates session configuration during an active session.
 Resumes a previous session using a session handle.
 
 **Parameters:**
+
 - `handle: string` - Session handle from previous session
 
 **Returns:** Promise that resolves when session is resumed
@@ -299,11 +305,14 @@ Checks if listening capabilities are enabled.
 Registers an event listener.
 
 **Parameters:**
+
 - `event: E` - Event name to listen for
 - `callback: (data) => void` - Function to call when event occurs
 
 **Available Events:**
+
 - `'speaking'` - Audio response from model
+- `'speaker'` - Readable stream of concatenated audio for the active response
 - `'writing'` - Text response or transcription
 - `'error'` - Error events
 - `'session'` - Session state changes
@@ -312,6 +321,52 @@ Registers an event listener.
 - `'interrupt'` - Interrupt events
 - `'usage'` - Token usage information
 - `'sessionHandle'` - Session resumption handle
+- `'turnComplete'` - Turn completion for the current model response
+
+### Tools
+
+Add tools with `addTools()` using either `@mastra/core/tools` or a plain object matching `ToolsInput`.
+
+Using `createTool`:
+
+```ts
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+const searchTool = createTool({
+  id: 'search',
+  description: 'Search the web',
+  inputSchema: z.object({ query: z.string() }),
+  execute: async ({ context }) => {
+    const { query } = context;
+    // ... perform search
+    return { results: [] };
+  },
+});
+
+voice.addTools({ search: searchTool });
+```
+
+Using a plain object (ensure each tool has an `id`):
+
+```ts
+voice.addTools({
+  search: {
+    id: 'search',
+    description: 'Search the web',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+    execute: async ({ context }) => ({ results: [] }),
+  },
+});
+```
+
+Tool call events from the model are emitted as:
+
+```ts
+voice.on('toolCall', ({ name, args, id }) => {
+  // name: string, args: Record<string, any>, id: string
+});
+```
 
 ---
 
@@ -320,27 +375,14 @@ Registers an event listener.
 Removes an event listener.
 
 **Parameters:**
+
 - `event: E` - Event name to stop listening to
 - `callback: (data) => void` - Specific callback function to remove
-
-### Video Support
-
-**`async sendVideo(videoData: Buffer | Uint8Array): Promise<void>`**
-
-Sends video frame for multimodal processing.
-
-**Parameters:**
-- `videoData: Buffer | Uint8Array` - Video frame data
-
-**Returns:** Promise that resolves when video is sent
-
-**Throws:** Error if not connected or video streaming not implemented
-
-**Note:** Video streaming is not yet implemented
 
 ### Configuration Types
 
 **`GeminiLiveVoiceConfig`**
+
 ```typescript
 interface GeminiLiveVoiceConfig {
   apiKey?: string;
@@ -360,6 +402,7 @@ interface GeminiLiveVoiceConfig {
 ```
 
 **`GeminiLiveVoiceOptions`**
+
 ```typescript
 interface GeminiLiveVoiceOptions {
   speaker?: GeminiVoiceName;
@@ -369,6 +412,7 @@ interface GeminiLiveVoiceOptions {
 ```
 
 **`GeminiSessionConfig`**
+
 ```typescript
 interface GeminiSessionConfig {
   enableResumption?: boolean;
@@ -401,7 +445,7 @@ interface GeminiSessionConfig {
 ## Voice Options
 
 - **Puck** - Conversational, friendly
-- **Charon** - Deep, authoritative  
+- **Charon** - Deep, authoritative
 - **Kore** - Neutral, professional
 - **Fenrir** - Warm, approachable
 

@@ -25,7 +25,7 @@ export class AudioStreamManager {
   private readonly maxChunkSize = 32768; // 32KB max chunk size per Gemini limits
   private readonly minSendInterval = 0; // No throttling - let the stream control the pace
   private lastSendTime = 0;
-  
+
   // Audio buffer management constants
   private readonly MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB maximum buffer size
   private readonly MAX_AUDIO_DURATION = 300; // 5 minutes maximum audio duration
@@ -48,7 +48,7 @@ export class AudioStreamManager {
   static createAudioConfig(customConfig?: Partial<AudioConfig>): AudioConfig {
     return {
       ...DEFAULT_AUDIO_CONFIG,
-      ...customConfig
+      ...customConfig,
     };
   }
 
@@ -74,7 +74,7 @@ export class AudioStreamManager {
     if (!currentResponseId) {
       return null;
     }
-    
+
     const currentStream = this.speakerStreams.get(currentResponseId);
     return currentStream ? (currentStream as NodeJS.ReadableStream) : null;
   }
@@ -85,12 +85,12 @@ export class AudioStreamManager {
   addSpeakerStream(responseId: string, stream: PassThrough): void {
     const streamWithMetadata = Object.assign(stream, {
       id: responseId,
-      created: Date.now()
+      created: Date.now(),
     });
-    
+
     this.speakerStreams.set(responseId, streamWithMetadata);
     this.log(`Added speaker stream for response: ${responseId}`);
-    
+
     // Enforce stream limits after adding
     this.enforceStreamLimits();
   }
@@ -109,7 +109,7 @@ export class AudioStreamManager {
         }
       }, 1000);
     }
-    
+
     this.speakerStreams.delete(responseId);
     this.log(`Removed speaker stream for response: ${responseId}`);
   }
@@ -124,13 +124,13 @@ export class AudioStreamManager {
       }
 
       this.log(`Cleaning up ${this.speakerStreams.size} speaker streams`);
-      
+
       for (const [responseId, stream] of this.speakerStreams.entries()) {
         try {
           // Check if stream is already ended/destroyed
           if (!stream.destroyed) {
             stream.end();
-            
+
             // Force destroy after a short timeout if end() doesn't work
             setTimeout(() => {
               if (!stream.destroyed) {
@@ -139,7 +139,7 @@ export class AudioStreamManager {
               }
             }, 1000);
           }
-          
+
           this.speakerStreams.delete(responseId);
           this.log(`Cleaned up speaker stream for response: ${responseId}`);
         } catch (streamError) {
@@ -148,7 +148,7 @@ export class AudioStreamManager {
           this.speakerStreams.delete(responseId);
         }
       }
-      
+
       this.currentResponseId = undefined;
       this.log('All speaker streams cleaned up');
     } catch (error) {
@@ -199,14 +199,17 @@ export class AudioStreamManager {
         return;
       }
 
-      this.log(`Stream limit exceeded (${this.speakerStreams.size}/${this.MAX_CONCURRENT_STREAMS}), cleaning up oldest streams`);
-      
+      this.log(
+        `Stream limit exceeded (${this.speakerStreams.size}/${this.MAX_CONCURRENT_STREAMS}), cleaning up oldest streams`,
+      );
+
       // Sort streams by creation time and remove oldest ones
-      const sortedStreams = Array.from(this.speakerStreams.entries())
-        .sort(([, a], [, b]) => (a.created || 0) - (b.created || 0));
+      const sortedStreams = Array.from(this.speakerStreams.entries()).sort(
+        ([, a], [, b]) => (a.created || 0) - (b.created || 0),
+      );
 
       const streamsToRemove = sortedStreams.slice(0, this.speakerStreams.size - this.MAX_CONCURRENT_STREAMS);
-      
+
       for (const [responseId, stream] of streamsToRemove) {
         if (!stream.destroyed) {
           stream.end();
@@ -230,13 +233,13 @@ export class AudioStreamManager {
     const streamDetails = Array.from(this.speakerStreams.entries()).map(([responseId, stream]) => ({
       responseId,
       created: stream.created || 0,
-      destroyed: stream.destroyed
+      destroyed: stream.destroyed,
     }));
 
     return {
       totalStreams: this.speakerStreams.size,
       currentResponseId: this.currentResponseId,
-      streamDetails
+      streamDetails,
     };
   }
 
@@ -246,12 +249,12 @@ export class AudioStreamManager {
   int16ArrayToBase64(int16Array: Int16Array): string {
     const buffer = new ArrayBuffer(int16Array.length * 2);
     const view = new DataView(buffer);
-    
+
     // Convert Int16Array to bytes with little-endian format
     for (let i = 0; i < int16Array.length; i++) {
       view.setInt16(i * 2, int16Array[i]!, true);
     }
-  
+
     const nodeBuffer = Buffer.from(buffer);
     return nodeBuffer.toString('base64');
   }
@@ -262,15 +265,17 @@ export class AudioStreamManager {
   base64ToInt16Array(base64Audio: string): Int16Array {
     try {
       const buffer = Buffer.from(base64Audio, 'base64');
-      
+
       // Convert Buffer to Int16Array
       if (buffer.length % 2 !== 0) {
         throw new Error('Invalid audio data: buffer length must be even for 16-bit audio');
       }
-      
+
       return new Int16Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 2);
     } catch (error) {
-      throw new Error(`Failed to decode base64 audio data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to decode base64 audio data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -286,11 +291,11 @@ export class AudioStreamManager {
       }
       return new Int16Array(audioData.buffer, audioData.byteOffset, audioData.byteLength / 2);
     }
-    
+
     if (audioData instanceof Int16Array) {
       return audioData;
     }
-    
+
     throw new Error('Unsupported audio data format. Expected Buffer or Int16Array');
   }
 
@@ -299,7 +304,7 @@ export class AudioStreamManager {
    */
   processAudioChunk(chunk: Buffer | Uint8Array | Int16Array): string {
     let int16Array: Int16Array;
-    
+
     if (chunk instanceof Int16Array) {
       int16Array = chunk;
     } else if (Buffer.isBuffer(chunk)) {
@@ -324,9 +329,11 @@ export class AudioStreamManager {
    */
   validateAudioFormat(sampleRate?: number, channels?: number): void {
     if (sampleRate && sampleRate !== this.audioConfig.inputSampleRate) {
-      this.log(`Warning: Audio sample rate ${sampleRate}Hz does not match expected ${this.audioConfig.inputSampleRate}Hz`);
+      this.log(
+        `Warning: Audio sample rate ${sampleRate}Hz does not match expected ${this.audioConfig.inputSampleRate}Hz`,
+      );
     }
-    
+
     if (channels && channels !== this.audioConfig.channels) {
       throw new Error(`Unsupported channel count: ${channels}. Gemini Live API requires mono audio (1 channel)`);
     }
@@ -347,14 +354,14 @@ export class AudioStreamManager {
                 {
                   inlineData: {
                     mimeType: 'audio/pcm',
-                    data: audioData
-                  }
-                }
-              ]
-            }
+                    data: audioData,
+                  },
+                },
+              ],
+            },
           ],
-          turnComplete: true
-        }
+          turnComplete: true,
+        },
       };
     } else {
       // For real-time streaming
@@ -363,10 +370,10 @@ export class AudioStreamManager {
           media_chunks: [
             {
               mime_type: 'audio/pcm',
-              data: audioData
-            }
-          ]
-        }
+              data: audioData,
+            },
+          ],
+        },
       };
     }
   }
@@ -385,10 +392,10 @@ export class AudioStreamManager {
     const stream = new PassThrough() as PassThrough & { id?: string; created?: number };
     stream.id = responseId;
     stream.created = Date.now();
-    
+
     // Add the stream to the manager
     this.addSpeakerStream(responseId, stream);
-    
+
     return stream;
   }
 
@@ -429,11 +436,11 @@ export class AudioStreamManager {
     if (chunk.length === 0) {
       throw new Error('Audio chunk cannot be empty');
     }
-    
+
     if (chunk.length > this.maxChunkSize) {
       throw new Error(`Audio chunk size ${chunk.length} exceeds maximum allowed size ${this.maxChunkSize}`);
     }
-    
+
     if (chunk.length % 2 !== 0) {
       throw new Error('Audio chunk length must be even for 16-bit audio');
     }
@@ -445,17 +452,16 @@ export class AudioStreamManager {
   sendAudioChunk(chunk: Buffer): void {
     try {
       this.validateAudioChunk(chunk);
-      
+
       const now = Date.now();
       if (now - this.lastSendTime < this.minSendInterval) {
         // Throttle if needed
         setTimeout(() => this.sendAudioChunk(chunk), this.minSendInterval - (now - this.lastSendTime));
         return;
       }
-      
+
       this.lastSendTime = now;
       this.log(`Sent audio chunk of size: ${chunk.length} bytes`);
-      
     } catch (error) {
       this.log('Error sending audio chunk:', error);
       throw error;
@@ -495,31 +501,11 @@ export class AudioStreamManager {
         resolve();
       });
 
-      stream.on('error', (error) => {
+      stream.on('error', error => {
         cleanup();
         reject(error);
       });
     });
-  }
-
-  /**
-   * Handle audio buffer processing
-   */
-  async handleAudioBuffer(audioData: Int16Array): Promise<void> {
-    try {
-      const validatedAudio = this.validateAndConvertAudioInput(audioData);
-      const base64Audio = this.int16ArrayToBase64(validatedAudio);
-      const message = this.createAudioMessage(base64Audio, 'realtime');
-      
-      this.log(`Processed audio buffer of size: ${audioData.length} samples`);
-      
-      // Here you would typically send the message to the WebSocket
-      // This method is abstracted to allow different implementations
-      
-    } catch (error) {
-      this.log('Error handling audio buffer:', error);
-      throw error;
-    }
   }
 
   /**
@@ -528,13 +514,13 @@ export class AudioStreamManager {
   private splitAudioChunk(chunk: Buffer): Buffer[] {
     const chunks: Buffer[] = [];
     let offset = 0;
-    
+
     while (offset < chunk.length) {
       const size = Math.min(this.maxChunkSize, chunk.length - offset);
       chunks.push(chunk.subarray(offset, offset + size));
       offset += size;
     }
-    
+
     return chunks;
   }
 
@@ -553,18 +539,22 @@ export class AudioStreamManager {
     if (buffer.length === 0) {
       throw new Error('Audio buffer cannot be empty');
     }
-    
+
     if (buffer.length > this.MAX_BUFFER_SIZE) {
-      throw new Error(`Audio buffer size ${buffer.length} exceeds maximum allowed size ${this.MAX_BUFFER_SIZE / (1024 * 1024)}MB`);
+      throw new Error(
+        `Audio buffer size ${buffer.length} exceeds maximum allowed size ${this.MAX_BUFFER_SIZE / (1024 * 1024)}MB`,
+      );
     }
-    
+
     if (buffer.length % 2 !== 0) {
       throw new Error('Audio buffer length must be even for 16-bit audio');
     }
-    
+
     const duration = this.calculateAudioDuration(buffer.length);
     if (duration > this.MAX_AUDIO_DURATION) {
-      throw new Error(`Audio duration ${duration.toFixed(2)}s exceeds maximum allowed duration ${this.MAX_AUDIO_DURATION}s`);
+      throw new Error(
+        `Audio duration ${duration.toFixed(2)}s exceeds maximum allowed duration ${this.MAX_AUDIO_DURATION}s`,
+      );
     }
   }
 
@@ -587,7 +577,7 @@ export class AudioStreamManager {
     return {
       base64Audio,
       duration,
-      size: audioBuffer.length
+      size: audioBuffer.length,
     };
   }
 
@@ -596,8 +586,8 @@ export class AudioStreamManager {
    * Handles chunk collection, size validation, and buffer management
    */
   processAudioChunksForTranscription(
-    chunks: Buffer[], 
-    totalBufferSize: number
+    chunks: Buffer[],
+    totalBufferSize: number,
   ): { audioBuffer: Buffer; base64Audio: string; duration: number; size: number } {
     // Check buffer size to prevent memory overflow
     if (totalBufferSize > this.MAX_BUFFER_SIZE) {
@@ -606,13 +596,13 @@ export class AudioStreamManager {
 
     // Combine all chunks
     const audioBuffer = Buffer.concat(chunks);
-    
+
     // Process for transcription
     const result = this.processAudioBufferForTranscription(audioBuffer);
-    
+
     return {
       audioBuffer,
-      ...result
+      ...result,
     };
   }
 
@@ -621,23 +611,23 @@ export class AudioStreamManager {
    */
   validateAudioChunks(chunks: Buffer[]): { totalSize: number; isValid: boolean; error?: string } {
     let totalSize = 0;
-    
+
     for (const chunk of chunks) {
       if (!Buffer.isBuffer(chunk)) {
         return { totalSize: 0, isValid: false, error: 'Invalid chunk format' };
       }
-      
+
       totalSize += chunk.length;
-      
+
       if (totalSize > this.MAX_BUFFER_SIZE) {
-        return { 
-          totalSize, 
-          isValid: false, 
-          error: `Total size ${totalSize} exceeds maximum allowed size ${this.MAX_BUFFER_SIZE}` 
+        return {
+          totalSize,
+          isValid: false,
+          error: `Total size ${totalSize} exceeds maximum allowed size ${this.MAX_BUFFER_SIZE}`,
         };
       }
     }
-    
+
     return { totalSize, isValid: true };
   }
 
@@ -648,7 +638,7 @@ export class AudioStreamManager {
     return {
       maxBufferSize: this.MAX_BUFFER_SIZE,
       maxAudioDuration: this.MAX_AUDIO_DURATION,
-      maxChunkSize: this.maxChunkSize
+      maxChunkSize: this.maxChunkSize,
     };
   }
 
@@ -676,7 +666,7 @@ export class AudioStreamManager {
     audioStream: NodeJS.ReadableStream,
     onTranscriptionResponse: (text: string) => void,
     onError: (error: Error) => void,
-    timeoutMs: number = 30000
+    timeoutMs: number = 30000,
   ): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const chunks: Buffer[] = [];
@@ -698,7 +688,7 @@ export class AudioStreamManager {
       const onStreamData = (chunk: Buffer) => {
         try {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          
+
           // Check buffer size to prevent memory overflow
           totalBufferSize += buffer.length;
           if (totalBufferSize > this.MAX_BUFFER_SIZE) {
@@ -706,11 +696,13 @@ export class AudioStreamManager {
             reject(new Error(`Audio data exceeds maximum size of ${this.MAX_BUFFER_SIZE / (1024 * 1024)}MB`));
             return;
           }
-          
+
           chunks.push(buffer);
         } catch (error) {
           cleanup();
-          reject(new Error(`Failed to process audio chunk: ${error instanceof Error ? error.message : 'Unknown error'}`));
+          reject(
+            new Error(`Failed to process audio chunk: ${error instanceof Error ? error.message : 'Unknown error'}`),
+          );
         }
       };
 
@@ -727,16 +719,13 @@ export class AudioStreamManager {
 
           // Process chunks for transcription
           const result = this.processAudioChunksForTranscription(chunks, totalBufferSize);
-          
-          this.log('Processing audio for transcription:', { 
+
+          this.log('Processing audio for transcription:', {
             chunks: chunks.length,
             totalSize: result.size,
-            duration: result.duration
+            duration: result.duration,
           });
 
-          // Create audio message for transcription
-          const message = this.createAudioMessage(result.base64Audio, 'input');
-          
           // Notify that audio is ready for transcription
           onTranscriptionResponse(result.base64Audio);
 
@@ -754,10 +743,11 @@ export class AudioStreamManager {
 
           // Start checking for response after a short delay
           checkResponseTimer = setTimeout(checkResponse, 100);
-
         } catch (error) {
           cleanup();
-          reject(new Error(`Failed to process audio stream: ${error instanceof Error ? error.message : 'Unknown error'}`));
+          reject(
+            new Error(`Failed to process audio stream: ${error instanceof Error ? error.message : 'Unknown error'}`),
+          );
         }
       };
 

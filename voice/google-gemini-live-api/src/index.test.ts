@@ -375,7 +375,7 @@ describe('GeminiLiveVoice', () => {
           id: 'search',
           description: 'Search the web',
           inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
-          execute: async ({ context }: { context: any }) => ({ results: [] }),
+          execute: async ({}: { context: any }) => ({ results: [] }),
         },
       };
 
@@ -433,7 +433,7 @@ describe('GeminiLiveVoice', () => {
           id: 'testTool',
           description: 'Test tool',
           inputSchema: { type: 'object', properties: {} },
-          execute: async ({ context }: { context: any }) => ({ result: 'success' }),
+          execute: async ({}: { context: any }) => ({ result: 'success' }),
         },
       };
 
@@ -472,7 +472,7 @@ describe('GeminiLiveVoice', () => {
           id: 'errorTool',
           description: 'Error tool',
           inputSchema: { type: 'object', properties: {} },
-          execute: async ({ context }: { context: any }) => {
+          execute: async ({}: { context: any }) => {
             throw new Error('Tool failed');
           },
         },

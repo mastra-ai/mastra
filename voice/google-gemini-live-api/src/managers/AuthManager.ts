@@ -1,4 +1,5 @@
-import { GoogleAuth, type OAuth2Client } from 'google-auth-library';
+import { GoogleAuth } from 'google-auth-library';
+import type { OAuth2Client } from 'google-auth-library';
 import { GeminiLiveError, GeminiLiveErrorCode } from '../types';
 
 export interface AuthConfig {
@@ -38,7 +39,7 @@ export class AuthManager {
     } else {
       throw new GeminiLiveError(
         GeminiLiveErrorCode.API_KEY_MISSING,
-        'Either API key or Vertex AI configuration is required'
+        'Either API key or Vertex AI configuration is required',
       );
     }
   }
@@ -50,7 +51,7 @@ export class AuthManager {
     if (!this.config.project) {
       throw new GeminiLiveError(
         GeminiLiveErrorCode.PROJECT_ID_MISSING,
-        'Google Cloud project ID is required when using Vertex AI'
+        'Google Cloud project ID is required when using Vertex AI',
       );
     }
 
@@ -76,7 +77,7 @@ export class AuthManager {
     } catch (error) {
       throw new GeminiLiveError(
         GeminiLiveErrorCode.AUTHENTICATION_FAILED,
-        `Failed to initialize Vertex AI authentication: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to initialize Vertex AI authentication: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }
@@ -86,17 +87,11 @@ export class AuthManager {
    */
   async getAccessToken(): Promise<string> {
     if (!this.config.vertexAI) {
-      throw new GeminiLiveError(
-        GeminiLiveErrorCode.AUTHENTICATION_FAILED,
-        'Vertex AI authentication not configured'
-      );
+      throw new GeminiLiveError(GeminiLiveErrorCode.AUTHENTICATION_FAILED, 'Vertex AI authentication not configured');
     }
 
     if (!this.authClient) {
-      throw new GeminiLiveError(
-        GeminiLiveErrorCode.AUTHENTICATION_FAILED,
-        'Authentication client not initialized'
-      );
+      throw new GeminiLiveError(GeminiLiveErrorCode.AUTHENTICATION_FAILED, 'Authentication client not initialized');
     }
 
     // Check if we have a valid cached token
@@ -107,22 +102,22 @@ export class AuthManager {
     try {
       const client = await this.authClient.getClient();
       const token = await client.getAccessToken();
-      
+
       if (!token.token) {
         throw new Error('No access token received');
       }
 
       this.accessToken = token.token;
-      
+
       // Set expiry time (tokens typically last 1 hour, so set to 50 minutes to be safe)
-      this.tokenExpiryTime = Date.now() + (50 * 60 * 1000);
+      this.tokenExpiryTime = Date.now() + 50 * 60 * 1000;
 
       this.log('Successfully obtained new access token');
       return this.accessToken;
     } catch (error) {
       throw new GeminiLiveError(
         GeminiLiveErrorCode.AUTHENTICATION_FAILED,
-        `Failed to get access token: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get access token: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

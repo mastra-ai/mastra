@@ -1,5 +1,5 @@
-import { WebSocket } from 'ws';
 import { EventEmitter } from 'events';
+import { WebSocket } from 'ws';
 import { GeminiLiveError, GeminiLiveErrorCode } from '../types';
 
 export interface ConnectionConfig {
@@ -110,17 +110,11 @@ export class ConnectionManager {
    */
   send(data: string | Buffer): void {
     if (!this.ws) {
-      throw new GeminiLiveError(
-        GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED,
-        'WebSocket not initialized'
-      );
+      throw new GeminiLiveError(GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED, 'WebSocket not initialized');
     }
 
     if (this.ws.readyState !== WebSocket.OPEN) {
-      throw new GeminiLiveError(
-        GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED,
-        'WebSocket is not open'
-      );
+      throw new GeminiLiveError(GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED, 'WebSocket is not open');
     }
 
     this.ws.send(data);
@@ -141,7 +135,7 @@ export class ConnectionManager {
    */
   getConnectionState(): 'disconnected' | 'connecting' | 'connected' | 'closed' {
     if (!this.ws) return 'disconnected';
-    
+
     switch (this.ws.readyState) {
       case WebSocket.CONNECTING:
         return 'connecting';
@@ -159,17 +153,11 @@ export class ConnectionManager {
    */
   validateWebSocketState(): void {
     if (!this.ws) {
-      throw new GeminiLiveError(
-        GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED,
-        'WebSocket not initialized'
-      );
+      throw new GeminiLiveError(GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED, 'WebSocket not initialized');
     }
 
     if (this.ws.readyState !== WebSocket.OPEN) {
-      throw new GeminiLiveError(
-        GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED,
-        'WebSocket is not open'
-      );
+      throw new GeminiLiveError(GeminiLiveErrorCode.CONNECTION_NOT_ESTABLISHED, 'WebSocket is not open');
     }
   }
 

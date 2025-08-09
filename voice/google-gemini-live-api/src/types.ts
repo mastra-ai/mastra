@@ -23,7 +23,7 @@ export class GeminiLiveError extends Error {
       message: this.message,
       code: this.code,
       details: this.details,
-      timestamp: this.timestamp
+      timestamp: this.timestamp,
     };
   }
 }
@@ -31,7 +31,7 @@ export class GeminiLiveError extends Error {
 /**
  * Available Gemini Live API models
  */
-export type GeminiVoiceModel = 
+export type GeminiVoiceModel =
   | 'gemini-2.0-flash-exp'
   | 'gemini-2.0-flash-exp-image-generation'
   | 'gemini-2.0-flash-live-001'
@@ -43,11 +43,7 @@ export type GeminiVoiceModel =
 /**
  * Available voice options for Gemini Live API
  */
-export type GeminiVoiceName = 
-  | 'Puck'
-  | 'Charon' 
-  | 'Kore'
-  | 'Fenrir';
+export type GeminiVoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir';
 
 /**
  * Tool configuration for Gemini Live API
@@ -101,12 +97,12 @@ export interface GeminiLiveVoiceConfig {
   project?: string;
   /** Google Cloud region (defaults to us-central1) */
   location?: string;
-  /** 
+  /**
    * Path to service account JSON key file for Vertex AI authentication.
    * If not provided, will use Application Default Credentials (ADC).
    */
   serviceAccountKeyFile?: string;
-  /** 
+  /**
    * Service account email for impersonation.
    * Useful when you want to use a specific service account without a key file.
    */
@@ -149,7 +145,7 @@ export interface GeminiLiveEventMap {
   /** Error events - compatible with base VoiceEventMap */
   error: { message: string; code?: string; details?: unknown };
   /** Session state changes */
-  session: { 
+  session: {
     state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'error' | 'updated';
     config?: Record<string, unknown>; // Configuration data when state is 'updated' or 'connected'
   };
@@ -160,9 +156,9 @@ export interface GeminiLiveEventMap {
   /** Interrupt events */
   interrupt: { type: 'user' | 'model'; timestamp: number };
   /** Token usage information */
-  usage: { 
-    inputTokens: number; 
-    outputTokens: number; 
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
     totalTokens: number;
     modality: 'audio' | 'text' | 'video';
   };
@@ -215,7 +211,7 @@ export interface VideoConfig {
 // https://ai.google.dev/api/live
 
 export interface GeminiLiveServerMessage {
-  // Server messages may have a usageMetadata field but will otherwise include 
+  // Server messages may have a usageMetadata field but will otherwise include
   // exactly one of the other fields from BidiGenerateContentServerMessage
   usageMetadata?: {
     promptTokenCount?: number;
@@ -237,15 +233,15 @@ export interface GeminiLiveServerMessage {
       tokenCount?: number;
     }>;
   };
-  
+
   // Setup completion message
   setup?: {
     sessionHandle?: string;
   };
-  
+
   // Setup complete message (alternative format)
   setupComplete?: Record<string, unknown>;
-  
+
   // Server content (model responses)
   serverContent?: {
     modelTurn?: {
@@ -259,19 +255,19 @@ export interface GeminiLiveServerMessage {
     };
     turnComplete?: boolean;
   };
-  
+
   // Tool call requests
   toolCall?: {
     name?: string;
     args?: Record<string, unknown>;
     id?: string;
   };
-  
+
   // Session end
   sessionEnd?: {
     reason?: string;
   };
-  
+
   // Error messages
   error?: {
     code?: string;
@@ -310,7 +306,7 @@ export enum GeminiLiveErrorCode {
   STREAM_LIMIT_EXCEEDED = 'stream_limit_exceeded',
   NOT_CONNECTED = 'not_connected',
   INVALID_STATE = 'invalid_state',
-  UNKNOWN_ERROR = 'unknown_error'
+  UNKNOWN_ERROR = 'unknown_error',
 }
 
 export interface UpdateMessage {
