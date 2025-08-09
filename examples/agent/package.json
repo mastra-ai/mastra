@@ -16,7 +16,7 @@
     "@mastra/voice-openai": "latest",
     "@mastra/libsql": "latest",
     "@mastra/evals": "latest",
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
     "zod": "^3.25.67"

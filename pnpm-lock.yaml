@@ -880,7 +880,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1270,7 +1270,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1308,7 +1308,7 @@ importers:
         specifier: ^2.2.1
         version: 2.2.1
       ai:
-        specifier: ^4.3.16
+        specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       date-fns:
         specifier: ^3.6.0
@@ -1348,7 +1348,7 @@ importers:
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@babel/core':
         specifier: ^7.28.0
@@ -1642,7 +1642,7 @@ importers:
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
@@ -1669,7 +1669,7 @@ importers:
         specifier: ^4.0.2
         version: 4.0.2
       ai:
-        specifier: ^4.3.16
+        specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       dotenv:
         specifier: ^17.0.0
@@ -1690,7 +1690,7 @@ importers:
   packages/fastembed:
     dependencies:
       ai:
-        specifier: ^4.3.16
+        specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       fastembed:
         specifier: ^1.14.4
@@ -1780,7 +1780,7 @@ importers:
         specifier: ^1.2.12
         version: 1.2.12(zod@3.25.76)
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
@@ -1804,8 +1804,8 @@ importers:
         specifier: ^20.17.57
         version: 20.19.9
       ai:
-        specifier: 4.3.16
-        version: 4.3.16(react@19.1.1)(zod@3.25.76)
+        specifier: 4.3.19
+        version: 4.3.19(react@19.1.1)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
@@ -1968,7 +1968,7 @@ importers:
   packages/mcp/integration-tests:
     dependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@ai-sdk/react':
         specifier: ^1.2.12
@@ -2017,7 +2017,7 @@ importers:
         specifier: ^1.35.3
         version: 1.35.3
       ai:
-        specifier: ^4.3.16
+        specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       async-mutex:
         specifier: ^0.5.0
@@ -2051,7 +2051,7 @@ importers:
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
@@ -2435,7 +2435,7 @@ importers:
         specifier: ^1.2.10
         version: 1.2.10(zod@3.25.76)
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
@@ -2456,7 +2456,7 @@ importers:
         specifier: ^20.17.57
         version: 20.19.9
       ai:
-        specifier: ^4.3.16
+        specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       dotenv:
         specifier: ^17.0.0
@@ -2499,8 +2499,8 @@ importers:
         specifier: ^20.17.57
         version: 20.19.9
       ai:
-        specifier: 4.3.16
-        version: 4.3.16(react@19.1.1)(zod@3.25.76)
+        specifier: 4.3.19
+        version: 4.3.19(react@19.1.1)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
@@ -2520,7 +2520,7 @@ importers:
   packages/server:
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
@@ -3767,7 +3767,7 @@ importers:
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.22
+        specifier: ^1.3.23
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
@@ -3794,7 +3794,7 @@ importers:
         specifier: ^20.17.57
         version: 20.19.9
       ai:
-        specifier: ^4.3.16
+        specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
@@ -9787,16 +9787,6 @@ packages:
   aggregate-error@4.0.1:
     resolution: {integrity: sha512-0poP0T7el6Vq3rstR8Mn4V/IQrpBLO6POkUSrN7RhyY+GF/InCFShQzsQ39T25gkHhLgSLByyAz+Kjb+c2L98w==}
     engines: {node: '>=12'}
-
-  ai@4.3.16:
-    resolution: {integrity: sha512-KUDwlThJ5tr2Vw0A1ZkbDKNME3wzWhuVfAOwIvFUzl1TPVDFAXDFTXio3p+jaKneB+dKNCvFFlolYmmgHttG1g==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      react: ^18 || ^19 || ^19.0.0-rc
-      zod: ^3.23.8
-    peerDependenciesMeta:
-      react:
-        optional: true
 
   ai@4.3.19:
     resolution: {integrity: sha512-dIE2bfNpqHN3r6IINp9znguYdhIOheKW2LDigAMrgt/upT3B8eBGPSCblENvaZGoq+hxaN9fSMzjWpbqloP+7Q==}
@@ -20384,7 +20374,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20433,7 +20423,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -21514,7 +21504,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -23932,18 +23922,6 @@ snapshots:
     dependencies:
       clean-stack: 4.2.0
       indent-string: 5.0.0
-
-  ai@4.3.16(react@19.1.1)(zod@3.25.76):
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      '@ai-sdk/react': 1.2.12(react@19.1.1)(zod@3.25.76)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
-      '@opentelemetry/api': 1.9.0
-      jsondiffpatch: 0.6.0
-      zod: 3.25.76
-    optionalDependencies:
-      react: 19.1.1
 
   ai@4.3.19(react@19.1.1)(zod@3.25.76):
     dependencies:
