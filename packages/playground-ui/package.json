@@ -43,9 +43,9 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
-    "@assistant-ui/react": "^0.7.91",
-    "@assistant-ui/react-markdown": "^0.7.21",
-    "@assistant-ui/react-syntax-highlighter": "^0.7.10",
+    "@assistant-ui/react": "^0.10.36",
+    "@assistant-ui/react-markdown": "^0.10.8",
+    "@assistant-ui/react-syntax-highlighter": "^0.10.9",
     "@autoform/core": "^2.2.0",
     "@autoform/react": "^3.1.0",
     "@autoform/zod": "^2.2.0",
