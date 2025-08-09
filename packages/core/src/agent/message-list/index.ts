@@ -509,18 +509,20 @@ export class MessageList {
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
       llmPrompt: (): LanguageModelV1Prompt => {
         const coreMessages = this.all.aiV4.core();
-        const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
 
-        // Convert v5 system messages to v4 format
-        const v4SystemMessages = systemMessages.map(msg => ({
-          role: msg.role,
-          content: typeof msg.content === 'string' ? msg.content : MessageList.coreContentToString(msg.content),
-        })) as CoreMessageV4[];
+        // kinda janky but we can pipe from v5model->mastra3->mastra2->v4ui->v4core to convert our v5 system messages to v4 system messages
+        // TODO: lets just make a v5core->v4core
+        const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()]
+          .map(m => this.aiV5ModelMessageToMastraMessageV3(m, 'system'))
+          .map(MessageList.mastraMessageV3ToV2)
+          .map(MessageList.mastraMessageV2ToAIV4UIMessage)
+          .map(m => this.convertToAIV4CoreMessages([m])[0]!);
 
-        const messages = [...v4SystemMessages, ...coreMessages];
+        const messages = [...systemMessages, ...coreMessages];
 
         // Ensure we have at least one user message
         const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
+
         if (needsDefaultUserMessage) {
           const defaultMessage: CoreMessageV4 = {
             role: 'user',
