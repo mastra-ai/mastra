@@ -43,7 +43,7 @@
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
     "@upstash/redis": "^1.35.3",
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
     "pg": "^8.16.3",
@@ -56,7 +56,7 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.23",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",

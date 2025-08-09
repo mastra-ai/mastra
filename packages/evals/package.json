@@ -95,7 +95,7 @@
     "ai": "^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.23",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -103,7 +103,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "dotenv": "^17.0.0",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",

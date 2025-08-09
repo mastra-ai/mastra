@@ -13,7 +13,7 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.23",
     "@mastra/core": "latest",
     "@mastra/voice-elevenlabs": "latest",
     "@mastra/voice-openai": "latest",

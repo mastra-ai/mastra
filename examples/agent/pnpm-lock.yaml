@@ -50,8 +50,8 @@ importers:
         specifier: link:../../voice/openai
         version: link:../../voice/openai
       ai:
-        specifier: ^4.3.16
-        version: 4.3.16(react@19.1.0)(zod@3.25.67)
+        specifier: ^4.3.19
+        version: 4.3.19(react@19.1.0)(zod@3.25.67)
       fetch-to-node:
         specifier: ^2.1.0
         version: 2.1.0
@@ -109,8 +109,8 @@ packages:
   '@types/diff-match-patch@1.0.36':
     resolution: {integrity: sha512-xFdR6tkm0MWvBfO8xXCSsinYxHcqkQUlcHeSpMC2ukzOb6lwQAfDmW+Qt0AvlGd8HpsS28qKsB+oPeJn9I39jg==}
 
-  ai@4.3.16:
-    resolution: {integrity: sha512-KUDwlThJ5tr2Vw0A1ZkbDKNME3wzWhuVfAOwIvFUzl1TPVDFAXDFTXio3p+jaKneB+dKNCvFFlolYmmgHttG1g==}
+  ai@4.3.19:
+    resolution: {integrity: sha512-dIE2bfNpqHN3r6IINp9znguYdhIOheKW2LDigAMrgt/upT3B8eBGPSCblENvaZGoq+hxaN9fSMzjWpbqloP+7Q==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
@@ -221,7 +221,7 @@ snapshots:
 
   '@types/diff-match-patch@1.0.36': {}
 
-  ai@4.3.16(react@19.1.0)(zod@3.25.67):
+  ai@4.3.19(react@19.1.0)(zod@3.25.67):
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.67)
