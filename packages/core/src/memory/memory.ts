@@ -2,7 +2,8 @@ import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 
 
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
-import { MastraBase, type RequireOnly, type Resolve } from '../base';
+import { MastraBase } from '../base';
+import type { RequireOnly, Resolve } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';

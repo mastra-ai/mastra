@@ -579,18 +579,17 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    let embeddingTextsAndVectorIds: ({
+    let embeddingTextsAndVectorIds: {
       textForEmbedding: string;
       vectorIds: string[];
-    } | null)[] = [];
+    }[] = [];
 
     let updatedMessages = v2Messages;
     if (this.vector && config.semanticRecall) {
       embeddingTextsAndVectorIds = this.getEmbeddingTextAndVectorIds(v2Messages);
 
-      const { textForEmbedding: firstEmbeddingText } =
-        embeddingTextsAndVectorIds.find(textAndId => typeof textAndId?.textForEmbedding === 'string') ?? {};
-      if (firstEmbeddingText) {
+      if (embeddingTextsAndVectorIds[0]) {
+        const { textForEmbedding: firstEmbeddingText } = embeddingTextsAndVectorIds[0];
         const dimension = this.dimension ?? (await this.embedMessageContent(firstEmbeddingText)).dimension;
 
         if (!dimension) {
@@ -601,7 +600,7 @@ export class Memory extends MastraMemory {
           if (!embeddingTextsAndVectorIds[i]) return;
           message.content.metadata ||= {};
           message.content.metadata.vectorIds = embeddingTextsAndVectorIds[i].vectorIds;
-          message.content.metadata.dimension = dimension;
+          message.content.metadata.vectorDimension = dimension;
         });
       }
     }
@@ -613,15 +612,15 @@ export class Memory extends MastraMemory {
 
     let indexName: string;
     await Promise.all(
-      embeddingTextsAndVectorIds.map(async (el, i) => {
+      embeddingTextsAndVectorIds.map(async (embeddingTextAndVectorId, i) => {
         if (!this.vector) {
           throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
         }
 
         const message = updatedMessages[i];
-        if (!el || !message) return;
+        if (!embeddingTextAndVectorId || !message) return;
 
-        const { textForEmbedding, vectorIds } = el;
+        const { textForEmbedding, vectorIds } = embeddingTextAndVectorId;
         const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
 
         indexName ||= (await this.createEmbeddingIndex(dimension)).indexName;
@@ -983,10 +982,10 @@ ${
 
     const config = this.getMergedThreadConfig();
     try {
-      let embeddingTextsAndVectorIds: ({
+      let embeddingTextsAndVectorIds: {
         textForEmbedding: string;
         vectorIds: string[];
-      } | null)[] = [];
+      }[] = [];
 
       let storedMessages: MastraMessageV2[] = [];
       let storedMessagesById: Record<string, DeepPartial<MastraMessageV2>> = {};
@@ -1036,7 +1035,7 @@ ${
           content: {
             metadata: {
               vectorIds: embeddingTextsAndVectorIds[i].vectorIds,
-              dimension: this.dimension, // must be a number
+              vectorDimension: this.dimension, // must be a number
             },
           },
         });
@@ -1057,7 +1056,8 @@ ${
           }
 
           // delete embeddings that won't be replaced in the upsert
-          const { dimension: previousDimension, vectorIds: storedVectorIds } = storedMessage.content?.metadata ?? {};
+          const { vectorDimension: previousDimension, vectorIds: storedVectorIds } =
+            storedMessage.content?.metadata ?? {};
 
           if (typeof previousDimension === 'number' && Array.isArray(storedVectorIds)) {
             const { indexName: previousIndexName } = await this.createEmbeddingIndex(previousDimension);
@@ -1092,18 +1092,20 @@ ${
     }
   }
 
-  protected getEmbeddingTextAndVectorIds(messages: DeepPartial<MastraMessageV2>[]): ({
+  protected getEmbeddingTextAndVectorIds(messages: (DeepPartial<MastraMessageV2> & { id: string })[]): {
     textForEmbedding: string;
     vectorIds: string[];
-  } | null)[] {
-    return messages.map(message => {
-      const textForEmbedding: string | null = this.prepMessageForEmbedding(message);
-      if (!textForEmbedding) return null;
+  }[] {
+    return messages
+      .map(message => {
+        const textForEmbedding: string | null = this.prepMessageForEmbedding(message);
+        if (!textForEmbedding) return null;
 
-      const chunks = this.chunkText(textForEmbedding);
-      const vectorIds = chunks.map(() => this.generateId());
-      return { textForEmbedding, vectorIds };
-    }, []);
+        const chunks = this.chunkText(textForEmbedding);
+        const vectorIds = chunks.map(() => this.generateId());
+        return { id: message.id, textForEmbedding, vectorIds };
+      })
+      .filter(element => !!element);
   }
 
   protected prepMessageForEmbedding(message: DeepPartial<MastraMessageV2>): string | null {
