@@ -34,7 +34,7 @@
     "node-html-better-parser": "^1.5.2",
     "pathe": "^2.0.3",
     "zeroentropy": "0.1.0-alpha.6",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.0-0 <0.14.0-0",

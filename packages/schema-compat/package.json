@@ -36,7 +36,7 @@
   "dependencies": {
     "json-schema": "^0.4.0",
     "zod-from-json-schema": "^0.0.5",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.6"
   },
   "peerDependencies": {
     "ai": "^4.0.0",
@@ -51,7 +51,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "@internal/types-builder": "workspace:*"
   }
 }
