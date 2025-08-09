@@ -1,5 +1,4 @@
 import { ReadableStream } from 'stream/web';
-import type { LanguageModelV1Prompt } from 'ai';
 import { generateId } from 'ai';
 import { z } from 'zod';
 import { MessageList } from '../../../agent';
