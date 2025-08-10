@@ -1,7 +1,7 @@
 {
   "name": "coding-agent",
   "version": "0.2.0",
-  "description": "",
+  "description": "Advanced Mastra AI coding agent with secure E2B sandbox execution, comprehensive file management, and multi-language support for Python, JavaScript, and TypeScript development workflows",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
