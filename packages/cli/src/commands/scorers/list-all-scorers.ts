@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import { AVAILABLE_SCORERS } from '.';
-import type { ScorerTemplate } from '.';
+import { AVAILABLE_SCORERS } from './available-scorers';
+import type { ScorerTemplate } from './types';
 
 export async function listAllScorers(): Promise<void> {
   p.intro(color.inverse(' Available Scorers '));
