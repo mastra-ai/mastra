@@ -378,7 +378,41 @@ mcp.prompts.onListChanged({
 
 Prompt notifications are delivered via SSE or compatible transports. Register handlers before expecting notifications.
 
-## SSE Authentication and Headers (Legacy Fallback)
+## Authentication
+
+### OAuth Token Refresh with AuthProvider
+
+For HTTP-based MCP servers that require OAuth authentication with automatic token refresh, you can use the `authProvider` option:
+
+```typescript
+const httpClient = new MCPClient({
+  servers: {
+    myOAuthClient: {
+      url: new URL('https://your-mcp-server.com/mcp'),
+      authProvider: {
+        tokens: async () => {
+          // Your token refresh logic here
+          const refreshedToken = await refreshAccessToken();
+          return {
+            token: refreshedToken,
+            type: 'Bearer',
+          };
+        },
+        // Additional OAuth provider methods as needed
+        redirectUrl: 'https://your-app.com/oauth/callback',
+        clientMetadata: {
+          /* ... */
+        },
+        // ... other OAuth provider properties
+      },
+    },
+  },
+});
+```
+
+The `authProvider` is automatically passed to both Streamable HTTP and SSE transports.
+
+### SSE Authentication and Headers (Legacy Fallback)
 
 When the client falls back to using the legacy SSE (Server-Sent Events) transport and you need to include authentication or custom headers, you need to configure headers in a specific way. The standard `requestInit` headers won't work alone because SSE connections using the browser's `EventSource` API don't support custom headers directly.
 
@@ -456,6 +490,7 @@ Here are the available options within `MastraMCPServerDefinition`:
 - **`url`**: (Optional, URL) For HTTP servers (Streamable HTTP or SSE): The URL of the server.
 - **`requestInit`**: (Optional, RequestInit) For HTTP servers: Request configuration for the fetch API. Used for the initial Streamable HTTP connection attempt and subsequent POST requests. Also used for the initial SSE connection attempt.
 - **`eventSourceInit`**: (Optional, EventSourceInit) **Only** for the legacy SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.
+- **`authProvider`**: (Optional, OAuthClientProvider) For HTTP servers: OAuth authentication provider for automatic token refresh. Automatically passed to both Streamable HTTP and SSE transports.
 - **`logger`**: (Optional, LogHandler) Optional additional handler for logging.
 - **`timeout`**: (Optional, number) Server-specific timeout in milliseconds, overriding the global client/configuration timeout.
 - **`capabilities`**: (Optional, ClientCapabilities) Server-specific capabilities configuration.
@@ -469,6 +504,8 @@ Here are the available options within `MastraMCPServerDefinition`:
 - Multiple transport layers with automatic detection:
   - Stdio-based for local servers (`command`)
   - HTTP-based for remote servers (`url`): Tries Streamable HTTP first, falls back to legacy SSE.
+- OAuth authentication with automatic token refresh (`authProvider`)
+- Manual authentication headers for static tokens (`requestInit`, `eventSourceInit`)
 - Per-server logging capability using all standard MCP log levels
 - Automatic error handling and logging
 - Tool execution with context

@@ -1347,7 +1347,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 
   it('should call workflow.createRun().start() when the derived tool is executed', async () => {
-    const testWorkflow = createMockWorkflow('MyExecWorkflow', 'Executable workflow');
+    const testWorkflow = createMockWorkflow('MyExecWorkflow', 'Executable workflow', z.object({ data: z.string() }));
     const step = createStep({
       id: 'my-step',
       description: 'My step description',
@@ -1853,5 +1853,290 @@ describe('MCPServer with Tool Output Schema', () => {
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
     expect(JSON.parse(result.content[0].text)).toEqual(result.structuredContent);
+  });
+});
+
+describe('MCPServer - Tool Input Validation', () => {
+  let validationServer: MCPServer;
+  let validationClient: InternalMastraMCPClient;
+  let httpValidationServer: ServerType;
+  let tools: Record<string, any>;
+  const VALIDATION_PORT = 9700 + Math.floor(Math.random() * 100);
+
+  const toolsWithValidation: ToolsInput = {
+    stringTool: {
+      description: 'Tool that requires a string input',
+      parameters: z.object({
+        message: z.string().min(3, 'Message must be at least 3 characters'),
+        optional: z.string().optional(),
+      }),
+      execute: async args => ({
+        result: `Received: ${args.message}`,
+      }),
+    },
+    numberTool: {
+      description: 'Tool that requires number inputs',
+      parameters: z.object({
+        age: z.number().min(0).max(150),
+        score: z.number().optional(),
+      }),
+      execute: async args => ({
+        result: `Age: ${args.age}, Score: ${args.score ?? 'N/A'}`,
+      }),
+    },
+    complexTool: {
+      description: 'Tool with complex validation',
+      parameters: z.object({
+        email: z.string().email('Invalid email format'),
+        tags: z.array(z.string()).min(1, 'At least one tag required'),
+        metadata: z.object({
+          priority: z.enum(['low', 'medium', 'high']),
+          deadline: z.string().datetime().optional(),
+        }),
+      }),
+      execute: async args => ({
+        result: `Processing ${args.email} with ${args.tags.length} tags`,
+      }),
+    },
+  };
+
+  beforeAll(async () => {
+    const app = new Hono();
+    validationServer = new MCPServer({
+      name: 'ValidationTestServer',
+      version: '1.0.0',
+      description: 'Server for testing tool validation',
+      tools: toolsWithValidation,
+    });
+
+    app.get('/sse', async c => {
+      const url = new URL(c.req.url, `http://localhost:${VALIDATION_PORT}`);
+      return await validationServer.startHonoSSE({
+        url,
+        ssePath: '/sse',
+        messagePath: '/message',
+        context: c,
+      });
+    });
+
+    app.post('/message', async c => {
+      const url = new URL(c.req.url, `http://localhost:${VALIDATION_PORT}`);
+      return await validationServer.startHonoSSE({
+        url,
+        ssePath: '/sse',
+        messagePath: '/message',
+        context: c,
+      });
+    });
+
+    httpValidationServer = serve({
+      fetch: app.fetch,
+      port: VALIDATION_PORT,
+    });
+
+    validationClient = new InternalMastraMCPClient({
+      name: 'validation-test-client',
+      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`) },
+    });
+
+    await validationClient.connect();
+    tools = await validationClient.tools();
+  });
+
+  afterAll(async () => {
+    await validationClient.disconnect();
+    httpValidationServer.close();
+  });
+
+  it('should successfully execute tool with valid inputs', async () => {
+    const stringTool = tools['stringTool'];
+    expect(stringTool).toBeDefined();
+
+    const result = await stringTool.execute({
+      context: {
+        message: 'Hello world',
+        optional: 'optional value',
+      },
+    });
+
+    expect(result).toBeDefined();
+    expect(result.content[0].text).toContain('Received: Hello world');
+  });
+
+  it('should return validation error for missing required parameters', async () => {
+    const stringTool = tools['stringTool'];
+    const result = await stringTool.execute({
+      context: {},
+    });
+
+    expect(result).toBeDefined();
+    // Handle both client-side and server-side error formats
+    if (result.error) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Please fix the following errors');
+    } else {
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Please fix the following errors');
+    }
+  });
+
+  it('should return validation error for invalid string length', async () => {
+    const stringTool = tools['stringTool'];
+    const result = await stringTool.execute({
+      context: {
+        message: 'Hi', // Too short, min is 3
+      },
+    });
+
+    expect(result).toBeDefined();
+    // Handle both client-side and server-side error formats
+    if (result.error) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('String must contain at least 3 character(s)');
+    } else {
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Message must be at least 3 characters');
+    }
+  });
+
+  it('should return validation error for invalid number range', async () => {
+    const numberTool = tools['numberTool'];
+    const result = await numberTool.execute({
+      context: {
+        age: -5, // Negative age not allowed
+      },
+    });
+
+    expect(result).toBeDefined();
+    // Handle both client-side and server-side error formats
+    if (result.error) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool validation failed');
+    } else {
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Tool validation failed');
+    }
+  });
+
+  it('should return validation error for invalid email format', async () => {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
+        email: 'not-an-email',
+        tags: ['tag1'],
+        metadata: {
+          priority: 'medium',
+        },
+      },
+    });
+
+    expect(result).toBeDefined();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Tool validation failed');
+    expect(result.content[0].text).toContain('Invalid email format');
+  });
+
+  it('should return validation error for empty array when minimum required', async () => {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
+        email: 'test@example.com',
+        tags: [], // Empty array, min 1 required
+        metadata: {
+          priority: 'low',
+        },
+      },
+    });
+
+    expect(result).toBeDefined();
+    // Handle both client-side and server-side error formats
+    if (result.error) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Array must contain at least 1 element(s)');
+    } else {
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Array must contain at least 1 element(s)');
+    }
+  });
+
+  it('should return validation error for invalid enum value', async () => {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
+        email: 'test@example.com',
+        tags: ['tag1'],
+        metadata: {
+          priority: 'urgent', // Not in enum ['low', 'medium', 'high']
+        },
+      },
+    });
+
+    expect(result).toBeDefined();
+    // Handle both client-side and server-side error formats
+    if (result.error) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool validation failed');
+    } else {
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Tool validation failed');
+    }
+  });
+
+  it('should handle multiple validation errors', async () => {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
+        email: 'invalid-email',
+        tags: [],
+        metadata: {
+          priority: 'invalid',
+        },
+      },
+    });
+
+    expect(result).toBeDefined();
+    // Handle both client-side and server-side error formats
+    if (result.error) {
+      expect(result.error).toBe(true);
+      const errorText = result.message;
+      expect(errorText).toContain('Tool validation failed');
+      // Should contain multiple validation errors
+      // Note: Some validations might not trigger when there are other errors
+      expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
+      expect(errorText).toContain('Provided arguments:');
+    } else {
+      expect(result.isError).toBe(true);
+      const errorText = result.content[0].text;
+      expect(errorText).toContain('Tool validation failed');
+      // Should contain multiple validation errors
+      // Note: Some validations might not trigger when there are other errors
+      expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
+      expect(errorText).toContain('Provided arguments:');
+    }
+  });
+
+  it('should work with executeTool method directly', async () => {
+    // Test valid input
+    const validResult = await validationServer.executeTool('stringTool', {
+      message: 'Valid message',
+    });
+    // executeTool returns result directly, not in MCP format
+    expect(validResult.result).toBe('Received: Valid message');
+
+    // Test invalid input - should return validation error (not throw)
+    const invalidResult = await validationServer.executeTool('stringTool', {
+      message: 'No', // Too short
+    });
+
+    // executeTool returns client-side validation format
+    expect(invalidResult.error).toBe(true);
+    expect(invalidResult.message).toContain('Tool validation failed');
+    expect(invalidResult.message).toContain('Message must be at least 3 characters');
   });
 });

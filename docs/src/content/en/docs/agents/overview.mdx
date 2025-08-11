@@ -238,7 +238,7 @@ const response = await testAgent.generate(
 );
 ```
 
-### Streaming progress with `onStepFinish`
+### Using `onStepFinish`
 
 You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
 
@@ -254,6 +254,26 @@ const response = await testAgent.generate(
     },
   },
 );
+```
+
+### Streaming steps with `onChunk`
+
+You can monitor the progress of multi-step operations using the `onChunk` callback. This is useful for debugging or providing progress updates to users.
+
+```typescript showLineNumbers copy
+const stream = await testAgent.stream(
+  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
+  {
+    maxSteps: 5,
+    onChunk: ({ chunk }) => {
+      console.log("Chunk", chunk);
+    },
+  },
+);
+
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
 ```
 
 ### Detecting completion with `onFinish`
