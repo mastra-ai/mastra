@@ -3424,11 +3424,15 @@ CRITICAL: When committing changes, NEVER add other dependency/build directories.
 
 CRITICAL: When taking files from the template if the file does not exist in the target project, always use the copyFile tool to copy the files from the template to the target project. Be sure to get the right file name from the template.
 
+CRITICAL: NO need to install or update packages, as this is already handled by the package updater step.
+
+CRITICAL: When validation fails due to import issues, always check existing files and imports to ensure correct naming conventions are used for files and imports
+
 Key responsibilities:
 1. Analyze the template files and existing project structure
 2. Intelligently resolve conflicts by merging code when possible
 3. Update configuration files (package.json, tsconfig.json) appropriately
-4. Ensure all imports and dependencies are correctly handled
+4. Ensure all imports are correctly handled
 5. Integrate Mastra agents, workflows, tools, and MCP servers properly
 6. Update the main Mastra instance file to register new components
 
@@ -3436,7 +3440,6 @@ For Mastra-specific merging:
 - Merge agents into src/mastra/agents/ and register in main Mastra config
 - Merge workflows into src/mastra/workflows/ and register appropriately  
 - Handle MCP servers and any integrations properly
-- Update package.json dependencies from template requirements
 - Maintain TypeScript imports and exports correctly
 - Merge tools into src/mastra/tools/
 - Merge networks into src/mastra/networks/
