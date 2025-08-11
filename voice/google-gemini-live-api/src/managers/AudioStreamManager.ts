@@ -25,6 +25,9 @@ export class AudioStreamManager {
   private readonly maxChunkSize = 32768; // 32KB max chunk size per Gemini limits
   private readonly minSendInterval = 0; // No throttling - let the stream control the pace
   private lastSendTime = 0;
+  private pendingChunks: Array<{ chunk: Buffer; timestamp: number }> = [];
+  private pendingTimer?: NodeJS.Timeout;
+  private sendToGemini?: (type: 'realtime_input' | 'client_content', message: Record<string, unknown>) => void;
 
   // Audio buffer management constants
   private readonly MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB maximum buffer size
@@ -33,6 +36,13 @@ export class AudioStreamManager {
   constructor(audioConfig: AudioConfig, debug: boolean = false) {
     this.audioConfig = audioConfig;
     this.debug = debug;
+  }
+
+  /**
+   * Provide a sender callback that will be used to deliver messages to Gemini
+   */
+  setSender(sender: (type: 'realtime_input' | 'client_content', message: Record<string, unknown>) => void): void {
+    this.sendToGemini = sender;
   }
 
   /**
@@ -455,13 +465,23 @@ export class AudioStreamManager {
 
       const now = Date.now();
       if (now - this.lastSendTime < this.minSendInterval) {
-        // Throttle if needed
-        setTimeout(() => this.sendAudioChunk(chunk), this.minSendInterval - (now - this.lastSendTime));
+        // Throttle if needed - enqueue for later processing
+        this.pendingChunks.push({ chunk, timestamp: now });
+        const delay = this.minSendInterval - (now - this.lastSendTime);
+        if (!this.pendingTimer) {
+          this.pendingTimer = setTimeout(
+            () => {
+              this.pendingTimer = undefined;
+              this.processPendingChunks();
+            },
+            Math.max(0, delay),
+          );
+        }
         return;
       }
 
-      this.lastSendTime = now;
-      this.log(`Sent audio chunk of size: ${chunk.length} bytes`);
+      this.processChunk(chunk);
+      this.processPendingChunks();
     } catch (error) {
       this.log('Error sending audio chunk:', error);
       throw error;
@@ -664,21 +684,19 @@ export class AudioStreamManager {
    */
   async handleAudioTranscription(
     audioStream: NodeJS.ReadableStream,
-    onTranscriptionResponse: (text: string) => void,
+    sendAndAwaitTranscript: (base64Audio: string) => Promise<string>,
     onError: (error: Error) => void,
     timeoutMs: number = 30000,
   ): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const chunks: Buffer[] = [];
-      let transcriptionText = '';
-      let hasReceivedResponse = false;
-      let checkResponseTimer: NodeJS.Timeout | undefined;
       let isCleanedUp = false;
       let totalBufferSize = 0;
+      let isResolved = false;
 
       // Set up timeout
       const timeout = setTimeout(() => {
-        if (!hasReceivedResponse) {
+        if (!isResolved) {
           cleanup();
           reject(new Error(`Transcription timeout - no response received within ${timeoutMs / 1000} seconds`));
         }
@@ -726,23 +744,25 @@ export class AudioStreamManager {
             duration: result.duration,
           });
 
-          // Notify that audio is ready for transcription
-          onTranscriptionResponse(result.base64Audio);
-
-          // Wait for transcription response
-          const checkResponse = () => {
-            if (transcriptionText.length > 0) {
-              hasReceivedResponse = true;
+          // Send audio and await the transcript from the caller
+          try {
+            const transcript = await sendAndAwaitTranscript(result.base64Audio);
+            if (!isResolved) {
+              isResolved = true;
               cleanup();
-              resolve(transcriptionText.trim());
-            } else if (!hasReceivedResponse && !isCleanedUp) {
-              // Check again in 100ms, but don't check forever
-              checkResponseTimer = setTimeout(checkResponse, 100);
+              resolve(transcript.trim());
             }
-          };
-
-          // Start checking for response after a short delay
-          checkResponseTimer = setTimeout(checkResponse, 100);
+          } catch (error) {
+            if (!isResolved) {
+              isResolved = true;
+              cleanup();
+              reject(
+                new Error(
+                  `Failed to obtain transcription: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                ),
+              );
+            }
+          }
         } catch (error) {
           cleanup();
           reject(
@@ -758,10 +778,6 @@ export class AudioStreamManager {
 
         // Clear all timers
         clearTimeout(timeout);
-        if (checkResponseTimer) {
-          clearTimeout(checkResponseTimer);
-          checkResponseTimer = undefined;
-        }
 
         // Remove stream event listeners
         audioStream.removeListener('data', onStreamData);
@@ -777,5 +793,45 @@ export class AudioStreamManager {
       audioStream.on('error', onStreamError);
       audioStream.on('end', onStreamEnd);
     });
+  }
+
+  private processChunk(chunk: Buffer): void {
+    // Convert raw audio buffer to base64 PCM16 and build message
+    const base64Audio = this.processAudioChunk(chunk);
+    const message = this.createAudioMessage(base64Audio, 'realtime');
+
+    // Send via injected sender
+    if (this.sendToGemini) {
+      this.sendToGemini('realtime_input', message);
+    } else {
+      this.log('No sender configured for AudioStreamManager; dropping audio chunk');
+    }
+
+    // Update throttle timing and log
+    this.lastSendTime = Date.now();
+    this.log(`Sent audio chunk of size: ${chunk.length} bytes`);
+  }
+
+  private processPendingChunks(): void {
+    while (this.pendingChunks.length > 0) {
+      const nextChunk = this.pendingChunks[0];
+      const now = Date.now();
+      if (nextChunk && now - this.lastSendTime >= this.minSendInterval) {
+        this.pendingChunks.shift();
+        this.processChunk(nextChunk.chunk);
+      } else {
+        const delay = this.minSendInterval - (now - this.lastSendTime);
+        if (!this.pendingTimer) {
+          this.pendingTimer = setTimeout(
+            () => {
+              this.pendingTimer = undefined;
+              this.processPendingChunks();
+            },
+            Math.max(0, delay),
+          );
+        }
+        break;
+      }
+    }
   }
 }

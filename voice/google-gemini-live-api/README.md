@@ -94,7 +94,7 @@ voice.on('speaking', ({ audioData }) => {
 });
 
 // Or subscribe to a concatenated audio stream per response
-voice.on('speaker', (audioStream) => {
+voice.on('speaker', audioStream => {
   audioStream.pipe(playbackDevice);
 });
 
@@ -185,7 +185,7 @@ voice.on('session', data => {
 
 ### Audio and Speech
 
-**`async speak(input: string | NodeJS.ReadableStream, options?: GeminiLiveVoiceOptions): Promise<NodeJS.ReadableStream | void>`**
+**`async speak(input: string | NodeJS.ReadableStream, options?: GeminiLiveVoiceOptions): Promise<void>`**
 
 Converts text to speech and sends it to the model.
 
@@ -197,7 +197,7 @@ Converts text to speech and sends it to the model.
   - `languageCode?: string` - Language code for the response
   - `responseModalities?: ('AUDIO' | 'TEXT')[]` - Response modalities
 
-**Returns:** Promise that resolves when speech is sent
+**Returns:** Promise<void> (responses are emitted via `speaker` and `writing` events)
 
 **Throws:** Error if not connected or input is empty
 

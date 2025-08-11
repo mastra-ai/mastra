@@ -363,8 +363,21 @@ describe('GeminiLiveVoice', () => {
     it('should use custom voice when specified', async () => {
       await voice.speak('Test', { speaker: 'Puck' });
 
-      const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
-      expect(sentData.client_content.turns[0].parts[0].text).toBe('Test');
+      expect(mockWs.send).toHaveBeenCalled();
+
+      const sentPayloads = mockWs.send.mock.calls.map((call: any[]) => JSON.parse(call[0]));
+
+      // Verify a session.update was sent with the requested voice
+      const updateMsg = sentPayloads.find((p: any) => p.session && p.session.generation_config);
+      expect(updateMsg).toBeDefined();
+      expect(
+        updateMsg.session.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name,
+      ).toBe('Puck');
+
+      // Verify the client_content was sent with the text
+      const clientContent = sentPayloads.find((p: any) => p.client_content);
+      expect(clientContent).toBeDefined();
+      expect(clientContent.client_content.turns[0].parts[0].text).toBe('Test');
     });
   });
 
@@ -670,6 +683,143 @@ describe('GeminiLiveVoice', () => {
       await expect(sessionPromise).resolves.toMatchObject({
         state: 'disconnected',
       });
+    });
+  });
+
+  describe('Integration - Realistic flows', () => {
+    beforeEach(() => {
+      (voice as any).state = 'connected';
+      (voice as any).ws = {
+        send: vi.fn(),
+        readyState: 1, // WebSocket.OPEN
+        close: vi.fn(),
+        once: vi.fn(),
+      };
+      (voice as any).connectionManager.setWebSocket((voice as any).ws);
+      mockWs = (voice as any).ws;
+    });
+
+    it('should resolve listen() with aggregated user transcript on turnComplete', async () => {
+      const audioStream = new PassThrough();
+      const listenPromise = voice.listen(audioStream);
+
+      // Provide audio bytes and end stream
+      audioStream.write(Buffer.alloc(2000));
+      audioStream.end();
+
+      // Simulate transcript chunks and turn completion
+      setTimeout(() => {
+        (voice as any).emit('writing', { text: 'Hello ', role: 'user' });
+        (voice as any).emit('writing', { text: 'world', role: 'user' });
+        (voice as any).emit('turnComplete', { timestamp: Date.now() });
+      }, 5);
+
+      await expect(listenPromise).resolves.toBe('Hello world');
+    });
+
+    it('should emit speaking and speaker stream for inbound audio and cleanup on turnComplete', async () => {
+      const speakingEvent = new Promise<any>(resolve => voice.on('speaking', resolve));
+      const speakerEvent = new Promise<NodeJS.ReadableStream>(resolve => voice.on('speaker', resolve));
+
+      // Create a small PCM16 audio base64 payload
+      const samples = new Int16Array([1, -2, 3, -4]);
+      const base64Audio = Buffer.from(samples.buffer).toString('base64');
+
+      // Deliver server content with audio
+      await (voice as any).handleGeminiMessage({
+        responseId: 'resp-1',
+        serverContent: {
+          modelTurn: {
+            parts: [
+              {
+                inlineData: { mimeType: 'audio/pcm', data: base64Audio },
+              },
+            ],
+          },
+        },
+      });
+
+      const speakingPayload = await speakingEvent;
+      const speakerStream = await speakerEvent;
+
+      expect(speakingPayload).toHaveProperty('audio');
+      expect(speakingPayload).toHaveProperty('audioData');
+      expect(speakingPayload).toHaveProperty('sampleRate');
+      expect(typeof (speakerStream as any).write).toBe('function');
+
+      // Complete turn and ensure streams are cleaned up
+      await (voice as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+      expect((voice as any).audioStreamManager.getActiveStreamCount()).toBe(0);
+    });
+
+    it('connect() should send setup message with model and instructions', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', model: 'gemini-2.0-flash-exp', instructions: 'You are test' });
+
+      // Mock connection open and session ready
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      // Extract sent messages
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      expect(wsSent).toHaveBeenCalled();
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg).toBeDefined();
+      expect(setupMsg.setup.model).toBe('models/gemini-2.0-flash-exp');
+      expect(setupMsg.setup.systemInstruction.parts[0].text).toBe('You are test');
+    });
+
+    it('speak() should send per-turn session.update before content (language, modalities, voice)', async () => {
+      await voice.speak('Hello', { languageCode: 'en-US', responseModalities: ['AUDIO'] as any, speaker: 'Puck' });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateIdx = calls.findIndex((p: any) => p.type === 'session.update' || p.session);
+      const contentIdx = calls.findIndex((p: any) => p.client_content);
+
+      expect(updateIdx).toBeGreaterThanOrEqual(0);
+      expect(contentIdx).toBeGreaterThan(updateIdx);
+
+      const updateMsg = calls[updateIdx];
+      expect(updateMsg.session.generation_config.response_modalities).toContain('AUDIO');
+      expect(updateMsg.session.generation_config.speech_config.language_code).toBe('en-US');
+      expect(updateMsg.session.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe(
+        'Puck',
+      );
+
+      const contentMsg = calls[contentIdx];
+      expect(contentMsg.client_content.turns[0].parts[0].text).toBe('Hello');
+    });
+
+    it('should process toolCall via inbound message and send tool_result', async () => {
+      const mockExecute = vi.fn().mockResolvedValue({ result: 'ok' });
+      voice.addTools({ testTool: { id: 'testTool', description: 'd', inputSchema: {}, execute: mockExecute as any } });
+
+      await (voice as any).handleGeminiMessage({
+        toolCall: { name: 'testTool', args: { q: 1 }, id: 'id-1' },
+      });
+
+      expect(mockExecute).toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalled();
+      const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const toolResult = payloads.find((p: any) => p.tool_result);
+      expect(toolResult).toBeDefined();
+      expect(toolResult.tool_result.tool_call_id).toBe('id-1');
+    });
+
+    it('should emit usage event from usageMetadata', async () => {
+      const usagePromise = new Promise<any>(resolve => voice.on('usage', resolve));
+
+      await (voice as any).handleGeminiMessage({
+        usageMetadata: { promptTokenCount: 1, responseTokenCount: 2, totalTokenCount: 3 },
+      });
+
+      const usage = await usagePromise;
+      expect(usage.inputTokens).toBe(1);
+      expect(usage.outputTokens).toBe(2);
+      expect(usage.totalTokens).toBe(3);
+      expect(['audio', 'text', 'video']).toContain(usage.modality);
     });
   });
 });

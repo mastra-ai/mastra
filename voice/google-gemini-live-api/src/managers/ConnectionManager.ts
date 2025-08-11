@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { WebSocket } from 'ws';
-import { GeminiLiveError, GeminiLiveErrorCode } from '../types';
+import { GeminiLiveErrorCode } from '../types';
+import { GeminiLiveError } from '../utils/errors';
 
 export interface ConnectionConfig {
   debug: boolean;
@@ -100,7 +101,7 @@ export class ConnectionManager {
       // Add timeout to prevent hanging indefinitely
       setTimeout(() => {
         cleanup();
-        reject(new Error('WebSocket connection timeout'));
+        reject(new GeminiLiveError(GeminiLiveErrorCode.CONNECTION_FAILED, 'WebSocket connection timeout'));
       }, this.timeoutMs);
     });
   }

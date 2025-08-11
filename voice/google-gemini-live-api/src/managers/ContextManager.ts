@@ -30,21 +30,25 @@ export class ContextManager {
    */
   addEntry(role: 'user' | 'assistant', content: string): void {
     // Validate content length
+    let processedContent = content;
     if (content.length > this.maxContentLength) {
-      content = content.substring(0, this.maxContentLength) + '...';
+      processedContent = content.substring(0, this.maxContentLength) + '...';
     }
 
     const entry: ContextEntry = {
       role,
-      content,
+      content: processedContent,
       timestamp: Date.now(),
     };
 
     this.contextHistory.push(entry);
 
-    // Enforce maximum entries limit
-    if (this.compressionEnabled && this.contextHistory.length > this.maxEntries) {
-      this.compressContext();
+    if (this.contextHistory.length > this.maxEntries) {
+      if (this.compressionEnabled) {
+        this.compressContext();
+      } else {
+        this.contextHistory = this.contextHistory.slice(-this.maxEntries);
+      }
     }
   }
 
@@ -88,7 +92,7 @@ export class ContextManager {
     }
 
     // Keep first and last entries, compress middle ones
-    const keepCount = Math.floor(this.compressionThreshold / 2);
+    const keepCount = Math.floor(this.compressionThreshold / 3);
     const firstEntries = this.contextHistory.slice(0, keepCount);
     const lastEntries = this.contextHistory.slice(-keepCount);
 

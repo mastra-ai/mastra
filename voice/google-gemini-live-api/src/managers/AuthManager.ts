@@ -1,6 +1,7 @@
 import { GoogleAuth } from 'google-auth-library';
-import type { OAuth2Client } from 'google-auth-library';
-import { GeminiLiveError, GeminiLiveErrorCode } from '../types';
+import { GeminiLiveErrorCode } from '../types';
+import type { AuthOptions } from '../types';
+import { GeminiLiveError } from '../utils/errors';
 
 export interface AuthConfig {
   apiKey?: string;
@@ -9,22 +10,18 @@ export interface AuthConfig {
   debug: boolean;
   serviceAccountKeyFile?: string;
   serviceAccountEmail?: string;
-}
-
-export interface AuthOptions {
-  scopes: string[];
-  projectId?: string;
+  tokenExpirationTime?: number;
 }
 
 export class AuthManager {
   private authClient?: GoogleAuth;
-  private oauthClient?: OAuth2Client;
   private accessToken?: string;
-  private tokenExpiryTime?: number;
+  private tokenExpirationTime?: number;
   private readonly config: AuthConfig;
 
   constructor(config: AuthConfig) {
     this.config = config;
+    this.tokenExpirationTime = config.tokenExpirationTime ?? 50 * 60 * 1000;
   }
 
   /**
@@ -55,7 +52,7 @@ export class AuthManager {
       );
     }
 
-    const authOptions: any = {
+    const authOptions: AuthOptions = {
       scopes: ['https://www.googleapis.com/auth/cloud-platform'],
       projectId: this.config.project,
     };
@@ -95,7 +92,7 @@ export class AuthManager {
     }
 
     // Check if we have a valid cached token
-    if (this.accessToken && this.tokenExpiryTime && Date.now() < this.tokenExpiryTime) {
+    if (this.accessToken && this.tokenExpirationTime && Date.now() < this.tokenExpirationTime) {
       return this.accessToken;
     }
 
@@ -110,7 +107,7 @@ export class AuthManager {
       this.accessToken = token.token;
 
       // Set expiry time (tokens typically last 1 hour, so set to 50 minutes to be safe)
-      this.tokenExpiryTime = Date.now() + 50 * 60 * 1000;
+      this.tokenExpirationTime = Date.now() + 50 * 60 * 1000;
 
       this.log('Successfully obtained new access token');
       return this.accessToken;
@@ -151,7 +148,7 @@ export class AuthManager {
    */
   hasValidToken(): boolean {
     if (!this.config.vertexAI) return false;
-    return !!(this.accessToken && this.tokenExpiryTime && Date.now() < this.tokenExpiryTime);
+    return !!(this.accessToken && this.tokenExpirationTime && Date.now() < this.tokenExpirationTime);
   }
 
   /**
@@ -159,7 +156,7 @@ export class AuthManager {
    */
   clearCache(): void {
     this.accessToken = undefined;
-    this.tokenExpiryTime = undefined;
+    this.tokenExpirationTime = undefined;
   }
 
   /**

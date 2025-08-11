@@ -8,5 +8,5 @@ export { EventManager } from './EventManager';
 export type { ConnectionConfig } from './ConnectionManager';
 export type { SessionConfig, SessionInfo } from './SessionManager';
 export type { ContextConfig, ContextEntry } from './ContextManager';
-export type { AuthConfig, AuthOptions } from './AuthManager';
+export type { AuthConfig } from './AuthManager';
 export type { EventConfig } from './EventManager';

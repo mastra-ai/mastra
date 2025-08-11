@@ -5,7 +5,7 @@ import type { VoiceEventType, VoiceConfig } from '@mastra/core/voice';
 import type { WebSocket as WSType } from 'ws';
 import { WebSocket } from 'ws';
 import { AudioStreamManager, ConnectionManager, ContextManager, AuthManager, EventManager } from './managers';
-import { GeminiLiveError, GeminiLiveErrorCode } from './types';
+import { GeminiLiveErrorCode } from './types';
 import type {
   GeminiLiveVoiceConfig,
   GeminiLiveVoiceOptions,
@@ -18,6 +18,7 @@ import type {
   GeminiSessionConfig,
   UpdateMessage,
 } from './types';
+import { GeminiLiveError } from './utils/errors';
 
 // Narrow event keys to strings for the typed EventManager
 type GeminiEventName = Extract<keyof GeminiLiveEventMap, string>;
@@ -113,8 +114,6 @@ export class GeminiLiveVoice extends MastraVoice<
   private sessionId?: string;
   private sessionStartTime?: number;
   private isResuming = false;
-  // Deprecated: use ContextManager instead
-  private contextHistory: Array<{ role: string; content: string; timestamp: number }> = [];
   private sessionDurationTimeout?: NodeJS.Timeout;
 
   // Tool integration properties
@@ -186,6 +185,8 @@ export class GeminiLiveVoice extends MastraVoice<
 
     // Initialize AudioStreamManager
     this.audioStreamManager = new AudioStreamManager(this.audioConfig, this.debug);
+    // Inject sender so AudioStreamManager can deliver realtime audio
+    this.audioStreamManager.setSender((type, message) => this.sendEvent(type, message));
 
     this.eventManager = new EventManager<GeminiLiveEventMap>({ debug: this.debug });
     this.connectionManager = new ConnectionManager({ debug: this.debug, timeoutMs: 30000 });
@@ -201,6 +202,7 @@ export class GeminiLiveVoice extends MastraVoice<
       serviceAccountKeyFile: this.options.serviceAccountKeyFile,
       serviceAccountEmail: this.options.serviceAccountEmail,
       debug: this.debug,
+      tokenExpirationTime: this.options.tokenExpirationTime,
     });
 
     if (this.options.vertexAI && !this.options.project) {
@@ -552,10 +554,7 @@ export class GeminiLiveVoice extends MastraVoice<
   /**
    * Send text to be converted to speech
    */
-  async speak(
-    input: string | NodeJS.ReadableStream,
-    _options?: GeminiLiveVoiceOptions,
-  ): Promise<NodeJS.ReadableStream | void> {
+  async speak(input: string | NodeJS.ReadableStream, options?: GeminiLiveVoiceOptions): Promise<void> {
     return this.traced(async () => {
       this.validateConnectionState();
 
@@ -574,8 +573,8 @@ export class GeminiLiveVoice extends MastraVoice<
       // Add to context history
       this.addToContext('user', input);
 
-      // Send text message to Gemini Live API
-      const textMessage = {
+      // Build text message to Gemini Live API
+      const textMessage: any = {
         client_content: {
           turns: [
             {
@@ -590,6 +589,31 @@ export class GeminiLiveVoice extends MastraVoice<
           turnComplete: true,
         },
       };
+
+      // If runtime options provided, send a session.update first to apply per-turn settings
+      if (options && (options.speaker || options.languageCode || options.responseModalities)) {
+        const updateMessage: UpdateMessage = {
+          type: 'session.update',
+          session: {
+            generation_config: {
+              ...(options.responseModalities ? { response_modalities: options.responseModalities } : {}),
+              speech_config: {
+                ...(options.languageCode ? { language_code: options.languageCode } : {}),
+                ...(options.speaker
+                  ? { voice_config: { prebuilt_voice_config: { voice_name: options.speaker } } }
+                  : {}),
+              },
+            },
+          },
+        };
+
+        try {
+          this.sendEvent('session.update', updateMessage);
+          this.log('Applied per-turn runtime options', options);
+        } catch (error) {
+          this.log('Failed to apply per-turn runtime options', error);
+        }
+      }
 
       try {
         this.sendEvent('client_content', textMessage);
@@ -640,7 +664,7 @@ export class GeminiLiveVoice extends MastraVoice<
         const message = this.audioStreamManager.createAudioMessage(base64Audio, 'realtime');
         this.sendEvent('realtime_input', message);
       }
-    }, 'genimi-live.send')();
+    }, 'gemini-live.send')();
   }
 
   /**
@@ -684,12 +708,39 @@ export class GeminiLiveVoice extends MastraVoice<
         const result = await this.audioStreamManager.handleAudioTranscription(
           audioStream,
           (base64Audio: string) => {
-            // Create audio message for transcription
-            const message = this.audioStreamManager.createAudioMessage(base64Audio, 'input');
+            // Send audio and await transcript until turn completes
+            return new Promise<string>((resolve, reject) => {
+              try {
+                // Create audio message for transcription
+                const message = this.audioStreamManager.createAudioMessage(base64Audio, 'input');
 
-            // Send to Gemini Live API
-            this.sendEvent('client_content', message);
-            this.log('Sent audio for transcription');
+                const cleanup = () => {
+                  this.off('turnComplete' as any, onTurnComplete as any);
+                  this.off('error', onErr as any);
+                };
+
+                // Handlers
+                const onTurnComplete = () => {
+                  cleanup();
+                  resolve(transcriptionText.trim());
+                };
+
+                const onErr = (e: { message: string }) => {
+                  cleanup();
+                  reject(new Error(e.message));
+                };
+
+                // Wire listeners before sending
+                this.on('turnComplete' as any, onTurnComplete as any);
+                this.on('error', onErr as any);
+
+                // Send to Gemini Live API
+                this.sendEvent('client_content', message);
+                this.log('Sent audio for transcription');
+              } catch (err) {
+                reject(err as Error);
+              }
+            });
           },
           (error: Error) => {
             this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Audio transcription failed', error);
@@ -1755,58 +1806,6 @@ export class GeminiLiveVoice extends MastraVoice<
         `Failed to send Live API setup message: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
-  }
-
-  /**
-   * Wait for WebSocket connection to open
-   * @private
-   */
-  private waitForOpen(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.ws) {
-        reject(new Error('WebSocket not initialized'));
-        return;
-      }
-
-      // If already open, resolve immediately
-      if (this.ws.readyState === WebSocket.OPEN) {
-        resolve();
-        return;
-      }
-
-      // Set up event listeners with cleanup
-      const onOpen = () => {
-        cleanup();
-        resolve();
-      };
-
-      const onError = (error: Error) => {
-        cleanup();
-        reject(new Error(`WebSocket connection failed: ${error.message}`));
-      };
-
-      const onClose = () => {
-        cleanup();
-        reject(new Error('WebSocket connection closed before opening'));
-      };
-
-      const cleanup = () => {
-        this.ws?.removeListener('open', onOpen);
-        this.ws?.removeListener('error', onError);
-        this.ws?.removeListener('close', onClose);
-      };
-
-      // Add event listeners
-      this.ws.once('open', onOpen);
-      this.ws.once('error', onError);
-      this.ws.once('close', onClose);
-
-      // Add timeout to prevent hanging indefinitely
-      setTimeout(() => {
-        cleanup();
-        reject(new Error('WebSocket connection timeout'));
-      }, 30000); // 30 second timeout
-    });
   }
 
   /**

@@ -3,32 +3,6 @@
  */
 
 /**
- * Helper class for consistent error handling across managers and provider
- */
-export class GeminiLiveError extends Error {
-  public readonly code: string;
-  public readonly details?: unknown;
-  public readonly timestamp: number;
-
-  constructor(code: GeminiLiveErrorCode | string, message: string, details?: unknown) {
-    super(message);
-    this.name = 'GeminiLiveError';
-    this.code = code;
-    this.details = details;
-    this.timestamp = Date.now();
-  }
-
-  toEventData() {
-    return {
-      message: this.message,
-      code: this.code,
-      details: this.details,
-      timestamp: this.timestamp,
-    };
-  }
-}
-
-/**
  * Available Gemini Live API models
  */
 export type GeminiVoiceModel =
@@ -85,7 +59,7 @@ export interface GeminiSessionConfig {
  * Configuration options for GeminiLiveVoice
  */
 export interface GeminiLiveVoiceConfig {
-  /** Google API key (falls back to GOOGLE_API_KEY env var) */
+  /** Google API key */
   apiKey?: string;
   /** Model to use for the Live API */
   model?: GeminiVoiceModel;
@@ -95,6 +69,8 @@ export interface GeminiLiveVoiceConfig {
   vertexAI?: boolean;
   /** Google Cloud project ID (required for Vertex AI) */
   project?: string;
+  /** Token expiration time in seconds (defaults to 50 minutes) */
+  tokenExpirationTime?: number;
   /** Google Cloud region (defaults to us-central1) */
   location?: string;
   /**
@@ -281,6 +257,7 @@ export interface AuthOptions {
   scopes: string[];
   projectId?: string;
   keyFilename?: string;
+  tokenExpirationTime?: number;
   clientOptions?: {
     subject?: string;
   };
@@ -313,7 +290,11 @@ export interface UpdateMessage {
   type: string;
   session: {
     generation_config?: {
+      /** Which modalities the model should respond with for this turn */
+      response_modalities?: ('AUDIO' | 'TEXT')[];
       speech_config?: {
+        /** Optional language code for synthesized speech */
+        language_code?: string;
         voice_config?: {
           prebuilt_voice_config?: {
             voice_name: string;
