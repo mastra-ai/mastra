@@ -3126,7 +3126,112 @@ const cloneTemplateStep = createStep({
   },
 });
 
-// Step 2: Discover template units by scanning the templates directory
+// Step 2: Analyze template package.json for dependencies
+const analyzePackageStep = createStep({
+  id: 'analyze-package',
+  description: 'Analyze the template package.json to extract dependency information',
+  inputSchema: z.object({
+    templateDir: z.string(),
+    commitSha: z.string(),
+    slug: z.string(),
+  }),
+  outputSchema: z.object({
+    dependencies: z.record(z.string()).optional(),
+    devDependencies: z.record(z.string()).optional(),
+    peerDependencies: z.record(z.string()).optional(),
+    scripts: z.record(z.string()).optional(),
+    packageInfo: z.object({
+      name: z.string().optional(),
+      version: z.string().optional(),
+      description: z.string().optional(),
+    }),
+  }),
+  execute: async ({ inputData }) => {
+    console.log('Analyzing template package.json...');
+    const { templateDir } = inputData;
+    const packageJsonPath = join(templateDir, 'package.json');
+
+    try {
+      const packageJsonContent = await readFile(packageJsonPath, 'utf-8');
+      const packageJson = JSON.parse(packageJsonContent);
+
+      console.log('Template package.json:', JSON.stringify(packageJson, null, 2));
+
+      return {
+        dependencies: packageJson.dependencies || {},
+        devDependencies: packageJson.devDependencies || {},
+        peerDependencies: packageJson.peerDependencies || {},
+        scripts: packageJson.scripts || {},
+        packageInfo: {
+          name: packageJson.name,
+          version: packageJson.version,
+          description: packageJson.description,
+        },
+      };
+    } catch (error) {
+      console.warn(`Failed to read template package.json: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        dependencies: {},
+        devDependencies: {},
+        peerDependencies: {},
+        scripts: {},
+        packageInfo: {},
+      };
+    }
+  },
+});
+
+// NOTE: This is commented out code to let the agent handle package.json merging. Leaving in case we want to use it later.
+// const packageMergeStep = createStep({
+//   id: 'package-merge',
+//   description: 'Merge template package.json into target project',
+//   inputSchema: z.object({
+//     templateDir: z.string(),
+//     commitSha: z.string(),
+//     slug: z.string(),
+//   }),
+//   outputSchema: z.object({
+//     success: z.boolean(),
+//     applied: z.boolean(),
+//     branchName: z.string().optional(),
+//     error: z.string().optional(),
+//   }),
+//   execute: async ({ inputData }) => {
+//     // Handle package.json merging with agent intelligence
+//     //       const packageMergePrompt = `
+//     // Analyze the template package.json at ${templateDir}/package.json and merge any necessary dependencies into the target project's package.json at ${targetPath}/package.json.
+//     // Rules for merging:
+//     // 1. For dependencies: Use semver to resolve conflicts, prefer compatible ranges
+//     // 2. For scripts: Add new scripts with template:${slug}: prefix, don't overwrite existing ones
+//     // 3. Maintain existing package.json structure and formatting
+//     // 4. Only add dependencies that are actually needed by the template code
+//     // After updating package.json, commit with message: "feat(template): update package.json for ${slug}"
+//     // `;
+//     // await agentBuilder.generate(packageMergePrompt);
+//     // // Commit package.json changes
+//     // try {
+//     //   await exec(`git add package.json || true`, { cwd: targetPath });
+//     //   await exec(`git commit -m "feat(template): update package.json for ${slug}" || true`, { cwd: targetPath });
+//     // } catch {
+//     //   // Continue if commit fails
+//     // }
+//     // Install dependencies
+//     //       const installPrompt = `
+//     // Install the new dependencies that were added to package.json. Use the appropriate package manager (detect from lockfiles).
+//     // Run the installation command and handle any peer dependency warnings or conflicts intelligently.
+//     // `;
+//     //       await agentBuilder.generate(installPrompt);
+//     //       // Check for any additional setup commands in template
+//     //       const setupPrompt = `
+//     // Check the template directory ${templateDir} for any README.md or setup instructions.
+//     // If there are any additional setup steps mentioned (like environment variables, database setup, etc.),
+//     // provide clear instructions to the user about what needs to be done manually.
+//     // `;
+//     //       await agentBuilder.generate(setupPrompt);
+//   },
+// })
+
+// Step 3: Discover template units by scanning the templates directory
 const discoverUnitsStep = createStep({
   id: 'discover-units',
   description: 'Discover template units by analyzing the templates directory structure',
@@ -3234,12 +3339,11 @@ Return the actual exported names of the units, not just file names.`,
   },
 });
 
-// Step 3: Topological ordering (simplified)
+// Step 4: Topological ordering (simplified)
 const orderUnitsStep = createStep({
   id: 'order-units',
   description: 'Sort units in topological order based on kind weights',
   inputSchema: z.object({
-    manifest: TemplateManifestSchema,
     units: z.array(TemplateUnitSchema),
   }),
   outputSchema: z.object({
@@ -3269,11 +3373,22 @@ const intelligentMergeStep = createStep({
     commitSha: z.string(),
     slug: z.string(),
     targetPath: z.string().optional(),
+    packageInfo: z.object({
+      dependencies: z.record(z.string()).optional(),
+      devDependencies: z.record(z.string()).optional(),
+      peerDependencies: z.record(z.string()).optional(),
+      scripts: z.record(z.string()).optional(),
+      packageInfo: z.object({
+        name: z.string().optional(),
+        version: z.string().optional(),
+        description: z.string().optional(),
+      }),
+    }),
   }),
   outputSchema: ApplyResultSchema,
   execute: async ({ inputData }) => {
     console.log('Intelligent merge step input:', inputData);
-    const { orderedUnits, templateDir, commitSha, slug } = inputData;
+    const { orderedUnits, templateDir, commitSha, slug, packageInfo } = inputData;
     const targetPath = inputData.targetPath || process.cwd();
 
     try {
@@ -3308,10 +3423,17 @@ For Mastra-specific merging:
 
 CRITICAL: DO NOT merge tools into main MASTRA CONFIG
 
-Template information from Mastra API:
+Template information:
 - Slug: ${slug}
 - Units to integrate: ${orderedUnits.map(u => `${u.kind}:${u.id}`).join(', ')}
 - Template source: ${templateDir}
+
+Package Dependencies from Template:
+- Dependencies: ${JSON.stringify(packageInfo.dependencies || {}, null, 2)}
+- Dev Dependencies: ${JSON.stringify(packageInfo.devDependencies || {}, null, 2)}
+- Peer Dependencies: ${JSON.stringify(packageInfo.peerDependencies || {}, null, 2)}
+
+CRITICAL: Use the EXACT versions listed above when installing packages. These are the tested versions from the template.
 
 For conflicts, prefer additive merging and maintain existing project patterns.
 `,
@@ -3375,47 +3497,6 @@ After merging all files for this unit, commit the changes with message:
         //   console.warn(`Commit failed for unit ${unit.id}:`, commitError);
         // }
       }
-
-      // Handle package.json merging with agent intelligence
-      //       const packageMergePrompt = `
-      // Analyze the template package.json at ${templateDir}/package.json and merge any necessary dependencies into the target project's package.json at ${targetPath}/package.json.
-
-      // Rules for merging:
-      // 1. For dependencies: Use semver to resolve conflicts, prefer compatible ranges
-      // 2. For scripts: Add new scripts with template:${slug}: prefix, don't overwrite existing ones
-      // 3. Maintain existing package.json structure and formatting
-      // 4. Only add dependencies that are actually needed by the template code
-
-      // After updating package.json, commit with message: "feat(template): update package.json for ${slug}"
-      // `;
-
-      // await agentBuilder.generate(packageMergePrompt);
-
-      // // Commit package.json changes
-      // try {
-      //   await exec(`git add package.json || true`, { cwd: targetPath });
-      //   await exec(`git commit -m "feat(template): update package.json for ${slug}" || true`, { cwd: targetPath });
-      // } catch {
-      //   // Continue if commit fails
-      // }
-
-      // Install dependencies
-      //       const installPrompt = `
-      // Install the new dependencies that were added to package.json. Use the appropriate package manager (detect from lockfiles).
-      // Run the installation command and handle any peer dependency warnings or conflicts intelligently.
-      // `;
-
-      //       await agentBuilder.generate(installPrompt);
-
-      //       // Check for any additional setup commands in template
-      //       const setupPrompt = `
-      // Check the template directory ${templateDir} for any README.md or setup instructions.
-      // If there are any additional setup steps mentioned (like environment variables, database setup, etc.),
-      // provide clear instructions to the user about what needs to be done manually.
-      // `;
-
-      //       await agentBuilder.generate(setupPrompt);
-
       return {
         success: true,
         applied: true,
@@ -3443,13 +3524,18 @@ export const mergeTemplateWorkflow = createWorkflow({
     'Merges a Mastra template repository into the current project using intelligent AgentBuilder-powered merging',
   inputSchema: MergeInputSchema,
   outputSchema: ApplyResultSchema,
-  steps: [cloneTemplateStep, discoverUnitsStep, orderUnitsStep, intelligentMergeStep],
+  steps: [cloneTemplateStep, analyzePackageStep, discoverUnitsStep, orderUnitsStep, intelligentMergeStep],
 })
   .then(cloneTemplateStep)
-  .then(discoverUnitsStep)
+  .parallel([analyzePackageStep, discoverUnitsStep])
+  .map(async ({ getStepResult }) => {
+    const discoverResult = getStepResult(discoverUnitsStep);
+    return discoverResult;
+  })
   .then(orderUnitsStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
+    const packageResult = getStepResult(analyzePackageStep);
     const orderResult = getStepResult(orderUnitsStep);
     const initData = getInitData();
 
@@ -3459,6 +3545,7 @@ export const mergeTemplateWorkflow = createWorkflow({
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
       targetPath: initData.targetPath,
+      packageInfo: packageResult,
     };
   })
   .then(intelligentMergeStep)
