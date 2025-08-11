@@ -1,4 +1,5 @@
 import * as p from '@clack/prompts';
+import { DepsService } from '../../services/service.deps';
 import { toCamelCase } from '../../utils/string';
 import { AVAILABLE_SCORERS } from './available-scorers';
 import { writeScorer } from './file-utils';
@@ -30,6 +31,13 @@ export async function selectScorer(): Promise<ScorerTemplate | null> {
 }
 
 export const addNewScorer = async (scorerId?: string) => {
+  const depServce = new DepsService();
+  const needsEvals = (await depServce.checkDependencies(['@mastra/evals'])) !== `ok`;
+
+  if (needsEvals) {
+    await depServce.installPackages(['@mastra/evals']);
+  }
+
   if (!scorerId) {
     let selectedScorer = await selectScorer();
     if (!selectedScorer) {
