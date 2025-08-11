@@ -23,6 +23,8 @@ export interface AgentBuilderConfig {
   projectPath: string;
   /** Summary model */
   summaryModel?: MastraLanguageModel;
+  /** Mode */
+  mode?: 'template' | 'code-editor';
 }
 
 /**
@@ -53,4 +55,4 @@ export type PackageManager = 'npm' | 'pnpm' | 'yarn';
 /**
  * Validation types for code validation
  */
-export type ValidationType = 'types' | 'schemas' | 'tests' | 'integration'; 
+export type ValidationType = 'types' | 'schemas' | 'tests' | 'integration';

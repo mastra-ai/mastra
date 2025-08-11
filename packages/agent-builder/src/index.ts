@@ -19,6 +19,7 @@ import { WriteToDiskProcessor } from './processors/write-file';
 import type { AgentBuilderConfig, GenerateAgentOptions } from './types';
 import { spawn as nodeSpawn } from 'child_process';
 import { createRequire } from 'module';
+import { existsSync } from 'fs';
 
 const exec = promisify(execNodejs);
 
@@ -465,7 +466,7 @@ export const tools = await mcpClient.getTools();
     lastMessages: 20,
   };
 
-  static DEFAULT_TOOLS = async (projectPath?: string) => {
+  static DEFAULT_TOOLS = async (projectPath?: string, mode: 'template' | 'code-editor' = 'code-editor') => {
     const mcpClient = new MCPClient({
       id: 'agent-builder-mcp-client',
       servers: {
@@ -489,8 +490,9 @@ export const tools = await mcpClient.getTools();
       }
     });
 
-    return {
+    const agentBuilderTools = {
       ...filteredTools,
+
       readFile: createTool({
         id: 'read-file',
         description: 'Read contents of a file with optional line range selection.',
@@ -601,42 +603,6 @@ export const tools = await mcpClient.getTools();
           });
         },
       }),
-
-      // Web Search (replaces MCP web search)
-      webSearch: createTool({
-        id: 'web-search',
-        description: 'Search the web for current information and return structured results.',
-        inputSchema: z.object({
-          query: z.string().describe('Search query'),
-          maxResults: z.number().default(10).describe('Maximum number of results to return'),
-          region: z.string().default('us').describe('Search region/country code'),
-          language: z.string().default('en').describe('Search language'),
-          includeImages: z.boolean().default(false).describe('Include image results'),
-          dateRange: z.enum(['day', 'week', 'month', 'year', 'all']).default('all').describe('Date range filter'),
-        }),
-        outputSchema: z.object({
-          success: z.boolean(),
-          query: z.string(),
-          results: z.array(
-            z.object({
-              title: z.string(),
-              url: z.string(),
-              snippet: z.string(),
-              domain: z.string(),
-              publishDate: z.string().optional(),
-              relevanceScore: z.number().optional(),
-            }),
-          ),
-          totalResults: z.number(),
-          searchTime: z.number(),
-          suggestions: z.array(z.string()).optional(),
-          error: z.string().optional(),
-        }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.webSearch(context);
-        },
-      }),
-
       // Enhanced Task Management (Critical for complex coding tasks)
       taskManager: createTool({
         id: 'task-manager',
@@ -648,7 +614,7 @@ export const tools = await mcpClient.getTools();
             .array(
               z.object({
                 id: z.string().describe('Unique task identifier'),
-                content: z.string().describe('Task description'),
+                content: z.string().describe('Task description, optional if just updating the status').optional(),
                 status: z.enum(['pending', 'in_progress', 'completed', 'blocked']).describe('Task status'),
                 priority: z.enum(['high', 'medium', 'low']).default('medium').describe('Task priority'),
                 dependencies: z.array(z.string()).optional().describe('IDs of tasks this depends on'),
@@ -677,68 +643,6 @@ export const tools = await mcpClient.getTools();
         }),
         execute: async ({ context }) => {
           return await AgentBuilderDefaults.manageTaskList(context);
-        },
-      }),
-
-      // Enhanced Code Discovery
-      codeAnalyzer: createTool({
-        id: 'code-analyzer',
-        description: 'Analyze codebase structure, discover definitions, and understand architecture patterns.',
-        inputSchema: z.object({
-          action: z
-            .enum(['definitions', 'dependencies', 'patterns', 'structure'])
-            .describe('Type of analysis to perform'),
-          path: z.string().describe('Directory or file path to analyze'),
-          language: z.string().optional().describe('Programming language filter'),
-          depth: z.number().default(3).describe('Directory traversal depth'),
-          includeTests: z.boolean().default(false).describe('Include test files in analysis'),
-        }),
-        outputSchema: z.object({
-          success: z.boolean(),
-          analysis: z.object({
-            definitions: z
-              .array(
-                z.object({
-                  name: z.string(),
-                  type: z.string(),
-                  file: z.string(),
-                  line: z.number().optional(),
-                  scope: z.string().optional(),
-                }),
-              )
-              .optional(),
-            dependencies: z
-              .array(
-                z.object({
-                  name: z.string(),
-                  type: z.enum(['import', 'require', 'include']),
-                  source: z.string(),
-                  target: z.string(),
-                }),
-              )
-              .optional(),
-            patterns: z
-              .array(
-                z.object({
-                  pattern: z.string(),
-                  description: z.string(),
-                  files: z.array(z.string()),
-                }),
-              )
-              .optional(),
-            structure: z
-              .object({
-                directories: z.number(),
-                files: z.number(),
-                languages: z.record(z.number()),
-                complexity: z.string(),
-              })
-              .optional(),
-          }),
-          message: z.string(),
-        }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.analyzeCode(context);
         },
       }),
 
@@ -819,41 +723,6 @@ export const tools = await mcpClient.getTools();
         },
       }),
 
-      // Task Completion Signaling
-      attemptCompletion: createTool({
-        id: 'attempt-completion',
-        description: 'Signal that you believe the requested task has been completed and provide a summary.',
-        inputSchema: z.object({
-          summary: z.string().describe('Summary of what was accomplished'),
-          changes: z
-            .array(
-              z.object({
-                type: z.enum(['file_created', 'file_modified', 'file_deleted', 'command_executed', 'dependency_added']),
-                description: z.string(),
-                path: z.string().optional(),
-              }),
-            )
-            .describe('List of changes made'),
-          validation: z
-            .object({
-              testsRun: z.boolean().default(false),
-              buildsSuccessfully: z.boolean().default(false),
-              manualTestingRequired: z.boolean().default(false),
-            })
-            .describe('Validation status'),
-          nextSteps: z.array(z.string()).optional().describe('Suggested next steps or follow-up actions'),
-        }),
-        outputSchema: z.object({
-          completionId: z.string(),
-          status: z.enum(['completed', 'needs_review', 'needs_testing']),
-          summary: z.string(),
-          confidence: z.number().min(0).max(100),
-        }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.signalCompletion(context);
-        },
-      }),
-
       // Enhanced Pattern Search
       smartSearch: createTool({
         id: 'smart-search',
@@ -903,84 +772,6 @@ export const tools = await mcpClient.getTools();
         },
       }),
 
-      manageProject: createTool({
-        id: 'manage-project',
-        description:
-          'Handles project management including creating project structures, managing dependencies, and package operations.',
-        inputSchema: z.object({
-          action: z.enum(['create', 'install', 'upgrade', 'check']).describe('The action to perform'),
-          features: z
-            .array(z.string())
-            .optional()
-            .describe('Mastra features to include (e.g., ["agents", "memory", "workflows"])'),
-          packages: z
-            .array(
-              z.object({
-                name: z.string(),
-                version: z.string().optional(),
-              }),
-            )
-            .optional()
-            .describe('Packages to install/upgrade'),
-        }),
-        outputSchema: z.object({
-          success: z.boolean(),
-          installed: z.array(z.string()).optional(),
-          upgraded: z.array(z.string()).optional(),
-          warnings: z.array(z.string()).optional(),
-          message: z.string().optional(),
-          details: z.string().optional(),
-          error: z.string().optional(),
-        }),
-        execute: async ({ context }) => {
-          const { action, features, packages } = context;
-          try {
-            switch (action) {
-              case 'create':
-                return await AgentBuilderDefaults.createMastraProject({
-                  projectName: projectPath,
-                  features,
-                });
-              case 'install':
-                if (!packages?.length) {
-                  return {
-                    success: false,
-                    message: 'Packages array is required for install action',
-                  };
-                }
-                return await AgentBuilderDefaults.installPackages({
-                  packages,
-                  projectPath,
-                });
-              case 'upgrade':
-                if (!packages?.length) {
-                  return {
-                    success: false,
-                    message: 'Packages array is required for upgrade action',
-                  };
-                }
-                return await AgentBuilderDefaults.upgradePackages({
-                  packages,
-                  projectPath,
-                });
-              case 'check':
-                return await AgentBuilderDefaults.checkProject({
-                  projectPath,
-                });
-              default:
-                return {
-                  success: false,
-                  message: `Unknown action: ${action}`,
-                };
-            }
-          } catch (error) {
-            return {
-              success: false,
-              message: `Error executing ${action}: ${error instanceof Error ? error.message : String(error)}`,
-            };
-          }
-        },
-      }),
       validateCode: createTool({
         id: 'validate-code',
         description:
@@ -1025,132 +816,357 @@ export const tools = await mcpClient.getTools();
           });
         },
       }),
-      manageServer: createTool({
-        id: 'manage-server',
-        description:
-          'Manages the Mastra server - start, stop, restart, and check status, use the terminal tool to make curl requests to the server. There is an openapi spec for the server at http://localhost:{port}/openapi.json',
-        inputSchema: z.object({
-          action: z.enum(['start', 'stop', 'restart', 'status']).describe('Server management action'),
-          port: z.number().optional().default(4200).describe('Port to run the server on'),
+    };
+
+    if (mode === 'template') {
+      return agentBuilderTools;
+    } else {
+      return {
+        ...agentBuilderTools,
+
+        // Web Search (replaces MCP web search)
+        webSearch: createTool({
+          id: 'web-search',
+          description: 'Search the web for current information and return structured results.',
+          inputSchema: z.object({
+            query: z.string().describe('Search query'),
+            maxResults: z.number().default(10).describe('Maximum number of results to return'),
+            region: z.string().default('us').describe('Search region/country code'),
+            language: z.string().default('en').describe('Search language'),
+            includeImages: z.boolean().default(false).describe('Include image results'),
+            dateRange: z.enum(['day', 'week', 'month', 'year', 'all']).default('all').describe('Date range filter'),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            query: z.string(),
+            results: z.array(
+              z.object({
+                title: z.string(),
+                url: z.string(),
+                snippet: z.string(),
+                domain: z.string(),
+                publishDate: z.string().optional(),
+                relevanceScore: z.number().optional(),
+              }),
+            ),
+            totalResults: z.number(),
+            searchTime: z.number(),
+            suggestions: z.array(z.string()).optional(),
+            error: z.string().optional(),
+          }),
+          execute: async ({ context }) => {
+            return await AgentBuilderDefaults.webSearch(context);
+          },
         }),
-        outputSchema: z.object({
-          success: z.boolean(),
-          status: z.enum(['running', 'stopped', 'starting', 'stopping', 'unknown']),
-          pid: z.number().optional(),
-          port: z.number().optional(),
-          url: z.string().optional(),
-          message: z.string().optional(),
-          stdout: z.array(z.string()).optional().describe('Server output lines captured during startup'),
-          error: z.string().optional(),
+
+        // Enhanced Code Discovery
+        codeAnalyzer: createTool({
+          id: 'code-analyzer',
+          description: 'Analyze codebase structure, discover definitions, and understand architecture patterns.',
+          inputSchema: z.object({
+            action: z
+              .enum(['definitions', 'dependencies', 'patterns', 'structure'])
+              .describe('Type of analysis to perform'),
+            path: z.string().describe('Directory or file path to analyze'),
+            language: z.string().optional().describe('Programming language filter'),
+            depth: z.number().default(3).describe('Directory traversal depth'),
+            includeTests: z.boolean().default(false).describe('Include test files in analysis'),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            analysis: z.object({
+              definitions: z
+                .array(
+                  z.object({
+                    name: z.string(),
+                    type: z.string(),
+                    file: z.string(),
+                    line: z.number().optional(),
+                    scope: z.string().optional(),
+                  }),
+                )
+                .optional(),
+              dependencies: z
+                .array(
+                  z.object({
+                    name: z.string(),
+                    type: z.enum(['import', 'require', 'include']),
+                    source: z.string(),
+                    target: z.string(),
+                  }),
+                )
+                .optional(),
+              patterns: z
+                .array(
+                  z.object({
+                    pattern: z.string(),
+                    description: z.string(),
+                    files: z.array(z.string()),
+                  }),
+                )
+                .optional(),
+              structure: z
+                .object({
+                  directories: z.number(),
+                  files: z.number(),
+                  languages: z.record(z.number()),
+                  complexity: z.string(),
+                })
+                .optional(),
+            }),
+            message: z.string(),
+          }),
+          execute: async ({ context }) => {
+            return await AgentBuilderDefaults.analyzeCode(context);
+          },
         }),
-        execute: async ({ context }) => {
-          const { action, port } = context;
-          try {
-            switch (action) {
-              case 'start':
-                return await AgentBuilderDefaults.startMastraServer({
-                  port,
-                  projectPath,
-                });
-              case 'stop':
-                return await AgentBuilderDefaults.stopMastraServer({
-                  port,
-                  projectPath,
-                });
-              case 'restart':
-                const stopResult = await AgentBuilderDefaults.stopMastraServer({
-                  port,
-                  projectPath,
-                });
-                if (!stopResult.success) {
+
+        // Task Completion Signaling
+        attemptCompletion: createTool({
+          id: 'attempt-completion',
+          description: 'Signal that you believe the requested task has been completed and provide a summary.',
+          inputSchema: z.object({
+            summary: z.string().describe('Summary of what was accomplished'),
+            changes: z
+              .array(
+                z.object({
+                  type: z.enum([
+                    'file_created',
+                    'file_modified',
+                    'file_deleted',
+                    'command_executed',
+                    'dependency_added',
+                  ]),
+                  description: z.string(),
+                  path: z.string().optional(),
+                }),
+              )
+              .describe('List of changes made'),
+            validation: z
+              .object({
+                testsRun: z.boolean().default(false),
+                buildsSuccessfully: z.boolean().default(false),
+                manualTestingRequired: z.boolean().default(false),
+              })
+              .describe('Validation status'),
+            nextSteps: z.array(z.string()).optional().describe('Suggested next steps or follow-up actions'),
+          }),
+          outputSchema: z.object({
+            completionId: z.string(),
+            status: z.enum(['completed', 'needs_review', 'needs_testing']),
+            summary: z.string(),
+            confidence: z.number().min(0).max(100),
+          }),
+          execute: async ({ context }) => {
+            return await AgentBuilderDefaults.signalCompletion(context);
+          },
+        }),
+
+        manageProject: createTool({
+          id: 'manage-project',
+          description:
+            'Handles project management including creating project structures, managing dependencies, and package operations.',
+          inputSchema: z.object({
+            action: z.enum(['create', 'install', 'upgrade']).describe('The action to perform'),
+            features: z
+              .array(z.string())
+              .optional()
+              .describe('Mastra features to include (e.g., ["agents", "memory", "workflows"])'),
+            packages: z
+              .array(
+                z.object({
+                  name: z.string(),
+                  version: z.string().optional(),
+                }),
+              )
+              .optional()
+              .describe('Packages to install/upgrade'),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            installed: z.array(z.string()).optional(),
+            upgraded: z.array(z.string()).optional(),
+            warnings: z.array(z.string()).optional(),
+            message: z.string().optional(),
+            details: z.string().optional(),
+            error: z.string().optional(),
+          }),
+          execute: async ({ context }) => {
+            const { action, features, packages } = context;
+            try {
+              switch (action) {
+                case 'create':
+                  return await AgentBuilderDefaults.createMastraProject({
+                    projectName: projectPath,
+                    features,
+                  });
+                case 'install':
+                  if (!packages?.length) {
+                    return {
+                      success: false,
+                      message: 'Packages array is required for install action',
+                    };
+                  }
+                  return await AgentBuilderDefaults.installPackages({
+                    packages,
+                    projectPath,
+                  });
+                case 'upgrade':
+                  if (!packages?.length) {
+                    return {
+                      success: false,
+                      message: 'Packages array is required for upgrade action',
+                    };
+                  }
+                  return await AgentBuilderDefaults.upgradePackages({
+                    packages,
+                    projectPath,
+                  });
+                // case 'check':
+                //   return await AgentBuilderDefaults.checkProject({
+                //     projectPath,
+                //   });
+                default:
+                  return {
+                    success: false,
+                    message: `Unknown action: ${action}`,
+                  };
+              }
+            } catch (error) {
+              return {
+                success: false,
+                message: `Error executing ${action}: ${error instanceof Error ? error.message : String(error)}`,
+              };
+            }
+          },
+        }),
+        manageServer: createTool({
+          id: 'manage-server',
+          description:
+            'Manages the Mastra server - start, stop, restart, and check status, use the terminal tool to make curl requests to the server. There is an openapi spec for the server at http://localhost:{port}/openapi.json',
+          inputSchema: z.object({
+            action: z.enum(['start', 'stop', 'restart', 'status']).describe('Server management action'),
+            port: z.number().optional().default(4200).describe('Port to run the server on'),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            status: z.enum(['running', 'stopped', 'starting', 'stopping', 'unknown']),
+            pid: z.number().optional(),
+            port: z.number().optional(),
+            url: z.string().optional(),
+            message: z.string().optional(),
+            stdout: z.array(z.string()).optional().describe('Server output lines captured during startup'),
+            error: z.string().optional(),
+          }),
+          execute: async ({ context }) => {
+            const { action, port } = context;
+            try {
+              switch (action) {
+                case 'start':
+                  return await AgentBuilderDefaults.startMastraServer({
+                    port,
+                    projectPath,
+                  });
+                case 'stop':
+                  return await AgentBuilderDefaults.stopMastraServer({
+                    port,
+                    projectPath,
+                  });
+                case 'restart':
+                  const stopResult = await AgentBuilderDefaults.stopMastraServer({
+                    port,
+                    projectPath,
+                  });
+                  if (!stopResult.success) {
+                    return {
+                      success: false,
+                      status: 'unknown' as const,
+                      message: `Failed to restart: could not stop server on port ${port}`,
+                      error: stopResult.error || 'Unknown stop error',
+                    };
+                  }
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                  const startResult = await AgentBuilderDefaults.startMastraServer({
+                    port,
+                    projectPath,
+                  });
+                  if (!startResult.success) {
+                    return {
+                      success: false,
+                      status: 'stopped' as const,
+                      message: `Failed to restart: server stopped successfully but failed to start on port ${port}`,
+                      error: startResult.error || 'Unknown start error',
+                    };
+                  }
+                  return {
+                    ...startResult,
+                    message: `Mastra server restarted successfully on port ${port}`,
+                  };
+                case 'status':
+                  return await AgentBuilderDefaults.checkMastraServerStatus({
+                    port,
+                    projectPath,
+                  });
+                default:
                   return {
                     success: false,
                     status: 'unknown' as const,
-                    message: `Failed to restart: could not stop server on port ${port}`,
-                    error: stopResult.error || 'Unknown stop error',
+                    message: `Unknown action: ${action}`,
                   };
-                }
-                await new Promise(resolve => setTimeout(resolve, 500));
-                const startResult = await AgentBuilderDefaults.startMastraServer({
-                  port,
-                  projectPath,
-                });
-                if (!startResult.success) {
-                  return {
-                    success: false,
-                    status: 'stopped' as const,
-                    message: `Failed to restart: server stopped successfully but failed to start on port ${port}`,
-                    error: startResult.error || 'Unknown start error',
-                  };
-                }
-                return {
-                  ...startResult,
-                  message: `Mastra server restarted successfully on port ${port}`,
-                };
-              case 'status':
-                return await AgentBuilderDefaults.checkMastraServerStatus({
-                  port,
-                  projectPath,
-                });
-              default:
-                return {
-                  success: false,
-                  status: 'unknown' as const,
-                  message: `Unknown action: ${action}`,
-                };
+              }
+            } catch (error) {
+              return {
+                success: false,
+                status: 'unknown' as const,
+                message: `Error managing server: ${error instanceof Error ? error.message : String(error)}`,
+              };
             }
-          } catch (error) {
-            return {
-              success: false,
-              status: 'unknown' as const,
-              message: `Error managing server: ${error instanceof Error ? error.message : String(error)}`,
-            };
-          }
-        },
-      }),
-      httpRequest: createTool({
-        id: 'http-request',
-        description: 'Makes HTTP requests to the Mastra server or external APIs for testing and integration',
-        inputSchema: z.object({
-          method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).describe('HTTP method'),
-          url: z.string().describe('Full URL or path (if baseUrl provided)'),
-          baseUrl: z.string().optional().describe('Base URL for the server (e.g., http://localhost:4200)'),
-          headers: z.record(z.string()).optional().describe('HTTP headers'),
-          body: z.any().optional().describe('Request body (will be JSON stringified if object)'),
-          timeout: z.number().optional().default(30000).describe('Request timeout in milliseconds'),
+          },
         }),
-        outputSchema: z.object({
-          success: z.boolean(),
-          status: z.number().optional(),
-          statusText: z.string().optional(),
-          headers: z.record(z.string()).optional(),
-          data: z.any().optional(),
-          error: z.string().optional(),
-          url: z.string(),
-          method: z.string(),
+        httpRequest: createTool({
+          id: 'http-request',
+          description: 'Makes HTTP requests to the Mastra server or external APIs for testing and integration',
+          inputSchema: z.object({
+            method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).describe('HTTP method'),
+            url: z.string().describe('Full URL or path (if baseUrl provided)'),
+            baseUrl: z.string().optional().describe('Base URL for the server (e.g., http://localhost:4200)'),
+            headers: z.record(z.string()).optional().describe('HTTP headers'),
+            body: z.any().optional().describe('Request body (will be JSON stringified if object)'),
+            timeout: z.number().optional().default(30000).describe('Request timeout in milliseconds'),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            status: z.number().optional(),
+            statusText: z.string().optional(),
+            headers: z.record(z.string()).optional(),
+            data: z.any().optional(),
+            error: z.string().optional(),
+            url: z.string(),
+            method: z.string(),
+          }),
+          execute: async ({ context }) => {
+            const { method, url, baseUrl, headers, body, timeout } = context;
+            try {
+              return await AgentBuilderDefaults.makeHttpRequest({
+                method,
+                url,
+                baseUrl,
+                headers,
+                body,
+                timeout,
+              });
+            } catch (error) {
+              return {
+                success: false,
+                url: baseUrl ? `${baseUrl}${url}` : url,
+                method,
+                error: error instanceof Error ? error.message : String(error),
+              };
+            }
+          },
         }),
-        execute: async ({ context }) => {
-          const { method, url, baseUrl, headers, body, timeout } = context;
-          try {
-            return await AgentBuilderDefaults.makeHttpRequest({
-              method,
-              url,
-              baseUrl,
-              headers,
-              body,
-              timeout,
-            });
-          } catch (error) {
-            return {
-              success: false,
-              url: baseUrl ? `${baseUrl}${url}` : url,
-              method,
-              error: error instanceof Error ? error.message : String(error),
-            };
-          }
-        },
-      }),
-    };
+      };
+    }
   };
 
   /**
@@ -1247,54 +1263,54 @@ export const tools = await mcpClient.getTools();
     }
   }
 
-  /**
-   * Check project health and status
-   */
-  static async checkProject({ projectPath }: { projectPath?: string }) {
-    try {
-      const execOptions = projectPath ? { cwd: projectPath } : {};
+  // /**
+  //  * Check project health and status
+  //  */
+  // static async checkProject({ projectPath }: { projectPath?: string }) {
+  //   try {
+  //     const execOptions = projectPath ? { cwd: projectPath } : {};
 
-      let hasPackageJson = false;
-      let hasMastraConfig = false;
+  //     let hasPackageJson = false;
+  //     let hasMastraConfig = false;
 
-      try {
-        await exec('test -f package.json', execOptions);
-        hasPackageJson = true;
-      } catch {
-        // ignore
-      }
+  //     try {
+  //       await exec('test -f package.json', execOptions);
+  //       hasPackageJson = true;
+  //     } catch {
+  //       // ignore
+  //     }
 
-      try {
-        await exec('test -f mastra.config.* || test -d src/mastra || test -d mastra', execOptions);
-        hasMastraConfig = true;
-      } catch {
-        // ignore
-      }
+  //     try {
+  //       await exec('test -f mastra.config.* || test -d src/mastra || test -d mastra', execOptions);
+  //       hasMastraConfig = true;
+  //     } catch {
+  //       // ignore
+  //     }
 
-      const warnings: string[] = [];
-      if (!hasPackageJson) {
-        warnings.push('No package.json found - this may not be a Node.js project');
-      }
-      if (!hasMastraConfig) {
-        warnings.push('No Mastra configuration found - run "npx create-mastra" to initialize');
-      }
+  //     const warnings: string[] = [];
+  //     if (!hasPackageJson) {
+  //       warnings.push('No package.json found - this may not be a Node.js project');
+  //     }
+  //     if (!hasMastraConfig) {
+  //       warnings.push('No Mastra configuration found - run "npx create-mastra" to initialize');
+  //     }
 
-      return {
-        success: true,
-        message: `Project health check completed for ${projectPath || 'current directory'}`,
-        warnings,
-        checks: {
-          hasPackageJson,
-          hasMastraConfig,
-        },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to check project: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  }
+  //     return {
+  //       success: true,
+  //       message: `Project health check completed for ${projectPath || 'current directory'}`,
+  //       warnings,
+  //       checks: {
+  //         hasPackageJson,
+  //         hasMastraConfig,
+  //       },
+  //     };
+  //   } catch (error) {
+  //     return {
+  //       success: false,
+  //       message: `Failed to check project: ${error instanceof Error ? error.message : String(error)}`,
+  //     };
+  //   }
+  // }
 
   /**
    * Start the Mastra server
@@ -1803,7 +1819,7 @@ export const tools = await mcpClient.getTools();
     action: 'create' | 'update' | 'list' | 'complete' | 'remove';
     tasks?: Array<{
       id: string;
-      content: string;
+      content?: string;
       status: 'pending' | 'in_progress' | 'completed' | 'blocked';
       priority: 'high' | 'medium' | 'low';
       dependencies?: string[];
@@ -3395,6 +3411,9 @@ const intelligentMergeStep = createStep({
             const { sourcePath, destinationPath } = context;
             const resolvedSourcePath = resolve(templateDir, sourcePath);
             const resolvedDestinationPath = resolve(targetPath, destinationPath);
+            if (existsSync(resolvedSourcePath) && !existsSync(dirname(resolvedDestinationPath))) {
+              await mkdir(dirname(resolvedDestinationPath), { recursive: true });
+            }
             await copyFile(resolvedSourcePath, resolvedDestinationPath);
             return {
               success: true,
@@ -3413,6 +3432,7 @@ const intelligentMergeStep = createStep({
       const agentBuilder = new AgentBuilder({
         projectPath: targetPath,
         model: openai('gpt-4o-mini'),
+        mode: 'template',
         instructions: `
 You are an expert at merging Mastra template repositories into existing projects. Your task is to intelligently integrate template code from the official Mastra templates (https://mastra.ai/api/templates.json).
 
@@ -3426,7 +3446,10 @@ CRITICAL: When taking files from the template if the file does not exist in the 
 
 CRITICAL: NO need to install or update packages, as this is already handled by the package updater step.
 
-CRITICAL: When validation fails due to import issues, always check existing files and imports to ensure correct naming conventions are used for files and imports
+CRITICAL: When validation fails due to import issues, always check existing files and imports to ensure correct naming conventions are used for files and imports. A varible name might be different than the file name.
+e.g. 
+// filename: ./downloaderTool.ts
+export const fetcherTool(...)
 
 Key responsibilities:
 1. Analyze the template files and existing project structure
@@ -3463,66 +3486,84 @@ For conflicts, prefer additive merging and maintain existing project patterns.
       // Create branch
       await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
 
-      // Process each unit with the agent
-      for (const unit of orderedUnits) {
-        console.log(`Merging ${unit.kind} unit "${unit.id}" from template "${slug}"...`);
-        const mergePrompt = `
-Merge the following ${unit.kind} unit "${unit.id}" from template "${slug}":
+      // Create a task list for all units to be processed
+      const tasks = orderedUnits.map((unit, index) => ({
+        id: `unit-${unit.kind}-${unit.id}`,
+        content: `Copy and integrate the ${unit.kind} "${unit.id}" from template into target project`,
+        status: 'pending' as const,
+        priority: 'medium' as const,
+        dependencies: index > 0 ? [`unit-${orderedUnits[index - 1]?.kind}-${orderedUnits[index - 1]?.id}`] : undefined,
+        notes: `Template unit: ${unit.kind}:${unit.id} from file ${unit.file}. Follow naming conventions of target project.`,
+      }));
 
-Template directory: ${templateDir}
-Target directory: ${targetPath}
+      console.log(`Creating task list for ${orderedUnits.length} units...`);
 
-Task: Copy and integrate the ${unit.kind} "${unit.id}" from the template source into the target project.
+      await AgentBuilderDefaults.manageTaskList({ action: 'create', tasks });
 
-CRITICAL: ANALYZE TARGET PROJECT NAMING CONVENTIONS FIRST
+      // Now process all units in a single stream session
+      console.log(`Processing ${orderedUnits.length} units through task list...`);
+
+      const result = await agentBuilder.stream(`
+You need to work through a task list to integrate template units into the target project. 
+
+CRITICAL INSTRUCTIONS:
+
+**STEP 1: GET YOUR TASK LIST**
+1. Use manageTaskList tool with action "list" to see all pending tasks
+2. Work through tasks in dependency order (complete dependencies first)
+
+**STEP 2: ANALYZE TARGET PROJECT NAMING CONVENTIONS (DO THIS ONCE)**
 1. **Examine existing files** in the target project's src/mastra/ directories using listDirectory and readFile
 2. **Identify the naming pattern** used (camelCase, snake_case, kebab-case, PascalCase, etc.)
 3. **Apply the SAME naming convention** to new files and imports you create
 
-For ${unit.kind} units:
-1. Find the appropriate files in the template (e.g., src/mastra/agents/${unit.id}.ts for agents)
-2. **Analyze target project file naming** in the corresponding directory (src/mastra/agents/, src/mastra/workflows/, etc.)
-3. **Copy to the correct location** using the target project's naming convention for the **filename only**
-4. **Update import paths** to match the target project's file naming patterns:
-   - If target uses camelCase files: import { myAgent } from './myAgent'
-   - If target uses snake_case files: import { myAgent } from './my_agent'
-   - If target uses kebab-case files: import { myAgent } from './my-agent'
-5. **Keep variable/export names unchanged** - only adapt file names and import paths
-6. Ensure the merged code follows TypeScript best practices
-${
-  unit.kind === 'tool'
-    ? '7. Copy tools to src/mastra/tools/ but DO NOT register them in the main Mastra config'
-    : '7. Update the main Mastra configuration to register this ' + unit.kind + ' using the correct naming convention'
-}
+**STEP 3: PROCESS EACH TASK SYSTEMATICALLY**
+For each task:
+1. Use manageTaskList to mark the current task as 'in_progress'
+2. Complete the task according to the requirements below
+3. Use manageTaskList to mark the task as 'completed' when done
+4. Continue until all tasks are completed
 
-EXAMPLES OF NAMING CONVENTION DETECTION:
-- If you see files like "weatherAgent.ts", "chatAgent.ts" → use camelCase
-- If you see files like "weather_agent.ts", "chat_agent.ts" → use snake_case  
-- If you see files like "weather-agent.ts", "chat-agent.ts" → use kebab-case
-- If you see files like "WeatherAgent.ts", "ChatAgent.ts" → use PascalCase
+**TASK PROCESSING REQUIREMENTS:**
+For each unit (${orderedUnits.map(u => `${u.kind}:${u.id}`).join(', ')}):
 
-After merging all files for this unit, commit the changes with message:
-"feat(template): add ${unit.kind} ${unit.id} (${slug}@${commitSha.substring(0, 7)})"
-`;
+1. **Find template files**: Look for the unit in template directory structure
+2. **Analyze target naming**: Check target project file naming in corresponding directory  
+3. **Copy with naming convention**: Use copyFile tool to copy files with correct naming
+4. **Update import paths**: Match target project's file naming patterns:
+   - camelCase files: import { myAgent } from './myAgent'
+   - snake_case files: import { myAgent } from './my_agent'
+   - kebab-case files: import { myAgent } from './my-agent'
+   - PascalCase files: import { MyAgent } from './MyAgent'
+5. **Keep variable names**: Only adapt file names and import paths, not export names
+6. **Register components**: Update main Mastra config (except for tools - don't register tools)
+7. **Commit changes**: After each unit with message: "feat(template): add {kind} {id} (${slug}@${commitSha.substring(0, 7)})"
 
-        // Use the agent to handle the merging
-        const result = await agentBuilder.stream(mergePrompt);
+**EXAMPLES OF NAMING DETECTION:**
+- Files like "weatherAgent.ts", "chatAgent.ts" → use camelCase
+- Files like "weather_agent.ts", "chat_agent.ts" → use snake_case  
+- Files like "weather-agent.ts", "chat-agent.ts" → use kebab-case
+- Files like "WeatherAgent.ts", "ChatAgent.ts" → use PascalCase
 
-        // let buffer = []
+**CRITICAL NOTES:**
+- Template source: ${templateDir}
+- Target project: ${targetPath}
+- NO need to install packages (already handled by package merge step)
+- When files don't exist in target, always use copyFile tool to copy from template
+- Validate imports and naming after each unit
+- Use executeCommand for git commits after each unit
 
-        for await (const chunk of result.fullStream) {
-          if (
-            chunk.type === 'text-delta' ||
-            chunk.type === 'reasoning' ||
-            chunk.type === 'tool-result' ||
-            chunk.type === 'tool-call'
-          ) {
-            // buffer.push(chunk.textDelta);
-            console.log(JSON.stringify(chunk, null, 2));
-            // if (buffer.length > 20) {
-            //   console.log(buffer.join(''));
-            //   buffer = [];
-          }
+Start by listing your tasks and work through them systematically!
+`);
+
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+          console.log({
+            type: chunk.type,
+            msgId: chunk.messageId,
+          });
+        } else {
+          console.log(JSON.stringify(chunk, null, 2));
         }
       }
       return {
@@ -3643,6 +3684,152 @@ After merging all files for this unit, commit the changes with message:
 //   },
 // });
 
+// Step 6: Validation and Fix Step - validates merged code and fixes any issues
+const validationAndFixStep = createStep({
+  id: 'validation-and-fix',
+  description: 'Validate the merged template code and fix any validation errors using a specialized agent',
+  inputSchema: z.object({
+    commitSha: z.string(),
+    slug: z.string(),
+    targetPath: z.string().optional(),
+    orderedUnits: z.array(
+      z.object({
+        kind: z.string(),
+        id: z.string(),
+        file: z.string(),
+      }),
+    ),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    applied: z.boolean(),
+    message: z.string(),
+    validationResults: z.object({
+      valid: z.boolean(),
+      errorsFixed: z.number(),
+      remainingErrors: z.number(),
+    }),
+    error: z.string().optional(),
+  }),
+  execute: async ({ inputData }) => {
+    console.log('Validation and fix step starting...');
+    const { commitSha, slug, orderedUnits } = inputData;
+    const targetPath = inputData.targetPath || process.cwd();
+
+    try {
+      const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath, 'template');
+
+      const validationAgent = new Agent({
+        name: 'code-validator-fixer',
+        description: 'Specialized agent for validating and fixing template integration issues',
+        instructions: `You are a code validation and fixing specialist. Your job is to:
+
+1. **Run comprehensive validation** using the validateCode tool to check for:
+   - TypeScript compilation errors
+   - ESLint issues
+   - Import/export problems
+   - Missing dependencies
+
+2. **Fix validation errors systematically**:
+   - Use readFile to examine files with errors
+   - Use writeFile to fix issues like missing imports, incorrect paths, syntax errors
+   - Use listDirectory to understand project structure when fixing import paths
+   - Update file contents to resolve TypeScript and linting issues
+
+3. **Re-validate after fixes** to ensure all issues are resolved
+
+4. **Focus on common template integration issues**:
+   - Missing imports in index files
+   - Incorrect file paths in imports
+   - Type mismatches after integration
+   - Missing exports in barrel files
+
+CRITICAL: Always validate the entire project first to get a complete picture of issues, then fix them systematically, and re-validate to confirm fixes worked.
+
+Here are the list of units that were integrated:
+${JSON.stringify(orderedUnits, null, 2)}
+
+Be thorough and methodical. Fix one category of errors at a time (imports, then types, then linting).`,
+        model: openai('gpt-4o-mini'),
+        tools: {
+          validateCode: allTools.validateCode,
+          readFile: allTools.readFile,
+          writeFile: allTools.writeFile,
+          listDirectory: allTools.listDirectory,
+          executeCommand: allTools.executeCommand,
+        },
+      });
+
+      console.log('Starting validation and fix agent...');
+
+      const result = await validationAgent.stream(
+        `Please validate the template integration and fix any errors found in the project at ${targetPath}. The template "${slug}" (${commitSha.substring(0, 7)}) was just integrated and may have validation issues that need fixing.
+
+Start by running validateCode with all validation types to get a complete picture of any issues, then systematically fix them.`,
+      );
+
+      let validationResults = {
+        valid: false,
+        errorsFixed: 0,
+        remainingErrors: 0,
+      };
+
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+          console.log({
+            type: chunk.type,
+            msgId: chunk.messageId,
+          });
+        } else {
+          console.log(JSON.stringify(chunk, null, 2));
+        }
+        if (chunk.type === 'tool-result') {
+          // Track validation results
+          if (chunk.toolName === 'validateCode') {
+            const toolResult = chunk.result as any;
+            if (toolResult?.summary) {
+              validationResults.remainingErrors = toolResult.summary.totalErrors || 0;
+              validationResults.valid = toolResult.valid || false;
+            }
+          }
+        }
+      }
+
+      // Commit the validation fixes
+      try {
+        await exec(
+          `git add . && git commit -m "fix(template): resolve validation errors for ${slug}@${commitSha.substring(0, 7)}" || true`,
+          {
+            cwd: targetPath,
+          },
+        );
+      } catch (commitError) {
+        console.warn('Failed to commit validation fixes:', commitError);
+      }
+
+      return {
+        success: true,
+        applied: true,
+        message: `Validation and fixes completed for ${slug}. ${validationResults.valid ? 'All issues resolved!' : `${validationResults.remainingErrors} issues remaining`}`,
+        validationResults,
+      };
+    } catch (error) {
+      console.error('Validation and fix failed:', error);
+      return {
+        success: false,
+        applied: false,
+        message: `Validation and fix failed: ${error instanceof Error ? error.message : String(error)}`,
+        validationResults: {
+          valid: false,
+          errorsFixed: 0,
+          remainingErrors: -1,
+        },
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+});
+
 // Create the complete workflow
 export const mergeTemplateWorkflow = createWorkflow({
   id: 'merge-template',
@@ -3658,6 +3845,7 @@ export const mergeTemplateWorkflow = createWorkflow({
     packageMergeStep,
     flatInstallStep,
     intelligentMergeStep,
+    validationAndFixStep,
   ],
 })
   .then(cloneTemplateStep)
@@ -3701,6 +3889,19 @@ export const mergeTemplateWorkflow = createWorkflow({
     };
   })
   .then(intelligentMergeStep)
+  .map(async ({ getStepResult, getInitData }) => {
+    const cloneResult = getStepResult(cloneTemplateStep);
+    const orderResult = getStepResult(orderUnitsStep);
+    const initData = getInitData();
+
+    return {
+      commitSha: cloneResult.commitSha,
+      slug: cloneResult.slug,
+      targetPath: initData.targetPath,
+      orderedUnits: orderResult.orderedUnits,
+    };
+  })
+  .then(validationAndFixStep)
   .commit();
 
 export class AgentBuilder extends Agent {
@@ -3720,7 +3921,10 @@ export class AgentBuilder extends Agent {
       instructions: combinedInstructions,
       model: config.model,
       tools: async () => {
-        return { ...(await AgentBuilderDefaults.DEFAULT_TOOLS(config.projectPath)), ...(config.tools || {}) };
+        return {
+          ...(await AgentBuilderDefaults.DEFAULT_TOOLS(config.projectPath, config.mode)),
+          ...(config.tools || {}),
+        };
       },
       workflows: {
         'merge-template': mergeTemplateWorkflow,
