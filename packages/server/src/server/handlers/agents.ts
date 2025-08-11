@@ -366,3 +366,28 @@ export function streamVNextGenerateHandler({
     return handleError(error, 'error streaming agent response');
   }
 }
+
+export function setAgentModelHandler({
+  mastra,
+  agentId,
+  body,
+}: Context & {
+  agentId: string;
+  body: GetBody<'__updateModel'>;
+}): { message: string } {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { model } = body;
+
+    agent.__updateModel({ model });
+
+    return { message: 'Agent model updated' };
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}

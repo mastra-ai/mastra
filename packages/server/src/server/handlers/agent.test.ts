@@ -15,6 +15,7 @@ import {
   getLiveEvalsByAgentIdHandler,
   generateHandler,
   streamGenerateHandler,
+  setAgentModelHandler,
 } from './agents';
 
 const mockEvals = [
@@ -315,6 +316,24 @@ describe('Agent Handlers', () => {
           runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Agent with name non-existing not found' }));
+    });
+  });
+
+  describe('setAgentModelHandler', () => {
+    it('should update agent model', async () => {
+      const result = setAgentModelHandler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        body: {
+          model: openai('gpt-5'),
+        },
+      });
+
+      const agent = mockMastra.getAgent('test-agent');
+      const llm = await agent.getLLM();
+      const modelId = llm.getModelId();
+      expect(result).toEqual({ message: 'Agent model updated' });
+      expect(modelId).toEqual('gpt-5');
     });
   });
 });
