@@ -1,5 +1,5 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import { transformSync } from '@babel/core';
+import * as babel from '@babel/core';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -451,7 +451,7 @@ export async function analyzeBundle(
     hasValidConfig: false,
   } as const;
 
-  transformSync(mastraConfig, {
+  await babel.transformAsync(mastraConfig, {
     filename: mastraEntry,
     plugins: [checkConfigExport(mastraConfigResult)],
   });
