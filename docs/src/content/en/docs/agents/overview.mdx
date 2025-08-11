@@ -11,7 +11,7 @@ Agents can run autonomously in a loop, run once, or take turns with a user. You 
 
 Additionally, agents support dynamic configuration, allowing you to change their instructions, model, tools, and memory based on runtime context like user preferences, subscription tiers, or environment settings.
 
-## Creating an Agent
+## 1. Creating an Agent
 
 To create an agent in Mastra, you use the `Agent` class and define its properties:
 
@@ -54,7 +54,7 @@ export const mastra = new Mastra({
 });
 ```
 
-## Generating and streaming text
+## 2. Generating and streaming text
 
 ### Generating text
 
@@ -88,7 +88,7 @@ for await (const chunk of stream.textStream) {
 
 For more details about streaming responses, see the [stream reference documentation](/reference/agents/stream).
 
-## Describing images
+## 3. Describing images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the content array. You can combine image content with text prompts to guide the agent's analysis.
 
@@ -111,7 +111,7 @@ await testAgent.generate([
 ]);
 ```
 
-## Structured Output
+## 4. Structured Output
 
 Agents can return structured data by providing a JSON Schema or using a Zod schema.
 
@@ -213,7 +213,7 @@ console.log("Structured Output:", response.object);
 
 This allows you to have strong typing and validation for the structured data returned by the agent.
 
-## Multi-step tool use
+## 5. Multi-step tool use
 
 Agents can be enhanced with tools - functions that extend their capabilities beyond text generation. Tools allow agents to perform calculations, access external systems, and process data. Agents not only decide whether to call tools they're given, they determine the parameters that should be given to that tool.
 
@@ -303,7 +303,7 @@ const stream = await testAgent.stream(
 );
 ```
 
-## Testing agents locally
+## 6. Testing agents locally
 
 Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory. It generates endpoints for testing your agent (eg `http://localhost:4111/api/agents/myAgent/generate`) and provides a visual playground where you can chat with an agent and view traces.
 
