@@ -457,11 +457,12 @@ export async function analyzeBundle(
   });
 
   if (!mastraConfigResult.hasValidConfig) {
-    logger.error(`Invalid Mastra config. Please make sure that your entry file looks like this:
+    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
 export const mastra = new Mastra({
   // your options
-})`);
-    process.exit(1);
+})
+  
+If you think your configuration is valid, please open an issue.`);
   }
 
   const depsToOptimize = new Map<string, string[]>();
