@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
-import functionsData from '../../data/functions.json';
+import functionsData from '../data/functions.json';
 
 type Argument = {
   name: string;
