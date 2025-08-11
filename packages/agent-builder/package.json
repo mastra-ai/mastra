@@ -31,6 +31,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "semver": "^7.7.2",
+    "swpm": "^2.6.0",
     "zod": "^3.25.67"
   },
   "peerDependencies": {

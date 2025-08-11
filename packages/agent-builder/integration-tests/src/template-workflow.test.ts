@@ -124,9 +124,10 @@ describe('Template Workflow Integration Tests', () => {
 
     // Verify the workflow succeeded
     expect(result).toBeDefined();
-    expect(result.success).toBe(true);
-    expect(result.applied).toBe(true);
-    expect(result.branchName).toBe('feat/install-template-csv-to-questions');
+    expect(result.status).toBe('success');
+    expect(result.result?.success).toBe(true);
+    expect(result.result?.applied).toBe(true);
+    expect(result.result?.branchName).toBe('feat/install-template-csv-to-questions');
 
     // Verify the template branch was created
     const branches = exec('git branch', targetRepo);

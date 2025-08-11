@@ -1,8 +1,8 @@
 import { exec as execNodejs } from 'child_process';
 import { promisify } from 'util';
-import { mkdtemp, readFile, writeFile, mkdir, cp as fsCp, stat, readdir, rm } from 'fs/promises';
+import { mkdtemp, readFile, writeFile, mkdir, stat, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join, resolve, dirname, basename, relative, extname } from 'path';
+import { join, dirname, relative } from 'path';
 import semver from 'semver';
 import { openai } from '@ai-sdk/openai';
 import type { CoreMessage } from '@mastra/core';
@@ -438,18 +438,6 @@ export const tools = await mcpClient.getTools();
     const mcpClient = new MCPClient({
       id: 'agent-builder-mcp-client',
       servers: {
-        // terminal: {
-        // 	command: 'npx',
-        // 	args: ['@dillip285/mcp-terminal', '--allowed-paths', projectPath || process.cwd()],
-        // },
-        // editor: {
-        // 	command: 'node',
-        // 	args: [
-        // 		'/Users/daniellew/Documents/Mastra/mcp-editor',
-        // 		'--allowedDirectories',
-        // 		projectPath || process.cwd(),
-        // 	],
-        // },
         // web: {
         // 	command: 'node',
         // 	args: ['/Users/daniellew/Documents/Mastra/web-search/build/index.js'],
@@ -472,43 +460,6 @@ export const tools = await mcpClient.getTools();
 
     return {
       ...filteredTools,
-
-      // // Template Merge Tool
-      // mergeTemplate: createTool({
-      //   id: 'merge-template',
-      //   description: 'Clone a Mastra template repository and merge it into the current project with safety checks.',
-      //   inputSchema: MergeInputSchema,
-      //   outputSchema: ApplyResultSchema,
-      //   execute: async ({ context, mastra }) => {
-      //     if (!mastra) {
-      //       throw new Error('Mastra instance not available');
-      //     }
-
-      //     const workflow = mastra.getWorkflow('merge-template');
-      //     if (!workflow) {
-      //       throw new Error('Merge template workflow not found');
-      //     }
-
-      //     const run = await workflow.createRunAsync();
-      //     const result = await run.start({ inputData: context });
-
-      //     if (result.status === 'success') {
-      //       return result.result;
-      //     } else if (result.status === 'suspended') {
-      //       // Handle suspension - the workflow is waiting for user input
-      //       return {
-      //         success: false,
-      //         applied: false,
-      //         conflicts: { safe: [], warn: [], block: [] },
-      //         error: 'Workflow suspended - user interaction required. Use workflow resume to continue.',
-      //       };
-      //     } else {
-      //       throw new Error(String(result.error) || 'Workflow failed');
-      //     }
-      //   },
-      // }),
-
-      // Core File Operations (replaces MCP editor)
       readFile: createTool({
         id: 'read-file',
         description: 'Read contents of a file with optional line range selection.',
@@ -593,7 +544,6 @@ export const tools = await mcpClient.getTools();
         },
       }),
 
-      // General Command Execution (replaces MCP terminal)
       executeCommand: createTool({
         id: 'execute-command',
         description: 'Execute shell commands with proper error handling and output capture.',
@@ -927,14 +877,13 @@ export const tools = await mcpClient.getTools();
       manageProject: createTool({
         id: 'manage-project',
         description:
-          'Handles project management including creating project structures, managing dependencies, and package operations',
+          'Handles project management including creating project structures, managing dependencies, and package operations.',
         inputSchema: z.object({
           action: z.enum(['create', 'install', 'upgrade', 'check']).describe('The action to perform'),
           features: z
             .array(z.string())
             .optional()
             .describe('Mastra features to include (e.g., ["agents", "memory", "workflows"])'),
-          packageManager: z.enum(['npm', 'pnpm', 'yarn']).optional().describe('Package manager to use'),
           packages: z
             .array(
               z.object({
@@ -955,14 +904,13 @@ export const tools = await mcpClient.getTools();
           error: z.string().optional(),
         }),
         execute: async ({ context }) => {
-          const { action, features, packages, packageManager } = context;
+          const { action, features, packages } = context;
           try {
             switch (action) {
               case 'create':
                 return await AgentBuilderDefaults.createMastraProject({
                   projectName: projectPath,
                   features,
-                  packageManager,
                 });
               case 'install':
                 if (!packages?.length) {
@@ -974,13 +922,11 @@ export const tools = await mcpClient.getTools();
                 return await AgentBuilderDefaults.installPackages({
                   packages,
                   projectPath,
-                  packageManager,
                 });
               case 'upgrade':
                 return await AgentBuilderDefaults.upgradePackages({
                   packages,
                   projectPath,
-                  packageManager,
                 });
               case 'check':
                 return await AgentBuilderDefaults.checkProject({
@@ -1173,50 +1119,23 @@ export const tools = await mcpClient.getTools();
   };
 
   /**
-   * Helper function to detect package manager
-   */
-  static getPackageManager(): 'npm' | 'pnpm' | 'yarn' {
-    const userAgent = process.env.npm_config_user_agent || '';
-    const execPath = process.env.npm_execpath || '';
-
-    if (userAgent.includes('yarn')) return 'yarn';
-    if (userAgent.includes('pnpm')) return 'pnpm';
-    if (userAgent.includes('npm')) return 'npm';
-
-    if (execPath.includes('yarn')) return 'yarn';
-    if (execPath.includes('pnpm')) return 'pnpm';
-    if (execPath.includes('npm')) return 'npm';
-
-    return 'npm'; // default
-  }
-
-  /**
    * Create a new Mastra project using create-mastra CLI
    */
-  static async createMastraProject({
-    features,
-    packageManager,
-    projectName,
-  }: {
-    features?: string[];
-    packageManager?: 'npm' | 'pnpm' | 'yarn';
-    projectName?: string;
-  }) {
+  static async createMastraProject({ features, projectName }: { features?: string[]; projectName?: string }) {
     try {
-      const pm = packageManager || AgentBuilderDefaults.getPackageManager();
-      const args = [pm === 'npm' ? 'npx' : pm, 'create mastra@latest', projectName, '-l', 'openai', '-k', 'skip'];
+      let command = `pnpx create mastra@latest ${projectName} -l openai -k skip`;
 
       if (features && features.length > 0) {
-        args.push('--components', features.join(','));
+        command += ` --components ${features.join(',')}`;
       }
-      args.push('--example');
+      command += ' --example';
 
-      const { stdout, stderr } = await exec(args.join(' '));
+      const { stdout, stderr } = await exec(command);
 
       return {
         success: true,
         projectPath: `./${projectName}`,
-        message: `Successfully created Mastra project: ${projectName}`,
+        message: `Successfully created Mastra project: ${projectName}.`,
         details: stdout,
         error: stderr,
       };
@@ -1234,28 +1153,16 @@ export const tools = await mcpClient.getTools();
   static async installPackages({
     packages,
     projectPath,
-    packageManager,
   }: {
     packages: Array<{ name: string; version?: string }>;
     projectPath?: string;
-    packageManager?: 'npm' | 'pnpm' | 'yarn';
   }) {
     try {
       console.log('Installing packages:', JSON.stringify(packages, null, 2));
-      const pm = packageManager || AgentBuilderDefaults.getPackageManager();
 
-      const packageStrings = packages.map(
-        p => `${p.name}${p.version && !p.name.includes('mastra') ? `@${p.version}` : ''}`,
-      );
+      const packageStrings = packages.map(p => `${p.name}`);
 
-      let installCmd: string;
-      // if (pm === 'npm') {
-      //   installCmd = `npm install ${packageStrings.join(' ')}`;
-      // } else if (pm === 'yarn') {
-      //   installCmd = `yarn add ${packageStrings.join(' ')}`;
-      // } else {
-      installCmd = `pnpm add ${packageStrings.join(' ')}`;
-      // }
+      const installCmd = `npx --yes swpm add ${packageStrings.join(' ')}`;
 
       const execOptions = projectPath ? { cwd: projectPath } : {};
       const { stdout } = await exec(installCmd, execOptions);
@@ -1263,7 +1170,7 @@ export const tools = await mcpClient.getTools();
       return {
         success: true,
         installed: packageStrings,
-        message: `Successfully installed ${packages.length} package(s)`,
+        message: `Successfully installed ${packages.length} package(s).`,
         details: stdout,
       };
     } catch (error) {
@@ -1280,34 +1187,20 @@ export const tools = await mcpClient.getTools();
   static async upgradePackages({
     packages,
     projectPath,
-    packageManager,
   }: {
     packages?: Array<{ name: string; version?: string }>;
     projectPath?: string;
-    packageManager?: 'npm' | 'pnpm' | 'yarn';
   }) {
     try {
       console.log('Upgrading specific packages:', JSON.stringify(packages, null, 2));
-      const pm = packageManager || AgentBuilderDefaults.getPackageManager();
+
       let upgradeCmd: string;
 
       if (packages && packages.length > 0) {
         const packageStrings = packages.map(p => `${p.name}${p.version ? `@${p.version}` : '@latest'}`);
-        if (pm === 'npm') {
-          upgradeCmd = `npm update ${packageStrings.join(' ')}`;
-        } else if (pm === 'yarn') {
-          upgradeCmd = `yarn upgrade ${packageStrings.join(' ')}`;
-        } else {
-          upgradeCmd = `pnpm update ${packageStrings.join(' ')}`;
-        }
+        upgradeCmd = `npx --yes swpm upgrade ${packageStrings.join(' ')}`;
       } else {
-        if (pm === 'npm') {
-          upgradeCmd = 'npm update';
-        } else if (pm === 'yarn') {
-          upgradeCmd = 'yarn upgrade';
-        } else {
-          upgradeCmd = 'pnpm update';
-        }
+        upgradeCmd = 'npx --yes swpm update';
       }
 
       const execOptions = projectPath ? { cwd: projectPath } : {};
@@ -1316,7 +1209,7 @@ export const tools = await mcpClient.getTools();
       return {
         success: true,
         upgraded: packages?.map(p => p.name) || ['all packages'],
-        message: 'Packages upgraded successfully',
+        message: `Packages upgraded successfully.`,
         details: stdout,
       };
     } catch (error) {
@@ -3373,22 +3266,11 @@ const intelligentMergeStep = createStep({
     commitSha: z.string(),
     slug: z.string(),
     targetPath: z.string().optional(),
-    packageInfo: z.object({
-      dependencies: z.record(z.string()).optional(),
-      devDependencies: z.record(z.string()).optional(),
-      peerDependencies: z.record(z.string()).optional(),
-      scripts: z.record(z.string()).optional(),
-      packageInfo: z.object({
-        name: z.string().optional(),
-        version: z.string().optional(),
-        description: z.string().optional(),
-      }),
-    }),
   }),
   outputSchema: ApplyResultSchema,
   execute: async ({ inputData }) => {
     console.log('Intelligent merge step input:', inputData);
-    const { orderedUnits, templateDir, commitSha, slug, packageInfo } = inputData;
+    const { orderedUnits, templateDir, commitSha, slug } = inputData;
     const targetPath = inputData.targetPath || process.cwd();
 
     try {
@@ -3420,6 +3302,7 @@ For Mastra-specific merging:
 - Update package.json dependencies from template requirements
 - Maintain TypeScript imports and exports correctly
 - Merge tools into src/mastra/tools/
+- Merge networks into src/mastra/networks/
 
 CRITICAL: DO NOT merge tools into main MASTRA CONFIG
 
@@ -3427,13 +3310,6 @@ Template information:
 - Slug: ${slug}
 - Units to integrate: ${orderedUnits.map(u => `${u.kind}:${u.id}`).join(', ')}
 - Template source: ${templateDir}
-
-Package Dependencies from Template:
-- Dependencies: ${JSON.stringify(packageInfo.dependencies || {}, null, 2)}
-- Dev Dependencies: ${JSON.stringify(packageInfo.devDependencies || {}, null, 2)}
-- Peer Dependencies: ${JSON.stringify(packageInfo.peerDependencies || {}, null, 2)}
-
-CRITICAL: Use the EXACT versions listed above when installing packages. These are the tested versions from the template.
 
 For conflicts, prefer additive merging and maintain existing project patterns.
 `,
@@ -3454,6 +3330,7 @@ Template directory: ${templateDir}
 Target directory: ${targetPath}
 
 Task: Copy and integrate the ${unit.kind} "${unit.id}" from the template source into the target project.
+If you create a new file, make sure to use camelCase for the file name. (e.g. myNewFile.ts)
 
 For ${unit.kind} units:
 1. Find the appropriate files in the template (e.g., src/mastra/agents/${unit.id}.ts for agents)
@@ -3483,19 +3360,6 @@ After merging all files for this unit, commit the changes with message:
             //   buffer = [];
           }
         }
-
-        // console.log(buffer.join(''));
-
-        // The agent should have handled all the file operations through its tools
-        // Let's verify the changes were applied with selective git add
-        // try {
-        //   // Only add src/ directory and package.json, avoid node_modules
-        //   await exec(`git add src/ package.json || true`, { cwd: targetPath });
-        //   await exec(`git commit -m "feat(template): add ${unit.kind} ${unit.id} (${slug}@${commitSha.substring(0, 7)})" || true`, { cwd: targetPath });
-        // } catch (commitError) {
-        //   // Continue if commit fails (might be no changes)
-        //   console.warn(`Commit failed for unit ${unit.id}:`, commitError);
-        // }
       }
       return {
         success: true,
@@ -3517,6 +3381,115 @@ After merging all files for this unit, commit the changes with message:
   },
 });
 
+export const packageUpdaterStep = createStep({
+  id: 'package-updater-step',
+  description: 'Updates packages using a specialized agent with package management tools',
+  inputSchema: z.object({
+    packages: z
+      .array(
+        z.object({
+          name: z.string(),
+          version: z.string().optional(),
+        }),
+      )
+      .optional()
+      .describe('Specific packages to update, if none provided updates all packages'),
+    projectPath: z.string().optional().describe('Path to the project to update'),
+    packageJson: z.object({
+      dependencies: z.record(z.string()).optional(),
+      devDependencies: z.record(z.string()).optional(),
+      peerDependencies: z.record(z.string()).optional(),
+      scripts: z.record(z.string()).optional(),
+      packageInfo: z.object({
+        name: z.string().optional(),
+        version: z.string().optional(),
+        description: z.string().optional(),
+      }),
+    }),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    message: z.string(),
+    upgraded: z.array(z.string()).optional(),
+    details: z.string().optional(),
+  }),
+  execute: async ({ inputData }) => {
+    const { packages, projectPath, packageJson } = inputData;
+
+    try {
+      const { openai } = await import('@ai-sdk/openai');
+
+      const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(projectPath);
+
+      const packageManagementAgent = new Agent({
+        name: 'package-manager',
+        description: 'Specialized agent for package management operations',
+        instructions: `You are a package management specialist. Your sole purpose is to update packages in projects.
+
+When asked to update packages:
+1. Use the manageProject tool with action "upgrade"
+2. If specific packages are provided, update only those packages
+3. If no specific packages are provided, update all packages
+4. Always provide clear feedback about what was updated
+
+Package Dependencies from Template:
+- Dependencies: ${JSON.stringify(packageJson.dependencies || {}, null, 2)}
+- Dev Dependencies: ${JSON.stringify(packageJson.devDependencies || {}, null, 2)}
+- Peer Dependencies: ${JSON.stringify(packageJson.peerDependencies || {}, null, 2)}
+- Scripts: ${JSON.stringify(packageJson.scripts || {}, null, 2)}
+- Package Info: ${JSON.stringify(packageJson.packageInfo || {}, null, 2)}
+
+Be concise and focused only on package management tasks.`,
+        model: openai('gpt-4o-mini'),
+        tools: {
+          manageProject: allTools.manageProject,
+          validateCode: allTools.validateCode,
+        },
+      });
+
+      // Create a message for the package management agent
+      let message: string;
+      if (packages && packages.length > 0) {
+        const packageList = packages.map(p => `${p.name}${p.version ? `@${p.version}` : ''}`).join(', ');
+        message = `Please update the following packages: ${packageList}`;
+      } else {
+        message = 'Please update all packages in the project to their latest versions';
+      }
+
+      // Call the agent to handle the package update
+      const result = await packageManagementAgent.stream(message);
+
+      // let buffer = []
+      const chunks: any[] = [];
+
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'text-delta' || chunk.type === 'reasoning' || chunk.type === 'tool-result') {
+          // buffer.push(chunk.textDelta);
+          console.log(JSON.stringify(chunk, null, 2));
+          chunks.push(chunk);
+          // if (buffer.length > 20) {
+          //   console.log(buffer.join(''));
+          //   buffer = [];
+        }
+      }
+
+      return {
+        success: true,
+        message: `Package update completed.`,
+        upgraded: packages?.map(p => p.name) || ['all packages'],
+        details: chunks.map(c => c.textDelta).join(''),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Package update failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  },
+});
+
+// The packageUpdaterStep can now be used in any workflow as needed
+
 // Create the complete workflow
 export const mergeTemplateWorkflow = createWorkflow({
   id: 'merge-template',
@@ -3524,15 +3497,22 @@ export const mergeTemplateWorkflow = createWorkflow({
     'Merges a Mastra template repository into the current project using intelligent AgentBuilder-powered merging',
   inputSchema: MergeInputSchema,
   outputSchema: ApplyResultSchema,
-  steps: [cloneTemplateStep, analyzePackageStep, discoverUnitsStep, orderUnitsStep, intelligentMergeStep],
+  steps: [
+    cloneTemplateStep,
+    analyzePackageStep,
+    discoverUnitsStep,
+    orderUnitsStep,
+    packageUpdaterStep,
+    intelligentMergeStep,
+  ],
 })
   .then(cloneTemplateStep)
   .parallel([analyzePackageStep, discoverUnitsStep])
   .map(async ({ getStepResult }) => {
     const discoverResult = getStepResult(discoverUnitsStep);
-    return discoverResult;
+    return { ...discoverResult, packageInfo: getStepResult(analyzePackageStep) };
   })
-  .then(orderUnitsStep)
+  .parallel([orderUnitsStep, packageUpdaterStep])
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
     const packageResult = getStepResult(analyzePackageStep);
@@ -3545,7 +3525,6 @@ export const mergeTemplateWorkflow = createWorkflow({
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
       targetPath: initData.targetPath,
-      packageInfo: packageResult,
     };
   })
   .then(intelligentMergeStep)
