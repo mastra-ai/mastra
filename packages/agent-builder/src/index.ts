@@ -1241,6 +1241,7 @@ export const tools = await mcpClient.getTools();
     packageManager?: 'npm' | 'pnpm' | 'yarn';
   }) {
     try {
+      console.log('Installing packages:', JSON.stringify(packages, null, 2));
       const pm = packageManager || AgentBuilderDefaults.getPackageManager();
 
       const packageStrings = packages.map(
@@ -1286,6 +1287,7 @@ export const tools = await mcpClient.getTools();
     packageManager?: 'npm' | 'pnpm' | 'yarn';
   }) {
     try {
+      console.log('Upgrading specific packages:', JSON.stringify(packages, null, 2));
       const pm = packageManager || AgentBuilderDefaults.getPackageManager();
       let upgradeCmd: string;
 
@@ -2937,7 +2939,7 @@ export async function mergeTemplateBySlug(slug: string, targetPath?: string) {
 
 // Types for the merge template workflow
 export interface TemplateUnit {
-  kind: 'agent' | 'workflow' | 'tool' | 'mcp-server' | 'integration';
+  kind: 'agent' | 'workflow' | 'tool' | 'mcp-server' | 'network';
   id: string;
 }
 
@@ -2957,7 +2959,7 @@ export interface MergePlan {
 
 // Schema definitions
 const TemplateUnitSchema = z.object({
-  kind: z.enum(['agent', 'workflow', 'tool', 'mcp-server', 'integration']),
+  kind: z.enum(['agent', 'workflow', 'tool', 'mcp-server', 'network']),
   id: z.string(),
 });
 
@@ -3124,71 +3126,111 @@ const cloneTemplateStep = createStep({
   },
 });
 
-// Step 2: Get template info from API
+// Step 2: Discover template units by scanning the templates directory
 const discoverUnitsStep = createStep({
   id: 'discover-units',
-  description: 'Fetch template information from Mastra templates API',
+  description: 'Discover template units by analyzing the templates directory structure',
   inputSchema: z.object({
     templateDir: z.string(),
     commitSha: z.string(),
     slug: z.string(),
   }),
   outputSchema: z.object({
-    manifest: TemplateManifestSchema,
     units: z.array(TemplateUnitSchema),
   }),
   execute: async ({ inputData }) => {
-    const { slug } = inputData;
+    const { templateDir, slug } = inputData;
 
-    // Fetch template info from API
-    const response = await fetch('https://mastra.ai/api/templates.json');
-    const templates = (await response.json()) as Array<{
-      slug: string;
-      title: string;
-      description: string;
-      agents: string[];
-      workflows: string[];
-      tools: string[];
-      mcp: string[];
-    }>;
+    const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
-    const template = templates.find(t => t.slug === slug);
-    if (!template) {
-      throw new Error(`Template "${slug}" not found in Mastra templates API`);
-    }
+    const agent = new Agent({
+      model: openai('gpt-4o-mini'),
+      instructions: `You are an expert at analyzing Mastra projects.
+
+Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
+
+Mastram Project Structure Analysis:
+- Each Mastra project has a structure like: src/mastra/agents/, src/mastra/workflows/, src/mastra/tools/, src/mastra/mcp/, src/mastra/networks/
+- Analyze TypeScript files in each category directory to identify exported units
+
+CRITICAL: YOU MUST USE YOUR TOOLS (readFile, listDirectory) TO DISCOVER THE UNITS IN THE TEMPLATE DIRECTORY.
+
+IMPORTANT - Agent Discovery Rules:
+1. **Multiple Agent Files**: Some templates have separate files for each agent (e.g., evaluationAgent.ts, researchAgent.ts)
+2. **Single File Multiple Agents**: Some files may export multiple agents (look for multiple 'export const' or 'export default' statements)
+3. **Agent Identification**: Look for exported variables that are instances of 'new Agent()' or similar patterns
+4. **Naming Convention**: Agent names should be extracted from the export name (e.g., 'weatherAgent', 'evaluationAgent')
+
+For each Mastra project directory you analyze:
+1. Scan all TypeScript files in src/mastra/agents/ and identify ALL exported agents
+2. Scan all TypeScript files in src/mastra/workflows/ and identify ALL exported workflows
+3. Scan all TypeScript files in src/mastra/tools/ and identify ALL exported tools
+4. Scan all TypeScript files in src/mastra/mcp/ and identify ALL exported MCP servers
+5. Scan all TypeScript files in src/mastra/networks/ and identify ALL exported networks
+
+Return the actual exported names of the units, not just file names.`,
+      name: 'Mastra Project Discoverer',
+      tools: {
+        readFile: tools.readFile,
+        listDirectory: tools.listDirectory,
+      },
+    });
+
+    const result = await agent.generate(
+      `Analyze the Mastra project directory structure at "${templateDir}".
+
+            List directory contents using listDirectory tool, and then analyze each file with readFile tool.
+      IMPORTANT:
+      - Look inside the actual file content to find export statements like 'export const agentName = new Agent(...)'
+      - A single file may contain multiple exports
+      - Return the actual exported variable names, not file names
+      - If a directory doesn't exist or has no files, return an empty array
+
+      Return the analysis in the exact format specified in the output schema.`,
+      {
+        experimental_output: z.object({
+          agents: z.array(z.string()).optional(),
+          workflows: z.array(z.string()).optional(),
+          tools: z.array(z.string()).optional(),
+          mcp: z.array(z.string()).optional(),
+          networks: z.array(z.string()).optional(),
+        }),
+        maxSteps: 100,
+      },
+    );
+
+    const template = result.object ?? {};
 
     const units: TemplateUnit[] = [];
 
     // Add agents
-    template.agents.forEach(agentId => {
+    template.agents?.forEach((agentId: string) => {
       units.push({ kind: 'agent', id: agentId });
     });
 
     // Add workflows
-    template.workflows.forEach(workflowId => {
+    template.workflows?.forEach((workflowId: string) => {
       units.push({ kind: 'workflow', id: workflowId });
     });
 
     // Add tools
-    template.tools.forEach(toolId => {
+    template.tools?.forEach((toolId: string) => {
       units.push({ kind: 'tool', id: toolId });
     });
 
     // Add MCP servers
-    template.mcp.forEach(mcpId => {
+    template.mcp?.forEach((mcpId: string) => {
       units.push({ kind: 'mcp-server', id: mcpId });
     });
 
     // Add integration unit for general template files
-    units.push({ kind: 'integration', id: 'general' });
+    template.networks?.forEach((networkId: string) => {
+      units.push({ kind: 'network', id: networkId });
+    });
 
-    const manifest: TemplateManifest = {
-      slug,
-      description: template.description,
-      units,
-    };
+    console.log('Discovered units:', JSON.stringify(units, null, 2));
 
-    return { manifest, units };
+    return { units };
   },
 });
 
@@ -3230,6 +3272,7 @@ const intelligentMergeStep = createStep({
   }),
   outputSchema: ApplyResultSchema,
   execute: async ({ inputData }) => {
+    console.log('Intelligent merge step input:', inputData);
     const { orderedUnits, templateDir, commitSha, slug } = inputData;
     const targetPath = inputData.targetPath || process.cwd();
 
@@ -3258,10 +3301,12 @@ Key responsibilities:
 For Mastra-specific merging:
 - Merge agents into src/mastra/agents/ and register in main Mastra config
 - Merge workflows into src/mastra/workflows/ and register appropriately  
-- Merge tools into src/mastra/tools/ and register in tools config
 - Handle MCP servers and any integrations properly
 - Update package.json dependencies from template requirements
 - Maintain TypeScript imports and exports correctly
+- Merge tools into src/mastra/tools/
+
+CRITICAL: DO NOT merge tools into main MASTRA CONFIG
 
 Template information from Mastra API:
 - Slug: ${slug}
@@ -3279,6 +3324,7 @@ For conflicts, prefer additive merging and maintain existing project patterns.
 
       // Process each unit with the agent
       for (const unit of orderedUnits) {
+        console.log(`Merging ${unit.kind} unit "${unit.id}" from template "${slug}"...`);
         const mergePrompt = `
 Merge the following ${unit.kind} unit "${unit.id}" from template "${slug}":
 
@@ -3292,8 +3338,11 @@ For ${unit.kind} units:
 2. Copy to the correct location in target project 
 3. Update any import paths or references as needed
 4. Ensure the merged code follows TypeScript best practices
-5. Update the main Mastra configuration to register this ${unit.kind}
-
+${
+  unit.kind === 'tool'
+    ? '5. Copy tools to src/mastra/tools/ but DO NOT register them in the main Mastra config'
+    : '5. Update the main Mastra configuration to register this ' + unit.kind
+}
 After merging all files for this unit, commit the changes with message:
 "feat(template): add ${unit.kind} ${unit.id} (${slug}@${commitSha.substring(0, 7)})"
 `;
@@ -3306,7 +3355,7 @@ After merging all files for this unit, commit the changes with message:
         for await (const chunk of result.fullStream) {
           if (chunk.type === 'text-delta' || chunk.type === 'reasoning' || chunk.type === 'tool-result') {
             // buffer.push(chunk.textDelta);
-            console.log(chunk);
+            console.log(JSON.stringify(chunk, null, 2));
             // if (buffer.length > 20) {
             //   console.log(buffer.join(''));
             //   buffer = [];
@@ -3401,7 +3450,6 @@ export const mergeTemplateWorkflow = createWorkflow({
   .then(orderUnitsStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
-    const discoverResult = getStepResult(discoverUnitsStep);
     const orderResult = getStepResult(orderUnitsStep);
     const initData = getInitData();
 
@@ -3409,7 +3457,7 @@ export const mergeTemplateWorkflow = createWorkflow({
       orderedUnits: orderResult.orderedUnits,
       templateDir: cloneResult.templateDir,
       commitSha: cloneResult.commitSha,
-      slug: cloneResult.slug || discoverResult.manifest.slug,
+      slug: cloneResult.slug,
       targetPath: initData.targetPath,
     };
   })
