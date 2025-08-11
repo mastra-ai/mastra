@@ -61,6 +61,7 @@ export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string 
       from: 'AGENT',
       payload: {
         usage: value.usage,
+        totalUsage: value.totalUsage,
         providerMetadata: value.providerMetadata,
       },
     };

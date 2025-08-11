@@ -102,16 +102,16 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
                   this.#toolCalls.push(transformedChunk.payload);
                   break;
                 case 'tool-result':
-                  this.#toolResults.push(chunk.payload);
+                  this.#toolResults.push(transformedChunk.payload);
                   break;
                 case 'step-finish':
-                  if (chunk.payload.reason) {
-                    this.#finishReason = chunk.payload.reason;
+                  if (transformedChunk.payload.reason) {
+                    this.#finishReason = transformedChunk.payload.reason;
                   }
                   break;
                 case 'finish':
-                  updateUsageCount(chunk.payload.usage);
-                  chunk.payload.totalUsage = this.#usageCount;
+                  updateUsageCount(transformedChunk.payload.usage);
+                  transformedChunk.payload.totalUsage = this.#usageCount;
                   break;
               }
               controller.enqueue(transformedChunk);
