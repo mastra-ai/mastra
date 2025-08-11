@@ -15,7 +15,7 @@ import {
   getLiveEvalsByAgentIdHandler,
   generateHandler,
   streamGenerateHandler,
-  setAgentModelHandler,
+  updateAgentModelHandler,
 } from './agents';
 
 const mockEvals = [
@@ -319,9 +319,9 @@ describe('Agent Handlers', () => {
     });
   });
 
-  describe('setAgentModelHandler', () => {
+  describe('updateAgentModelHandler', () => {
     it('should update agent model', async () => {
-      const result = setAgentModelHandler({
+      const result = updateAgentModelHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {

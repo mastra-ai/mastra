@@ -367,7 +367,7 @@ export function streamVNextGenerateHandler({
   }
 }
 
-export function setAgentModelHandler({
+export function updateAgentModelHandler({
   mastra,
   agentId,
   body,
