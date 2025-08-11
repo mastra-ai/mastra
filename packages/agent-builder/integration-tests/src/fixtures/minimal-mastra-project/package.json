@@ -7,7 +7,8 @@
     "build": "mastra build"
   },
   "dependencies": {
-    "@mastra/core": "^0.10.0",
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
     "zod": "^3.25.0"
   },
   "devDependencies": {

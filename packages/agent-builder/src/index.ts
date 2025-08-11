@@ -224,7 +224,7 @@ You have access to an enhanced set of tools based on production coding agent pat
 
 ### Advanced File Operations
 - **readFile**: Read files with optional line ranges, encoding support, metadata
-- **writeFile**: Write files with directory creation, backup options
+- **writeFile**: Write files with directory creation
 - **listDirectory**: Directory listing with filtering, recursion, metadata
 - **multiEdit**: Perform multiple search-replace operations across files atomically with backup creation
 - **executeCommand**: Execute shell commands with proper error handling and working directory support
@@ -521,18 +521,16 @@ export const tools = await mcpClient.getTools();
 
       writeFile: createTool({
         id: 'write-file',
-        description: 'Write content to a file, with options for creating directories and backup.',
+        description: 'Write content to a file, with options for creating directories.',
         inputSchema: z.object({
           filePath: z.string().describe('Path to the file to write'),
           content: z.string().describe('Content to write to the file'),
           createDirs: z.boolean().default(true).describe("Create parent directories if they don't exist"),
-          backup: z.boolean().default(false).describe('Create a backup of existing file'),
           encoding: z.string().default('utf-8').describe('File encoding'),
         }),
         outputSchema: z.object({
           success: z.boolean(),
           filePath: z.string(),
-          backup: z.string().optional(),
           bytesWritten: z.number().optional(),
           message: z.string(),
           error: z.string().optional(),
@@ -2464,14 +2462,13 @@ export const tools = await mcpClient.getTools();
     filePath: string;
     content: string;
     createDirs?: boolean;
-    backup?: boolean;
     encoding?: string;
     projectPath?: string;
   }) {
     try {
-      const { writeFile, mkdir, copyFile } = await import('fs/promises');
+      const { writeFile, mkdir } = await import('fs/promises');
       const { dirname, resolve, isAbsolute } = await import('path');
-      const { filePath, content, createDirs = true, backup = false, encoding = 'utf-8', projectPath } = context;
+      const { filePath, content, createDirs = true, encoding = 'utf-8', projectPath } = context;
 
       // Resolve path relative to project directory if it's not absolute
       const resolvedPath = isAbsolute(filePath) ? filePath : resolve(projectPath || process.cwd(), filePath);
@@ -2482,25 +2479,12 @@ export const tools = await mcpClient.getTools();
         await mkdir(dir, { recursive: true });
       }
 
-      let backupPath: string | undefined;
-
-      // Create backup if requested
-      if (backup) {
-        try {
-          backupPath = `${resolvedPath}.backup.${Date.now()}`;
-          await copyFile(resolvedPath, backupPath);
-        } catch {
-          // File might not exist, which is fine
-        }
-      }
-
       // Write the file
       await writeFile(resolvedPath, content, { encoding: encoding as BufferEncoding });
 
       return {
         success: true,
         filePath: resolvedPath,
-        backup: backupPath,
         bytesWritten: Buffer.byteLength(content, encoding as BufferEncoding),
         message: `Successfully wrote ${Buffer.byteLength(content, encoding as BufferEncoding)} bytes to ${filePath}`,
       };
@@ -2863,6 +2847,7 @@ export async function mergeTemplateBySlug(slug: string, targetPath?: string) {
 export interface TemplateUnit {
   kind: 'agent' | 'workflow' | 'tool' | 'mcp-server' | 'network';
   id: string;
+  file: string;
 }
 
 export interface TemplateManifest {
@@ -2883,6 +2868,7 @@ export interface MergePlan {
 const TemplateUnitSchema = z.object({
   kind: z.enum(['agent', 'workflow', 'tool', 'mcp-server', 'network']),
   id: z.string(),
+  file: z.string(),
 });
 
 const TemplateManifestSchema = z.object({
@@ -3282,7 +3268,7 @@ For each Mastra project directory you analyze:
 4. Scan all TypeScript files in src/mastra/mcp/ and identify ALL exported MCP servers
 5. Scan all TypeScript files in src/mastra/networks/ and identify ALL exported networks
 
-Return the actual exported names of the units, not just file names.`,
+Return the actual exported names of the units, as well as the file names.`,
       name: 'Mastra Project Discoverer',
       tools: {
         readFile: tools.readFile,
@@ -3297,17 +3283,17 @@ Return the actual exported names of the units, not just file names.`,
       IMPORTANT:
       - Look inside the actual file content to find export statements like 'export const agentName = new Agent(...)'
       - A single file may contain multiple exports
-      - Return the actual exported variable names, not file names
+      - Return the actual exported variable names, as well as the file names
       - If a directory doesn't exist or has no files, return an empty array
 
       Return the analysis in the exact format specified in the output schema.`,
       {
         experimental_output: z.object({
-          agents: z.array(z.string()).optional(),
-          workflows: z.array(z.string()).optional(),
-          tools: z.array(z.string()).optional(),
-          mcp: z.array(z.string()).optional(),
-          networks: z.array(z.string()).optional(),
+          agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
         }),
         maxSteps: 100,
       },
@@ -3318,28 +3304,28 @@ Return the actual exported names of the units, not just file names.`,
     const units: TemplateUnit[] = [];
 
     // Add agents
-    template.agents?.forEach((agentId: string) => {
-      units.push({ kind: 'agent', id: agentId });
+    template.agents?.forEach((agentId: { name: string; file: string }) => {
+      units.push({ kind: 'agent', id: agentId.name, file: agentId.file });
     });
 
     // Add workflows
-    template.workflows?.forEach((workflowId: string) => {
-      units.push({ kind: 'workflow', id: workflowId });
+    template.workflows?.forEach((workflowId: { name: string; file: string }) => {
+      units.push({ kind: 'workflow', id: workflowId.name, file: workflowId.file });
     });
 
     // Add tools
-    template.tools?.forEach((toolId: string) => {
-      units.push({ kind: 'tool', id: toolId });
+    template.tools?.forEach((toolId: { name: string; file: string }) => {
+      units.push({ kind: 'tool', id: toolId.name, file: toolId.file });
     });
 
     // Add MCP servers
-    template.mcp?.forEach((mcpId: string) => {
-      units.push({ kind: 'mcp-server', id: mcpId });
+    template.mcp?.forEach((mcpId: { name: string; file: string }) => {
+      units.push({ kind: 'mcp-server', id: mcpId.name, file: mcpId.file });
     });
 
     // Add integration unit for general template files
-    template.networks?.forEach((networkId: string) => {
-      units.push({ kind: 'network', id: networkId });
+    template.networks?.forEach((networkId: { name: string; file: string }) => {
+      units.push({ kind: 'network', id: networkId.name, file: networkId.file });
     });
 
     console.log('Discovered units:', JSON.stringify(units, null, 2));
@@ -3390,6 +3376,39 @@ const intelligentMergeStep = createStep({
     const targetPath = inputData.targetPath || process.cwd();
 
     try {
+      const copyFileTool = createTool({
+        id: 'copy-file',
+        description: 'Copy a file to a new location.',
+        inputSchema: z.object({
+          sourcePath: z.string().describe('Path to the source file'),
+          destinationPath: z.string().describe('Path to the destination file'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          message: z.string(),
+          error: z.string().optional(),
+        }),
+        execute: async ({ context }) => {
+          try {
+            const { copyFile } = await import('fs/promises');
+            const { resolve } = await import('path');
+            const { sourcePath, destinationPath } = context;
+            const resolvedSourcePath = resolve(templateDir, sourcePath);
+            const resolvedDestinationPath = resolve(targetPath, destinationPath);
+            await copyFile(resolvedSourcePath, resolvedDestinationPath);
+            return {
+              success: true,
+              message: `Successfully copied file from ${sourcePath} to ${destinationPath}`,
+            };
+          } catch (error) {
+            return {
+              success: false,
+              message: `Failed to copy file: ${error instanceof Error ? error.message : String(error)}`,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        },
+      });
       // Initialize AgentBuilder for the merging process
       const agentBuilder = new AgentBuilder({
         projectPath: targetPath,
@@ -3402,6 +3421,8 @@ DO NOT DO ANY EDITS OUTSIDE OF MERGING THE FILES FROM THE TEMPLATE TO THE TARGET
 IF THE FILE FOR THE RESOURCE DOES NOT EXIST IN THE TARGET PROJECT, YOU CAN JUST COPY THE EXACT FILE FROM THE TEMPLATE TO THE TARGET PROJECT.
 
 CRITICAL: When committing changes, NEVER add other dependency/build directories. Only add the actual template source files you create/modify. Use specific file paths with 'git add' instead of 'git add .' to avoid accidentally committing dependencies.
+
+CRITICAL: When taking files from the template if the file does not exist in the target project, always use the copyFile tool to copy the files from the template to the target project. Be sure to get the right file name from the template.
 
 Key responsibilities:
 1. Analyze the template files and existing project structure
@@ -3429,6 +3450,9 @@ Template information:
 
 For conflicts, prefer additive merging and maintain existing project patterns.
 `,
+        tools: {
+          copyFile: copyFileTool,
+        },
       });
 
       const branchName = `feat/install-template-${slug}`;
@@ -3446,18 +3470,34 @@ Template directory: ${templateDir}
 Target directory: ${targetPath}
 
 Task: Copy and integrate the ${unit.kind} "${unit.id}" from the template source into the target project.
-If you create a new file, make sure to use camelCase for the file name. (e.g. myNewFile.ts)
+
+CRITICAL: ANALYZE TARGET PROJECT NAMING CONVENTIONS FIRST
+1. **Examine existing files** in the target project's src/mastra/ directories using listDirectory and readFile
+2. **Identify the naming pattern** used (camelCase, snake_case, kebab-case, PascalCase, etc.)
+3. **Apply the SAME naming convention** to new files and imports you create
 
 For ${unit.kind} units:
 1. Find the appropriate files in the template (e.g., src/mastra/agents/${unit.id}.ts for agents)
-2. Copy to the correct location in target project 
-3. Update any import paths or references as needed
-4. Ensure the merged code follows TypeScript best practices
+2. **Analyze target project file naming** in the corresponding directory (src/mastra/agents/, src/mastra/workflows/, etc.)
+3. **Copy to the correct location** using the target project's naming convention for the **filename only**
+4. **Update import paths** to match the target project's file naming patterns:
+   - If target uses camelCase files: import { myAgent } from './myAgent'
+   - If target uses snake_case files: import { myAgent } from './my_agent'
+   - If target uses kebab-case files: import { myAgent } from './my-agent'
+5. **Keep variable/export names unchanged** - only adapt file names and import paths
+6. Ensure the merged code follows TypeScript best practices
 ${
   unit.kind === 'tool'
-    ? '5. Copy tools to src/mastra/tools/ but DO NOT register them in the main Mastra config'
-    : '5. Update the main Mastra configuration to register this ' + unit.kind
+    ? '7. Copy tools to src/mastra/tools/ but DO NOT register them in the main Mastra config'
+    : '7. Update the main Mastra configuration to register this ' + unit.kind + ' using the correct naming convention'
 }
+
+EXAMPLES OF NAMING CONVENTION DETECTION:
+- If you see files like "weatherAgent.ts", "chatAgent.ts" → use camelCase
+- If you see files like "weather_agent.ts", "chat_agent.ts" → use snake_case  
+- If you see files like "weather-agent.ts", "chat-agent.ts" → use kebab-case
+- If you see files like "WeatherAgent.ts", "ChatAgent.ts" → use PascalCase
+
 After merging all files for this unit, commit the changes with message:
 "feat(template): add ${unit.kind} ${unit.id} (${slug}@${commitSha.substring(0, 7)})"
 `;
@@ -3468,7 +3508,12 @@ After merging all files for this unit, commit the changes with message:
         // let buffer = []
 
         for await (const chunk of result.fullStream) {
-          if (chunk.type === 'text-delta' || chunk.type === 'reasoning' || chunk.type === 'tool-result') {
+          if (
+            chunk.type === 'text-delta' ||
+            chunk.type === 'reasoning' ||
+            chunk.type === 'tool-result' ||
+            chunk.type === 'tool-call'
+          ) {
             // buffer.push(chunk.textDelta);
             console.log(JSON.stringify(chunk, null, 2));
             // if (buffer.length > 20) {
@@ -3662,14 +3707,8 @@ export class AgentBuilder extends Agent {
    * Private constructor - use AgentBuilder.create() instead
    */
   constructor(config: AgentBuilderConfig) {
-    const combinedInstructions =
-      AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(config.projectPath) +
-      (config.instructions
-        ? `
-
-## Additional Instructions
-${config.instructions}`
-        : '');
+    const additionalInstructions = config.instructions ? `## Priority Instructions \n\n${config.instructions}` : '';
+    const combinedInstructions = additionalInstructions + AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(config.projectPath);
 
     const agentConfig = {
       name: 'agent-builder',
