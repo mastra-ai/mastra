@@ -1,4 +1,4 @@
-import type { Agent } from '@mastra/core/agent';
+import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -373,7 +373,9 @@ export function updateAgentModelHandler({
   body,
 }: Context & {
   agentId: string;
-  body: GetBody<'__updateModel'>;
+  body: {
+    model: MastraLanguageModel;
+  };
 }): { message: string } {
   try {
     const agent = mastra.getAgent(agentId);
