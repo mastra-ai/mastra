@@ -92,30 +92,6 @@ Use `.generate()` to get a response from an agent. Pass a single string for simp
 
 > See [.generate()](../../reference/agents/generate.mdx) for more information.
 
-### `.generate()` string
-
-Call `.generate()` with a single string:
-
-```typescript showLineNumbers copy
-const response = await testAgent.generate("Help me organize my day");
-
-console.log(response.text);
-```
-
-### `.generate()` string[]
-
-Call `.generate()` with an array of strings:
-
-```typescript showLineNumbers copy
-const response = await testAgent.generate([
-  "Help me organize my day",
-  "My day starts at 9am and finishes at 5.30pm",
-  "I take lunch between 12:30 and 13:30",
-  "I have meetings Monday to Friday between 10:30 and 11:30"
-]);
-
-console.log(response.text);
-```
 ### `.generate()` messages[]
 
 Call `.generate()` with an array of message objects that include `role` and `content`:
@@ -137,35 +113,6 @@ Use `.stream()` for real-time responses. Pass a single string for simple prompts
 
 > See [.stream()](../../reference/agents/stream.mdx) for more information.
 
-### `.stream()` string
-
-Call `.stream()` with a single string:
-
-```typescript showLineNumbers copy
-const stream = await testAgent.stream("Help me organize my day");
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-### `.stream()` string[]
-
-Call `.stream()` with an array of strings:
-
-```typescript showLineNumbers copy
-const stream = await testAgent.stream([
-  "Help me organize my day",
-  "My day starts at 9am and finishes at 5.30pm",
-  "I take lunch between 12:30 and 13:30",
-  "I have meetings Monday to Friday between 10:30 and 11:30"
-]);
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
 ### `.stream()` messages[]
 
 Call `.stream()` with an array of message objects that include `role` and `content`:
@@ -177,6 +124,23 @@ const stream = await testAgent.stream([
   { role: "user", content: "I take lunch between 12:30 and 13:30" },
   { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
 ]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### completion using `onFinish()`
+
+When streaming responses, the `onFinish` callback runs after the LLM finishes generating its response and all tool executions are complete.
+It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
+
+```typescript showLineNumbers copy
+const stream = await testAgent.stream("Help me organize my day", {
+  onFinish: ({ steps, text, finishReason, usage }) => {
+    console.log({ steps, text, finishReason, usage });
+  }
+});
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
@@ -311,7 +275,7 @@ For a detailed guide to creating and configuring tools, see the [Tools Overview]
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make, particularly important when using tool calls. By default, it is set to 1 to prevent infinite loops in case of misconfigured tools:
 
 ```typescript showLineNumbers copy
-const response = await testAgent.generate([{ role: "user", content: "If a taxi driver earns $41 per hour and works 12 hours a day, how much do they earn in one day?" }], {
+const response = await testAgent.generate("Help me organize my day", {
   maxSteps: 5
 });
 
@@ -325,77 +289,24 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 `onStepFinish` is only available when streaming or generating text without structured output.
 
 ```typescript showLineNumbers copy
-const response = await testAgent.generate([{ role: "user", content: "Calculate the taxi driver's daily earnings." }], {
-  maxSteps: 5,
-  onStepFinish: ({ text, toolCalls, toolResults }) => {
-    console.log({ text, toolCalls, toolResults });
+const response = await testAgent.generate("Help me organize my day", {
+  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
+    console.log({ text, toolCalls, toolResults, finishReason, usage });
   }
 });
-
-console.log(response.text);
 ```
 
-### Streaming steps with `onChunk`
+## Testing agents locally
 
-You can monitor the progress of multi-step operations using the `onChunk` callback. This is useful for debugging or providing progress updates to users.
+Use the `mastra dev` CLI command to run your agents behind a local API.
+By default, it loads exported agents from the `src/mastra/agents` directory and creates endpoints for testing (for example, `http://localhost:4111/api/agents/myAgent/generate`).
+It also launches a visual playground where you can chat with your agent and view execution traces.
 
-```typescript showLineNumbers copy
-const stream = await testAgent.stream(
-  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
-  {
-    maxSteps: 5,
-    onChunk: ({ chunk }) => {
-      console.log("Chunk", chunk);
-    },
-  },
-);
-
-for await (const chunk of stream.textStream) {
-  console.log(chunk);
-}
-```
-
-### Detecting completion with `onFinish`
-
-The `onFinish` callback is available when streaming responses and provides detailed information about the completed interaction. It is called after the LLM has finished generating its response and all tool executions have completed.
-This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
-
-```typescript showLineNumbers copy
-const stream = await testAgent.stream(
-  [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
-  {
-    maxSteps: 5,
-    onFinish: ({
-      steps,
-      text,
-      finishReason, // 'complete', 'length', 'tool', etc.
-      usage, // token usage statistics
-      reasoningDetails, // additional context about the agent's decisions
-    }) => {
-      console.log("Stream complete:", {
-        totalSteps: steps.length,
-        finishReason,
-        usage,
-      });
-    },
-  },
-);
-```
-
-
-## ------ OLD --------
-
-
-
-## 6. Testing agents locally
-
-Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory. It generates endpoints for testing your agent (eg `http://localhost:4111/api/agents/myAgent/generate`) and provides a visual playground where you can chat with an agent and view traces.
-
-For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playground) docs.
+> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
 
 ## Next Steps
 
-- Learn about Agent Memory in the [Agent Memory](./agent-memory.mdx) guide.
-- Learn about Dynamic Agent configuration in the [Dynamic Agents](./dynamic-agents.mdx) guide.
-- Learn about Agent Tools in the [Agent Tools and MCP](./using-tools-and-mcp.mdx) guide.
-- See an example agent in the [Chef Michel](../../guides/guide/chef-michel.mdx) example.
+- [Agent Memory](./agent-memory.mdx)
+- [Dynamic Agents](./dynamic-agents.mdx)
+- [Agent Tools and MCP](./using-tools-and-mcp.mdx)
+- [Calling Agents](../../examples//agents//calling-agents.mdx)
