@@ -6,3 +6,5 @@ temp
 *.log
 .DS_Store
 
+.env.test
+.env

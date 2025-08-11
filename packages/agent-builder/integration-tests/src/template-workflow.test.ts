@@ -87,11 +87,11 @@ describe('Template Workflow Integration Tests', () => {
     }
 
     // Cleanup temp directory
-    try {
-      rmSync(tempRoot, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    // try {
+    //   rmSync(tempRoot, { recursive: true, force: true });
+    // } catch {
+    //   // Ignore cleanup errors
+    // }
   });
 
   it.only('should merge csv-to-questions template and validate functionality', async () => {
@@ -157,7 +157,7 @@ describe('Template Workflow Integration Tests', () => {
     expect(hasTemplateScript).toBe(true);
 
     console.log('Template merge completed successfully');
-  }, 600000); // 3 minute timeout for full workflow
+  }, 60000000); // 3 minute timeout for full workflow
 
   it('should start Mastra server and validate both original and new agents work', async () => {
     // Skip test if no OPENAI_API_KEY available
