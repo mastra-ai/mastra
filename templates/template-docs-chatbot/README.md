@@ -17,7 +17,7 @@ This template includes the following apps and packages:
 ### Apps
 
 - `apps/agent`: Mastra agent that connects to MCP servers for documentation assistance
-- `apps/mcp-server`: Standalone MCP server exposing documentation tools  
+- `apps/mcp-server`: Standalone MCP server exposing documentation tools
 - `apps/docs`: Next.js documentation site
 - `apps/web`: Next.js web application
 
@@ -30,11 +30,13 @@ This template includes the following apps and packages:
 ## Getting Started
 
 1. Install dependencies:
+
    ```bash
    pnpm install
    ```
 
 2. Set up environment files:
+
    ```bash
    # Copy environment files for each app
    cp apps/mcp-server/.env.example apps/mcp-server/.env
@@ -42,11 +44,13 @@ This template includes the following apps and packages:
    ```
 
 3. Add your OpenAI API key to `apps/agent/.env`:
+
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    ```
 
 4. Start the development servers:
+
    ```bash
    # Start all services
    pnpm dev
@@ -93,11 +97,13 @@ curl http://localhost:4112/health
 ### Building
 
 Build all apps and packages:
+
 ```bash
 pnpm build
 ```
 
 Build specific apps:
+
 ```bash
 pnpm build --filter=@templates/mcp-server
 pnpm build --filter=@templates/agent

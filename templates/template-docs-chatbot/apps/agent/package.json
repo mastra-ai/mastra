@@ -8,7 +8,12 @@
     "build": "mastra build",
     "start": "mastra start"
   },
-  "keywords": ["agent", "mastra", "documentation", "mcp"],
+  "keywords": [
+    "agent",
+    "mastra",
+    "documentation",
+    "mcp"
+  ],
   "author": "",
   "license": "ISC",
   "description": "A Mastra agent that consumes tools from an MCP server for documentation assistance",

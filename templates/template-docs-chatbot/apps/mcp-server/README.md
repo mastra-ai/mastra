@@ -11,11 +11,13 @@ A standalone MCP (Model Context Protocol) server that exposes documentation tool
 ## Getting Started
 
 1. Install dependencies:
+
    ```bash
    pnpm install
    ```
 
 2. Copy environment file:
+
    ```bash
    cp .env.example .env
    ```
@@ -30,13 +32,14 @@ The MCP server will be available at `http://localhost:4111/mcp`.
 ## Scripts
 
 - `pnpm dev` - Start development server
-- `pnpm build` - Build for production 
+- `pnpm build` - Build for production
 - `pnpm start` - Start production server
 - `pnpm test` - Run tests
 
 ## Configuration
 
 Environment variables:
+
 - `MCP_PORT` - Port for the MCP server (default: 4111)
 - `SERVER_BASE_URL` - Base URL for the server (default: http://localhost:4111)
 

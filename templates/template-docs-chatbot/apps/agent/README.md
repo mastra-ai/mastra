@@ -11,16 +11,19 @@ A Mastra agent that consumes tools from an MCP server to provide documentation a
 ## Getting Started
 
 1. Install dependencies:
+
    ```bash
    pnpm install
    ```
 
 2. Copy environment file:
+
    ```bash
    cp .env.example .env
    ```
 
 3. Add your OpenAI API key to `.env`:
+
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    ```
@@ -37,13 +40,14 @@ The agent will be available at `http://localhost:4112`.
 ## Scripts
 
 - `pnpm dev` - Start development server
-- `pnpm build` - Build for production 
+- `pnpm build` - Build for production
 - `pnpm start` - Start production server
 - `pnpm test` - Run tests
 
 ## Configuration
 
 Environment variables:
+
 - `PORT` - Port for the agent server (default: 4112)
 - `NODE_ENV` - Environment mode (development/production)
 - `MCP_SERVER_URL` - URL of the MCP server to connect to
