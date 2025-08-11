@@ -17,8 +17,39 @@ import { z } from 'zod';
 import { ToolSummaryProcessor } from './processors/tool-summary';
 import { WriteToDiskProcessor } from './processors/write-file';
 import type { AgentBuilderConfig, GenerateAgentOptions } from './types';
+import { spawn as nodeSpawn } from 'child_process';
+import { createRequire } from 'module';
 
 const exec = promisify(execNodejs);
+
+function spawn(command: string, args: string[], options: any) {
+  return new Promise((resolve, reject) => {
+    const childProcess = nodeSpawn(command, args, {
+      // stdio: 'inherit',
+      ...options,
+    });
+    childProcess.on('error', error => {
+      reject(error);
+    });
+    let stderr = '';
+    childProcess.stderr?.on('data', message => {
+      stderr += message;
+    });
+    childProcess.on('close', code => {
+      if (code === 0) {
+        resolve(void 0);
+      } else {
+        reject(new Error(stderr));
+      }
+    });
+  });
+}
+
+async function spawnSWPM(cwd: string, command: string, packageNames: string[]) {
+  await spawn(createRequire(import.meta.filename).resolve('swpm'), [command, ...packageNames], {
+    cwd,
+  });
+}
 
 export class AgentBuilderDefaults {
   static DEFAULT_INSTRUCTIONS = (
@@ -924,6 +955,12 @@ export const tools = await mcpClient.getTools();
                   projectPath,
                 });
               case 'upgrade':
+                if (!packages?.length) {
+                  return {
+                    success: false,
+                    message: 'Packages array is required for upgrade action',
+                  };
+                }
                 return await AgentBuilderDefaults.upgradePackages({
                   packages,
                   projectPath,
@@ -1162,16 +1199,13 @@ export const tools = await mcpClient.getTools();
 
       const packageStrings = packages.map(p => `${p.name}`);
 
-      const installCmd = `npx --yes swpm add ${packageStrings.join(' ')}`;
-
-      const execOptions = projectPath ? { cwd: projectPath } : {};
-      const { stdout } = await exec(installCmd, execOptions);
+      await spawnSWPM(projectPath || '', 'add', packageStrings);
 
       return {
         success: true,
         installed: packageStrings,
         message: `Successfully installed ${packages.length} package(s).`,
-        details: stdout,
+        details: '',
       };
     } catch (error) {
       return {
@@ -1194,23 +1228,18 @@ export const tools = await mcpClient.getTools();
     try {
       console.log('Upgrading specific packages:', JSON.stringify(packages, null, 2));
 
-      let upgradeCmd: string;
+      let packageNames: string[] = [];
 
       if (packages && packages.length > 0) {
-        const packageStrings = packages.map(p => `${p.name}${p.version ? `@${p.version}` : '@latest'}`);
-        upgradeCmd = `npx --yes swpm upgrade ${packageStrings.join(' ')}`;
-      } else {
-        upgradeCmd = 'npx --yes swpm update';
+        packageNames = packages.map(p => `${p.name}`);
       }
-
-      const execOptions = projectPath ? { cwd: projectPath } : {};
-      const { stdout } = await exec(upgradeCmd, execOptions);
+      await spawnSWPM(projectPath || '', 'upgrade', packageNames);
 
       return {
         success: true,
         upgraded: packages?.map(p => p.name) || ['all packages'],
         message: `Packages upgraded successfully.`,
-        details: stdout,
+        details: '',
       };
     } catch (error) {
       return {
@@ -3074,55 +3103,142 @@ const analyzePackageStep = createStep({
   },
 });
 
+export const flatInstallStep = createStep({
+  id: 'flat-install',
+  description: 'Run a flat install command without specifying packages',
+  inputSchema: z.object({
+    targetPath: z.string().describe('Path to the project to install packages in'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    message: z.string(),
+    details: z.string().optional(),
+  }),
+  execute: async ({ inputData }) => {
+    console.log('Running flat install...');
+    const { targetPath } = inputData;
+
+    try {
+      // Run flat install using swpm (no specific packages)
+      await spawnSWPM(targetPath, 'install', []);
+
+      return {
+        success: true,
+        message: 'Successfully ran flat install command',
+        details: 'Installed all dependencies from package.json',
+      };
+    } catch (error) {
+      console.error('Flat install failed:', error);
+      return {
+        success: false,
+        message: `Flat install failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  },
+});
+
 // NOTE: This is commented out code to let the agent handle package.json merging. Leaving in case we want to use it later.
-// const packageMergeStep = createStep({
-//   id: 'package-merge',
-//   description: 'Merge template package.json into target project',
-//   inputSchema: z.object({
-//     templateDir: z.string(),
-//     commitSha: z.string(),
-//     slug: z.string(),
-//   }),
-//   outputSchema: z.object({
-//     success: z.boolean(),
-//     applied: z.boolean(),
-//     branchName: z.string().optional(),
-//     error: z.string().optional(),
-//   }),
-//   execute: async ({ inputData }) => {
-//     // Handle package.json merging with agent intelligence
-//     //       const packageMergePrompt = `
-//     // Analyze the template package.json at ${templateDir}/package.json and merge any necessary dependencies into the target project's package.json at ${targetPath}/package.json.
-//     // Rules for merging:
-//     // 1. For dependencies: Use semver to resolve conflicts, prefer compatible ranges
-//     // 2. For scripts: Add new scripts with template:${slug}: prefix, don't overwrite existing ones
-//     // 3. Maintain existing package.json structure and formatting
-//     // 4. Only add dependencies that are actually needed by the template code
-//     // After updating package.json, commit with message: "feat(template): update package.json for ${slug}"
-//     // `;
-//     // await agentBuilder.generate(packageMergePrompt);
-//     // // Commit package.json changes
-//     // try {
-//     //   await exec(`git add package.json || true`, { cwd: targetPath });
-//     //   await exec(`git commit -m "feat(template): update package.json for ${slug}" || true`, { cwd: targetPath });
-//     // } catch {
-//     //   // Continue if commit fails
-//     // }
-//     // Install dependencies
-//     //       const installPrompt = `
-//     // Install the new dependencies that were added to package.json. Use the appropriate package manager (detect from lockfiles).
-//     // Run the installation command and handle any peer dependency warnings or conflicts intelligently.
-//     // `;
-//     //       await agentBuilder.generate(installPrompt);
-//     //       // Check for any additional setup commands in template
-//     //       const setupPrompt = `
-//     // Check the template directory ${templateDir} for any README.md or setup instructions.
-//     // If there are any additional setup steps mentioned (like environment variables, database setup, etc.),
-//     // provide clear instructions to the user about what needs to be done manually.
-//     // `;
-//     //       await agentBuilder.generate(setupPrompt);
-//   },
-// })
+const packageMergeStep = createStep({
+  id: 'package-merge',
+  description: 'Merge template package.json dependencies into target project and install',
+  inputSchema: z.object({
+    commitSha: z.string(),
+    slug: z.string(),
+    targetPath: z.string().optional(),
+    packageInfo: z.object({
+      dependencies: z.record(z.string()).optional(),
+      devDependencies: z.record(z.string()).optional(),
+      peerDependencies: z.record(z.string()).optional(),
+      scripts: z.record(z.string()).optional(),
+      packageInfo: z.object({
+        name: z.string().optional(),
+        version: z.string().optional(),
+        description: z.string().optional(),
+      }),
+    }),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    applied: z.boolean(),
+    message: z.string(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ inputData }) => {
+    console.log('Package merge step starting...');
+    const { commitSha, slug, packageInfo } = inputData;
+    const targetPath = inputData.targetPath || process.cwd();
+
+    try {
+      const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath);
+
+      const packageMergeAgent = new Agent({
+        name: 'package-merger',
+        description: 'Specialized agent for merging package.json dependencies',
+        instructions: `You are a package.json merge specialist. Your job is to:
+
+1. **Read the target project's package.json** using readFile tool
+2. **Merge template dependencies** into the target package.json following these rules:
+   - For dependencies: Add NEW ones with template versions, KEEP EXISTING versions for conflicts
+   - For devDependencies: Add NEW ones with template versions, KEEP EXISTING versions for conflicts  
+   - For peerDependencies: Add NEW ones with template versions, KEEP EXISTING versions for conflicts
+   - For scripts: Add new scripts with "template:${slug}:" prefix, don't overwrite existing ones
+   - Maintain existing package.json structure and formatting
+3. **Write the updated package.json** using writeFile tool
+
+Template Dependencies to Merge:
+- Dependencies: ${JSON.stringify(packageInfo.dependencies || {}, null, 2)}
+- Dev Dependencies: ${JSON.stringify(packageInfo.devDependencies || {}, null, 2)}
+- Peer Dependencies: ${JSON.stringify(packageInfo.peerDependencies || {}, null, 2)}
+- Scripts: ${JSON.stringify(packageInfo.scripts || {}, null, 2)}
+
+CRITICAL: For conflicts, PRESERVE the existing project's versions. Only use template versions for NEW dependencies.
+
+Be systematic and thorough. Always read the existing package.json first, then merge, then write.`,
+        model: openai('gpt-4o-mini'),
+        tools: {
+          readFile: allTools.readFile,
+          writeFile: allTools.writeFile,
+          listDirectory: allTools.listDirectory,
+        },
+      });
+
+      console.log('Starting package merge agent...');
+
+      const result = await packageMergeAgent.stream(
+        `Please merge the template dependencies into the target project's package.json at ${targetPath}/package.json.`,
+      );
+
+      let buffer: string[] = [];
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'text-delta') {
+          buffer.push(chunk.textDelta);
+          if (buffer.length > 20) {
+            console.log(buffer.join(''));
+            buffer = [];
+          }
+        }
+      }
+
+      if (buffer.length > 0) {
+        console.log(buffer.join(''));
+      }
+
+      return {
+        success: true,
+        applied: true,
+        message: `Successfully merged template dependencies and installed packages for ${slug}`,
+      };
+    } catch (error) {
+      console.error('Package merge failed:', error);
+      return {
+        success: false,
+        applied: false,
+        message: `Package merge failed: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+});
 
 // Step 3: Discover template units by scanning the templates directory
 const discoverUnitsStep = createStep({
@@ -3381,114 +3497,103 @@ After merging all files for this unit, commit the changes with message:
   },
 });
 
-export const packageUpdaterStep = createStep({
-  id: 'package-updater-step',
-  description: 'Updates packages using a specialized agent with package management tools',
-  inputSchema: z.object({
-    packages: z
-      .array(
-        z.object({
-          name: z.string(),
-          version: z.string().optional(),
-        }),
-      )
-      .optional()
-      .describe('Specific packages to update, if none provided updates all packages'),
-    projectPath: z.string().optional().describe('Path to the project to update'),
-    packageJson: z.object({
-      dependencies: z.record(z.string()).optional(),
-      devDependencies: z.record(z.string()).optional(),
-      peerDependencies: z.record(z.string()).optional(),
-      scripts: z.record(z.string()).optional(),
-      packageInfo: z.object({
-        name: z.string().optional(),
-        version: z.string().optional(),
-        description: z.string().optional(),
-      }),
-    }),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    message: z.string(),
-    upgraded: z.array(z.string()).optional(),
-    details: z.string().optional(),
-  }),
-  execute: async ({ inputData }) => {
-    const { packages, projectPath, packageJson } = inputData;
+// export const packageUpdaterStep = createStep({
+//   id: 'package-updater-step',
+//   description: 'Updates packages using a specialized agent with package management tools',
+//   inputSchema: z.object({
+//     projectPath: z.string().optional().describe('Path to the project to update'),
+//     packageJson: z.object({
+//       dependencies: z.record(z.string()).optional(),
+//       devDependencies: z.record(z.string()).optional(),
+//       peerDependencies: z.record(z.string()).optional(),
+//       scripts: z.record(z.string()).optional(),
+//       packageInfo: z.object({
+//         name: z.string().optional(),
+//         version: z.string().optional(),
+//         description: z.string().optional(),
+//       }),
+//     }),
+//   }),
+//   outputSchema: z.object({
+//     success: z.boolean(),
+//     message: z.string(),
+//     upgraded: z.array(z.string()).optional(),
+//     details: z.string().optional(),
+//   }),
+//   execute: async ({ inputData }) => {
+//     console.log('Package updater step...');
+//     const { projectPath, packageJson } = inputData;
+//     console.log('Package JSON', JSON.stringify(packageJson, null, 2));
+//     try {
+//       const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(projectPath);
 
-    try {
-      const { openai } = await import('@ai-sdk/openai');
+//       const packageManagementAgent = new Agent({
+//         name: 'package-manager',
+//         description: 'Specialized agent for package management operations',
+//         instructions: `You are a package management specialist. Your sole purpose is to update packages in projects.
 
-      const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(projectPath);
+// When asked to update packages:
+// 1. Use the manageProject tool with action "upgrade"
+// 2. If specific packages are provided, update only those packages
+// 3. If no specific packages are provided, update all packages
+// 4. Always provide clear feedback about what was updated
 
-      const packageManagementAgent = new Agent({
-        name: 'package-manager',
-        description: 'Specialized agent for package management operations',
-        instructions: `You are a package management specialist. Your sole purpose is to update packages in projects.
+// Package Dependencies from Template:
+// - Dependencies: ${JSON.stringify(packageJson.dependencies || {}, null, 2)}
+// - Dev Dependencies: ${JSON.stringify(packageJson.devDependencies || {}, null, 2)}
+// - Peer Dependencies: ${JSON.stringify(packageJson.peerDependencies || {}, null, 2)}
+// - Scripts: ${JSON.stringify(packageJson.scripts || {}, null, 2)}
+// - Package Info: ${JSON.stringify(packageJson.packageInfo || {}, null, 2)}
 
-When asked to update packages:
-1. Use the manageProject tool with action "upgrade"
-2. If specific packages are provided, update only those packages
-3. If no specific packages are provided, update all packages
-4. Always provide clear feedback about what was updated
+// Be concise and focused only on package management tasks.`,
+//         model: openai('gpt-4o-mini'),
+//         tools: {
+//           manageProject: allTools.manageProject,
+//           validateCode: allTools.validateCode,
+//         },
+//       });
 
-Package Dependencies from Template:
-- Dependencies: ${JSON.stringify(packageJson.dependencies || {}, null, 2)}
-- Dev Dependencies: ${JSON.stringify(packageJson.devDependencies || {}, null, 2)}
-- Peer Dependencies: ${JSON.stringify(packageJson.peerDependencies || {}, null, 2)}
-- Scripts: ${JSON.stringify(packageJson.scripts || {}, null, 2)}
-- Package Info: ${JSON.stringify(packageJson.packageInfo || {}, null, 2)}
+//       // Create a message for the package management agent
+//       let message: string;
+//       if (packageJson.dependencies && Object.keys(packageJson.dependencies).length > 0) {
+//         const packageList = Object.keys(packageJson.dependencies).join(', ');
+//         message = `Please update the following packages: ${packageList}`;
+//       } else {
+//         message = 'Please update all packages in the project to their latest versions';
+//       }
 
-Be concise and focused only on package management tasks.`,
-        model: openai('gpt-4o-mini'),
-        tools: {
-          manageProject: allTools.manageProject,
-          validateCode: allTools.validateCode,
-        },
-      });
+//       // Call the agent to handle the package update
+//       const result = await packageManagementAgent.stream(message);
 
-      // Create a message for the package management agent
-      let message: string;
-      if (packages && packages.length > 0) {
-        const packageList = packages.map(p => `${p.name}${p.version ? `@${p.version}` : ''}`).join(', ');
-        message = `Please update the following packages: ${packageList}`;
-      } else {
-        message = 'Please update all packages in the project to their latest versions';
-      }
+//       // let buffer = []
+//       const chunks: any[] = [];
 
-      // Call the agent to handle the package update
-      const result = await packageManagementAgent.stream(message);
+//       for await (const chunk of result.fullStream) {
+//         if (chunk.type === 'text-delta' || chunk.type === 'reasoning' || chunk.type === 'tool-result') {
+//           // buffer.push(chunk.textDelta);
+//           console.log(JSON.stringify(chunk, null, 2));
+//           chunks.push(chunk);
+//           // if (buffer.length > 20) {
+//           //   console.log(buffer.join(''));
+//           //   buffer = [];
+//         }
+//       }
 
-      // let buffer = []
-      const chunks: any[] = [];
-
-      for await (const chunk of result.fullStream) {
-        if (chunk.type === 'text-delta' || chunk.type === 'reasoning' || chunk.type === 'tool-result') {
-          // buffer.push(chunk.textDelta);
-          console.log(JSON.stringify(chunk, null, 2));
-          chunks.push(chunk);
-          // if (buffer.length > 20) {
-          //   console.log(buffer.join(''));
-          //   buffer = [];
-        }
-      }
-
-      return {
-        success: true,
-        message: `Package update completed.`,
-        upgraded: packages?.map(p => p.name) || ['all packages'],
-        details: chunks.map(c => c.textDelta).join(''),
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Package update failed: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  },
-});
-
-// The packageUpdaterStep can now be used in any workflow as needed
+//       return {
+//         success: true,
+//         message: `Package update completed.`,
+//         upgraded: Object.keys(packageJson.dependencies || {}),
+//         details: chunks.map(c => c.textDelta).join(''),
+//       };
+//     } catch (error) {
+//       console.error('Package update failed:', error);
+//       return {
+//         success: false,
+//         message: `Package update failed: ${error instanceof Error ? error.message : String(error)}`,
+//       };
+//     }
+//   },
+// });
 
 // Create the complete workflow
 export const mergeTemplateWorkflow = createWorkflow({
@@ -3502,7 +3607,8 @@ export const mergeTemplateWorkflow = createWorkflow({
     analyzePackageStep,
     discoverUnitsStep,
     orderUnitsStep,
-    packageUpdaterStep,
+    packageMergeStep,
+    flatInstallStep,
     intelligentMergeStep,
   ],
 })
@@ -3510,12 +3616,31 @@ export const mergeTemplateWorkflow = createWorkflow({
   .parallel([analyzePackageStep, discoverUnitsStep])
   .map(async ({ getStepResult }) => {
     const discoverResult = getStepResult(discoverUnitsStep);
-    return { ...discoverResult, packageInfo: getStepResult(analyzePackageStep) };
+    return discoverResult;
   })
-  .parallel([orderUnitsStep, packageUpdaterStep])
+  .then(orderUnitsStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
     const packageResult = getStepResult(analyzePackageStep);
+    const initData = getInitData();
+
+    return {
+      commitSha: cloneResult.commitSha,
+      slug: cloneResult.slug,
+      targetPath: initData.targetPath,
+      packageInfo: packageResult,
+    };
+  })
+  .then(packageMergeStep)
+  .map(async ({ getInitData }) => {
+    const initData = getInitData();
+    return {
+      targetPath: initData.targetPath,
+    };
+  })
+  .then(flatInstallStep)
+  .map(async ({ getStepResult, getInitData }) => {
+    const cloneResult = getStepResult(cloneTemplateStep);
     const orderResult = getStepResult(orderUnitsStep);
     const initData = getInitData();
 
