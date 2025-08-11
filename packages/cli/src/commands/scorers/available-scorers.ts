@@ -54,11 +54,11 @@ export const AVAILABLE_SCORERS: Array<ScorerTemplate> = [
     filename: 'tone-consistency-scorer.ts',
   },
   {
-    id: 'toxicity',
+    id: 'toxicity-detection',
     name: 'Toxicity Detection',
     description: 'Detects harmful or inappropriate content in responses',
     category: 'output-quality',
-    filename: 'toxicity-scorer.ts',
+    filename: 'toxicity-detection-scorer.ts',
   },
   {
     id: 'bias-detection',
