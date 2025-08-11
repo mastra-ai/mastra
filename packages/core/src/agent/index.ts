@@ -641,8 +641,8 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
-  __updateModel(newModel: MastraLanguageModel) {
-    this.model = newModel;
+  __updateModel({ model }: { model: DynamicArgument<MastraLanguageModel> }) {
+    this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
 
