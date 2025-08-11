@@ -4,11 +4,13 @@ import pc from 'picocolors';
 
 import type { CLI_ORIGIN } from './analytics/index';
 import { PosthogAnalytics, setAnalytics } from './analytics/index';
+import { addScorer } from './commands/actions/add-scorer';
 import { buildProject } from './commands/actions/build-project';
 import { createProject } from './commands/actions/create-project';
 import { deployProject } from './commands/actions/deploy-project';
 import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
+import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { DepsService } from './services/service.deps';
@@ -121,6 +123,16 @@ program
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-nt, --no-telemetry', 'Disable telemetry on start')
   .action(startProject);
+
+const scorersCommand = program.command('scorers').description(pc.yellow('Manage scorers for evaluating AI outputs'));
+
+scorersCommand
+  .command('add [scorer-name]')
+  .description('Add a new scorer to your project')
+  .option('-d, --dir <path>', 'Path to your Mastra directory (default: auto-detect)')
+  .action(addScorer);
+
+scorersCommand.command('list').description('List available scorer templates').action(listScorers);
 
 program.parse(process.argv);
 
