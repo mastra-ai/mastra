@@ -32,7 +32,7 @@ Import the necessary class from the agents module, and an LLM provider:
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";;
+import { Agent } from "@mastra/core/agent";
 ```
 ### LLM providers
 
@@ -119,7 +119,7 @@ Call `.stream()` with an array of message objects that include `role` and `conte
 
 ```typescript showLineNumbers copy
 const stream = await testAgent.stream([
-  { role: "assistant", content: "Help me organize my day" },
+  { role: "user", content: "Help me organize my day" },
   { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
   { role: "user", content: "I take lunch between 12:30 and 13:30" },
   { role: "user", content: "I have meetings Monday to Friday between 10:30 and 11:30" }
