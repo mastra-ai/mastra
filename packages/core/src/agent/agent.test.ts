@@ -1020,7 +1020,7 @@ describe('agent', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
     expect(usedModelName).toBe('standard');
 
-    agent.__updateModel(premiumModel);
+    agent.__updateModel({ model: premiumModel });
     usedModelName = '';
 
     await agent.generate('Test message');
