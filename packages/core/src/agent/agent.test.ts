@@ -981,6 +981,54 @@ describe('agent', () => {
     expect(usedModelName).toBe('standard');
   });
 
+  it('should allow agent model to be updated', async () => {
+    let usedModelName = '';
+
+    // Create two different models
+    const premiumModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        usedModelName = 'premium';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Premium Title`,
+        };
+      },
+    });
+
+    const standardModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        usedModelName = 'standard';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Standard Title`,
+        };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'update-model-agent',
+      instructions: 'test agent',
+      model: standardModel,
+    });
+
+    await agent.generate('Test message');
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedModelName).toBe('standard');
+
+    agent.__updateModel(premiumModel);
+    usedModelName = '';
+
+    await agent.generate('Test message');
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedModelName).toBe('premium');
+  });
+
   it('should handle boolean generateTitle config for backward compatibility', async () => {
     let titleGenerationCallCount = 0;
     let agentCallCount = 0;
