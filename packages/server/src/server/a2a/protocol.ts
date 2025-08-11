@@ -1,4 +1,4 @@
-import { A2AError } from '@mastra/core/a2a';
+import { MastraA2AError } from '@mastra/core/a2a';
 
 import type { JSONRPCError, JSONRPCResponse, Message, Part } from '@mastra/core/a2a';
 import type { CoreMessage } from '@mastra/core/llm';
@@ -10,15 +10,15 @@ export function normalizeError(
   taskId?: string,
   logger?: IMastraLogger,
 ): JSONRPCResponse<null, unknown> {
-  let a2aError: A2AError;
-  if (error instanceof A2AError) {
+  let a2aError: MastraA2AError;
+  if (error instanceof MastraA2AError) {
     a2aError = error;
   } else if (error instanceof Error) {
     // Generic JS error
-    a2aError = A2AError.internalError(error.message, { stack: error.stack });
+    a2aError = MastraA2AError.internalError(error.message, { stack: error.stack });
   } else {
     // Unknown error type
-    a2aError = A2AError.internalError('An unknown error occurred.', error);
+    a2aError = MastraA2AError.internalError('An unknown error occurred.', error);
   }
 
   // Ensure Task ID context is present if possible
@@ -46,7 +46,7 @@ export function createErrorResponse(
 export function createSuccessResponse<T>(id: number | string | null, result: T): JSONRPCResponse<T> {
   if (!id) {
     // This shouldn't happen for methods that expect a response, but safeguard
-    throw A2AError.internalError('Cannot create success response for null ID.');
+    throw MastraA2AError.internalError('Cannot create success response for null ID.');
   }
 
   return {
@@ -64,7 +64,7 @@ export function convertToCoreMessage(message: Message): CoreMessage {
 }
 
 function convertToCoreMessagePart(part: Part) {
-  switch (part.type) {
+  switch (part.kind) {
     case 'text':
       return {
         type: 'text',
@@ -73,7 +73,7 @@ function convertToCoreMessagePart(part: Part) {
     case 'file':
       return {
         type: 'file',
-        data: new URL(part.file.uri!),
+        data: 'uri' in part.file ? new URL(part.file.uri) : part.file.bytes,
         mimeType: part.file.mimeType!,
       } as const;
     case 'data':
