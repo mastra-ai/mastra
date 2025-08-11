@@ -49,13 +49,7 @@ const stream = run.streamVNext({
   },
 });
 
-for await (const chunk of stream) {
-  process.stdout.write(chunk);
-}
-
-
 const result = await stream.result;
-console.log(result);
 ```
 
 ## Returns
