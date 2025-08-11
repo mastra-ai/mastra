@@ -39,6 +39,11 @@ describe('checkConfigExport Babel plugin', () => {
     expect(runPlugin(code)).toBe(false);
   });
 
+  it('does not match export const mastra = getMastra()', () => {
+    const code = 'export const mastra = getMastra()';
+    expect(runPlugin(code)).toBe(false);
+  });
+
   it('does not match export { mastra } if mastra is not new Mastra()', () => {
     const code = 'const mastra = 123; export { mastra }';
     expect(runPlugin(code)).toBe(false);
