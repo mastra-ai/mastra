@@ -707,11 +707,13 @@ describe('GeminiLiveVoice', () => {
       audioStream.write(Buffer.alloc(2000));
       audioStream.end();
 
-      // Simulate transcript chunks and turn completion
+      // Simulate transcript chunks; ensure turnComplete is emitted after writing handlers run
       setTimeout(() => {
         (voice as any).emit('writing', { text: 'Hello ', role: 'user' });
         (voice as any).emit('writing', { text: 'world', role: 'user' });
-        (voice as any).emit('turnComplete', { timestamp: Date.now() });
+        setTimeout(() => {
+          (voice as any).emit('turnComplete', { timestamp: Date.now() });
+        }, 0);
       }, 5);
 
       await expect(listenPromise).resolves.toBe('Hello world');
@@ -801,11 +803,16 @@ describe('GeminiLiveVoice', () => {
       });
 
       expect(mockExecute).toHaveBeenCalled();
+      // Verify tool was called with correct parameter structure
+      const [toolArgs, execOptions] = mockExecute.mock.calls[0];
+      expect(toolArgs).toEqual({ context: { q: 1 }, runtimeContext: undefined });
+      expect(execOptions).toMatchObject({ toolCallId: 'id-1' });
       expect(mockWs.send).toHaveBeenCalled();
       const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
       const toolResult = payloads.find((p: any) => p.tool_result);
       expect(toolResult).toBeDefined();
       expect(toolResult.tool_result.tool_call_id).toBe('id-1');
+      expect(toolResult.tool_result.result).toEqual({ result: 'ok' });
     });
 
     it('should emit usage event from usageMetadata', async () => {
