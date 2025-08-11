@@ -42,7 +42,7 @@ export interface TracesTableProps {
 
 const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: number; isActive: boolean }) => {
   const { openTrace } = useOpenTrace();
-  const hasFailure = trace.trace.some(span => span.status.code !== 0);
+  const hasFailure = trace.trace.some(span => span.status.code === 2);
 
   return (
     <Row className={isActive ? 'bg-surface4' : ''} onClick={() => openTrace(trace.trace, index)}>
