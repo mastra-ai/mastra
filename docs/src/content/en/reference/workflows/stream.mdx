@@ -17,10 +17,6 @@ const stream = await run.stream({
     value: "initial data",
   },
 });
-
-for (const chunk of stream) {
-  process.stdout.write(chunk);
-}
 ```
 
 ## Parameters
@@ -28,38 +24,16 @@ for (const chunk of stream) {
 <PropertiesTable
   content={[
     {
-      name: "params",
-      type: "object",
-      description: "Configuration object for starting the workflow run",
-      isOptional: false,
-      properties: [
-        {
-          name: "inputData",
-          type: "z.infer<TInput>",
-          parameters: [
-            {
-              name: "z.infer<TInput>",
-              type: "inputData",
-              description:
-                "Runtime context data to use when starting the workflow",
-              isOptional: true,
-            },
-          ],
-        },
-        {
-          name: "runtimeContext",
-          type: "RuntimeContext",
-          parameters: [
-            {
-              name: "runtimeContext",
-              type: "RuntimeContext",
-              description:
-                "Runtime context data to use when starting the workflow",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "Input data that matches the workflow's input schema",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "Runtime context data to use during workflow execution",
+      isOptional: true,
     },
   ]}
 />
