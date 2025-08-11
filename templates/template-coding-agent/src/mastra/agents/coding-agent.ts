@@ -1,7 +1,7 @@
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
-import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import { openai } from '@ai-sdk/openai';
 import {
   checkFileExists,
   createDirectory,
@@ -16,11 +16,11 @@ import {
   watchDirectory,
   writeFile,
   writeFiles,
-} from "../tools/e2b";
-import { fastembed } from "@mastra/fastembed";
+} from '../tools/e2b';
+import { fastembed } from '@mastra/fastembed';
 
 export const codingAgent = new Agent({
-  name: "Coding Agent",
+  name: 'Coding Agent',
   instructions: `
 # Mastra Coding Agent for E2B Sandboxes
 
@@ -187,7 +187,7 @@ For sophisticated projects, leverage:
 
 Remember: You are not just a code executor, but a complete development environment that can handle sophisticated, multi-file projects with professional development workflows and comprehensive monitoring capabilities.
 `,
-  model: openai("gpt-4.1"),
+  model: openai('gpt-4.1'),
   tools: {
     createSandbox,
     runCode,
@@ -204,14 +204,14 @@ Remember: You are not just a code executor, but a complete development environme
     runCommand,
   },
   memory: new Memory({
-    storage: new LibSQLStore({ url: "file:../../mastra.db" }),
+    storage: new LibSQLStore({ url: 'file:../../mastra.db' }),
     options: {
       threads: { generateTitle: true },
       semanticRecall: true,
       workingMemory: { enabled: true },
     },
     embedder: fastembed,
-    vector: new LibSQLVector({ connectionUrl: "file:../../mastra.db" }),
+    vector: new LibSQLVector({ connectionUrl: 'file:../../mastra.db' }),
   }),
   defaultStreamOptions: { maxSteps: 20 },
 });
