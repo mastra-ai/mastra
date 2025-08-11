@@ -1,78 +1,77 @@
 ---
-title: "Reference: Workflow.resume() | Building Workflows | Mastra Docs"
-description: Documentation for the `.resume()` method in workflows, which resumes a suspended workflow run with new data.
+title: "Reference: Workflow.resume() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.resume()` method in workflows, which resumes a suspended workflow run with new data.
 ---
 
 # Workflow.resume()
 
-The `.resume()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step.
+The `resume()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step.
 
-## Usage
+## Usage example
 
-```typescript
-const run = await counterWorkflow.createRunAsync();
-const result = await run.start({ inputData: { startValue: 0 } });
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const result = await run.start({ inputData: { value: "initial data" } });
 
 if (result.status === "suspended") {
   const resumedResults = await run.resume({
-    resumeData: { newValue: 0 },
+    resumeData: { value: "resume data" }
   });
 }
 ```
-
-
-For more advanced scenarios where you need to specify the exact step to resume:
-
-```typescript
-await run.resume({
-  step: result.suspended[0], // Explicitly choose which step to resume
-  resumeData: { newValue: 0 },
-});
-```
-> **Note**: When exactly one step is suspended, you can omit the `step` parameter and the workflow will automatically resume that step. For workflows with multiple suspended steps, you must explicitly specify which step to resume.
-
 ## Parameters
 
 <PropertiesTable
   content={[
     {
-      name: "params",
-      type: "object",
-      description: "Configuration object for resuming the workflow run",
-      isOptional: false,
-      properties: [
-        {
-          name: "resumeData",
-          type: "ResumeSchema",
-          description: "Data for resuming the suspended step",
-          isOptional: true,
-        },
-        {
-          name: "step",
-          type: "Step | Step[] | string | string[]",
-          description: "The step(s) to resume execution from. When omitted, the workflow will automatically resume the suspended step if exactly one step is suspended. Throws an error if multiple steps are suspended and no step is specified.",
-          isOptional: true,
-        },
-        {
-          name: "runtimeContext",
-          type: "RuntimeContext",
-          description: "Runtime context data to use when resuming",
-          isOptional: true,
-        },
-      ],
+      name: "resumeData",
+      type: "z.infer<TResumeSchema>",
+      description: "Data for resuming the suspended step",
+      isOptional: true,
+    },
+    {
+      name: "step",
+      type: "Step<string, any, any, TResumeSchema, any, TEngineType> | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>] | string | string[]",
+      description: "The step(s) to resume execution from. Can be a Step instance, array of Steps, step ID string, or array of step ID strings",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "Runtime context data to use when resuming",
+      isOptional: true,
+    },
+    {
+      name: "runCount",
+      type: "number",
+      description: "Optional run count for nested workflow execution",
+      isOptional: true,
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    step: result.suspended[0],
+    resumeData: { value: "resume data" }
+  });
+}
+```
+> **Note**: When exactly one step is suspended, you can omit the `step` parameter and the workflow will automatically resume that step. For workflows with multiple suspended steps, you must explicitly specify which step to resume.
+
 
 ## Returns
 
 <PropertiesTable
   content={[
     {
-      name: "resumedResults",
+      name: "result",
       type: "Promise<WorkflowResult<TOutput, TSteps>>",
-      description:
-        "A promise that resolves to the result of the resumed workflow run",
+      description: "A promise that resolves to the workflow execution result containing step outputs and status",
     },
   ]}
 />

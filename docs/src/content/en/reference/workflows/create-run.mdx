@@ -1,37 +1,22 @@
 ---
-title: "Reference: Workflow.createRunAsync() | Building Workflows | Mastra Docs"
-description: Documentation for the `.createRunAsync()` method in workflows, which creates a new workflow run instance.
+title: "Reference: Workflow.createRunAsync() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.createRunAsync()` method in workflows, which creates a new workflow run instance.
 ---
 
 # Workflow.createRunAsync()
 
 The `.createRunAsync()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data.
 
-## Usage
+## Usage example
 
-```typescript
-const myWorkflow = createWorkflow({
-  id: "my-workflow",
-  inputSchema: z.object({
-    startValue: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  steps: [step1, step2, step3], // Declare steps used in this workflow
-})
-  .then(step1)
-  .then(step2)
-  .then(step3)
-  .commit();
+```typescript showLineNumbers copy
+const run = await mastra.getWorkflow("workflow").createRunAsync();
 
-const mastra = new Mastra({
-  workflows: {
-    myWorkflow,
-  },
+const result = await run.start({
+  inputData: {
+    value: 10
+  }
 });
-
-const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
 ```
 
 ## Parameters

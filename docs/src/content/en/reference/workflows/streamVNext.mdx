@@ -1,28 +1,68 @@
 ---
-title: "Reference: Workflow.streamVNext() | Streaming | Workflows | Mastra Docs"
-description: Documentation for the `.streamVNext()` method in Mastra workflows, which enables real-time streaming of responses.
+title: "Reference: Workflow.streamVNext() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
 
-# `streamVNext()`
+# Workflow.streamVNext()
 
 The `streamVNext()` method enables real-time streaming of responses from a workflow.
 
-## Usage
+## Usage example
 
 ```typescript
-const run = await myWorkflow.createRunAsync();
+const run = await workflow.createRunAsync();
 
-// Add a stream to monitor execution
-const stream = run.streamVNext({ inputData: {...} });
+const stream = run.streamVNext({
+  inputData: {
+    value: "initial data",
+  },
+});
 
-
-for (const chunk of stream) {
-  // do something with the chunk
+for await (const chunk of stream) {
+  process.stdout.write(chunk);
 }
-
 ```
 
-## Protocol
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "Input data that matches the workflow's input schema",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "Runtime context data to use during workflow execution",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = run.streamVNext({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk);
+}
+
+
+const result = await stream.result;
+console.log(result);
+```
+
+## Returns
 
 <PropertiesTable
   content={[
@@ -124,10 +164,6 @@ for (const chunk of stream) {
   ]}
 />
 
-## Returns
-
-### PropertiesTable for Return Values
-
 <PropertiesTable
   content={[
     {
@@ -164,7 +200,7 @@ for (const chunk of stream) {
           parameters: [
             {
               name: "totalTokens",
-              type: "number", 
+              type: "number",
               isOptional: true,
               description: "The total number of tokens used by the agent.",
             },
@@ -189,27 +225,8 @@ for (const chunk of stream) {
   ]}
 />
 
-## Examples
-
-### Basic Streaming
-
-```typescript
-const run = await myWorkflow.createRunAsync();
-const stream = run.streamVNext({ inputData: {...} });
-
-for await (const chunk of stream) {
-  process.stdout.write(chunk);
-}
-```
-
-### Structured Output Streaming
-
-```typescript
-const run = await myWorkflow.createRunAsync();
-const stream = run.streamVNext({ inputData: {...} });
 
 
-const result = await stream.result;
-console.log("Final structured result:", result);
-```
+
+
 

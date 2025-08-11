@@ -1,27 +1,80 @@
 ---
-title: "Reference: Workflow.stream() | Building Workflows | Mastra Docs"
-description: Documentation for the `.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
+title: "Reference: Workflow.stream() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
 ---
 
-# Run.stream()
+# Workflow.stream()
 
-The `.stream()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
+The `stream()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
 
-## Usage
+## Usage example
 
-```typescript
-const run = await myWorkflow.createRunAsync();
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
 
-// Add a stream to monitor execution
-const result = run.stream({ inputData: {...} });
-
+const stream = await run.stream({
+  inputData: {
+    value: "initial data",
+  },
+});
 
 for (const chunk of stream) {
-  // do something with the chunk
+  process.stdout.write(chunk);
 }
 ```
 
-## Messages
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "params",
+      type: "object",
+      description: "Configuration object for starting the workflow run",
+      isOptional: false,
+      properties: [
+        {
+          name: "inputData",
+          type: "z.infer<TInput>",
+          parameters: [
+            {
+              name: "z.infer<TInput>",
+              type: "inputData",
+              description:
+                "Runtime context data to use when starting the workflow",
+              isOptional: true,
+            },
+          ],
+        },
+        {
+          name: "runtimeContext",
+          type: "RuntimeContext",
+          parameters: [
+            {
+              name: "runtimeContext",
+              type: "RuntimeContext",
+              description:
+                "Runtime context data to use when starting the workflow",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "A stream that pipes each step to the stream",
+    },
+  ]}
+/>
 
 <PropertiesTable
   content={[
@@ -180,55 +233,5 @@ for (const chunk of stream) {
   ]}
 />
 
-## Parameters
 
-<PropertiesTable
-  content={[
-    {
-      name: "params",
-      type: "object",
-      description: "Configuration object for starting the workflow run",
-      isOptional: false,
-      properties: [
-        {
-          name: "inputData",
-          type: "z.infer<TInput>",
-          parameters: [
-            {
-              name: "z.infer<TInput>",
-              type: "inputData",
-              description:
-                "Runtime context data to use when starting the workflow",
-              isOptional: true,
-            },
-          ],
-        },
-        {
-          name: "runtimeContext",
-          type: "RuntimeContext",
-          parameters: [
-            {
-              name: "runtimeContext",
-              type: "RuntimeContext",
-              description:
-                "Runtime context data to use when starting the workflow",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
-/>
 
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
-      description: "A stream that pipes each step to the stream",
-    },
-  ]}
-/>
