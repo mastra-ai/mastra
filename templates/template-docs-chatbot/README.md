@@ -152,11 +152,13 @@ This separation provides several advantages:
 
 ## Deployment
 
-Each app can be deployed independently:
+Each app should be deployed independently:
 
 - **MCP Server**: Deploy as a standalone service (Docker, serverless, etc.)
 - **Agent**: Deploy with Mastra's built-in deployment options
 - **Web/Docs**: Deploy to Vercel, Netlify, or other hosting platforms
+
+The Agent app should be deployed first, then the deployment URL should be added to the MCP server's `MCP_SERVER_URL` environment variable.
 
 ## Learn More
 
