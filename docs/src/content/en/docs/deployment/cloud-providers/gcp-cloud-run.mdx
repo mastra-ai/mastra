@@ -1,0 +1,305 @@
+---
+title: Google Cloud Run
+description: Deploy your Mastra application to Google Cloud Run for scalable, serverless container hosting.
+---
+
+import { Callout } from "@/components/ui/callout";
+
+Deploy your Mastra application to Google Cloud Run for scalable, serverless container hosting with automatic scaling and pay-per-use pricing.
+
+## Prerequisites
+
+- Google Cloud Platform account with billing enabled
+- [Docker](https://docs.docker.com/get-docker/) installed and running
+- A Mastra application ready for deployment
+
+## Setup
+
+### Create a Google Cloud Project
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Click **Select a project** → **New Project**
+3. Enter a project name and click **Create**
+4. Enable billing for your project
+
+### Enable Required APIs
+
+1. In the Google Cloud Console, go to **APIs & Services** → **Library**
+2. Search for and enable the following APIs:
+   - Cloud Run API
+   - Container Registry API
+
+### Install Google Cloud SDK
+
+Download and install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) for your operating system, then authenticate:
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+## Manual Deployment
+
+### Prepare Your Application
+
+Create a `Dockerfile` in your project root:
+
+```dockerfile
+# Multi-stage build for optimized production image
+FROM node:20-alpine AS builder
+WORKDIR /app
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=8192"  # Allocate 8GB heap for Mastra's memory-intensive workflows
+
+# Install dependencies and build
+COPY package*.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+RUN npm run build
+
+# Runtime stage
+FROM node:20-alpine AS runner
+ENV NODE_OPTIONS="--max-old-space-size=8192" \  # Maintain 8GB heap for runtime AI operations
+    HOST=0.0.0.0  # Bind to all interfaces - required for Cloud Run container networking
+WORKDIR /app
+
+# Copy production dependencies and built app
+COPY package*.json ./
+RUN npm ci --omit=dev --no-audit --no-fund  # Install only production dependencies to reduce image size; also some intermittent SSL errors
+COPY --from=builder /app/.mastra /app/.mastra
+
+EXPOSE $PORT
+CMD ["npm", "run", "start:cloud"]
+```
+
+<Callout type="warning">
+**Port Configuration**: Cloud Run requires your application to listen on port 8080 (via the `PORT` environment variable). If your local development uses port 4111, you'll need to update your start script to use `${PORT:-8080}` to default to 8080 in production.
+</Callout>
+
+Update your `package.json` to include the Cloud Run start script:
+
+```json
+{
+  "scripts": {
+    "start:cloud": "NODE_OPTIONS='--max-old-space-size=8192' HOST=0.0.0.0 PORT=${PORT:-8080} node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs"
+  }
+}
+```
+
+### Deploy Using Cloud Console
+
+1. **Build and Push Container:**
+
+   ```bash
+   # Configure Docker authentication
+   gcloud auth configure-docker
+
+   # Build and push your container
+   docker build -t gcr.io/YOUR_PROJECT_ID/mastra-app .
+   docker push gcr.io/YOUR_PROJECT_ID/mastra-app
+   ```
+
+2. **Create Cloud Run Service:**
+   - Go to [Cloud Run Console](https://console.cloud.google.com/run)
+   - Click **Create Service**
+   - Select **Deploy one revision from an existing container image**
+   - Enter your image URL: `gcr.io/YOUR_PROJECT_ID/mastra-app`
+   - Configure the service:
+     - **Service name**: `mastra-app`
+     - **Region**: Choose your preferred region (e.g., `us-west1`)
+     - **Authentication**: Select "Require authentication" for private access
+
+3. **Configure Resources:**
+   - **Memory**: 8 GiB (recommended for Mastra applications)
+   - **CPU**: 4 (for optimal performance)
+   - **Maximum instances**: 10
+   - **Request timeout**: 900 seconds (15 minutes)
+
+4. **Set Environment Variables:**
+   - In the **Variables & Secrets** section, add your required variables (see Configuration section below)
+
+5. Click **Create** to deploy your service
+
+<Callout type="info">
+  **Environment Variables**: Unlike some platforms, Cloud Run creates a new
+  revision with each deployment. Environment variables must be set during each
+  deployment or they will be lost. This is why CI/CD pipelines must include all
+  environment variables in the deployment configuration.
+</Callout>
+
+## CI/CD with GitHub Actions
+
+### Create Service Account
+
+1. Go to **IAM & Admin** → **Service Accounts** in Google Cloud Console
+2. Click **Create Service Account**
+3. Name: `github-actions-deployer`
+4. Grant the following roles:
+   - Cloud Run Admin (to deploy services)
+   - Service Account User (to impersonate the Cloud Run runtime service account)
+   - Storage Admin (to push container images to Container Registry)
+5. Create and download a JSON key file
+
+<Callout type="info">
+  **Security Note**: JSON key files are long-lived credentials that should be
+  handled carefully. For enhanced security, consider using [Workload Identity
+  Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
+  instead, which eliminates the need for service account keys and provides
+  keyless authentication from GitHub Actions.
+</Callout>
+
+### Configure GitHub Repository
+
+In your GitHub repository settings:
+
+**Variables** (Settings → Secrets and variables → Actions → Variables):
+
+- `GCP_PROJECT_ID`: Your Google Cloud project ID
+- `USE_LOCAL_PROMPTS`: `true` or `false`
+- `DISABLE_STEP_CACHE`: `false`
+
+**Secrets** (Settings → Secrets and variables → Actions → Secrets):
+
+- `GCP_SA_KEY`: Contents of the service account JSON key file
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `DATABASE_URL`: Your database connection string
+- `REDIS_URL`: Your Redis connection string (if using)
+- Add any other API keys your application requires
+
+### Create Workflow File
+
+You can use GitHub's default Cloud Run template or create a custom one. Here's a custom workflow that handles environment variables properly:
+
+Create `.github/workflows/deploy-cloudrun.yml`:
+
+```yaml
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  CLOUD_RUN_SERVICE: mastra-app # Change this to your preferred service name
+  CLOUD_RUN_REGION: us-west1 # Change this to your preferred region (e.g., us-central1, europe-west1)
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="gcr.io/${GCP_PROJECT_ID}/${CLOUD_RUN_SERVICE}:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.CLOUD_RUN_SERVICE }}
+          region: ${{ env.CLOUD_RUN_REGION }}
+          image: gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.CLOUD_RUN_SERVICE }}:${{ github.sha }}
+          env_vars: |
+            NODE_ENV=production
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            REDIS_URL=${{ secrets.REDIS_URL }}
+            USE_LOCAL_PROMPTS=${{ vars.USE_LOCAL_PROMPTS }}
+            DISABLE_STEP_CACHE=${{ vars.DISABLE_STEP_CACHE }}
+          flags: "--timeout=900s --memory=8Gi --cpu=4 --max-instances=10 --no-allow-unauthenticated"
+```
+
+<Callout type="warning">
+  **GitHub Actions Flags**: The `flags` parameter in the `deploy-cloudrun`
+  action must be a space-separated string on a single line, not one flag per
+  line. Complex flags with nested values must be quoted properly.
+</Callout>
+
+### Alternative: Use GitHub's Default Template
+
+GitHub provides a default Cloud Run workflow template:
+
+1. Go to your repository → **Actions** → **New workflow**
+2. Search for "Deploy to Cloud Run"
+3. Click **Configure** on the Google Cloud Run template
+4. Modify the template to include your environment variables and resource requirements
+
+## Configuration
+
+### Environment Variables
+
+Configure these environment variables based on your application needs:
+
+**Required:**
+
+- `NODE_ENV`: Set to `production`
+- `HOST`: `0.0.0.0` (configured automatically in Dockerfile)
+- `PORT`: Set automatically by Cloud Run to 8080
+
+**Application-specific (examples):**
+
+- `OPENAI_API_KEY`: Your AI provider API key
+- `DATABASE_URL`: Database connection string
+- `REDIS_URL`: Redis connection string
+- `API_SECRET_KEY`: Your application's secret key
+- `WEBHOOK_SECRET`: Webhook verification secret
+
+<Callout type="info">
+  **Environment Variable Management**: Since Cloud Run creates new revisions
+  with each deployment, environment variables must be explicitly set during
+  deployment. They are not persisted between deployments unless included in your
+  CI/CD configuration or set manually in the Cloud Console.
+</Callout>
+
+### Resource Configuration
+
+**Memory**: 8 GiB recommended for Mastra applications with complex AI workflows
+**CPU**: 4 cores for optimal performance  
+**Timeout**: 900 seconds (15 minutes) for long-running AI operations
+**Scaling**: Up to 10 instances with automatic scaling
+
+### Access Control
+
+**Private Access** (default): Requires authentication
+**Public Access**: To make your service publicly accessible:
+
+1. Go to Cloud Run Console → Your service
+2. Click **Security** tab
+3. Check "Allow unauthenticated invocations"
+
+## Monitoring and Troubleshooting
+
+### View Logs and Metrics
+
+1. Go to [Cloud Run Console](https://console.cloud.google.com/run)
+2. Click your service name
+3. Use the **Logs** tab to view application logs
+4. Use the **Metrics** tab to monitor performance
+
+### Common Issues
+
+**Container startup failures:**
+
+- Verify your application binds to `0.0.0.0:$PORT` (not localhost)
+- Check that all required environment variables are configured
+- Review container logs in the Cloud Run Console
+
+**Port binding issues:**
+
+- Ensure your application uses `process.env.PORT` or defaults to 8080
+- Cloud Run automatically sets the `PORT` environment variable
