@@ -1,6 +1,7 @@
 {
   "name": "template-docs-chatbot",
   "private": true,
+  "type": "module",
   "description": "A monorepo template for building documentation chatbots with separate MCP server and agent components",
   "scripts": {
     "build": "turbo run build",
