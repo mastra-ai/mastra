@@ -24,7 +24,13 @@ This structure provides full type safety and runtime validation, ensuring data i
 
 ## Getting started
 
-To use workflows, first import the necessary functions from the workflows module:
+To use workflows, install the required dependencies:
+
+```bash
+npm install @mastra/core
+```
+
+Import the necessary functions from the workflows module:
 
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
