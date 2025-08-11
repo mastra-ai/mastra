@@ -1,9 +1,9 @@
 ---
-title: "Reference: Workflow.start() | Workflows | Mastra Docs"
-description: Documentation for the `Workflow.start()` method in workflows, which starts a workflow run with input data.
+title: "Reference: WorkflowRun.start() | Workflows | Mastra Docs"
+description: Documentation for the `WorkflowRun.start()` method in workflows, which starts a workflow run with input data.
 ---
 
-# Workflow.start()
+# WorkflowRun.start()
 
 The `start()` method starts a workflow run with input data, allowing you to execute the workflow from the beginning.
 
@@ -56,7 +56,7 @@ runtimeContext.set("variable", false);
 
 const result = await run.start({
   inputData: {
-   value: "initial data",
+    value: "initial data"
   },
   runtimeContext
 });
