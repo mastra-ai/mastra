@@ -28,6 +28,8 @@ To use agents, install the required dependencies:
 npm install @mastra/core @ai-sdk/openai
 ```
 
+> Mastra works with all AI SDK provider. See [Model Providers](../getting-started/model-providers.mdx) for more information.
+
 Import the necessary class from the agents module, and an LLM provider:
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
@@ -92,7 +94,7 @@ Use `.generate()` to get a response from an agent. Pass a single string for simp
 
 > See [.generate()](../../reference/agents/generate.mdx) for more information.
 
-### `.generate()` messages[]
+### Generating text
 
 Call `.generate()` with an array of message objects that include `role` and `content`:
 
@@ -113,7 +115,7 @@ Use `.stream()` for real-time responses. Pass a single string for simple prompts
 
 > See [.stream()](../../reference/agents/stream.mdx) for more information.
 
-### `.stream()` messages[]
+### Streaming text
 
 Call `.stream()` with an array of message objects that include `role` and `content`:
 
@@ -130,9 +132,9 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### completion using `onFinish()`
+### Completion using `onFinish()`
 
-When streaming responses, the `onFinish` callback runs after the LLM finishes generating its response and all tool executions are complete.
+When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
 It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
 
 ```typescript showLineNumbers copy
@@ -149,7 +151,7 @@ for await (const chunk of stream.textStream) {
 
 ## Structured output
 
-Agents can return structured, type-safe data by defining the expected output with either a [JSON Schema](https://json-schema.org/) or a [Zod](https://zod.dev/). In both cases, the parsed result is available on `response.object`, allowing you to work directly with validated and typed data.
+Agents can return structured, type-safe data by defining the expected output with either a [JSON Schema](https://json-schema.org/) or a [Zod](https://zod.dev/) schema. In both cases, the parsed result is available on `response.object`, allowing you to work directly with validated and typed data.
 
 ### Using JSON Schema
 
@@ -185,7 +187,7 @@ console.log(response.object);
 
 ### Using Zod
 
-Define the `output` shape using a [Zod](https://zod.dev/):
+Define the `output` shape using [Zod](https://zod.dev/):
 
 ```typescript showLineNumbers copy
 import { z } from "zod";
