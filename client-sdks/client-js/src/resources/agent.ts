@@ -9,7 +9,7 @@ import {
   type UIMessage,
   type UseChatOptions,
 } from '@ai-sdk/ui-utils';
-import { Tool, type CoreMessage } from '@mastra/core';
+import { Tool, type CoreMessage, type MastraLanguageModel } from '@mastra/core';
 import { type GenerateReturn } from '@mastra/core/llm';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
@@ -781,5 +781,17 @@ export class Agent extends BaseResource {
    */
   liveEvals(): Promise<GetEvalsByAgentIdResponse> {
     return this.request(`/api/agents/${this.agentId}/evals/live`);
+  }
+
+  /**
+   * Updates the model for the agent
+   * @param params - Parameters for updating the model
+   * @returns Promise containing the updated model
+   */
+  updateModel(params: { model: MastraLanguageModel }): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/model`, {
+      method: 'POST',
+      body: params,
+    });
   }
 }

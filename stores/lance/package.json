@@ -26,7 +26,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.18.2",
+    "@lancedb/lancedb": "^0.21.2",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
