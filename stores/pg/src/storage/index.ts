@@ -32,6 +32,8 @@ import { WorkflowsPG } from './domains/workflows';
 
 export type PostgresConfig = {
   schemaName?: string;
+  max?: number;
+  idleTimeoutMillis?: number;
 } & (
   | {
       host: string;
@@ -47,10 +49,11 @@ export type PostgresConfig = {
 );
 
 export class PostgresStore extends MastraStorage {
-  public db: pgPromise.IDatabase<{}>;
-  public pgp: pgPromise.IMain;
-  private client: pgPromise.IDatabase<{}>;
-  private schema?: string;
+  #db?: pgPromise.IDatabase<{}>;
+  #pgp?: pgPromise.IMain;
+  #config: PostgresConfig;
+  private schema: string;
+  private isConnected: boolean = false;
 
   stores: StorageDomains;
 
@@ -78,10 +81,11 @@ export class PostgresStore extends MastraStorage {
         }
       }
       super({ name: 'PostgresStore' });
-      this.pgp = pgPromise();
       this.schema = config.schemaName || 'public';
-      this.db = this.pgp(
-        `connectionString` in config
+      this.#config = {
+        max: config.max,
+        idleTimeoutMillis: config.idleTimeoutMillis,
+        ...(`connectionString` in config
           ? { connectionString: config.connectionString }
           : {
               host: config.host,
@@ -90,26 +94,9 @@ export class PostgresStore extends MastraStorage {
               user: config.user,
               password: config.password,
               ssl: config.ssl,
-            },
-      );
-
-      this.client = this.db;
-
-      const operations = new StoreOperationsPG({ client: this.client, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.client, operations, schema: this.schema });
-      const traces = new TracesPG({ client: this.client, operations, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.client, operations, schema: this.schema });
-      const legacyEvals = new LegacyEvalsPG({ client: this.client, schema: this.schema });
-      const memory = new MemoryPG({ client: this.client, schema: this.schema, operations });
-
-      this.stores = {
-        operations,
-        scores,
-        traces,
-        workflows,
-        legacyEvals,
-        memory,
+            }),
       };
+      this.stores = {} as StorageDomains;
     } catch (e) {
       throw new MastraError(
         {
@@ -120,6 +107,60 @@ export class PostgresStore extends MastraStorage {
         e,
       );
     }
+  }
+
+  async init(): Promise<void> {
+    if (this.isConnected) {
+      return;
+    }
+
+    try {
+      this.isConnected = true;
+      this.#pgp = pgPromise();
+      this.#db = this.#pgp(this.#config);
+
+      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
+      const scores = new ScoresPG({ client: this.#db, operations });
+      const traces = new TracesPG({ client: this.#db, operations, schema: this.schema });
+      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
+      const legacyEvals = new LegacyEvalsPG({ client: this.#db, schema: this.schema });
+      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
+
+      this.stores = {
+        operations,
+        scores,
+        traces,
+        workflows,
+        legacyEvals,
+        memory,
+      };
+
+      await super.init();
+    } catch (error) {
+      this.isConnected = false;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_POSTGRES_STORE_INIT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  public get db() {
+    if (!this.#db) {
+      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
+    }
+    return this.#db;
+  }
+
+  public get pgp() {
+    if (!this.#pgp) {
+      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
+    }
+    return this.#pgp;
   }
 
   public get supports() {

@@ -761,6 +761,29 @@ export class MessageList {
   }
   private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
+
+    // Fix toolInvocations with empty args by looking in the parts array
+    // This handles messages restored from database where toolInvocations might have lost their args
+    if (message.content.toolInvocations && message.content.parts) {
+      message.content.toolInvocations = message.content.toolInvocations.map(ti => {
+        if (!ti.args || Object.keys(ti.args).length === 0) {
+          // Find the corresponding tool-invocation part with args
+          const partWithArgs = message.content.parts.find(
+            part =>
+              part.type === 'tool-invocation' &&
+              part.toolInvocation &&
+              part.toolInvocation.toolCallId === ti.toolCallId &&
+              part.toolInvocation.args &&
+              Object.keys(part.toolInvocation.args).length > 0,
+          );
+          if (partWithArgs && partWithArgs.type === 'tool-invocation') {
+            return { ...ti, args: partWithArgs.toolInvocation.args };
+          }
+        }
+        return ti;
+      });
+    }
+
     return message;
   }
   private vercelUIMessageToMastraMessageV2(
@@ -828,12 +851,44 @@ export class MessageList {
             break;
 
           case 'tool-result':
+            // Try to find args from the corresponding tool-call in previous messages
+            let toolArgs: Record<string, unknown> = {};
+
+            // First, check if there's a tool-call in the same message
+            const toolCallInSameMsg = coreMessage.content.find(
+              p => p.type === 'tool-call' && p.toolCallId === part.toolCallId,
+            );
+            if (toolCallInSameMsg && toolCallInSameMsg.type === 'tool-call') {
+              toolArgs = toolCallInSameMsg.args as Record<string, unknown>;
+            }
+
+            // If not found, look in previous messages for the corresponding tool-call
+            // Search from most recent messages first (more likely to find the match)
+            if (Object.keys(toolArgs).length === 0) {
+              // Iterate in reverse order (most recent first) for better performance
+              for (let i = this.messages.length - 1; i >= 0; i--) {
+                const msg = this.messages[i];
+                if (msg && msg.role === 'assistant' && msg.content.parts) {
+                  const toolCallPart = msg.content.parts.find(
+                    p =>
+                      p.type === 'tool-invocation' &&
+                      p.toolInvocation.toolCallId === part.toolCallId &&
+                      p.toolInvocation.state === 'call',
+                  );
+                  if (toolCallPart && toolCallPart.type === 'tool-invocation' && toolCallPart.toolInvocation.args) {
+                    toolArgs = toolCallPart.toolInvocation.args;
+                    break;
+                  }
+                }
+              }
+            }
+
             const invocation = {
               state: 'result' as const,
               toolCallId: part.toolCallId,
               toolName: part.toolName,
               result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
-              args: {}, // when we combine this invocation onto the existing tool-call part it will have args already
+              args: toolArgs, // Use the args from the corresponding tool-call
             };
             parts.push({
               type: 'tool-invocation',

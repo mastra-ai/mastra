@@ -1,19 +1,34 @@
 import type { MemoryConfig } from '@mastra/core';
 import { createTool } from '@mastra/core';
-import { z } from 'zod';
+import { convertSchemaToZod } from '@mastra/schema-compat';
+import type { Schema } from 'ai';
+import { z, ZodObject } from 'zod';
+import type { ZodTypeAny } from 'zod';
 
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
+  const schema = memoryConfig?.workingMemory?.schema;
+
+  let inputSchema: ZodTypeAny = z.object({
+    memory: z
+      .string()
+      .describe(`The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`),
+  });
+
+  if (schema) {
+    inputSchema = z.object({
+      memory:
+        schema instanceof ZodObject
+          ? schema
+          : convertSchemaToZod({ jsonSchema: schema } as Schema).describe(
+              `The JSON formatted working memory content to store.`,
+            ),
+    });
+  }
+
   return createTool({
     id: 'update-working-memory',
-    description:
-      'Update the working memory with new information. Always pass data as string to the memory field. Never pass an object.',
-    inputSchema: z.object({
-      memory: z
-        .string()
-        .describe(
-          `The ${!!memoryConfig?.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store. This MUST be a string. Never pass an object.`,
-        ),
-    }),
+    description: `Update the working memory with new information. Any data not included will be overwritten.${schema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
+    inputSchema,
     execute: async params => {
       const { context, threadId, memory, resourceId } = params;
       if (!threadId || !memory || !resourceId) {
@@ -34,13 +49,13 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = context.memory;
+      const workingMemory = typeof context.memory === 'string' ? context.memory : JSON.stringify(context.memory);
 
       // Use the new updateWorkingMemory method which handles both thread and resource scope
       await memory.updateWorkingMemory({
         threadId,
         resourceId,
-        workingMemory: workingMemory,
+        workingMemory,
         memoryConfig,
       });
 
