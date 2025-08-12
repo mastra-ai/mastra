@@ -530,14 +530,14 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       thread1Messages = [
         createSampleMessageV2({
-          threadId: threads[0]?.id,
+          threadId: threads[0]!.id,
           resourceId,
           content: {
             content: 'Message 1',
           },
         }),
         createSampleMessageV2({
-          threadId: threads[0]?.id,
+          threadId: threads[0]!.id,
           resourceId,
           content: {
             content: 'Message 2',
@@ -547,14 +547,14 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       thread2Messages = [
         createSampleMessageV2({
-          threadId: threads[1]?.id,
+          threadId: threads[1]!.id,
           resourceId,
           content: {
             content: 'Message A',
           },
         }),
         createSampleMessageV2({
-          threadId: threads[1]?.id,
+          threadId: threads[1]!.id,
           resourceId,
           content: {
             content: 'Message B',
@@ -564,7 +564,7 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       resource2Messages = [
         createSampleMessageV2({
-          threadId: threads[2]?.id,
+          threadId: threads[2]!.id,
           resourceId: resourceId2,
           content: {
             content: 'The quick brown fox jumps over the lazy dog',
