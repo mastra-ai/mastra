@@ -22,7 +22,7 @@ export function writeScorer(filename: string, content: string, customPath?: stri
   const filePath = path.join(fullPath, filename);
 
   if (fs.existsSync(filePath)) {
-    throw new Error(`Duplicate: Scorer ${filename} already exists at ${scorersPath}`);
+    throw new Error(`Skipped: Scorer ${filename} already exists at ${scorersPath}`);
   }
 
   try {

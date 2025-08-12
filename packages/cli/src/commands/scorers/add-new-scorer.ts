@@ -71,7 +71,7 @@ export async function addNewScorer(scorerId?: string) {
     showSuccessNote();
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('Duplicate')) {
+    if (errorMessage.includes('Skipped')) {
       return p.log.warning(errorMessage);
     }
     p.log.error(errorMessage);
@@ -103,7 +103,7 @@ async function showInteractivePrompt() {
   }
 
   const useCustomDir = await p.confirm({
-    message: 'Would you like to use a custom directory?',
+    message: `Would you like to use a custom directory?${pc.gray('(Default: src/mastra/scorers)')}`,
     initialValue: false,
   });
 
@@ -140,7 +140,7 @@ async function showInteractivePrompt() {
     }
     const errorMessage = String(op.reason);
     const coreError = errorMessage.replace('Error:', '').trim();
-    if (errorMessage.includes('Duplicate')) {
+    if (errorMessage.includes('Skipped')) {
       return p.log.warning(coreError);
     }
     p.log.error(coreError);
