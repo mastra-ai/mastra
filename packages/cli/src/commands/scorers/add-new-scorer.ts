@@ -4,6 +4,7 @@ import { toCamelCase } from '../../utils/string';
 import { AVAILABLE_SCORERS } from './available-scorers';
 import { writeScorer } from './file-utils';
 import type { ScorerTemplate } from './types';
+import pc from 'picocolors';
 
 export async function selectScorer(): Promise<ScorerTemplate | null> {
   const options = [];
@@ -67,7 +68,8 @@ export const addNewScorer = async (scorerId?: string) => {
       }
       customPath = dirPath as string;
 
-      await initializeScorer(selectedScorer.filename, selectedScorer.filename, customPath);
+      const { id, filename } = selectedScorer;
+      await initializeScorer(id, filename, customPath);
     }
 
     const foundScorer = AVAILABLE_SCORERS.find(scorer => scorer.id === selectedScorer.id);
@@ -86,11 +88,12 @@ export const addNewScorer = async (scorerId?: string) => {
     return;
   }
 
-  await initializeScorer(foundScorer.id, foundScorer.filename);
+  const { id, filename } = foundScorer;
+
+  await initializeScorer(id, filename);
 };
 
 async function initializeScorer(scorerId: string, filename: string, customPath?: string) {
-  console.log({ scorerId, filename, customPath });
   try {
     const templateModule = await import(`../../templates/scorers/${filename}`);
     const key = `${toCamelCase(scorerId)}Scorer`;
