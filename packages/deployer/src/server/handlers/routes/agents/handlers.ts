@@ -211,7 +211,7 @@ export async function updateAgentModelHandler(c: Context) {
   }
 }
 
-export async function getAvailableProvidersHandler(c: Context) {
+export async function getModelProvidersHandler(c: Context) {
   const isPlayground = c.get('playground') === true;
   if (!isPlayground) {
     return c.json({ error: 'This API is only available in the playground environment' }, 403);
