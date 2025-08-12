@@ -737,27 +737,27 @@ export default withGT(
       },
       {
         source: "/reference/workflows/start",
-        destination: "/reference/workflows/run/start",
+        destination: "/reference/workflows/run-methods/start",
         permanent: true,
       },
       {
         source: "/reference/workflows/streamVNext",
-        destination: "/reference/workflows/run/streamVNext",
+        destination: "/reference/workflows/run-methods/streamVNext",
         permanent: true,
       },
       {
         source: "/reference/workflows/resume",
-        destination: "/reference/workflows/run/resume",
+        destination: "/reference/workflows/run-methods/resume",
         permanent: true,
       },
       {
         source: "/reference/workflows/watch",
-        destination: "/reference/workflows/run/watch",
+        destination: "/reference/workflows/run-methods/watch",
         permanent: true,
       },
       {
         source: "/reference/workflows/stream",
-        destination: "/reference/workflows/run/stream",
+        destination: "/reference/workflows/run-methods/stream",
         permanent: true,
       },
     ],
