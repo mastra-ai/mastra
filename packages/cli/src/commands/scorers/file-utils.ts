@@ -1,11 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import * as p from '@clack/prompts';
-import pc from 'picocolors';
 
 const DEFAULT_SCORERS_DIR = 'src/mastra/scorers';
 
-export function writeScorer(filename: string, content: string, customPath?: string): void {
+export function writeScorer(filename: string, content: string, customPath?: string): { ok: true; message: string } {
   const rootDir = process.cwd();
   const scorersPath = customPath || DEFAULT_SCORERS_DIR;
   const fullPath = path.join(rootDir, scorersPath);
@@ -23,17 +22,13 @@ export function writeScorer(filename: string, content: string, customPath?: stri
   const filePath = path.join(fullPath, filename);
 
   if (fs.existsSync(filePath)) {
-    p.log.warn(`Scorer ${filename} already exists at ${scorersPath}`);
-    return;
+    throw new Error(`Duplicate: Scorer ${filename} already exists at ${scorersPath}`);
   }
 
   try {
     fs.writeFileSync(filePath, content);
-    p.log.success(`Created scorer at ${path.relative(rootDir, filePath)}`);
 
-    p.note(`
-      ${pc.green('To use: Add the Scorer to your workflow or agent!')}
-      `);
+    return { ok: true, message: `Created scorer at ${path.relative(rootDir, filePath)}` };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to write scorer: ${errorMessage}`);
