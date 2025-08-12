@@ -43,19 +43,11 @@ export const chefAgent = new Agent({
 });
 ```
 
-### Set Up Environment Variables
-
-Create a `.env` file in your project root and add your OpenAI API key:
-
-```bash filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-```
-
 ### Register the Agent with Mastra
 
-In your main file, register the agent:
+In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy filename="src/mastra/index.ts"
+```ts copy filename="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { chefAgent } from "./agents/chefAgent";
 
@@ -225,7 +217,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents.
+This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground.mdx) you can test your agent through a UI.
 
 ### Accessing the Chef Assistant API
 
