@@ -219,7 +219,7 @@ export async function getAvailableProvidersHandler(c: Context) {
   const envVars = process.env;
   const providers = Object.entries(AllowedProviderKeys);
   const envKeys = Object.keys(envVars);
-  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value));
+  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
   const availableProvidersNames = availableProviders.map(([key]) => key);
   return c.json(availableProvidersNames);
 }
