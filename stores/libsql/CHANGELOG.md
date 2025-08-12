@@ -1,5 +1,13 @@
 # @mastra/libsql
 
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+
 ## 0.13.2-alpha.0
 
 ### Patch Changes

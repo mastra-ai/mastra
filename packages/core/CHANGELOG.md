@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+
 ## 0.13.2-alpha.2
 
 ### Patch Changes
