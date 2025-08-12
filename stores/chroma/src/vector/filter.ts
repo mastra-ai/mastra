@@ -44,7 +44,7 @@ export class ChromaFilterTranslator extends BaseFilterTranslator<ChromaVectorFil
       logical: ['$and', '$or'],
       array: ['$in', '$nin'],
       element: [],
-      regex: [],
+      regex: ['$regex'],
       custom: [],
     };
   }
