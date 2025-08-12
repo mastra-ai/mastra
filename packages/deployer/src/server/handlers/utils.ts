@@ -19,4 +19,5 @@ export const AllowedProviderKeys = {
   xai: 'XAI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  groq: 'GROQ_API_KEY',
 };
