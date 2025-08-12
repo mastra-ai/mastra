@@ -1,5 +1,18 @@
 # @mastra/qdrant
 
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- 0885aef: dependencies updates:
+  - Updated dependency [`@qdrant/js-client-rest@^1.15.0` ↗︎](https://www.npmjs.com/package/@qdrant/js-client-rest/v/1.15.0) (from `^1.14.1`, in `dependencies`)
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.11.3
 
 ### Patch Changes

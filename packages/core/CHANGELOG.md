@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- d5330bf: Allow agent model to be updated after the agent is created
+- a239d41: Updated A2A syntax to v0.3.0
+- b32c50d: Filter scores by source
+- 121a3f8: Fixed an issue where telemetry logs were displaying promise statuses when `agent.stream` is called
+- ec510e7: Tool input validation now returns errors as tool results instead of throwing, allowing agents to understand validation failures and retry with corrected parameters.
+- Updated dependencies [ae2eb63]
+  - @mastra/schema-compat@0.10.7-alpha.1
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes
