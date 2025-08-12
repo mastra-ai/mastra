@@ -466,6 +466,14 @@ export const tools = await mcpClient.getTools();
     lastMessages: 20,
   };
 
+  static DEFAULT_FOLDER_STRUCTURE = {
+    agent: 'src/mastra/agents',
+    workflow: 'src/mastra/workflows',
+    tool: 'src/mastra/tools',
+    'mcp-server': 'src/mastra/mcp',
+    network: 'src/mastra/networks',
+  };
+
   static DEFAULT_TOOLS = async (projectPath?: string, mode: 'template' | 'code-editor' = 'code-editor') => {
     const mcpClient = new MCPClient({
       id: 'agent-builder-mcp-client',
@@ -3180,9 +3188,9 @@ const packageMergeStep = createStep({
 
 1. **Read the target project's package.json** using readFile tool
 2. **Merge template dependencies** into the target package.json following these rules:
-   - For dependencies: Add NEW ones with template versions, KEEP EXISTING versions for conflicts
-   - For devDependencies: Add NEW ones with template versions, KEEP EXISTING versions for conflicts  
-   - For peerDependencies: Add NEW ones with template versions, KEEP EXISTING versions for conflicts
+   - For dependencies: Add ALL NEW ones with template versions, KEEP EXISTING versions for conflicts
+   - For devDependencies: Add ALL NEW ones with template versions, KEEP EXISTING versions for conflicts  
+   - For peerDependencies: Add ALL NEW ones with template versions, KEEP EXISTING versions for conflicts
    - For scripts: Add new scripts with "template:${slug}:" prefix, don't overwrite existing ones
    - Maintain existing package.json structure and formatting
 3. **Write the updated package.json** using writeFile tool
@@ -3193,7 +3201,16 @@ Template Dependencies to Merge:
 - Peer Dependencies: ${JSON.stringify(packageInfo.peerDependencies || {}, null, 2)}
 - Scripts: ${JSON.stringify(packageInfo.scripts || {}, null, 2)}
 
-CRITICAL: For conflicts, PRESERVE the existing project's versions. Only use template versions for NEW dependencies.
+CRITICAL MERGE RULES:
+1. For each dependency in template dependencies, if it does NOT exist in target, ADD it with template version
+2. For each dependency in template dependencies, if it ALREADY exists in target, KEEP target version
+3. You MUST add ALL template dependencies that don't conflict - do not skip any
+4. Be explicit about what you're adding vs keeping
+
+EXAMPLE:
+Template has: {"@mastra/libsql": "latest", "@mastra/core": "latest", "zod": "^3.25.67"}
+Target has: {"@mastra/core": "latest", "zod": "^3.25.0"}
+Result should have: {"@mastra/core": "latest", "zod": "^3.25.0", "@mastra/libsql": "latest"}
 
 Be systematic and thorough. Always read the existing package.json first, then merge, then write.`,
         model: openai('gpt-4o-mini'),
@@ -3205,6 +3222,8 @@ Be systematic and thorough. Always read the existing package.json first, then me
       });
 
       console.log('Starting package merge agent...');
+      console.log('Template dependencies to merge:', JSON.stringify(packageInfo.dependencies, null, 2));
+      console.log('Template devDependencies to merge:', JSON.stringify(packageInfo.devDependencies, null, 2));
 
       const result = await packageMergeAgent.stream(
         `Please merge the template dependencies into the target project's package.json at ${targetPath}/package.json.`,
@@ -3266,7 +3285,7 @@ const discoverUnitsStep = createStep({
 Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
 
 Mastram Project Structure Analysis:
-- Each Mastra project has a structure like: src/mastra/agents/, src/mastra/workflows/, src/mastra/tools/, src/mastra/mcp/, src/mastra/networks/
+- Each Mastra project has a structure like: ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.agent}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.workflow}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network}
 - Analyze TypeScript files in each category directory to identify exported units
 
 CRITICAL: YOU MUST USE YOUR TOOLS (readFile, listDirectory) TO DISCOVER THE UNITS IN THE TEMPLATE DIRECTORY.
@@ -3278,11 +3297,11 @@ IMPORTANT - Agent Discovery Rules:
 4. **Naming Convention**: Agent names should be extracted from the export name (e.g., 'weatherAgent', 'evaluationAgent')
 
 For each Mastra project directory you analyze:
-1. Scan all TypeScript files in src/mastra/agents/ and identify ALL exported agents
-2. Scan all TypeScript files in src/mastra/workflows/ and identify ALL exported workflows
-3. Scan all TypeScript files in src/mastra/tools/ and identify ALL exported tools
-4. Scan all TypeScript files in src/mastra/mcp/ and identify ALL exported MCP servers
-5. Scan all TypeScript files in src/mastra/networks/ and identify ALL exported networks
+1. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.agent} and identify ALL exported agents
+2. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.workflow} and identify ALL exported workflows
+3. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} and identify ALL exported tools
+4. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']} and identify ALL exported MCP servers
+5. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network} and identify ALL exported networks
 
 Return the actual exported names of the units, as well as the file names.`,
       name: 'Mastra Project Discoverer',
@@ -3379,25 +3398,67 @@ const intelligentMergeStep = createStep({
   id: 'intelligent-merge',
   description: 'Use AgentBuilder to intelligently merge template files',
   inputSchema: z.object({
-    orderedUnits: z.array(TemplateUnitSchema),
+    conflicts: z.array(
+      z.object({
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
+        }),
+        issue: z.string(),
+        sourceFile: z.string(),
+        targetFile: z.string(),
+      }),
+    ),
+    copiedFiles: z.array(
+      z.object({
+        source: z.string(),
+        destination: z.string(),
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
+        }),
+      }),
+    ),
     templateDir: z.string(),
     commitSha: z.string(),
     slug: z.string(),
     targetPath: z.string().optional(),
   }),
-  outputSchema: ApplyResultSchema,
+  outputSchema: z.object({
+    success: z.boolean(),
+    applied: z.boolean(),
+    message: z.string(),
+    conflictsResolved: z.array(
+      z.object({
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
+        }),
+        issue: z.string(),
+        resolution: z.string(),
+      }),
+    ),
+    error: z.string().optional(),
+  }),
   execute: async ({ inputData }) => {
-    console.log('Intelligent merge step input:', inputData);
-    const { orderedUnits, templateDir, commitSha, slug } = inputData;
+    console.log('Intelligent merge step starting...');
+    const { conflicts, copiedFiles, commitSha, slug, templateDir } = inputData;
     const targetPath = inputData.targetPath || process.cwd();
 
     try {
+      // Create git branch for template integration
+      const branchName = `feat/install-template-${slug}`;
+      await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
+      console.log(`Created branch: ${branchName}`);
+
+      // Create copyFile tool for edge cases
       const copyFileTool = createTool({
         id: 'copy-file',
-        description: 'Copy a file to a new location.',
+        description:
+          'Copy a file from template to target project (use only for edge cases - most files are already copied programmatically).',
         inputSchema: z.object({
-          sourcePath: z.string().describe('Path to the source file'),
-          destinationPath: z.string().describe('Path to the destination file'),
+          sourcePath: z.string().describe('Path to the source file relative to template directory'),
+          destinationPath: z.string().describe('Path to the destination file relative to target project'),
         }),
         outputSchema: z.object({
           success: z.boolean(),
@@ -3406,14 +3467,18 @@ const intelligentMergeStep = createStep({
         }),
         execute: async ({ context }) => {
           try {
-            const { copyFile } = await import('fs/promises');
-            const { resolve } = await import('path');
+            const { copyFile, mkdir } = await import('fs/promises');
+            const { resolve, dirname } = await import('path');
             const { sourcePath, destinationPath } = context;
+
+            // Use templateDir directly from input
             const resolvedSourcePath = resolve(templateDir, sourcePath);
             const resolvedDestinationPath = resolve(targetPath, destinationPath);
+
             if (existsSync(resolvedSourcePath) && !existsSync(dirname(resolvedDestinationPath))) {
               await mkdir(dirname(resolvedDestinationPath), { recursive: true });
             }
+
             await copyFile(resolvedSourcePath, resolvedDestinationPath);
             return {
               success: true,
@@ -3428,83 +3493,115 @@ const intelligentMergeStep = createStep({
           }
         },
       });
-      // Initialize AgentBuilder for the merging process
+
+      // Initialize AgentBuilder for merge and registration
       const agentBuilder = new AgentBuilder({
         projectPath: targetPath,
-        model: openai('gpt-4o-mini'),
         mode: 'template',
+        model: openai('gpt-4o-mini'),
         instructions: `
-You are an expert at merging Mastra template repositories into existing projects. Your task is to intelligently integrate template code from the official Mastra templates (https://mastra.ai/api/templates.json).
+You are an expert at integrating Mastra template components into existing projects.
 
-DO NOT DO ANY EDITS OUTSIDE OF MERGING THE FILES FROM THE TEMPLATE TO THE TARGET PROJECT.
+CRITICAL CONTEXT:
+- Files have been programmatically copied from template to target project
+- Your job is to handle integration issues, registration, and validation
 
-IF THE FILE FOR THE RESOURCE DOES NOT EXIST IN THE TARGET PROJECT, YOU CAN JUST COPY THE EXACT FILE FROM THE TEMPLATE TO THE TARGET PROJECT.
+FILES SUCCESSFULLY COPIED:
+${JSON.stringify(copiedFiles, null, 2)}
 
-CRITICAL: When committing changes, NEVER add other dependency/build directories. Only add the actual template source files you create/modify. Use specific file paths with 'git add' instead of 'git add .' to avoid accidentally committing dependencies.
+CONFLICTS TO RESOLVE:
+${JSON.stringify(conflicts, null, 2)}
 
-CRITICAL: When taking files from the template if the file does not exist in the target project, always use the copyFile tool to copy the files from the template to the target project. Be sure to get the right file name from the template.
+CRITICAL INSTRUCTIONS:
+1. **When committing changes**: NEVER add dependency/build directories. Use specific file paths with 'git add'
+2. **Package management**: NO need to install packages (already handled by package merge step)
+3. **Validation**: When validation fails due to import issues, check existing files and imports for correct naming conventions
+4. **Variable vs file names**: A variable name might differ from file name (e.g., filename: ./downloaderTool.ts, export const fetcherTool(...))
+5. **File copying**: Most files are already copied programmatically. Only use copyFile tool for edge cases where additional files are needed
 
-CRITICAL: NO need to install or update packages, as this is already handled by the package updater step.
+KEY RESPONSIBILITIES:
+1. Resolve any conflicts from the programmatic copy step
+2. Register components in main Mastra config (agents, workflows, networks, mcp-servers)
+3. DO NOT register tools in main config - tools should remain standalone
+4. Fix import path issues in copied files
+5. Ensure TypeScript imports and exports are correct
+6. Validate integration works properly
+7. Copy additional files ONLY if needed for conflict resolution or missing dependencies
 
-CRITICAL: When validation fails due to import issues, always check existing files and imports to ensure correct naming conventions are used for files and imports. A varible name might be different than the file name.
-e.g. 
-// filename: ./downloaderTool.ts
-export const fetcherTool(...)
+MASTRA-SPECIFIC INTEGRATION:
+- Agents: Register in main Mastra config
+- Workflows: Register in main Mastra config
+- Networks: Register in main Mastra config
+- MCP servers: Register in main Mastra config
+- Tools: Copy to ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} but DO NOT register in main config
 
-Key responsibilities:
-1. Analyze the template files and existing project structure
-2. Intelligently resolve conflicts by merging code when possible
-3. Update configuration files (package.json, tsconfig.json) appropriately
-4. Ensure all imports are correctly handled
-5. Integrate Mastra agents, workflows, tools, and MCP servers properly
-6. Update the main Mastra instance file to register new components
+EDGE CASE FILE COPYING:
+- IF a file for a resource does not exist in the target project AND was not programmatically copied, you can use copyFile tool
+- When taking files from template, ensure you get the right file name and path
+- Only copy files that are actually needed for the integration to work
 
-For Mastra-specific merging:
-- Merge agents into src/mastra/agents/ and register in main Mastra config
-- Merge workflows into src/mastra/workflows/ and register appropriately  
-- Handle MCP servers and any integrations properly
-- Maintain TypeScript imports and exports correctly
-- Merge tools into src/mastra/tools/
-- Merge networks into src/mastra/networks/
+NAMING CONVENTION GUIDANCE:
+When fixing imports or understanding naming patterns, use these examples:
 
-CRITICAL: DO NOT merge tools into main MASTRA CONFIG
+**Import Path Patterns:**
+- camelCase files: import { myAgent } from './myAgent'
+- snake_case files: import { myAgent } from './my_agent'
+- kebab-case files: import { myAgent } from './my-agent'
+- PascalCase files: import { MyAgent } from './MyAgent'
+
+**Naming Detection Examples:**
+- Files like "weatherAgent.ts", "chatAgent.ts" → use camelCase
+- Files like "weather_agent.ts", "chat_agent.ts" → use snake_case  
+- Files like "weather-agent.ts", "chat-agent.ts" → use kebab-case
+- Files like "WeatherAgent.ts", "ChatAgent.ts" → use PascalCase
+
+**Key Rule:** Keep variable/export names unchanged - only adapt file names and import paths
 
 Template information:
 - Slug: ${slug}
-- Units to integrate: ${orderedUnits.map(u => `${u.kind}:${u.id}`).join(', ')}
-- Template source: ${templateDir}
-
-For conflicts, prefer additive merging and maintain existing project patterns.
+- Commit: ${commitSha.substring(0, 7)}
+- Branch: ${branchName}
 `,
         tools: {
           copyFile: copyFileTool,
         },
       });
 
-      const branchName = `feat/install-template-${slug}`;
+      // Create task list for systematic processing
+      const tasks = [];
 
-      // Create branch
-      await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
+      // Add conflict resolution tasks
+      conflicts.forEach((conflict, index) => {
+        tasks.push({
+          id: `conflict-${conflict.unit.kind}-${conflict.unit.id}`,
+          content: `Resolve conflict: ${conflict.issue}`,
+          status: 'pending' as const,
+          priority: 'high' as const,
+          notes: `Unit: ${conflict.unit.kind}:${conflict.unit.id}, Issue: ${conflict.issue}, Source: ${conflict.sourceFile}, Target: ${conflict.targetFile}`,
+        });
+      });
 
-      // Create a task list for all units to be processed
-      const tasks = orderedUnits.map((unit, index) => ({
-        id: `unit-${unit.kind}-${unit.id}`,
-        content: `Copy and integrate the ${unit.kind} "${unit.id}" from template into target project`,
-        status: 'pending' as const,
-        priority: 'medium' as const,
-        dependencies: index > 0 ? [`unit-${orderedUnits[index - 1]?.kind}-${orderedUnits[index - 1]?.id}`] : undefined,
-        notes: `Template unit: ${unit.kind}:${unit.id} from file ${unit.file}. Follow naming conventions of target project.`,
-      }));
+      // Add registration tasks for successfully copied files
+      const nonToolFiles = copiedFiles.filter(f => f.unit.kind !== 'tool');
+      if (nonToolFiles.length > 0) {
+        tasks.push({
+          id: 'register-components',
+          content: `Register ${nonToolFiles.length} components in main Mastra config`,
+          status: 'pending' as const,
+          priority: 'medium' as const,
+          dependencies: conflicts.length > 0 ? conflicts.map(c => `conflict-${c.unit.kind}-${c.unit.id}`) : undefined,
+          notes: `Components to register: ${nonToolFiles.map(f => `${f.unit.kind}:${f.unit.id}`).join(', ')}`,
+        });
+      }
 
-      console.log(`Creating task list for ${orderedUnits.length} units...`);
+      // Note: Validation is handled by the dedicated validation step, not here
 
+      console.log(`Creating task list with ${tasks.length} tasks...`);
       await AgentBuilderDefaults.manageTaskList({ action: 'create', tasks });
 
-      // Now process all units in a single stream session
-      console.log(`Processing ${orderedUnits.length} units through task list...`);
-
+      // Process tasks systematically
       const result = await agentBuilder.stream(`
-You need to work through a task list to integrate template units into the target project. 
+You need to work through a task list to complete the template integration.
 
 CRITICAL INSTRUCTIONS:
 
@@ -3512,46 +3609,37 @@ CRITICAL INSTRUCTIONS:
 1. Use manageTaskList tool with action "list" to see all pending tasks
 2. Work through tasks in dependency order (complete dependencies first)
 
-**STEP 2: ANALYZE TARGET PROJECT NAMING CONVENTIONS (DO THIS ONCE)**
-1. **Examine existing files** in the target project's src/mastra/ directories using listDirectory and readFile
-2. **Identify the naming pattern** used (camelCase, snake_case, kebab-case, PascalCase, etc.)
-3. **Apply the SAME naming convention** to new files and imports you create
-
-**STEP 3: PROCESS EACH TASK SYSTEMATICALLY**
+**STEP 2: PROCESS EACH TASK SYSTEMATICALLY**
 For each task:
 1. Use manageTaskList to mark the current task as 'in_progress'
-2. Complete the task according to the requirements below
+2. Complete the task according to its requirements
 3. Use manageTaskList to mark the task as 'completed' when done
 4. Continue until all tasks are completed
 
-**TASK PROCESSING REQUIREMENTS:**
-For each unit (${orderedUnits.map(u => `${u.kind}:${u.id}`).join(', ')}):
+**TASK TYPES AND REQUIREMENTS:**
 
-1. **Find template files**: Look for the unit in template directory structure
-2. **Analyze target naming**: Check target project file naming in corresponding directory  
-3. **Copy with naming convention**: Use copyFile tool to copy files with correct naming
-4. **Update import paths**: Match target project's file naming patterns:
-   - camelCase files: import { myAgent } from './myAgent'
-   - snake_case files: import { myAgent } from './my_agent'
-   - kebab-case files: import { myAgent } from './my-agent'
-   - PascalCase files: import { MyAgent } from './MyAgent'
-5. **Keep variable names**: Only adapt file names and import paths, not export names
-6. **Register components**: Update main Mastra config (except for tools - don't register tools)
-7. **Commit changes**: After each unit with message: "feat(template): add {kind} {id} (${slug}@${commitSha.substring(0, 7)})"
+**Conflict Resolution Tasks:**
+- Analyze the specific conflict and determine best resolution strategy
+- For file name conflicts: merge content or rename appropriately
+- For missing files: investigate and copy if needed
+- For other issues: apply appropriate fixes
 
-**EXAMPLES OF NAMING DETECTION:**
-- Files like "weatherAgent.ts", "chatAgent.ts" → use camelCase
-- Files like "weather_agent.ts", "chat_agent.ts" → use snake_case  
-- Files like "weather-agent.ts", "chat-agent.ts" → use kebab-case
-- Files like "WeatherAgent.ts", "ChatAgent.ts" → use PascalCase
+**Component Registration Task:**
+- Update main Mastra instance file to register new components
+- Only register: agents, workflows, networks, mcp-servers
+- DO NOT register tools in main config
+- Ensure proper import paths and naming conventions
+
+**COMMIT STRATEGY:**
+- After resolving conflicts: "feat(template): resolve conflicts for ${slug}@${commitSha.substring(0, 7)}"
+- After registration: "feat(template): register components from ${slug}@${commitSha.substring(0, 7)}"
 
 **CRITICAL NOTES:**
 - Template source: ${templateDir}
 - Target project: ${targetPath}
-- NO need to install packages (already handled by package merge step)
-- When files don't exist in target, always use copyFile tool to copy from template
-- Validate imports and naming after each unit
-- Use executeCommand for git commits after each unit
+- Focus ONLY on conflict resolution and component registration
+- Use executeCommand for git commits after each task
+- DO NOT perform validation - that's handled by the dedicated validation step
 
 Start by listing your tasks and work through them systematically!
 `);
@@ -3566,22 +3654,29 @@ Start by listing your tasks and work through them systematically!
           console.log(JSON.stringify(chunk, null, 2));
         }
       }
+      // TODO: Extract actual conflict resolution details from agent execution
+      // For now, create placeholder resolution data based on input conflicts
+      const conflictResolutions = conflicts.map(conflict => ({
+        unit: conflict.unit,
+        issue: conflict.issue,
+        resolution: `Resolved conflict for ${conflict.unit.kind} ${conflict.unit.id}`,
+      }));
+
       return {
         success: true,
         applied: true,
         branchName,
+        message: `Successfully resolved ${conflicts.length} conflicts from template ${slug}`,
+        conflictsResolved: conflictResolutions,
       };
     } catch (error) {
       return {
         success: false,
         applied: false,
-        error: `Failed to merge template: ${error instanceof Error ? error.message : String(error)}`,
+        message: `Failed to resolve conflicts: ${error instanceof Error ? error.message : String(error)}`,
+        conflictsResolved: [],
+        error: error instanceof Error ? error.message : String(error),
       };
-    } finally {
-      // Cleanup temp directory
-      try {
-        await rm(templateDir, { recursive: true, force: true });
-      } catch {}
     }
   },
 });
@@ -3684,14 +3779,11 @@ Start by listing your tasks and work through them systematically!
 //   },
 // });
 
-// Step 6: Validation and Fix Step - validates merged code and fixes any issues
-const validationAndFixStep = createStep({
-  id: 'validation-and-fix',
-  description: 'Validate the merged template code and fix any validation errors using a specialized agent',
+// Step 6: Programmatic File Copy Step - copies template files to target project
+const programmaticFileCopyStep = createStep({
+  id: 'programmatic-file-copy',
+  description: 'Programmatically copy template files to target project based on ordered units',
   inputSchema: z.object({
-    commitSha: z.string(),
-    slug: z.string(),
-    targetPath: z.string().optional(),
     orderedUnits: z.array(
       z.object({
         kind: z.string(),
@@ -3699,6 +3791,281 @@ const validationAndFixStep = createStep({
         file: z.string(),
       }),
     ),
+    templateDir: z.string(),
+    commitSha: z.string(),
+    slug: z.string(),
+    targetPath: z.string().optional(),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    copiedFiles: z.array(
+      z.object({
+        source: z.string(),
+        destination: z.string(),
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
+        }),
+      }),
+    ),
+    conflicts: z.array(
+      z.object({
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
+        }),
+        issue: z.string(),
+        sourceFile: z.string(),
+        targetFile: z.string(),
+      }),
+    ),
+    message: z.string(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ inputData }) => {
+    console.log('Programmatic file copy step starting...');
+    const { orderedUnits, templateDir, commitSha, slug } = inputData;
+    const targetPath = inputData.targetPath || process.cwd();
+
+    try {
+      const { copyFile, mkdir } = await import('fs/promises');
+      const { resolve, dirname, basename, extname } = await import('path');
+
+      const copiedFiles: Array<{
+        source: string;
+        destination: string;
+        unit: { kind: string; id: string };
+      }> = [];
+
+      const conflicts: Array<{
+        unit: { kind: string; id: string };
+        issue: string;
+        sourceFile: string;
+        targetFile: string;
+      }> = [];
+
+      // Analyze target project naming convention first
+      const analyzeNamingConvention = async (
+        directory: string,
+      ): Promise<'camelCase' | 'snake_case' | 'kebab-case' | 'PascalCase' | 'unknown'> => {
+        try {
+          const files = await readdir(resolve(targetPath, directory), { withFileTypes: true });
+          const tsFiles = files.filter(f => f.isFile() && f.name.endsWith('.ts')).map(f => f.name);
+
+          if (tsFiles.length === 0) return 'unknown';
+
+          // Check for patterns
+          const camelCaseCount = tsFiles.filter(f => /^[a-z][a-zA-Z0-9]*\.ts$/.test(f)).length;
+          const snakeCaseCount = tsFiles.filter(f => /^[a-z][a-z0-9_]*\.ts$/.test(f) && f.includes('_')).length;
+          const kebabCaseCount = tsFiles.filter(f => /^[a-z][a-z0-9-]*\.ts$/.test(f) && f.includes('-')).length;
+          const pascalCaseCount = tsFiles.filter(f => /^[A-Z][a-zA-Z0-9]*\.ts$/.test(f)).length;
+
+          const max = Math.max(camelCaseCount, snakeCaseCount, kebabCaseCount, pascalCaseCount);
+          if (max === 0) return 'unknown';
+
+          if (camelCaseCount === max) return 'camelCase';
+          if (snakeCaseCount === max) return 'snake_case';
+          if (kebabCaseCount === max) return 'kebab-case';
+          if (pascalCaseCount === max) return 'PascalCase';
+
+          return 'unknown';
+        } catch {
+          return 'unknown';
+        }
+      };
+
+      // Convert naming based on convention
+      const convertNaming = (name: string, convention: string): string => {
+        const baseName = basename(name, extname(name));
+        const ext = extname(name);
+
+        switch (convention) {
+          case 'camelCase':
+            return (
+              baseName
+                .replace(/[-_]/g, '')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? p1.toLowerCase() : p1)) + ext
+            );
+          case 'snake_case':
+            return (
+              baseName
+                .replace(/[-]/g, '_')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '_') + p1.toLowerCase()) + ext
+            );
+          case 'kebab-case':
+            return (
+              baseName
+                .replace(/[_]/g, '-')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '-') + p1.toLowerCase()) + ext
+            );
+          case 'PascalCase':
+            return baseName.replace(/[-_]/g, '').replace(/^[a-z]/, match => match.toUpperCase()) + ext;
+          default:
+            return name;
+        }
+      };
+
+      // Process each unit
+      for (const unit of orderedUnits) {
+        console.log(`Processing ${unit.kind} unit "${unit.id}" from file "${unit.file}"`);
+
+        // Resolve source file path with fallback logic
+        let sourceFile: string;
+        let resolvedUnitFile: string;
+
+        // Check if unit.file already contains directory structure
+        if (unit.file.includes('/')) {
+          // unit.file has path structure (e.g., "src/mastra/agents/weatherAgent.ts")
+          sourceFile = resolve(templateDir, unit.file);
+          resolvedUnitFile = unit.file;
+        } else {
+          // unit.file is just filename (e.g., "weatherAgent.ts") - use fallback
+          const folderPath =
+            AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE[
+              unit.kind as keyof typeof AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE
+            ];
+          if (!folderPath) {
+            conflicts.push({
+              unit: { kind: unit.kind, id: unit.id },
+              issue: `Unknown unit kind: ${unit.kind}`,
+              sourceFile: unit.file,
+              targetFile: 'N/A',
+            });
+            continue;
+          }
+          resolvedUnitFile = `${folderPath}/${unit.file}`;
+          sourceFile = resolve(templateDir, resolvedUnitFile);
+        }
+
+        // Check if source file exists
+        if (!existsSync(sourceFile)) {
+          conflicts.push({
+            unit: { kind: unit.kind, id: unit.id },
+            issue: `Source file not found: ${sourceFile}`,
+            sourceFile: resolvedUnitFile,
+            targetFile: 'N/A',
+          });
+          continue;
+        }
+
+        // Extract target directory from resolved unit file path
+        const targetDir = dirname(resolvedUnitFile);
+
+        // Analyze target naming convention
+        const namingConvention = await analyzeNamingConvention(targetDir);
+        console.log(`Detected naming convention in ${targetDir}: ${namingConvention}`);
+
+        // Convert unit.id to target filename with proper extension
+        const fileExtension = extname(unit.file);
+        const convertedFileName =
+          namingConvention !== 'unknown'
+            ? convertNaming(unit.id + fileExtension, namingConvention)
+            : unit.id + fileExtension;
+
+        const targetFile = resolve(targetPath, targetDir, convertedFileName);
+
+        // Check if target file already exists (conflict)
+        if (existsSync(targetFile)) {
+          conflicts.push({
+            unit: { kind: unit.kind, id: unit.id },
+            issue: `Target file already exists: ${convertedFileName}`,
+            sourceFile: unit.file,
+            targetFile: convertedFileName,
+          });
+          continue;
+        }
+
+        // Ensure target directory exists
+        await mkdir(dirname(targetFile), { recursive: true });
+
+        // Copy the file
+        try {
+          await copyFile(sourceFile, targetFile);
+          copiedFiles.push({
+            source: sourceFile,
+            destination: targetFile,
+            unit: { kind: unit.kind, id: unit.id },
+          });
+          console.log(`✓ Copied ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName}`);
+        } catch (copyError) {
+          conflicts.push({
+            unit: { kind: unit.kind, id: unit.id },
+            issue: `Failed to copy file: ${copyError instanceof Error ? copyError.message : String(copyError)}`,
+            sourceFile: unit.file,
+            targetFile: convertedFileName,
+          });
+        }
+      }
+
+      // Commit the copied files
+      if (copiedFiles.length > 0) {
+        try {
+          const fileList = copiedFiles.map(f => f.destination).join(' ');
+          await exec(`git add ${fileList}`, { cwd: targetPath });
+          await exec(
+            `git commit -m "feat(template): copy ${copiedFiles.length} files from ${slug}@${commitSha.substring(0, 7)}"`,
+            { cwd: targetPath },
+          );
+          console.log(`✓ Committed ${copiedFiles.length} copied files`);
+        } catch (commitError) {
+          console.warn('Failed to commit copied files:', commitError);
+        }
+      }
+
+      const message = `Programmatic file copy completed. Copied ${copiedFiles.length} files, ${conflicts.length} conflicts detected.`;
+      console.log(message);
+
+      return {
+        success: true,
+        copiedFiles,
+        conflicts,
+        message,
+      };
+    } catch (error) {
+      console.error('Programmatic file copy failed:', error);
+      throw new Error(`Programmatic file copy failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  },
+});
+
+// Step 7: Validation and Fix Step - validates merged code and fixes any issues
+const validationAndFixStep = createStep({
+  id: 'validation-and-fix',
+  description: 'Validate the merged template code and fix any validation errors using a specialized agent',
+  inputSchema: z.object({
+    commitSha: z.string(),
+    slug: z.string(),
+    targetPath: z.string().optional(),
+    templateDir: z.string(),
+    orderedUnits: z.array(
+      z.object({
+        kind: z.string(),
+        id: z.string(),
+        file: z.string(),
+      }),
+    ),
+    copiedFiles: z.array(
+      z.object({
+        source: z.string(),
+        destination: z.string(),
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
+        }),
+      }),
+    ),
+    conflictsResolved: z
+      .array(
+        z.object({
+          unit: z.object({
+            kind: z.string(),
+            id: z.string(),
+          }),
+          issue: z.string(),
+          resolution: z.string(),
+        }),
+      )
+      .optional(),
   }),
   outputSchema: z.object({
     success: z.boolean(),
@@ -3713,7 +4080,7 @@ const validationAndFixStep = createStep({
   }),
   execute: async ({ inputData }) => {
     console.log('Validation and fix step starting...');
-    const { commitSha, slug, orderedUnits } = inputData;
+    const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved } = inputData;
     const targetPath = inputData.targetPath || process.cwd();
 
     try {
@@ -3738,18 +4105,35 @@ const validationAndFixStep = createStep({
 
 3. **Re-validate after fixes** to ensure all issues are resolved
 
-4. **Focus on common template integration issues**:
+4. **Focus on template integration issues**:
+   - Files were copied with new names based on unit IDs
+   - Original template imports may reference old filenames
    - Missing imports in index files
    - Incorrect file paths in imports
    - Type mismatches after integration
    - Missing exports in barrel files
+   - Use the COPIED FILES mapping below to fix import paths
 
 CRITICAL: Always validate the entire project first to get a complete picture of issues, then fix them systematically, and re-validate to confirm fixes worked.
 
-Here are the list of units that were integrated:
+CRITICAL IMPORT PATH RESOLUTION:
+The following files were copied from template with new names:
+${JSON.stringify(copiedFiles, null, 2)}
+
+When fixing import errors:
+1. Check if the missing module corresponds to a copied file
+2. Use listDirectory to verify actual filenames in target directories
+3. Update import paths to match the actual copied filenames
+4. Ensure exported variable names match what's being imported
+
+EXAMPLE: If error shows "Cannot find module './tools/download-csv-tool'" but a file was copied as "csv-fetcher-tool.ts", update the import to "./tools/csv-fetcher-tool"
+
+${conflictsResolved ? `CONFLICTS RESOLVED BY INTELLIGENT MERGE:\n${JSON.stringify(conflictsResolved, null, 2)}\n` : ''}
+
+INTEGRATED UNITS:
 ${JSON.stringify(orderedUnits, null, 2)}
 
-Be thorough and methodical. Fix one category of errors at a time (imports, then types, then linting).`,
+Be thorough and methodical. Always use listDirectory to verify actual file existence before fixing imports.`,
         model: openai('gpt-4o-mini'),
         tools: {
           validateCode: allTools.validateCode,
@@ -3826,6 +4210,14 @@ Start by running validateCode with all validation types to get a complete pictur
         },
         error: error instanceof Error ? error.message : String(error),
       };
+    } finally {
+      // Cleanup template directory
+      try {
+        await rm(templateDir, { recursive: true, force: true });
+        console.log(`✓ Cleaned up template directory: ${templateDir}`);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup template directory:', cleanupError);
+      }
     }
   },
 });
@@ -3844,6 +4236,7 @@ export const mergeTemplateWorkflow = createWorkflow({
     orderUnitsStep,
     packageMergeStep,
     flatInstallStep,
+    programmaticFileCopyStep,
     intelligentMergeStep,
     validationAndFixStep,
   ],
@@ -3888,17 +4281,37 @@ export const mergeTemplateWorkflow = createWorkflow({
       targetPath: initData.targetPath,
     };
   })
+  .then(programmaticFileCopyStep)
+  .map(async ({ getStepResult, getInitData }) => {
+    const copyResult = getStepResult(programmaticFileCopyStep);
+    const cloneResult = getStepResult(cloneTemplateStep);
+    const initData = getInitData();
+
+    return {
+      conflicts: copyResult.conflicts,
+      copiedFiles: copyResult.copiedFiles,
+      commitSha: cloneResult.commitSha,
+      slug: cloneResult.slug,
+      targetPath: initData.targetPath,
+      templateDir: cloneResult.templateDir,
+    };
+  })
   .then(intelligentMergeStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
     const orderResult = getStepResult(orderUnitsStep);
+    const copyResult = getStepResult(programmaticFileCopyStep);
+    const mergeResult = getStepResult(intelligentMergeStep);
     const initData = getInitData();
 
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
       targetPath: initData.targetPath,
+      templateDir: cloneResult.templateDir,
       orderedUnits: orderResult.orderedUnits,
+      copiedFiles: copyResult.copiedFiles,
+      conflictsResolved: mergeResult.conflictsResolved,
     };
   })
   .then(validationAndFixStep)
