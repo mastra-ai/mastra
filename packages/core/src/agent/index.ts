@@ -1531,18 +1531,18 @@ export class Agent<
           });
         }
 
-        let [memoryMessages, memorySystemMessage] = existingThread
-          ? await Promise.all([
-              this.getMemoryMessages({
+        let [memoryMessages, memorySystemMessage] = await Promise.all([
+          existingThread
+            ? this.getMemoryMessages({
                 resourceId,
                 threadId: threadObject.id,
                 vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                 memoryConfig,
                 runtimeContext,
-              }),
-              memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
-            ])
-          : [[], null];
+              })
+            : [],
+          memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+        ]);
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
