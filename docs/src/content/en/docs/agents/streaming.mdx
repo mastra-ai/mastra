@@ -5,11 +5,15 @@ description: Documentation on how to stream agents
 
 # Agent Streaming
 
-Agents in Mastra have access to a powerful streaming protocol! With seamless integration into tools or agents as a tool, you can stream responses directly back to your clients, creating a more interactive and engaging experience.
+Agents in Mastra support streaming responses for real-time interaction with clients. This enables progressive rendering of responses and better user experience.
+
+<Note type="info">
+  **Experimental API**: The `streamVNext` method shown in this guide is an experimental feature that will replace the current `stream()` method after additional testing and refinement. For production use, consider using the stable [`stream()` method](/docs/agents/overview#2-generating-and-streaming-text) until `streamVNext` is finalized.
+</Note>
 
 ## Usage
 
-To use the new protocol, you can use the `streamVNext` method on an agent. This method will return a custom MastraAgentStream. This stream extends a ReadableStream, so all basic stream methods are available.
+The experimental streaming protocol uses the `streamVNext` method on an agent. This method returns a custom MastraAgentStream that extends ReadableStream with additional utilities.
 
 ```typescript
 const stream = await agent.streamVNext({ role: "user", content: "Tell me a story." });
@@ -30,7 +34,7 @@ Each chunk is a JSON object with the following properties:
 }
 ```
 
-We have a couple of utility functions on the stream to help you with the streaming process.
+The stream provides several utility functions for working with streaming responses:
 
 - `stream.finishReason` - The reason the agent stopped streaming.
 - `stream.toolCalls` - The tool calls made by the agent.
@@ -86,7 +90,7 @@ export const weatherInfo = createTool({
 });
 ```
 
-If you want to use the stream in an agent, you can use the `streamVNext` method on the agent and pipe it to the agent's input stream.
+To use streaming within an agent-based tool, call `streamVNext` on the agent and pipe it to the writer:
 
 ```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -114,5 +118,5 @@ export const weatherInfo = createTool({
 });
 ```
 
-Piping the stream to the agent's input stream will allow us to automatically sum up the usage of the agent so the total usage count can be calculated.
+Piping the stream to the writer enables automatic aggregation of token usage across nested agent calls.
 
