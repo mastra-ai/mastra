@@ -1,6 +1,8 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import type { StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import { InMemoryStore } from './mock';
+import { randomUUID } from 'node:crypto';
+import { deepMerge } from '../utils';
 
 describe('InMemoryStore - Thread Sorting', () => {
   let store: InMemoryStore;
@@ -208,5 +210,132 @@ describe('InMemoryStore - Thread Sorting', () => {
       expect(result.total).toBe(0);
       expect(result.hasMore).toBe(false);
     });
+  });
+});
+
+describe('InMemoryStore - getMessagesById', () => {
+  let store: InMemoryStore;
+  const resourceId = 'test-resource-id';
+  const resourceId2 = 'test-resource-id-2';
+  let threads: StorageThreadType[] = [];
+  let thread1Messages: MastraMessageV1[] = [];
+  let thread2Messages: MastraMessageV1[] = [];
+  let resource2Messages: MastraMessageV1[] = [];
+
+  let messageCounter = 0;
+  const createTestMessageV1 = (text: string, props?: Partial<Omit<MastraMessageV1, 'content'>>): MastraMessageV1 => {
+    messageCounter += 1;
+
+    const defaults = {
+      id: randomUUID(),
+      role: 'user' as const,
+      resourceId,
+      createdAt: new Date(Date.now() + messageCounter * 1000),
+      content: text,
+      type: 'text' as const,
+    };
+
+    return deepMerge<MastraMessageV1>(defaults, props ?? {});
+  };
+
+  beforeEach(async () => {
+    store = new InMemoryStore();
+
+    // Create test threads with different dates
+    threads = [
+      {
+        id: 'thread-1',
+        resourceId,
+        title: 'Thread 1',
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+        updatedAt: new Date('2024-01-03T10:00:00Z'),
+        metadata: {},
+      },
+      {
+        id: 'thread-2',
+        resourceId,
+        title: 'Thread 2',
+        createdAt: new Date('2024-01-02T10:00:00Z'),
+        updatedAt: new Date('2024-01-02T10:00:00Z'),
+        metadata: {},
+      },
+      {
+        id: 'thread-3',
+        resourceId: resourceId2,
+        title: 'Thread 3',
+        createdAt: new Date('2024-01-03T10:00:00Z'),
+        updatedAt: new Date('2024-01-01T10:00:00Z'),
+        metadata: {},
+      },
+    ];
+
+    // Save threads to store
+    for (const thread of threads) {
+      await store.saveThread({ thread });
+    }
+
+    thread1Messages = [
+      createTestMessageV1('Message 1', { threadId: threads[0].id, resourceId }),
+      createTestMessageV1('Message 2', { threadId: threads[0].id, resourceId }),
+    ];
+
+    thread2Messages = [
+      createTestMessageV1('Message A', { threadId: threads[1].id, resourceId }),
+      createTestMessageV1('Message B', { threadId: threads[1].id, resourceId }),
+    ];
+
+    resource2Messages = [
+      createTestMessageV1('The quick brown fox jumps over the lazy dog', {
+        threadId: threads[2].id,
+        resourceId: resourceId2,
+      }),
+    ];
+
+    await store.saveMessages({ messages: thread1Messages, format: 'v1' });
+    await store.saveMessages({ messages: thread2Messages, format: 'v1' });
+    await store.saveMessages({ messages: resource2Messages, format: 'v1' });
+  });
+
+  it('should return an empty array if no message IDs are provided', async () => {
+    const messages = await store.getMessagesById({ messageIds: [] });
+    expect(messages).toHaveLength(0);
+  });
+
+  it('should return messages sorted by createdAt DESC by default', async () => {
+    const messages = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
+    expect(messages).toHaveLength(thread1Messages.length);
+    expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1].createdAt)).toBe(true);
+  });
+
+  it('should return V1 messages by default', async () => {
+    const messages = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
+
+    expect(messages.every(msg => typeof msg.content === 'string')).toBe(true);
+  });
+
+  it('should return V2 messages if specified', async () => {
+    const messages = await store.getMessagesById({
+      messageIds: thread1Messages.map(msg => msg.id),
+      format: 'v2',
+    });
+    expect(messages.every(msg => msg.content?.format === 2)).toBe(true);
+  });
+
+  it('should return messages from multiple threads', async () => {
+    const messages = await store.getMessagesById({
+      messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
+    });
+
+    expect(messages.some(msg => msg.threadId === threads[0].id)).toBe(true);
+    expect(messages.some(msg => msg.threadId === threads[1].id)).toBe(true);
+  });
+
+  it('should return messages from multiple resources', async () => {
+    const messages = await store.getMessagesById({
+      messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
+    });
+
+    expect(messages.some(msg => msg.resourceId === threads[0].resourceId)).toBe(true);
+    expect(messages.some(msg => msg.resourceId === threads[2].resourceId)).toBe(true);
   });
 });

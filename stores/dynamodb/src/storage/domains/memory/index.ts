@@ -350,6 +350,48 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    this.logger.debug('Getting messages by ID', { messageIds });
+    if (messageIds.length === 0) return [];
+
+    try {
+      const results = await Promise.all(
+        messageIds.map(id => this.service.entities.message.query.primary({ entity: 'message', id }).go()),
+      );
+
+      const data = results.map(result => result.data).flat(1);
+
+      let parsedMessages = data
+        .map((data: any) => this.parseMessageData(data))
+        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
+
+      // Deduplicate messages by ID (like libsql)
+      const uniqueMessages = parsedMessages.filter(
+        (message, index, self) => index === self.findIndex(m => m.id === message.id),
+      );
+
+      const list = new MessageList().add(uniqueMessages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
+        },
+        error,
+      );
+    }
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(

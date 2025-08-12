@@ -818,6 +818,49 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     }
   }
 
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    console.log(`getMessagesById called with format: ${format}, messageIds: ${JSON.stringify(messageIds)}`);
+    if (messageIds.length === 0) return [];
+
+    // Default to v1 format if not specified
+    const actualFormat = format || 'v1';
+    console.log(`Using format: ${actualFormat}`);
+
+    try {
+      // Fetch and parse all messages from their respective threads
+      const messages = (await Promise.all(messageIds.map(id => this.findMessageInAnyThread(id)))).filter(
+        result => !!result,
+      );
+
+      // For v2 format, use MessageList for proper conversion
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error retrieving messages by ID`,
+          details: {
+            messageIds: JSON.stringify(messageIds),
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      return [];
+    }
+  }
+
   async getMessagesPaginated(
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {

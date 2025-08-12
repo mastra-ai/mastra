@@ -236,6 +236,41 @@ export class InMemoryMemory extends MemoryStorage {
     return messages as T;
   }
 
+  protected convertMessageToV2(message: StorageMessageType): MastraMessageV2 {
+    return {
+      id: message.id,
+      threadId: message.thread_id,
+      ...(message.resourceId && { resourceId: message.resourceId }),
+      content: typeof message.content === 'string' ? message.content : JSON.parse(message.content),
+      role: message.role as MastraMessageV2['role'],
+      type: message.type,
+      createdAt: message.createdAt,
+    } satisfies MastraMessageV2;
+  }
+
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    this.logger.debug(`MockStore: getMessagesById called`);
+
+    const messages = messageIds.reduce((acc: MastraMessageV2[], id) => {
+      const storedMessage = this.collection.messages.get(id);
+      if (storedMessage) acc.push(this.convertMessageToV2(storedMessage));
+      return acc;
+    }, []);
+
+    // Sort by createdAt
+    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    const list = new MessageList().add(messages, 'memory');
+    if (format === 'v2') return list.get.all.v2();
+    return list.get.all.v1();
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(

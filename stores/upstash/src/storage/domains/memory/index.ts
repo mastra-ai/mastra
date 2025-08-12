@@ -552,6 +552,56 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
+  private parseStoredMessage(storedMessage: MastraMessageV2 & { _index?: number }): MastraMessageV2 {
+    const defaultMessageContent = { format: 2, parts: [{ type: 'text', text: '' }] };
+    const { _index, ...rest } = storedMessage;
+    return {
+      ...rest,
+      createdAt: new Date(rest.createdAt),
+      content: rest.content || defaultMessageContent,
+    } satisfies MastraMessageV2;
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: { messageIds: string[] } & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    try {
+      // Search in all threads in parallel
+      const threadKeys = await this.client.keys('thread:*');
+
+      const result = await Promise.all(
+        threadKeys.map(threadKey => {
+          const threadId = threadKey.split(':')[1];
+          if (!threadId) throw new Error(`Failed to parse thread ID from thread key "${threadKey}"`);
+          return this.client.mget<(MastraMessageV2 & { _index?: number })[]>(
+            messageIds.map(id => getMessageKey(threadId, id)),
+          );
+        }),
+      );
+
+      const rawMessages = result.flat(1).filter(msg => !!msg) as (MastraMessageV2 & { _index?: number })[];
+
+      const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageIds: JSON.stringify(messageIds),
+          },
+        },
+        error,
+      );
+    }
+  }
+
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';

@@ -169,6 +169,81 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    try {
+      const messages: any[] = [];
+
+      // Then get the remaining messages, excluding the ids we just fetched
+      const result = await this.client.query({
+        query: `
+        SELECT 
+          id, 
+          content, 
+          role, 
+          type,
+          toDateTime64(createdAt, 3) as createdAt,
+          thread_id AS "threadId",
+          "resourceId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE id IN {messageIds:Array(String)}
+        ORDER BY "createdAt" DESC
+        `,
+        query_params: {
+          messageIds,
+        },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = await result.json();
+      console.table(rows.data);
+      messages.push(...transformRows(rows.data));
+      console.log('transformed rows:');
+      console.table(messages);
+
+      // // Sort all messages by creation date
+      // messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      // Parse message content
+      messages.forEach(message => {
+        if (typeof message.content === 'string') {
+          try {
+            message.content = JSON.parse(message.content);
+          } catch {
+            // If parsing fails, leave as string
+          }
+        }
+      });
+
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
+        },
+        error,
+      );
+    }
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
