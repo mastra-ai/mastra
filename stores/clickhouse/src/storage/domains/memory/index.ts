@@ -179,9 +179,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (messageIds.length === 0) return [];
 
     try {
-      const messages: any[] = [];
-
-      // Then get the remaining messages, excluding the ids we just fetched
       const result = await this.client.query({
         query: `
         SELECT 
@@ -209,13 +206,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const rows = await result.json();
-      console.table(rows.data);
-      messages.push(...transformRows(rows.data));
-      console.log('transformed rows:');
-      console.table(messages);
-
-      // // Sort all messages by creation date
-      // messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      const messages: any[] = transformRows(rows.data);
 
       // Parse message content
       messages.forEach(message => {

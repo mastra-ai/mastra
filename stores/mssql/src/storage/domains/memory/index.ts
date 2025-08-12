@@ -530,9 +530,7 @@ export class MemoryMSSQL extends MemoryStorage {
         return timeDiff;
       });
       rows = rows.map(({ seq_id, ...rest }) => rest);
-      const list = new MessageList().add(this._parseAndFormatMessages(rows, format), 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      return this._parseAndFormatMessages(rows, format);
     } catch (error) {
       const mastraError = new MastraError(
         {

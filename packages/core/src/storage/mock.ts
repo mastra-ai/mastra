@@ -220,18 +220,15 @@ export class InMemoryStore extends MastraStorage {
     >;
   }
 
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
   async getMessagesById({
     messageIds,
     format,
-  }: { messageIds: string[] } & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: { messageIds: string[] } & { format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: { messageIds: string[] } & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     return this.stores.memory.getMessagesById({ messageIds, format });
   }
 

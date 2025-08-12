@@ -825,19 +825,20 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     messageIds: string[];
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    console.log(`getMessagesById called with format: ${format}, messageIds: ${JSON.stringify(messageIds)}`);
     if (messageIds.length === 0) return [];
-
-    // Default to v1 format if not specified
-    const actualFormat = format || 'v1';
-    console.log(`Using format: ${actualFormat}`);
 
     try {
       // Fetch and parse all messages from their respective threads
       const messages = (await Promise.all(messageIds.map(id => this.findMessageInAnyThread(id)))).filter(
         result => !!result,
-      );
+      ) as (MastraMessageV1 & { _index: string })[];
 
+      // Remove _index and ensure dates before returning, just like Upstash
+      const prepared = messages.map(({ _index, ...message }) => ({
+        ...message,
+        type: message.type === (`v2` as `text`) ? undefined : message.type,
+        createdAt: ensureDate(message.createdAt)!,
+      }));
       // For v2 format, use MessageList for proper conversion
       const list = new MessageList().add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
