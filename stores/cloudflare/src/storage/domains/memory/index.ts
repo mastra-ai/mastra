@@ -834,13 +834,13 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       ) as (MastraMessageV1 & { _index: string })[];
 
       // Remove _index and ensure dates before returning, just like Upstash
-      const prepared = messages.map(({ _index, ...message }) => ({
+      const prepared: MastraMessageV1[] = messages.map(({ _index, ...message }) => ({
         ...message,
-        type: message.type === (`v2` as `text`) ? undefined : message.type,
+        ...(message.type !== (`v2` as string) && { type: message.type }),
         createdAt: ensureDate(message.createdAt)!,
       }));
       // For v2 format, use MessageList for proper conversion
-      const list = new MessageList().add(messages, 'memory');
+      const list = new MessageList().add(prepared, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
