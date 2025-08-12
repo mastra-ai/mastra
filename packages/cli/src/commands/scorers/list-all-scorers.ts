@@ -25,7 +25,7 @@ export async function listAllScorers(): Promise<void> {
     for (const scorer of scorers) {
       p.log.message(`  ${color.bold(scorer.name)} ${color.dim(`(${scorer.id})`)}
     ${color.dim(scorer.description)}
-    ${color.dim(`Use: mastra scorers add ${scorer.id}`)}`);
+    `);
     }
   }
 }
