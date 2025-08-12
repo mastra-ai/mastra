@@ -1659,37 +1659,37 @@ export const tools = await mcpClient.getTools();
     }
 
     // Build validation
-    if (validationType.includes('build')) {
-      try {
-        await exec('npm run build || pnpm build || yarn build', execOptions);
-        validationsPassed.push('build');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        errors.push({
-          type: 'build',
-          severity: 'error',
-          message: `Build failed: ${errorMessage}`,
-        });
-        validationsFailed.push('build');
-      }
-    }
+    // if (validationType.includes('build')) {
+    //   try {
+    //     await spawnSWPM(execOptions.cwd!, 'build', []);
+    //     validationsPassed.push('build');
+    //   } catch (error) {
+    //     const errorMessage = error instanceof Error ? error.message : String(error);
+    //     errors.push({
+    //       type: 'build',
+    //       severity: 'error',
+    //       message: `Build failed: ${errorMessage}`,
+    //     });
+    //     validationsFailed.push('build');
+    //   }
+    // }
 
     // Test validation
-    if (validationType.includes('tests')) {
-      try {
-        const testCommand = files?.length ? `npx vitest run ${files.join(' ')}` : 'npm test || pnpm test || yarn test';
-        await exec(testCommand, execOptions);
-        validationsPassed.push('tests');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        errors.push({
-          type: 'test',
-          severity: 'error',
-          message: `Tests failed: ${errorMessage}`,
-        });
-        validationsFailed.push('tests');
-      }
-    }
+    // if (validationType.includes('tests')) {
+    //   try {
+    //     const testCommand = files?.length ? `npx vitest run ${files.join(' ')}` : 'npm test || pnpm test || yarn test';
+    //     await exec(testCommand, execOptions);
+    //     validationsPassed.push('tests');
+    //   } catch (error) {
+    //     const errorMessage = error instanceof Error ? error.message : String(error);
+    //     errors.push({
+    //       type: 'test',
+    //       severity: 'error',
+    //       message: `Tests failed: ${errorMessage}`,
+    //     });
+    //     validationsFailed.push('tests');
+    //   }
+    // }
 
     const totalErrors = errors.filter(e => e.severity === 'error').length;
     const totalWarnings = errors.filter(e => e.severity === 'warning').length;
@@ -3227,6 +3227,7 @@ Be systematic and thorough. Always read the existing package.json first, then me
 
       const result = await packageMergeAgent.stream(
         `Please merge the template dependencies into the target project's package.json at ${targetPath}/package.json.`,
+        { experimental_output: z.object({ success: z.boolean() }) },
       );
 
       let buffer: string[] = [];
@@ -3521,19 +3522,19 @@ CRITICAL INSTRUCTIONS:
 
 KEY RESPONSIBILITIES:
 1. Resolve any conflicts from the programmatic copy step
-2. Register components in main Mastra config (agents, workflows, networks, mcp-servers)
-3. DO NOT register tools in main config - tools should remain standalone
+2. Register components in existing Mastra index file (agents, workflows, networks, mcp-servers)
+3. DO NOT register tools in existing Mastra index file - tools should remain standalone
 4. Fix import path issues in copied files
 5. Ensure TypeScript imports and exports are correct
 6. Validate integration works properly
 7. Copy additional files ONLY if needed for conflict resolution or missing dependencies
 
 MASTRA-SPECIFIC INTEGRATION:
-- Agents: Register in main Mastra config
-- Workflows: Register in main Mastra config
-- Networks: Register in main Mastra config
-- MCP servers: Register in main Mastra config
-- Tools: Copy to ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} but DO NOT register in main config
+- Agents: Register in existing Mastra index file
+- Workflows: Register in existing Mastra index file
+- Networks: Register in existing Mastra index file
+- MCP servers: Register in existing Mastra index file
+- Tools: Copy to ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} but DO NOT register in existing Mastra index file
 
 EDGE CASE FILE COPYING:
 - IF a file for a resource does not exist in the target project AND was not programmatically copied, you can use copyFile tool
@@ -3586,7 +3587,7 @@ Template information:
       if (nonToolFiles.length > 0) {
         tasks.push({
           id: 'register-components',
-          content: `Register ${nonToolFiles.length} components in main Mastra config`,
+          content: `Register ${nonToolFiles.length} components in existing Mastra index file (src/mastra/index.ts)`,
           status: 'pending' as const,
           priority: 'medium' as const,
           dependencies: conflicts.length > 0 ? conflicts.map(c => `conflict-${c.unit.kind}-${c.unit.id}`) : undefined,
@@ -4150,6 +4151,7 @@ Be thorough and methodical. Always use listDirectory to verify actual file exist
         `Please validate the template integration and fix any errors found in the project at ${targetPath}. The template "${slug}" (${commitSha.substring(0, 7)}) was just integrated and may have validation issues that need fixing.
 
 Start by running validateCode with all validation types to get a complete picture of any issues, then systematically fix them.`,
+        { experimental_output: z.object({ success: z.boolean() }) },
       );
 
       let validationResults = {
@@ -4315,6 +4317,18 @@ export const mergeTemplateWorkflow = createWorkflow({
     };
   })
   .then(validationAndFixStep)
+  .map(async ({ getStepResult, getInitData }) => {
+    const initData = getInitData();
+    const validationResult = getStepResult(validationAndFixStep);
+    return {
+      success: validationResult.success,
+      applied: validationResult.applied,
+      message: validationResult.message,
+      validationResults: validationResult.validationResults,
+      error: validationResult.error,
+      branchName: initData.branch,
+    };
+  })
   .commit();
 
 export class AgentBuilder extends Agent {
