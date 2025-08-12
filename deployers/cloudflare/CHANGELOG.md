@@ -1,5 +1,26 @@
 # @mastra/deployer-cloudflare
 
+## 0.12.0-alpha.1
+
+### Minor Changes
+
+- 79d34ce: improve cloudflare workers compatibility
+
+### Patch Changes
+
+- Updated dependencies [d5330bf]
+- Updated dependencies [aaf0224]
+- Updated dependencies [42cb4e9]
+- Updated dependencies [a239d41]
+- Updated dependencies [96169cc]
+- Updated dependencies [b32c50d]
+- Updated dependencies [c6d2603]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+  - @mastra/deployer@0.13.2-alpha.2
+
 ## 0.11.6-alpha.0
 
 ### Patch Changes

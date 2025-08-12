@@ -1,5 +1,19 @@
 # @mastra/lance
 
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- cc9035c: dependencies updates:
+  - Updated dependency [`@lancedb/lancedb@^0.21.2` ↗︎](https://www.npmjs.com/package/@lancedb/lancedb/v/0.21.2) (from `^0.18.2`, in `dependencies`)
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.2.4
 
 ### Patch Changes

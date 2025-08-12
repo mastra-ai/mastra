@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- f6a1ae7: Return correct `agentIds` for `/api/scores/scorers` and `/api/scores/scorers/${scorerId}` endpoints
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

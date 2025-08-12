@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.10.7-alpha.1
+
+### Patch Changes
+
+- ae2eb63: Handle regex checks better, return description as a string rather than an object with pattern and flags.
+
 ## 0.10.7-alpha.0
 
 ### Patch Changes

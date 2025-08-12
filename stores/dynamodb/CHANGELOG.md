@@ -1,5 +1,17 @@
 # @mastra/dynamodb
 
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.14.0
 
 ### Minor Changes

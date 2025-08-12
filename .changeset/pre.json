@@ -73,15 +73,33 @@
     "@mastra/inngest": "0.11.9"
   },
   "changesets": [
+    "@mastra_lance-6619-dependencies",
+    "@mastra_playground-ui-6585-dependencies",
+    "@mastra_qdrant-6644-dependencies",
+    "afraid-guests-go",
+    "blue-showers-mate",
     "cool-humans-pay",
     "cuddly-wombats-cover",
     "curly-seals-sniff",
+    "few-peas-rest",
     "fluffy-cameras-greet",
+    "fresh-games-watch",
     "great-worms-brake",
     "green-buttons-swim",
+    "grumpy-bushes-burn",
+    "legal-rivers-fly",
+    "metal-results-swim",
     "pink-apes-turn",
     "red-walls-punch",
+    "salty-mails-divide",
+    "seven-pants-swim",
+    "shy-maps-serve",
+    "silent-nights-help",
     "silly-singers-fix",
-    "silver-cycles-listen"
+    "silver-cycles-listen",
+    "smooth-things-stop",
+    "soft-actors-tease",
+    "some-readers-laugh",
+    "ten-windows-punch"
   ]
 }
