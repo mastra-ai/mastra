@@ -5,6 +5,7 @@ import { RegisteredLogger } from '../logger';
 import type { ChunkType } from '../stream/types';
 import type { Emitter, StepResult } from './types';
 import type { StepFlowEntry } from '.';
+import type { AnyAISpan } from '../ai-tracing';
 
 /**
  * Represents an execution graph for a workflow
@@ -49,6 +50,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
+    parentAISpan?: AnyAISpan;
     retryConfig?: {
       attempts?: number;
       delay?: number;

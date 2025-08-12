@@ -7,6 +7,7 @@ import type { IAction, IExecutionContext, MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
 import type { ToolStream } from './stream';
+import type { AITraceContext } from '../ai-tracing';
 
 export type VercelTool = Tool;
 export type VercelToolV5 = ToolV5;
@@ -54,6 +55,7 @@ export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined 
   mastra?: MastraUnion;
   runtimeContext: RuntimeContext;
   writer?: ToolStream<any>;
+  aiTracingContext?: AITraceContext;
 }
 
 export interface ToolAction<
