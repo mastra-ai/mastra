@@ -17,6 +17,7 @@ const meta = {
   snapshots: "Snapshots",
   watch: "watch()",
   stream: "stream()",
+  streamVNext: "streamVNext() (Experimental)",
   execute: "execute()",
   resume: "resume()",
   start: "start()",
