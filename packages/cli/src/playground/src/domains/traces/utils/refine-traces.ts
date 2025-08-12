@@ -29,7 +29,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
       parentSpanId: parentSpan?.id === span.id ? null : span?.parentSpanId,
     }));
 
-    const failedStatus = value.find(span => span.status.code !== 0)?.status;
+    const failedStatus = value.find(span => span.status.code === 2)?.status;
 
     const runId = value?.[0]?.attributes?.runId;
 

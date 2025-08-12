@@ -1,9 +1,9 @@
 ---
-title: "Reference: streamVNext() (Experimental) | Agents | Mastra Docs"
-description: "Documentation for the `.streamVNext()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
+title: "Reference: Agent.streamVNext() (Experimental) | Agents | Mastra Docs"
+description: "Documentation for the `Agent.streamVNext()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
 ---
 
-# Streaming (vNext)
+# Agent.streamVNext() (Experimental)
 
 <Note type="warning">
   **Experimental Feature**: This is a new streaming implementation that will replace the existing `stream()` method once battle-tested. The API may change as we refine the feature based on feedback.
@@ -13,8 +13,8 @@ The `.streamVNext()` method enables real-time streaming of responses from an age
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const response = await agent.streamVNext("message for agent");
+```typescript copy
+await agent.streamVNext("message for agent");
 ```
 
 ## Parameters
@@ -34,20 +34,6 @@ const response = await agent.streamVNext("message for agent");
     },
   ]}
 />
-
-## Extended usage example
-
-```typescript showLineNumbers copy
-const response = await agent.streamVNext("message for agent", {
-  temperature: 0.7,
-  maxSteps: 3,
-  memory: {
-    thread: "user-123",
-    resource: "test-app"
-  },
-  toolChoice: "auto"
-});
-```
 
 ### Options parameters
 
@@ -406,3 +392,16 @@ const response = await agent.streamVNext("message for agent", {
   ]}
 />
 
+## Extended usage example
+
+```typescript showLineNumbers copy
+await agent.streamVNext("message for agent", {
+  temperature: 0.7,
+  maxSteps: 3,
+  memory: {
+    thread: "user-123",
+    resource: "test-app"
+  },
+  toolChoice: "auto"
+});
+```

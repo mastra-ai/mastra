@@ -13,6 +13,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
   streamVNextGenerateHandler,
+  updateAgentModelHandler,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -270,6 +271,49 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     streamVNextGenerateHandler,
+  );
+
+  router.post(
+    '/:agentId/model',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Update the model for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                model: {
+                  type: 'object',
+                  description: 'The model to update the agent to',
+                },
+              },
+              required: ['model'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Model updated successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    updateAgentModelHandler,
   );
 
   router.get(
