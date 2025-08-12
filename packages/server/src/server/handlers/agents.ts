@@ -390,6 +390,6 @@ export function updateAgentModelHandler({
 
     return { message: 'Agent model updated' };
   } catch (error) {
-    return handleError(error, 'error streaming agent response');
+    return handleError(error, 'error updating agent model');
   }
 }
