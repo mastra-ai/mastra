@@ -21,6 +21,7 @@ import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/cl
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
 
+import { getAvailableProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
@@ -372,6 +373,21 @@ export async function createHonoServer(
       },
     }),
     rootHandler,
+  );
+
+  // Providers route
+  app.get(
+    '/api/providers',
+    describeRoute({
+      description: 'Get all providers with available keys',
+      tags: ['agents'],
+      responses: {
+        200: {
+          description: 'All providers with available keys',
+        },
+      },
+    }),
+    getAvailableProvidersHandler,
   );
 
   // Agents routes

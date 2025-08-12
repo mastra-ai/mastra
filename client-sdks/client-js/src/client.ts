@@ -620,4 +620,12 @@ export class MastraClient extends BaseResource {
       body: params,
     });
   }
+
+  /**
+   * Retrieves available providers for the project
+   * @returns Promise containing available providers
+   */
+  getAvailableProviders(): Promise<string[]> {
+    return this.request(`/api/providers`);
+  }
 }

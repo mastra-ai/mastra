@@ -14,6 +14,7 @@ import type { Context } from 'hono';
 
 import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
+import { AllowedProviderKeys } from '../../utils';
 
 // Agent handlers
 export async function getAgentsHandler(c: Context) {
@@ -208,4 +209,17 @@ export async function updateAgentModelHandler(c: Context) {
   } catch (error) {
     return handleError(error, 'Error updating agent model');
   }
+}
+
+export async function getAvailableProvidersHandler(c: Context) {
+  const isPlayground = c.get('playground') === true;
+  if (!isPlayground) {
+    return c.json({ error: 'This API is only available in the playground environment' }, 403);
+  }
+  const envVars = process.env;
+  const providers = Object.entries(AllowedProviderKeys);
+  const envKeys = Object.keys(envVars);
+  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value));
+  const availableProvidersNames = availableProviders.map(([key]) => key);
+  return c.json(availableProvidersNames);
 }
