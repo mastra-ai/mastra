@@ -1,16 +1,16 @@
 ---
-title: "Reference: getVoice() | Agents | Mastra Docs"
-description: "Documentation for the `.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities."
+title: "Reference: Agent.getVoice() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities."
 ---
 
-# getVoice()
+# Agent.getVoice()
 
 The `.getVoice()` method retrieves the voice provider configured for an agent, resolving it if it's a function. This method is used to access the agent's speech capabilities for text-to-speech and speech-to-text functionality.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const voice = await agent.getVoice();
+```typescript copy
+await agent.getVoice();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const voice = await agent.getVoice();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "voice",
+      type: "Promise<MastraVoice>",
+      description: "A promise that resolves to the voice provider configured for the agent, or a default voice provider if none was configured.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const voice = await agent.getVoice({
+```typescript copy
+await agent.getVoice({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -49,14 +61,7 @@ const voice = await agent.getVoice({
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "voice",
-      type: "Promise<MastraVoice>",
-      description: "A promise that resolves to the voice provider configured for the agent, or a default voice provider if none was configured.",
-    },
-  ]}
-/>
+- [Adding voice to agents](../../docs/agents/adding-voice.mdx)
+- [Voice providers](../voice/mastra-voice.mdx)

@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { mcpClient } from '../mcp/mcp-client';
+import { mcpClient } from '../mcp/mcp-client.js';
 
 // Create an agent that uses tools from the MCP server
 export const docsAgent = new Agent({
