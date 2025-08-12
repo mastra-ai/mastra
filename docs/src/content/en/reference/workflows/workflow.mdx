@@ -46,20 +46,6 @@ const workflow = createWorkflow({
   ]}
 />
 
-## Extended usage example
-
-```typescript filename="src/test-run.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("workflow").createRunAsync();
-
-const result = await run.start({...});
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({...});
-}
-```
-
 ## Workflow status
 
 A workflow's `status` indicates its current execution state. The possible values are:
@@ -86,6 +72,20 @@ A workflow's `status` indicates its current execution state. The possible values
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript filename="src/test-run.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("workflow").createRunAsync();
+
+const result = await run.start({...});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({...});
+}
+```
 
 ## Related
 

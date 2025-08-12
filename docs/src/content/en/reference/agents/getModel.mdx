@@ -9,8 +9,8 @@ The `.getModel()` method retrieves the language model configured for an agent, r
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const model = await agent.getModel();
+```typescript copy
+await agent.getModel();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const model = await agent.getModel();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel | Promise<MastraLanguageModel>",
+      description: "The language model configured for the agent, either as a direct instance or a promise that resolves to the model.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const model = await agent.getModel({
+```typescript copy
+await agent.getModel({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -45,18 +57,6 @@ const model = await agent.getModel({
       isOptional: true,
       defaultValue: "undefined",
       description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "model",
-      type: "MastraLanguageModel | Promise<MastraLanguageModel>",
-      description: "The language model configured for the agent, either as a direct instance or a promise that resolves to the model.",
     },
   ]}
 />

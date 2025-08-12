@@ -44,6 +44,18 @@ const result = await run.start({
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "A promise that resolves to the workflow execution result containing step outputs and status",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
 ```typescript showLineNumbers copy
@@ -61,18 +73,6 @@ const result = await run.start({
   runtimeContext
 });
 ```
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
-      description: "A promise that resolves to the workflow execution result containing step outputs and status",
-    },
-  ]}
-/>
 
 ## Related
 

@@ -51,19 +51,6 @@ if (result.status === "suspended") {
   ]}
 />
 
-## Extended usage example
-
-```typescript showLineNumbers copy
-if (result.status === "suspended") {
-  const resumedResults = await run.resume({
-    step: result.suspended[0],
-    resumeData: { value: "resume data" }
-  });
-}
-```
-> **Note**: When exactly one step is suspended, you can omit the `step` parameter and the workflow will automatically resume that step. For workflows with multiple suspended steps, you must explicitly specify which step to resume.
-
-
 ## Returns
 
 <PropertiesTable
@@ -75,6 +62,18 @@ if (result.status === "suspended") {
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    step: result.suspended[0],
+    resumeData: { value: "resume data" }
+  });
+}
+```
+> **Note**: When exactly one step is suspended, you can omit the `step` parameter and the workflow will automatically resume that step. For workflows with multiple suspended steps, you must explicitly specify which step to resume.
 
 ## Related
 

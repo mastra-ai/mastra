@@ -40,19 +40,6 @@ const result = await run.start({ inputData: { value: "initial data" } });
 />
 
 
-## Extended usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
-
-run.watch((event) => {
-  console.log("Step completed:", event?.payload?.currentStep?.id);
-}, 'watch');
-
-
-const result = await run.start({ inputData: { value: "initial data" } });
-```
-
 ## Returns
 
 <PropertiesTable
@@ -65,6 +52,19 @@ const result = await run.start({ inputData: { value: "initial data" } });
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+run.watch((event) => {
+  console.log("Step completed:", event?.payload?.currentStep?.id);
+}, 'watch');
+
+
+const result = await run.start({ inputData: { value: "initial data" } });
+```
 
 ## Related
 

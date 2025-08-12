@@ -9,8 +9,8 @@ The `.getLLM()` method retrieves the language model instance configured for an a
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const llm = await agent.getLLM();
+```typescript copy
+await agent.getLLM();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const llm = await agent.getLLM();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLLMBase | Promise<MastraLLMBase>",
+      description: "The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const llm = await agent.getLLM({
+```typescript copy
+await agent.getLLM({
   runtimeContext: new RuntimeContext(),
   model: openai('gpt-4')
 });
@@ -51,19 +63,7 @@ const llm = await agent.getLLM({
       name: "model",
       type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
       isOptional: true,
-      description: "Optional model override. If provided, this model will be used instead of the agent's configured model.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "llm",
-      type: "MastraLLMBase | Promise<MastraLLMBase>",
-      description: "The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
+      description: "Optional model override. If provided, this model will be used used instead of the agent's configured model.",
     },
   ]}
 />

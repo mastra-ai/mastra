@@ -9,7 +9,7 @@ The `.sleepUntil()` method pauses execution until a specified date.
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript copy
 workflow.sleepUntil(new Date(Date.now() + 5000));
 ```
 
@@ -26,14 +26,6 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
   ]}
 />
 
-## Extended usage example
-
-```typescript showLineNumbers copy
-workflow.sleepUntil(async ({ inputData }) => {
-  return new Date(Date.now() + inputData.value);
-});
-```
-
 ## Returns
 
 <PropertiesTable
@@ -45,6 +37,14 @@ workflow.sleepUntil(async ({ inputData }) => {
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+workflow.sleepUntil(async ({ inputData }) => {
+  return new Date(Date.now() + inputData.value);
+});
+```
 
 ## Related
 

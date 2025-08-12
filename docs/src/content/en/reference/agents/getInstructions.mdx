@@ -9,8 +9,8 @@ The `.getInstructions()` method retrieves the instructions configured for an age
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const instructions = await agent.getInstructions();
+```typescript copy
+await agent.getInstructions();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const instructions = await agent.getInstructions();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string | Promise<string>",
+      description: "The instructions configured for the agent, either as a direct string or a promise that resolves to the instructions.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const instructions = await agent.getInstructions({
+```typescript copy
+await agent.getInstructions({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -45,18 +57,6 @@ const instructions = await agent.getInstructions({
       isOptional: true,
       defaultValue: "undefined",
       description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "instructions",
-      type: "string | Promise<string>",
-      description: "The instructions configured for the agent, either as a direct string or a promise that resolves to the instructions.",
     },
   ]}
 />

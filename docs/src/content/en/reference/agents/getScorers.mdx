@@ -9,8 +9,8 @@ The `.getScorers()` method retrieves the scoring configuration configured for an
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const scorers = await agent.getScorers();
+```typescript copy
+await agent.getScorers();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const scorers = await agent.getScorers();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorers",
+      type: "MastraScorers | Promise<MastraScorers>",
+      description: "The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const scorers = await agent.getScorers({
+```typescript copy
+await agent.getScorers({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -45,18 +57,6 @@ const scorers = await agent.getScorers({
       isOptional: true,
       defaultValue: "new RuntimeContext()",
       description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "scorers",
-      type: "MastraScorers | Promise<MastraScorers>",
-      description: "The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
     },
   ]}
 />

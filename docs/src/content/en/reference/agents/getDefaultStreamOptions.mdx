@@ -9,8 +9,8 @@ The `.getDefaultStreamOptions()` method retrieves the default streaming options 
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const defaultOptions = await agent.getDefaultStreamOptions();
+```typescript copy
+await agent.getDefaultStreamOptions();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const defaultOptions = await agent.getDefaultStreamOptions();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
+      description: "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const defaultOptions = await agent.getDefaultStreamOptions({
+```typescript copy
+await agent.getDefaultStreamOptions({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -45,18 +57,6 @@ const defaultOptions = await agent.getDefaultStreamOptions({
       isOptional: true,
       defaultValue: "new RuntimeContext()",
       description: "Runtime context for dependency injection and contextual information.",
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "defaultOptions",
-      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
-      description: "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
     },
   ]}
 />

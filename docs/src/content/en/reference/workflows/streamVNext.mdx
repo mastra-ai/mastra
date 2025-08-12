@@ -38,20 +38,6 @@ const stream = run.streamVNext({
   ]}
 />
 
-## Extended usage example
-
-```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
-
-const stream = run.streamVNext({
-  inputData: {
-    value: "initial data",
-  },
-});
-
-const result = await stream.result;
-```
-
 ## Returns
 
 <PropertiesTable
@@ -78,6 +64,20 @@ const result = await stream.result;
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const stream = run.streamVNext({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+const result = await stream.result;
+```
 
 ## Stream Events
 
