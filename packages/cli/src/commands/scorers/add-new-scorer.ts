@@ -4,7 +4,6 @@ import { toCamelCase } from '../../utils/string';
 import { AVAILABLE_SCORERS } from './available-scorers';
 import { writeScorer } from './file-utils';
 import type { ScorerTemplate } from './types';
-import pc from 'picocolors';
 
 export async function selectScorer(): Promise<ScorerTemplate | null> {
   const options = [];
@@ -70,6 +69,7 @@ export const addNewScorer = async (scorerId?: string) => {
 
       const { id, filename } = selectedScorer;
       await initializeScorer(id, filename, customPath);
+      return;
     }
 
     const foundScorer = AVAILABLE_SCORERS.find(scorer => scorer.id === selectedScorer.id);
