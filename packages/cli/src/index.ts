@@ -45,7 +45,7 @@ ${pc.bold(pc.cyan('Mastra'))} is a typescript framework for building AI applicat
 
 program
   .command('create [project-name]')
-  .description(pc.green('Create a new Mastra project'))
+  .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras))')
@@ -67,7 +67,7 @@ program
 
 program
   .command('init')
-  .description(pc.blue('Initialize Mastra in your project'))
+  .description('Initialize Mastra in your project')
   .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
@@ -80,7 +80,7 @@ program
 
 program
   .command('lint')
-  .description(pc.yellow('Lint your Mastra project'))
+  .description('Lint your Mastra project')
   .option('-d, --dir <path>', 'Path to your Mastra folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
@@ -88,7 +88,7 @@ program
 
 program
   .command('dev')
-  .description(pc.magenta('Start mastra server'))
+  .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
@@ -104,7 +104,7 @@ program
 
 program
   .command('build')
-  .description(pc.cyan('Build your Mastra project'))
+  .description('Build your Mastra project')
   .option('-d, --dir <path>', 'Path to your Mastra Folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
@@ -113,18 +113,18 @@ program
 
 program
   .command('deploy')
-  .description(pc.red('Deploy your Mastra project'))
+  .description('Deploy your Mastra project')
   .option('-d, --dir <path>', 'Path to directory')
   .action(deployProject);
 
 program
   .command('start')
-  .description(pc.green('Start your built Mastra application'))
+  .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-nt, --no-telemetry', 'Disable telemetry on start')
   .action(startProject);
 
-const scorersCommand = program.command('scorers').description(pc.yellow('Manage scorers for evaluating AI outputs'));
+const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
 
 scorersCommand
   .command('add [scorer-name]')
