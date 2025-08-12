@@ -3,7 +3,7 @@ import type { HonoRequest } from 'hono';
 import { defaultAuthConfig } from './defaults';
 
 export const isDevPlaygroundRequest = (req: HonoRequest): boolean => {
-  return req.header('x-mastra-dev-playground') === 'true' && (req.header('referer')?.includes('localhost') ?? false);
+  return req.header('x-mastra-dev-playground') === 'true' && process.env.MASTRA_DEV === 'true';
 };
 
 export const isProtectedPath = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
