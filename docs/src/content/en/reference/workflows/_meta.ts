@@ -1,6 +1,7 @@
 const meta = {
   workflow: "Workflow",
   step: "Step",
+  "run-class": "Run",
   then: ".then()",
   branch: ".branch()",
   parallel: ".parallel()",

@@ -1,9 +1,10 @@
 const meta = {
   start: ".start()",
   resume: ".resume()",
-  watch: ".watch()",
   stream: ".stream()",
   streamVNext: ".streamVNext()",
+  watch: ".watch()",
+  cancel: ".cancel()",
 };
 
 export default meta;

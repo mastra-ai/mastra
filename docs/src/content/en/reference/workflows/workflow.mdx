@@ -13,7 +13,7 @@ The `Workflow` class enables you to create state machines for complex sequences 
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const workflow = createWorkflow({
+export const workflow = createWorkflow({
   id: "test-workflow",
   inputSchema: z.object({
     value: z.string(),
