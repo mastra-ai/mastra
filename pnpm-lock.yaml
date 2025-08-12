@@ -706,7 +706,7 @@ importers:
     dependencies:
       mem0ai:
         specifier: ^2.1.36
-        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250803.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
+        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250803.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2355,8 +2355,8 @@ importers:
         specifier: ^3.25.67
         version: 3.25.76
       zustand:
-        specifier: ^5.0.6
-        version: 5.0.6(@types/react@19.1.9)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1))
+        specifier: ^5.0.7
+        version: 5.0.7(@types/react@19.1.9)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1))
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -2870,8 +2870,8 @@ importers:
   stores/lance:
     dependencies:
       '@lancedb/lancedb':
-        specifier: ^0.18.2
-        version: 0.18.2(apache-arrow@18.1.0)
+        specifier: ^0.21.2
+        version: 0.21.2(apache-arrow@18.1.0)
       apache-arrow:
         specifier: ^18.1.0
         version: 18.1.0
@@ -3153,8 +3153,8 @@ importers:
   stores/qdrant:
     dependencies:
       '@qdrant/js-client-rest':
-        specifier: ^1.14.1
-        version: 1.14.1(typescript@5.8.3)
+        specifier: ^1.15.0
+        version: 1.15.0(typescript@5.8.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -6543,50 +6543,56 @@ packages:
     peerDependencies:
       tslib: '2'
 
-  '@lancedb/lancedb-darwin-arm64@0.18.2':
-    resolution: {integrity: sha512-I56GuGSzh1pP9iV74aYFZK8nocORoXH44Z6xu4EVtU/R0fwjAeL99qy74dm4WtPmhC9aDzqdLq77H0pjYx6zlw==}
+  '@lancedb/lancedb-darwin-arm64@0.21.2':
+    resolution: {integrity: sha512-aCRc/Jrpll7AMQejK18HzNmYtEzV+oU0zTSFhYJTu1SqDTA+CoXoibj9SmXHYwY6MYlfx5y6kI8UkjtU3T8zHQ==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [darwin]
 
-  '@lancedb/lancedb-darwin-x64@0.18.2':
-    resolution: {integrity: sha512-oCfP9uCJWo81FzoZv48YZYMPeePZwVxtyal64ALFYPRkFY47b6orgV7vtcD/7lV0KE0itucIlx6ndBOr4L/dlQ==}
+  '@lancedb/lancedb-darwin-x64@0.21.2':
+    resolution: {integrity: sha512-Oiiz1W9E2VwKpmPCrRF+40Hd6M1kj/ej6FNQwXaCy688+CJC0dKlz95omQU3B2WnynDiwszUyNVknyMwNI3sCQ==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [darwin]
 
-  '@lancedb/lancedb-linux-arm64-gnu@0.18.2':
-    resolution: {integrity: sha512-beuB7J03wrD+FcchOXqm6mG6gmqyFZKqT1wfAcY4+1RATq8K0GU6E+8G93jOF6gCm7m2H/B4dVBeJpFwx7dmDw==}
+  '@lancedb/lancedb-linux-arm64-gnu@0.21.2':
+    resolution: {integrity: sha512-LyLlEYUDlpm2sSMzoqmVWIYbY6U5AVZhpZucX0L6a3usyuce6V/Z9UGR6Uw9284xZKsPFnYNRlLZwwUGkb2tKw==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-arm64-musl@0.18.2':
-    resolution: {integrity: sha512-pPcnk4wLxeOtJuUKY0sYJPlsblKzQ1SRX/TDgPmIE83Gg0NbqioYJjvumS7y95TI2/6FUqwKR7+PBt2rj4ckHA==}
+  '@lancedb/lancedb-linux-arm64-musl@0.21.2':
+    resolution: {integrity: sha512-J7fK1gzBrrBx+CnUk+BnvU3V/A+F7EfqveOw2SUbTP7Gy5bXdUL2sieVVuJlRmmhfvjLTAGxsITr2RkO9n3wZw==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-x64-gnu@0.18.2':
-    resolution: {integrity: sha512-o81WOaF56dGdc+Rs9wQ3IPmDLjBq95bfA7KZCrTY8iYZIgVUSMHfRqGtPH04JKu/NM/E1C4PbDCN+TlAOywmQQ==}
+  '@lancedb/lancedb-linux-x64-gnu@0.21.2':
+    resolution: {integrity: sha512-yD1lWUe/gLR4QFA3ZdWc2ukdgbfXDcRoi9iTgqedUwAj++Wld64wOFjYhZbYwzGNClXlkJJiP70jzhomBv3RIw==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [linux]
 
-  '@lancedb/lancedb-win32-arm64-msvc@0.18.2':
-    resolution: {integrity: sha512-a3K3ALkd13LSs8Ji8GlHB4opxgDCsDo0KuJJ9rGZ2/cYDa09AmhC7s65KE385+fykmTLjhieKEy1XAYHWX366g==}
+  '@lancedb/lancedb-linux-x64-musl@0.21.2':
+    resolution: {integrity: sha512-Dq3G6KtGlxidS3mY4cebp7GHRT7rQoe6wpXTzlCankANvEOwxBI68wxid3+GDcqi4jkGHrOrHTQVZqIKZ2NXnQ==}
+    engines: {node: '>= 18'}
+    cpu: [x64]
+    os: [linux]
+
+  '@lancedb/lancedb-win32-arm64-msvc@0.21.2':
+    resolution: {integrity: sha512-cPxzm5G2LhiA+DjVGueEnc7K909gzH6q+UGeNXF5Ly4IsvE6BRrjSQNmTRBGflD/aQEV7VD4SqiIj/rpmIZ4Sg==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [win32]
 
-  '@lancedb/lancedb-win32-x64-msvc@0.18.2':
-    resolution: {integrity: sha512-EVCzfP3aGgEZwe+3zCWrHtmnbEXAz+uPzQP/PUm8V3apuEpnvLBPp//L+OX+/Uvl4BeSOqLnAq7Q5al9p35bIQ==}
+  '@lancedb/lancedb-win32-x64-msvc@0.21.2':
+    resolution: {integrity: sha512-jewJB5ggDi4jlZocmmjMnwQYDHHr+t0jhiZQINRs/I4tkt9RxaRVPPz7D4rP+NXILj4PgKfDqKcDVeJ/5bc4hQ==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [win32]
 
-  '@lancedb/lancedb@0.18.2':
-    resolution: {integrity: sha512-mWrijjkUVmf7HseX2SnZVh5M1tYAnO+pB1f81AVMKiSMfR4OqpA/6lQ2hk6qeQqJ6NNc/8pIgjkvwfGyp1QOag==}
+  '@lancedb/lancedb@0.21.2':
+    resolution: {integrity: sha512-3RPsGbdhFbwgy7GisQnlgf+5r6R73N4xIkPNISJfvratJ5kVoQIuswra/jJxAf8N5tKriD9UnrQyUsRbmblwFQ==}
     engines: {node: '>= 18'}
     cpu: [x64, arm64]
     os: [darwin, linux, win32]
@@ -7891,8 +7897,8 @@ packages:
   '@protobufjs/utf8@1.1.0':
     resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
 
-  '@qdrant/js-client-rest@1.14.1':
-    resolution: {integrity: sha512-CkCCTDc4gCXq+hhjB3yDw9Hs/PxCJ0bKqk/LjAAmuL9+nDm/RPue4C/tGOIMlzouTQ2l6J6t+JPeM//j38VFug==}
+  '@qdrant/js-client-rest@1.15.0':
+    resolution: {integrity: sha512-4aaEmjRbvrk//Ser+//M4NLCBBD2dwlIGWo7PPwdoWmQYlQYDc3Ey8KTiH9ZDsyufYhHX40P2jX4zHuqtdZwJw==}
     engines: {node: '>=18.17.0', pnpm: '>=8'}
     peerDependencies:
       typescript: ^5.8.3
@@ -16414,8 +16420,8 @@ packages:
       react:
         optional: true
 
-  zustand@5.0.6:
-    resolution: {integrity: sha512-ihAqNeUVhe0MAD+X8M5UzqyZ9k3FFZLBTtqo6JLPwV53cbRB/mJwBI0PxcIgqhBBHlEs8G45OTDTMq3gNcLq3A==}
+  zustand@5.0.7:
+    resolution: {integrity: sha512-Ot6uqHDW/O2VdYsKLLU8GQu8sCOM1LcoE8RwvLv9uuRT9s6SOHCKs0ZEOhxg+I1Ld+A1Q5lwx+UlKXXUoCZITg==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
       '@types/react': '>=18.0.0'
@@ -16646,7 +16652,7 @@ snapshots:
       secure-json-parse: 3.0.2
       zod: 3.25.76
       zod-to-json-schema: 3.24.6(zod@3.25.76)
-      zustand: 5.0.6(@types/react@19.1.9)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1))
+      zustand: 5.0.7(@types/react@19.1.9)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1))
     optionalDependencies:
       '@types/react': 19.1.9
       '@types/react-dom': 19.1.7(@types/react@19.1.9)
@@ -19917,39 +19923,43 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@lancedb/lancedb-darwin-arm64@0.18.2':
+  '@lancedb/lancedb-darwin-arm64@0.21.2':
     optional: true
 
-  '@lancedb/lancedb-darwin-x64@0.18.2':
+  '@lancedb/lancedb-darwin-x64@0.21.2':
     optional: true
 
-  '@lancedb/lancedb-linux-arm64-gnu@0.18.2':
+  '@lancedb/lancedb-linux-arm64-gnu@0.21.2':
     optional: true
 
-  '@lancedb/lancedb-linux-arm64-musl@0.18.2':
+  '@lancedb/lancedb-linux-arm64-musl@0.21.2':
     optional: true
 
-  '@lancedb/lancedb-linux-x64-gnu@0.18.2':
+  '@lancedb/lancedb-linux-x64-gnu@0.21.2':
     optional: true
 
-  '@lancedb/lancedb-win32-arm64-msvc@0.18.2':
+  '@lancedb/lancedb-linux-x64-musl@0.21.2':
     optional: true
 
-  '@lancedb/lancedb-win32-x64-msvc@0.18.2':
+  '@lancedb/lancedb-win32-arm64-msvc@0.21.2':
     optional: true
 
-  '@lancedb/lancedb@0.18.2(apache-arrow@18.1.0)':
+  '@lancedb/lancedb-win32-x64-msvc@0.21.2':
+    optional: true
+
+  '@lancedb/lancedb@0.21.2(apache-arrow@18.1.0)':
     dependencies:
       apache-arrow: 18.1.0
       reflect-metadata: 0.2.2
     optionalDependencies:
-      '@lancedb/lancedb-darwin-arm64': 0.18.2
-      '@lancedb/lancedb-darwin-x64': 0.18.2
-      '@lancedb/lancedb-linux-arm64-gnu': 0.18.2
-      '@lancedb/lancedb-linux-arm64-musl': 0.18.2
-      '@lancedb/lancedb-linux-x64-gnu': 0.18.2
-      '@lancedb/lancedb-win32-arm64-msvc': 0.18.2
-      '@lancedb/lancedb-win32-x64-msvc': 0.18.2
+      '@lancedb/lancedb-darwin-arm64': 0.21.2
+      '@lancedb/lancedb-darwin-x64': 0.21.2
+      '@lancedb/lancedb-linux-arm64-gnu': 0.21.2
+      '@lancedb/lancedb-linux-arm64-musl': 0.21.2
+      '@lancedb/lancedb-linux-x64-gnu': 0.21.2
+      '@lancedb/lancedb-linux-x64-musl': 0.21.2
+      '@lancedb/lancedb-win32-arm64-msvc': 0.21.2
+      '@lancedb/lancedb-win32-x64-msvc': 0.21.2
 
   '@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76))':
     dependencies:
@@ -21746,7 +21756,7 @@ snapshots:
 
   '@protobufjs/utf8@1.1.0': {}
 
-  '@qdrant/js-client-rest@1.14.1(typescript@5.8.3)':
+  '@qdrant/js-client-rest@1.15.0(typescript@5.8.3)':
     dependencies:
       '@qdrant/openapi-typescript-fetch': 1.2.6
       '@sevinf/maybe': 0.5.0
@@ -28067,14 +28077,14 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250803.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
+  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250803.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
     dependencies:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
       '@cloudflare/workers-types': 4.20250803.0
       '@google/genai': 1.5.1(@modelcontextprotocol/sdk@1.13.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       '@langchain/core': 0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76))
       '@mistralai/mistralai': 1.7.2(zod@3.25.76)
-      '@qdrant/js-client-rest': 1.14.1(typescript@5.8.3)
+      '@qdrant/js-client-rest': 1.15.0(typescript@5.8.3)
       '@supabase/supabase-js': 2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       '@types/jest': 29.5.14
       '@types/pg': 8.15.5
@@ -31798,7 +31808,7 @@ snapshots:
       '@types/react': 19.1.9
       react: 19.1.1
 
-  zustand@5.0.6(@types/react@19.1.9)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1)):
+  zustand@5.0.7(@types/react@19.1.9)(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1)):
     optionalDependencies:
       '@types/react': 19.1.9
       react: 19.1.1

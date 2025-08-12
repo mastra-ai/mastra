@@ -8,6 +8,7 @@ import {
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
   streamVNextGenerateHandler as getOriginalStreamVNextGenerateHandler,
+  updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -188,5 +189,23 @@ export async function setAgentInstructionsHandler(c: Context) {
     );
   } catch (error) {
     return handleError(error, 'Error setting agent instructions');
+  }
+}
+
+export async function updateAgentModelHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const body = await c.req.json();
+
+    const result = getOriginalUpdateAgentModelHandler({
+      mastra,
+      agentId,
+      body,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error updating agent model');
   }
 }
