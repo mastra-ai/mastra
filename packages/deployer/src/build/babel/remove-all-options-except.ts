@@ -82,7 +82,7 @@ export function removeAllOptionsFromMastraExcept(
 
           if (!hasExport) {
             if (logger) {
-              logger.warn(`Mastra ${option} config could not be extracted. Make sure you entry file looks like
+              logger.warn(`Mastra ${option} config could not be extracted. Please make sure your entry file looks like this:
 export const mastra = new Mastra({
   ${option}: <value>
 })
