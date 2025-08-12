@@ -760,6 +760,11 @@ export default withGT(
         destination: "/reference/workflows/run-methods/stream",
         permanent: true,
       },
+      {
+        source: "/reference/workflows/snapshots",
+        destination: "/docs/server-db/snapshots",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

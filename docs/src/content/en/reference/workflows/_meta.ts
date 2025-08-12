@@ -17,7 +17,6 @@ const meta = {
   "create-run": ".createRunAsync()",
   run: "Run Class",
   "run-methods": { title: "Methods", theme: { collapsed: false } },
-  snapshots: "Snapshots",
 };
 
 export default meta;
