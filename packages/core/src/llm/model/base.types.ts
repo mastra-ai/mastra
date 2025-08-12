@@ -25,8 +25,8 @@ import type { RuntimeContext } from '../../runtime-context';
 export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
   ? z.infer<Output>
   : Output extends JSONSchema7
-    ? unknown
-    : undefined;
+  ? unknown
+  : undefined;
 
 export type { ToolSet } from 'ai';
 

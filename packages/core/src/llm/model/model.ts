@@ -210,8 +210,8 @@ export class MastraLLM extends MastraLLMBase {
       },
       experimental_output: schema
         ? Output.object({
-            schema,
-          })
+          schema,
+        })
         : undefined,
     };
 
@@ -463,8 +463,8 @@ export class MastraLLM extends MastraLLMBase {
       },
       experimental_output: schema
         ? (Output.object({
-            schema,
-          }) as any)
+          schema,
+        }) as any)
         : undefined,
     };
 
@@ -619,8 +619,8 @@ export class MastraLLM extends MastraLLMBase {
       ...rest
     }: Omit<
       Output extends undefined
-        ? GenerateTextWithMessagesArgs<Tools, StructuredOutput>
-        : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'>,
+      ? GenerateTextWithMessagesArgs<Tools, StructuredOutput>
+      : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'>,
       'messages'
     > & { output?: Output },
   ): Promise<GenerateReturn<Tools, Output, StructuredOutput>> {
@@ -659,8 +659,8 @@ export class MastraLLM extends MastraLLMBase {
       ...rest
     }: Omit<
       Output extends undefined
-        ? StreamTextWithMessagesArgs<Tools, StructuredOutput>
-        : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'> & { maxSteps?: never },
+      ? StreamTextWithMessagesArgs<Tools, StructuredOutput>
+      : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'> & { maxSteps?: never },
       'messages'
     > & { output?: Output },
   ): StreamReturn<Tools, Output, StructuredOutput> {

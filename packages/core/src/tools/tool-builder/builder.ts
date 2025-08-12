@@ -76,13 +76,14 @@ export class CoreToolBuilder extends MastraBase {
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: convertZodSchemaToAISDKSchema(parameters),
+        inputSchema: convertZodSchemaToAISDKSchema(parameters),
         ...(outputSchema ? { outputSchema: convertZodSchemaToAISDKSchema(outputSchema) } : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
-              this.originalTool,
-              { ...this.options, description: this.originalTool.description },
-              this.logType,
-            )
+            this.originalTool,
+            { ...this.options, description: this.originalTool.description },
+            this.logType,
+          )
           : undefined,
       };
     }
@@ -209,13 +210,14 @@ export class CoreToolBuilder extends MastraBase {
       type: 'function' as const,
       description: this.originalTool.description,
       parameters: this.getParameters(),
+      inputSchema: this.getParameters(),
       outputSchema: this.getOutputSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
-            this.originalTool,
-            { ...this.options, description: this.originalTool.description },
-            this.logType,
-          )
+          this.originalTool,
+          { ...this.options, description: this.originalTool.description },
+          this.logType,
+        )
         : undefined,
     };
 
