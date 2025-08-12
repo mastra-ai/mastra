@@ -174,6 +174,20 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     format,
   }: {
     messageIds: string[];
+    format?: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     if (messageIds.length === 0) return [];
