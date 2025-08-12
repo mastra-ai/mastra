@@ -735,6 +735,31 @@ export default withGT(
         destination: "/reference/tools/create-tool",
         permanent: true,
       },
+      {
+        source: "/reference/workflows/start",
+        destination: "/reference/workflows/run/start",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/streamVNext",
+        destination: "/reference/workflows/run/streamVNext",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/resume",
+        destination: "/reference/workflows/run/resume",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/watch",
+        destination: "/reference/workflows/run/watch",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/stream",
+        destination: "/reference/workflows/run/stream",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

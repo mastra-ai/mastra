@@ -5,12 +5,6 @@ const meta = {
   branch: ".branch()",
   parallel: ".parallel()",
   commit: ".commit()",
-  "create-run": ".createRunAsync()",
-  start: ".start()",
-  resume: ".resume()",
-  watch: ".watch()",
-  stream: ".stream()",
-  streamVNext: ".streamVNext()",
   dowhile: ".dowhile()",
   dountil: ".dountil()",
   foreach: ".foreach()",
@@ -20,6 +14,8 @@ const meta = {
   waitForEvent: ".waitForEvent()",
   sendEvent: ".sendEvent()",
   execute: ".execute()",
+  "create-run": ".createRunAsync()",
+  run: { title: "Run", theme: { collapsed: false } },
   snapshots: "Snapshots",
 };
 

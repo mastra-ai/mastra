@@ -1,9 +1,9 @@
 ---
-title: "Reference: WorkflowRun.streamVNext() | Workflows | Mastra Docs"
-description: Documentation for the `WorkflowRun.streamVNext()` method in workflows, which enables real-time streaming of responses.
+title: "Reference: Run.streamVNext() | Workflows | Mastra Docs"
+description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
 
-# WorkflowRun.streamVNext()
+# Run.streamVNext()
 
 The `.streamVNext()` method enables real-time streaming of responses from a workflow.
 
@@ -49,7 +49,7 @@ const stream = run.streamVNext({
     },
     {
       name: "stream.status",
-      type: "Promise<WorkflowRunStatus>",
+      type: "Promise<RunStatus>",
       description: "A promise that resolves to the current workflow run status",
     },
     {
