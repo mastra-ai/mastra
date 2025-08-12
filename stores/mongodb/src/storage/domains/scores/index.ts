@@ -14,13 +14,15 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     }
   }
 
-  let extractStepResultValue: any = null;
-  if (row.extractStepResult) {
+  let preprocessStepResultValue: any = null;
+  if (row.preprocessStepResult) {
     try {
-      extractStepResultValue =
-        typeof row.extractStepResult === 'string' ? safelyParseJSON(row.extractStepResult) : row.extractStepResult;
+      preprocessStepResultValue =
+        typeof row.preprocessStepResult === 'string'
+          ? safelyParseJSON(row.preprocessStepResult)
+          : row.preprocessStepResult;
     } catch (e) {
-      console.warn('Failed to parse extractStepResult:', e);
+      console.warn('Failed to parse preprocessStepResult:', e);
     }
   }
 
@@ -79,7 +81,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     traceId: row.traceId as string,
     runId: row.runId as string,
     scorer: scorerValue,
-    extractStepResult: extractStepResultValue,
+    preprocessStepResult: preprocessStepResultValue,
     analyzeStepResult: analyzeStepResultValue,
     score: row.score as number,
     reason: row.reason as string,
@@ -143,17 +145,19 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         traceId: score.traceId || '',
         runId: score.runId,
         scorer: typeof score.scorer === 'string' ? safelyParseJSON(score.scorer) : score.scorer,
-        extractStepResult:
-          typeof score.extractStepResult === 'string'
-            ? safelyParseJSON(score.extractStepResult)
-            : score.extractStepResult,
+        preprocessStepResult:
+          typeof score.preprocessStepResult === 'string'
+            ? safelyParseJSON(score.preprocessStepResult)
+            : score.preprocessStepResult,
         analyzeStepResult:
           typeof score.analyzeStepResult === 'string'
             ? safelyParseJSON(score.analyzeStepResult)
             : score.analyzeStepResult,
         score: score.score,
         reason: score.reason,
-        extractPrompt: score.extractPrompt,
+        preprocessPrompt: score.preprocessPrompt,
+        generateScorePrompt: score.generateScorePrompt,
+        generateReasonPrompt: score.generateReasonPrompt,
         analyzePrompt: score.analyzePrompt,
         reasonPrompt: score.reasonPrompt,
         input: typeof score.input === 'string' ? safelyParseJSON(score.input) : score.input,
@@ -198,11 +202,13 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     pagination,
     entityId,
     entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const query: any = { scorerId };
@@ -213,6 +219,10 @@ export class ScoresStorageMongoDB extends ScoresStorage {
 
       if (entityType) {
         query.entityType = entityType;
+      }
+
+      if (source) {
+        query.source = source;
       }
 
       const collection = await this.operations.getCollection(TABLE_SCORERS);

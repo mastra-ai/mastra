@@ -1,6 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -16,7 +16,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
 
   private transformScoreRow(row: any): ScoreRowData {
     const scorer = safelyParseJSON(row.scorer);
-    const extractStepResult = safelyParseJSON(row.extractStepResult);
+    const preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
     const analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
     const metadata = safelyParseJSON(row.metadata);
     const input = safelyParseJSON(row.input);
@@ -28,7 +28,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     return {
       ...row,
       scorer,
-      extractStepResult,
+      preprocessStepResult,
       analyzeStepResult,
       metadata,
       input,
@@ -179,16 +179,38 @@ export class ScoresStorageClickhouse extends ScoresStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
     pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    let whereClause = `scorerId = {var_scorerId:String}`;
+    if (entityId) {
+      whereClause += ` AND entityId = {var_entityId:String}`;
+    }
+    if (entityType) {
+      whereClause += ` AND entityType = {var_entityType:String}`;
+    }
+    if (source) {
+      whereClause += ` AND source = {var_source:String}`;
+    }
+
     try {
       // Get total count
       const countResult = await this.client.query({
-        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE scorerId = {var_scorerId:String}`,
-        query_params: { var_scorerId: scorerId },
+        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE ${whereClause}`,
+        query_params: {
+          var_scorerId: scorerId,
+          var_entityId: entityId,
+          var_entityType: entityType,
+          var_source: source,
+        },
         format: 'JSONEachRow',
       });
       const countRows = await countResult.json();
@@ -211,11 +233,14 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       // Get paginated results
       const offset = pagination.page * pagination.perPage;
       const result = await this.client.query({
-        query: `SELECT * FROM ${TABLE_SCORERS} WHERE scorerId = {var_scorerId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
+        query: `SELECT * FROM ${TABLE_SCORERS} WHERE ${whereClause} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_scorerId: scorerId,
           var_limit: pagination.perPage,
           var_offset: offset,
+          var_entityId: entityId,
+          var_entityType: entityType,
+          var_source: source,
         },
         format: 'JSONEachRow',
         clickhouse_settings: {

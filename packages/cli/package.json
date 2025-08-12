@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.16",
+  "version": "0.10.21",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "build": "npm-run-all --serial build:lib copy-starter-files copy-templates build:playground",
-    "build:lib": "tsup --config tsup.config.js",
+    "build:lib": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm run build:lib --watch --onSuccess \"pnpm run copy-starter-files && pnpm run copy-templates\"",
     "copy-starter-files": "cpy \"src/starter-files/**/*\" \"dist/starter-files\"",
     "copy-templates": "cpy \"src/templates/**/*\" \"dist/templates/\"",
@@ -113,9 +113,10 @@
     "tsup": "^8.5.0",
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.2-0 <0.13.0-0"
+    "@mastra/core": ">=0.10.2-0 <0.14.0-0"
   }
 }

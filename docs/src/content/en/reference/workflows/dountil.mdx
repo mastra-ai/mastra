@@ -1,16 +1,16 @@
 ---
-title: "Reference: Workflow.dountil() | Building Workflows | Mastra Docs"
-description: Documentation for the `.dountil()` method in workflows, which creates a loop that executes a step until a condition is met.
+title: "Reference: Workflow.dountil() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.dountil()` method in workflows, which creates a loop that executes a step until a condition is met.
 ---
 
 # Workflow.dountil()
 
 The `.dountil()` method creates a loop that executes a step until a condition is met.
 
-## Usage
+## Usage example
 
-```typescript
-workflow.dountil(stepOne, async ({ inputData }) => true);
+```typescript copy
+workflow.dountil(step1, async ({ inputData }) => true);
 ```
 
 ## Parameters
@@ -47,5 +47,4 @@ workflow.dountil(stepOne, async ({ inputData }) => true);
 
 ## Related
 
-- [Loops](../../docs/workflows/control-flow.mdx#loops)
-- [Loops example](../../examples/workflows/control-flow.mdx)
+- [Control flow](../../docs/workflows/control-flow.mdx)

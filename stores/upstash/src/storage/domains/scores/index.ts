@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
@@ -19,7 +19,9 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return {
     ...row,
     scorer: parseField(row.scorer),
-    extractStepResult: parseField(row.extractStepResult),
+    preprocessStepResult: parseField(row.preprocessStepResult),
+    generateScorePrompt: row.generateScorePrompt,
+    generateReasonPrompt: row.generateReasonPrompt,
     analyzeStepResult: parseField(row.analyzeStepResult),
     metadata: parseField(row.metadata),
     input: parseField(row.input),
@@ -65,9 +67,15 @@ export class ScoresUpstash extends ScoresStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
+    source,
     pagination = { page: 0, perPage: 20 },
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
     pagination?: { page: number; perPage: number };
   }): Promise<{
     scores: ScoreRowData[];
@@ -87,7 +95,14 @@ export class ScoresUpstash extends ScoresStorage {
     // Filter out nulls and by scorerId
     const filtered = results
       .map((row: any) => row as Record<string, any> | null)
-      .filter((row): row is Record<string, any> => !!row && typeof row === 'object' && row.scorerId === scorerId);
+      .filter((row): row is Record<string, any> => {
+        if (!row || typeof row !== 'object') return false;
+        if (row.scorerId !== scorerId) return false;
+        if (entityId && row.entityId !== entityId) return false;
+        if (entityType && row.entityType !== entityType) return false;
+        if (source && row.source !== source) return false;
+        return true;
+      });
     const total = filtered.length;
     const { page, perPage } = pagination;
     const start = page * perPage;

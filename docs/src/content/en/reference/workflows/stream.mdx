@@ -1,222 +1,39 @@
 ---
-title: "Reference: Workflow.stream() | Building Workflows | Mastra Docs"
-description: Documentation for the `.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
+title: "Reference: WorkflowRun.stream() | Workflows | Mastra Docs"
+description: Documentation for the `WorkflowRun.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
 ---
 
-# Run.stream()
+# WorkflowRun.stream()
 
 The `.stream()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
 
-## Usage
+## Usage example
 
-```typescript
-const run = await myWorkflow.createRunAsync();
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
 
-// Add a stream to monitor execution
-const result = run.stream({ inputData: {...} });
-
-
-for (const chunk of stream) {
-  // do something with the chunk
-}
+const stream = await run.stream({
+  inputData: {
+    value: "initial data",
+  },
+});
 ```
-
-## Messages
-
-<PropertiesTable
-  content={[
-    {
-      name: "start",
-      type: "object",
-      description: "The workflow starts",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'start', payload: { runId: '1' } }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "step-start",
-      type: "object",
-      description: "The start of a step",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'step-start', payload: { id: 'fetch-weather' } }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tool-call",
-      type: "object",
-      description: "A tool call has started",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'tool-call', toolCallId: 'weatherAgent', toolName: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:...' } }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tool-call-streaming-start",
-      type: "object",
-      description: "A tool call/agent has started",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'tool-call-streaming-start', toolCallId: 'weatherAgent', toolName: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:...' } }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "tool-call-delta",
-      type: "object",
-      description: "The delta of the tool output",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'tool-call-delta', toolCallId: 'weatherAgent', toolName: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:\\n' + '            [\\n' + '  {\\n' + '    \"date\": \"2025-05-16\",\\n' + '    \"maxTemp\": 22.2,\\n' + '    \"minTemp\": 16,\\n' + '    \"precipitationChance\": 5,\\n' + '    \"condition\": \"Dense drizzle\",\\n' + '    \"location\": \"New York\"\\n' + '  },\\n' + '            ' }, argsTextDelta: '📅' }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "step-result",
-      type: "object",
-      description: "The result of a step",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'step-result', payload: { id: 'Weather Agent', status: 'success', output: [Object] } }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "step-finish",
-      type: "object",
-      description: "The end of a step",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'step-finish', payload: { id: 'Weather Agent', metadata: {} } }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: "finish",
-      type: "object",
-      description: "The end of the workflow",
-      isOptional: false,
-      properties: [
-        {
-          type: "object",
-          parameters: [
-            {
-              name: "example",
-              type: "{ type: 'finish', payload: { runId: '1' } }",
-              description: "Example message structure",
-              isOptional: false,
-            },
-          ],
-        },
-      ],
-    },
-  ]}
-/>
 
 ## Parameters
 
 <PropertiesTable
   content={[
     {
-      name: "params",
-      type: "object",
-      description: "Configuration object for starting the workflow run",
-      isOptional: false,
-      properties: [
-        {
-          name: "inputData",
-          type: "z.infer<TInput>",
-          parameters: [
-            {
-              name: "z.infer<TInput>",
-              type: "inputData",
-              description:
-                "Runtime context data to use when starting the workflow",
-              isOptional: true,
-            },
-          ],
-        },
-        {
-          name: "runtimeContext",
-          type: "RuntimeContext",
-          parameters: [
-            {
-              name: "runtimeContext",
-              type: "RuntimeContext",
-              description:
-                "Runtime context data to use when starting the workflow",
-              isOptional: true,
-            },
-          ],
-        },
-      ],
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "Input data that matches the workflow's input schema",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "Runtime context data to use during workflow execution",
+      isOptional: true,
     },
   ]}
 />
@@ -226,9 +43,42 @@ for (const chunk of stream) {
 <PropertiesTable
   content={[
     {
-      name: "result",
-      type: "Promise<WorkflowResult<TOutput, TSteps>>",
-      description: "A stream that pipes each step to the stream",
+      name: "stream",
+      type: "ReadableStream<StreamEvent>",
+      description: "A readable stream that emits workflow execution events in real-time",
+    },
+    {
+      name: "getWorkflowState",
+      type: "() => Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "A function that returns a promise resolving to the final workflow result",
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+const { getWorkflowState } = await run.stream({
+  inputData: {
+    value: "initial data"
+  }
+});
+
+const result = await getWorkflowState();
+```
+
+## Stream Events
+
+The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
+
+- **`start`**: Workflow execution begins
+- **`step-start`**: A step begins execution
+- **`tool-call`**: A tool call is initiated
+- **`tool-call-streaming-start`**: Tool call streaming begins
+- **`tool-call-delta`**: Incremental tool output updates
+- **`step-result`**: A step completes with results
+- **`step-finish`**: A step finishes execution
+- **`finish`**: Workflow execution completes
+
+
+

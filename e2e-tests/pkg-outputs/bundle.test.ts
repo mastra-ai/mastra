@@ -60,8 +60,8 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         }
       });
 
-      it.skipIf(pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra' || pkgJson.name === '@mastra/core')(
-        'should use .cjs and .d.cts extensions when using require',
+      it.skipIf(pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra')(
+        'should use .cjs and .d.ts extensions when using require',
         async () => {
           if (importPath === './package.json') {
             return;
@@ -71,7 +71,7 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
           expect(exportConfig.require).toBeDefined();
           expect(exportConfig.require).not.toBe(expect.any(String));
           expect(extname(exportConfig.require.default)).toMatch(/\.cjs$/);
-          expect(exportConfig.require.types).toMatch(/\.d\.cts$/);
+          expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
 
           const fileOutput = customResolve.exports(pkgJson, importPath, {
             require: true,

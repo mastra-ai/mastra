@@ -1,0 +1,67 @@
+---
+title: "Reference: Agent.getDefaultVNextStreamOptions() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultVNextStreamOptions()` method in Mastra agents, which retrieves the default options used for streamVNext calls."
+---
+
+# Agent.getDefaultVNextStreamOptions()
+
+The `.getDefaultVNextStreamOptions()` method retrieves the default vNext streaming options configured for an agent, resolving them if they're a function. These options are used as the base configuration for all `streamVNext()` calls unless overridden.
+
+## Usage example
+
+```typescript copy
+await agent.getDefaultVNextStreamOptions();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing runtime context.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentVNextStreamOptions<Output, StructuredOutput> | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>",
+      description: "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript copy
+await agent.getDefaultVNextStreamOptions({
+  runtimeContext: new RuntimeContext()
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description: "Runtime context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Agent streaming](../../docs/agents/streaming.mdx)
+- [Runtime variables](../../docs/agents/runtime-variables.mdx)

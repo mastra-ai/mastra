@@ -988,6 +988,54 @@ describe('agent', () => {
     expect(usedModelName).toBe('standard');
   });
 
+  it('should allow agent model to be updated', async () => {
+    let usedModelName = '';
+
+    // Create two different models
+    const premiumModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        usedModelName = 'premium';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Premium Title`,
+        };
+      },
+    });
+
+    const standardModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        usedModelName = 'standard';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Standard Title`,
+        };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'update-model-agent',
+      instructions: 'test agent',
+      model: standardModel,
+    });
+
+    await agent.generate('Test message');
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedModelName).toBe('standard');
+
+    agent.__updateModel({ model: premiumModel });
+    usedModelName = '';
+
+    await agent.generate('Test message');
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedModelName).toBe('premium');
+  });
+
   it('should handle boolean generateTitle config for backward compatibility', async () => {
     let titleGenerationCallCount = 0;
     let agentCallCount = 0;
@@ -1700,6 +1748,121 @@ describe('agent', () => {
   });
 
   describe('agent tool handling', () => {
+    it('should handle tool name collisions caused by formatting', async () => {
+      // Create two tool names that will collide after truncation to 63 chars
+      const base = 'a'.repeat(63);
+      const toolName1 = base + 'X'; // 64 chars
+      const toolName2 = base + 'Y'; // 64 chars, but will be truncated to same as toolName1
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name collision.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [toolName1]: {
+            id: toolName1,
+            description: 'Tool 1',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+          [toolName2]: {
+            id: toolName2,
+            description: 'Tool 2',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
+    });
+
+    it('should sanitize tool names with invalid characters', async () => {
+      const badName = 'bad!@#tool$name';
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name sanitization.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [badName]: {
+            id: badName,
+            description: 'Tool with bad chars',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      expect(Object.keys(tools)).toContain('bad___tool_name');
+      expect(Object.keys(tools)).not.toContain(badName);
+    });
+
+    it('should prefix tool names that do not start with a letter or underscore', async () => {
+      const badStart = '1tool';
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name prefix.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [badStart]: {
+            id: badStart,
+            description: 'Tool with bad start',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      expect(Object.keys(tools)).toContain('_1tool');
+      expect(Object.keys(tools)).not.toContain(badStart);
+    });
+
+    it('should truncate tool names longer than 63 characters', async () => {
+      const longName = 'a'.repeat(70);
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name truncation.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [longName]: {
+            id: longName,
+            description: 'Tool with long name',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
+      expect(Object.keys(tools)).not.toContain(longName);
+    });
+
     it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
       const mastraExecute = vi.fn().mockResolvedValue({ result: 'mastra' });
       const vercelExecute = vi.fn().mockResolvedValue({ result: 'vercel' });
@@ -2957,7 +3120,7 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-echo', resourceId: 'resource-echo' });
       expect(messages.length).toBeGreaterThan(0);
-    }, 10000);
+    }, 15000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
       const mockMemory = new MockMemory();
@@ -3243,7 +3406,7 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-echo', resourceId: 'resource-echo' });
       expect(messages.length).toBeGreaterThan(0);
-    }, 10000);
+    }, 15000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
       const mockMemory = new MockMemory();

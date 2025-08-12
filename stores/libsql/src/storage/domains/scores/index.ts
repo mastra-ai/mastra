@@ -1,7 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
-import { TABLE_SCORERS, ScoresStorage } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { TABLE_SCORERS, ScoresStorage, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
 
@@ -51,11 +51,13 @@ export class ScoresLibSQL extends ScoresStorage {
     scorerId,
     entityId,
     entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
@@ -75,6 +77,11 @@ export class ScoresLibSQL extends ScoresStorage {
       if (entityType) {
         conditions.push(`entityType = ?`);
         queryParams.push(entityType);
+      }
+
+      if (source) {
+        conditions.push(`source = ?`);
+        queryParams.push(source);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -106,15 +113,15 @@ export class ScoresLibSQL extends ScoresStorage {
   }
 
   private transformScoreRow(row: Record<string, any>): ScoreRowData {
-    const scorerValue = JSON.parse(row.scorer ?? '{}');
-    const inputValue = JSON.parse(row.input ?? '{}');
-    const outputValue = JSON.parse(row.output ?? '{}');
-    const additionalLLMContextValue = row.additionalLLMContext ? JSON.parse(row.additionalLLMContext) : null;
-    const runtimeContextValue = row.runtimeContext ? JSON.parse(row.runtimeContext) : null;
-    const metadataValue = row.metadata ? JSON.parse(row.metadata) : null;
-    const entityValue = row.entity ? JSON.parse(row.entity) : null;
-    const extractStepResultValue = row.extractStepResult ? JSON.parse(row.extractStepResult) : null;
-    const analyzeStepResultValue = row.analyzeStepResult ? JSON.parse(row.analyzeStepResult) : null;
+    const scorerValue = safelyParseJSON(row.scorer);
+    const inputValue = safelyParseJSON(row.input ?? '{}');
+    const outputValue = safelyParseJSON(row.output ?? '{}');
+    const additionalLLMContextValue = row.additionalLLMContext ? safelyParseJSON(row.additionalLLMContext) : null;
+    const runtimeContextValue = row.runtimeContext ? safelyParseJSON(row.runtimeContext) : null;
+    const metadataValue = row.metadata ? safelyParseJSON(row.metadata) : null;
+    const entityValue = row.entity ? safelyParseJSON(row.entity) : null;
+    const preprocessStepResultValue = row.preprocessStepResult ? safelyParseJSON(row.preprocessStepResult) : null;
+    const analyzeStepResultValue = row.analyzeStepResult ? safelyParseJSON(row.analyzeStepResult) : null;
 
     return {
       id: row.id,
@@ -123,10 +130,12 @@ export class ScoresLibSQL extends ScoresStorage {
       scorer: scorerValue,
       score: row.score,
       reason: row.reason,
-      extractStepResult: extractStepResultValue,
+      preprocessStepResult: preprocessStepResultValue,
       analyzeStepResult: analyzeStepResultValue,
       analyzePrompt: row.analyzePrompt,
-      extractPrompt: row.extractPrompt,
+      preprocessPrompt: row.preprocessPrompt,
+      generateScorePrompt: row.generateScorePrompt,
+      generateReasonPrompt: row.generateReasonPrompt,
       metadata: metadataValue,
       input: inputValue,
       output: outputValue,

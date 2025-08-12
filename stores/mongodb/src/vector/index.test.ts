@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 
@@ -93,6 +94,7 @@ describe('MongoDBVector Integration Tests', () => {
   let vectorDB: MongoDBVector;
   const testIndexName = 'my_vectors';
   const testIndexName2 = 'my_vectors_2';
+  const emptyIndexName = 'empty-index';
 
   beforeAll(async () => {
     vectorDB = new MongoDBVector({ uri, dbName });
@@ -114,6 +116,7 @@ describe('MongoDBVector Integration Tests', () => {
 
     await createIndexAndWait(vectorDB, testIndexName, 4, 'cosine');
     await createIndexAndWait(vectorDB, testIndexName2, 4, 'cosine');
+    await createIndexAndWait(vectorDB, emptyIndexName, 4, 'cosine');
   }, 500000);
 
   afterAll(async () => {
@@ -124,6 +127,11 @@ describe('MongoDBVector Integration Tests', () => {
     }
     try {
       await vectorDB.deleteIndex({ indexName: testIndexName2 });
+    } catch (error) {
+      console.error('Failed to delete test collection:', error);
+    }
+    try {
+      await vectorDB.deleteIndex({ indexName: emptyIndexName });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
@@ -482,5 +490,162 @@ describe('MongoDBVector Integration Tests', () => {
       const invalidVector = [1, 2, 3]; // 3D vector for 4D index
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
     });
+    it('should return empty results and not throw when semantic search filter matches zero documents', async () => {
+      // Use a valid embedding vector matching your test index dimension
+      const testEmbedding = [0.1, 0.2, 0.3, 0.4]; // Adjust dimension as needed
+
+      // Should not throw, should return an empty array
+      let error: unknown = null;
+      let results: any[] = [];
+      try {
+        results = await vectorDB.query({
+          indexName: emptyIndexName,
+          queryVector: testEmbedding,
+          topK: 2,
+          filter: {
+            'metadata.label': 'test_filter_validation',
+          },
+        });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).toBeNull();
+      expect(Array.isArray(results)).toBe(true);
+      expect(results.length).toBe(0);
+    });
   });
+
+  describe('Metadata Field Filtering Bug Reproduction', () => {
+    const bugTestIndexName = 'metadata_filter_bug_test_' + Date.now();
+
+    beforeAll(async () => {
+      // Create index for bug reproduction
+      await createIndexAndWait(vectorDB, bugTestIndexName, 4, 'cosine');
+
+      // Insert vectors with thread_id and resource_id in metadata
+      // Simulating what the Memory system does
+      const vectors = [
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+      ];
+
+      const metadata = [
+        { thread_id: 'thread-123', resource_id: 'resource-123', message: 'first' },
+        { thread_id: 'thread-123', resource_id: 'resource-123', message: 'second' },
+        { thread_id: 'thread-456', resource_id: 'resource-456', message: 'third' },
+        { thread_id: 'thread-456', resource_id: 'resource-456', message: 'fourth' },
+      ];
+
+      await vectorDB.upsert({
+        indexName: bugTestIndexName,
+        vectors,
+        metadata,
+      });
+
+      // Wait for indexing
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    });
+
+    afterAll(async () => {
+      await deleteIndexAndWait(vectorDB, bugTestIndexName);
+    });
+
+    test('filtering by thread_id WITHOUT metadata prefix works correctly', async () => {
+      // This is what Memory.rememberMessages does - passes thread_id directly
+      // Previously this would ignore the filter, but now it works correctly
+      const results = await vectorDB.query({
+        indexName: bugTestIndexName,
+        queryVector: [1, 0, 0, 0],
+        topK: 10,
+        filter: { thread_id: 'thread-123' }, // Now correctly filters by thread_id
+      });
+
+      // Verify the fix works - should return only documents from thread-123
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.thread_id === 'thread-123')).toBe(true);
+
+      // Should NOT contain documents from other threads
+      const threadIds = results.map(r => r.metadata?.thread_id);
+      expect(threadIds).not.toContain('thread-456');
+    });
+
+    test('filtering by resource_id WITHOUT metadata prefix works correctly', async () => {
+      // This is what Memory.rememberMessages does with resource scope
+      const results = await vectorDB.query({
+        indexName: bugTestIndexName,
+        queryVector: [0, 1, 0, 0],
+        topK: 10,
+        filter: { resource_id: 'resource-123' }, // Now correctly filters by resource_id
+      });
+
+      // Verify the fix works - should return only documents from resource-123
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.resource_id === 'resource-123')).toBe(true);
+
+      // Should NOT contain documents from other resources
+      const resourceIds = results.map(r => r.metadata?.resource_id);
+      expect(resourceIds).not.toContain('resource-456');
+    });
+
+    test('filtering WITH metadata. prefix works correctly (workaround)', async () => {
+      // This is the workaround - using metadata.thread_id
+      const results = await vectorDB.query({
+        indexName: bugTestIndexName,
+        queryVector: [1, 0, 0, 0],
+        topK: 10,
+        filter: { 'metadata.thread_id': 'thread-123' },
+      });
+
+      // This works correctly
+      expect(results).toHaveLength(2);
+      expect(results[0]?.metadata?.thread_id).toBe('thread-123');
+      expect(results[1]?.metadata?.thread_id).toBe('thread-123');
+    });
+
+    test('semantic search without filter returns all vectors (shows data exists)', async () => {
+      // Verify that the data exists and can be retrieved without filters
+      const results = await vectorDB.query({
+        indexName: bugTestIndexName,
+        queryVector: [0.5, 0.5, 0.5, 0.5],
+        topK: 10,
+      });
+
+      // Should return all 4 vectors
+      expect(results).toHaveLength(4);
+
+      // Verify metadata is stored correctly
+      const threadIds = results.map(r => r.metadata?.thread_id);
+      expect(threadIds).toContain('thread-123');
+      expect(threadIds).toContain('thread-456');
+    });
+  });
+});
+
+// Use the shared test suite with factory pattern
+const vectorDB = new MongoDBVector({ uri, dbName });
+
+createVectorTestSuite({
+  vector: vectorDB,
+  connect: async () => {
+    await vectorDB.connect();
+    await waitForAtlasSearchReady(vectorDB);
+  },
+  disconnect: async () => {
+    await vectorDB.disconnect();
+  },
+  createIndex: async (indexName: string) => {
+    await vectorDB.createIndex({ indexName, dimension: 4, metric: 'cosine' });
+    await vectorDB.waitForIndexReady({ indexName });
+  },
+  deleteIndex: async (indexName: string) => {
+    try {
+      await vectorDB.deleteIndex({ indexName });
+    } catch (error) {
+      console.error(`Error deleting index ${indexName}:`, error);
+    }
+  },
+  waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 5000)),
 });

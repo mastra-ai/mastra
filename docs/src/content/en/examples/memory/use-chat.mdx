@@ -31,12 +31,12 @@ Benefits:
 
 The default behavior of `useChat` sends the entire chat history with each request. Since Mastra's memory automatically retrieves history based on `threadId`, sending the full history from the client leads to duplicate messages in the context window and storage.
 
-**Solution:** Configure `useChat` to send **only the latest message** along with your `threadId` and `resourceId`.
+**Solution:** Configure `useChat` to send **only the latest message** along with your memory configuration (thread and resource identifiers).
 
 ```typescript filename="components/Chat.tsx" showLineNumbers copy
 import { useChat } from "ai/react";
 
-export function Chat({ threadId, resourceId }) {
+export function Chat({ thread, resource }) {
   const { messages, input, handleInputChange, handleSubmit } = useChat({
     api: "/api/chat", // Your backend endpoint
     // Pass only the latest message and custom IDs
@@ -47,8 +47,10 @@ export function Chat({ threadId, resourceId }) {
       // Return the structured body for your API route
       return {
         message: lastMessage, // Send only the most recent message content/role
-        threadId,
-        resourceId,
+        memory: {
+          thread,
+          resource,
+        },
       };
     },
     // Optional: Initial messages if loading history from backend
@@ -84,7 +86,7 @@ const mastraClient = new MastraClient({
 
 export async function POST(request: Request) {
   // Get data structured by experimental_prepareRequestBody
-  const { message, threadId, resourceId }: { message: CoreMessage | null; threadId: string; resourceId: string } = await request.json();
+  const { message, memory }: { message: CoreMessage | null; memory: { thread: string; resource: string } } = await request.json();
 
   // Handle cases where message might be null (e.g., initial load or error)
   if (!message || !message.content) {
@@ -97,8 +99,7 @@ export async function POST(request: Request) {
   // Stream the response with memory context
   const response = await agent.stream({
     messages: [{ role: message.role || "user", content: message.content }],
-    threadId,
-    resourceId,
+    memory,
   });
 
   // Return the streaming response to the frontend
@@ -113,7 +114,7 @@ If you've deployed your Mastra Server with a custom route handler for chat, you 
 ```typescript filename="components/Chat.tsx" showLineNumbers copy
 import { useChat } from "ai/react";
 
-export function Chat({ threadId, resourceId, agentId = "ChatAgent" }) {
+export function Chat({ thread, resource, agentId = "ChatAgent" }) {
   const { messages, input, handleInputChange, handleSubmit } = useChat({
     // Connect directly to your Mastra Server's stream endpoint
     api: `${process.env.NEXT_PUBLIC_MASTRA_SERVER_URL}/api/agents/${agentId}/stream`,
@@ -122,8 +123,10 @@ export function Chat({ threadId, resourceId, agentId = "ChatAgent" }) {
       // The Mastra Server expects the full messages array, not just a single message
       return {
         messages: lastMessage ? [lastMessage] : [],
-        threadId,
-        resourceId,
+        memory: {
+          thread,
+          resource,
+        },
       };
     },
     headers: {
@@ -206,7 +209,7 @@ function ChatApp() {
       />
       <div style={{ flexGrow: 1 }}>
         {currentThreadId ? (
-          <Chat threadId={currentThreadId} resourceId={userId} agentId="your-agent-id" /> // Your useChat component
+          <Chat thread={currentThreadId} resource={userId} agentId="your-agent-id" /> // Your useChat component
         ) : (
           <div>Select or start a conversation.</div>
         )}
@@ -236,12 +239,12 @@ function ChatApp() {
 1. **Connection refused**: Ensure your Mastra Server is running and accessible
 2. **Authentication errors**: Check your API key configuration
 3. **Message duplication**: Verify you're only sending the latest message
-4. **Missing thread history**: Ensure `threadId` and `resourceId` are passed correctly
+4. **Missing thread history**: Ensure memory configuration with `thread` and `resource` is passed correctly
 5. **CORS errors (direct connection)**: Configure your Mastra Server to allow requests from your frontend origin
 
 ## Related
 
 - **[MastraClient Overview](../../docs/server-db/mastra-client.mdx)**: Learn more about the Mastra Client SDK
-- **[Mastra Server](../../docs/deployment/server.mdx)**: How to deploy and configure a Mastra Server
-- **[Memory Overview](../../docs/memory/overview.mdx)**: Core concepts of `resourceId` and `threadId`
+- **[Mastra Server](../../docs/deployment/server-deployment.mdx)**: How to deploy and configure a Mastra Server
+- **[Memory Overview](../../docs/memory/overview.mdx)**: Core concepts of memory resources and threads
 - **[AI SDK Integration](../../docs/frameworks/agentic-uis/ai-sdk.mdx#usechat)**: General useChat documentation

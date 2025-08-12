@@ -8,6 +8,7 @@ import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { MCPClient } from '@mastra/mcp';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const memory = new Memory();
 
@@ -192,4 +193,33 @@ export const agentThatHarassesYou = new Agent({
     `,
   model: openai('gpt-4o'),
   outputProcessors: [moderationDetector],
+});
+
+const answerRelevance = createAnswerRelevancyScorer({
+  model: openai('gpt-4o'),
+});
+
+console.log(`answerRelevance`, answerRelevance);
+
+export const evalAgent = new Agent({
+  name: 'Eval Agent',
+  instructions: `
+    You are a helpful assistant with a weather tool.
+    `,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherInfo,
+  },
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+  scorers: {
+    answerRelevance: {
+      scorer: answerRelevance,
+    },
+  },
 });

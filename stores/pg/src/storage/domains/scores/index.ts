@@ -1,23 +1,24 @@
 import type { PaginationInfo, StoragePagination } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
+import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let input = undefined;
-
-  if (row.input) {
-    try {
-      input = JSON.parse(row.input);
-    } catch {
-      input = row.input;
-    }
-  }
+  console.log(`row is`, JSON.stringify(row, null, 2));
   return {
     ...row,
-    input,
+    input: safelyParseJSON(row.input),
+    scorer: safelyParseJSON(row.scorer),
+    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
+    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
+    metadata: safelyParseJSON(row.metadata),
+    output: safelyParseJSON(row.output),
+    additionalContext: safelyParseJSON(row.additionalContext),
+    runtimeContext: safelyParseJSON(row.runtimeContext),
+    entity: safelyParseJSON(row.entity),
     createdAt: row.createdAtZ || row.createdAt,
     updatedAt: row.updatedAtZ || row.updatedAt,
   } as ScoreRowData;
@@ -26,18 +27,31 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 export class ScoresPG extends ScoresStorage {
   public client: IDatabase<{}>;
   private operations: StoreOperationsPG;
+  private schema?: string;
 
-  constructor({ client, operations }: { client: IDatabase<{}>; operations: StoreOperationsPG }) {
+  constructor({
+    client,
+    operations,
+    schema,
+  }: {
+    client: IDatabase<{}>;
+    operations: StoreOperationsPG;
+    schema?: string;
+  }) {
     super();
     this.client = client;
     this.operations = operations;
+    this.schema = schema;
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const result = await this.client.oneOrNone<ScoreRowData>(`SELECT * FROM ${TABLE_SCORERS} WHERE id = $1`, [id]);
+      const result = await this.client.oneOrNone<ScoreRowData>(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE id = $1`,
+        [id],
+      );
 
-      return transformScoreRow(result!);
+      return result ? transformScoreRow(result) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -53,14 +67,41 @@ export class ScoresPG extends ScoresStorage {
   async getScoresByScorerId({
     scorerId,
     pagination,
+    entityId,
+    entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const conditions: string[] = [`"scorerId" = $1`];
+      const queryParams: any[] = [scorerId];
+      let paramIndex = 2;
+
+      if (entityId) {
+        conditions.push(`"entityId" = $${paramIndex++}`);
+        queryParams.push(entityId);
+      }
+
+      if (entityType) {
+        conditions.push(`"entityType" = $${paramIndex++}`);
+        queryParams.push(entityType);
+      }
+
+      if (source) {
+        conditions.push(`"source" = $${paramIndex++}`);
+        queryParams.push(source);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "scorerId" = $1`,
-        [scorerId],
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause}`,
+        queryParams,
       );
       if (total?.count === '0' || !total?.count) {
         return {
@@ -75,9 +116,10 @@ export class ScoresPG extends ScoresStorage {
       }
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${TABLE_SCORERS} WHERE "scorerId" = $1 LIMIT $2 OFFSET $3`,
-        [scorerId, pagination.perPage, pagination.page * pagination.perPage],
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...queryParams, pagination.perPage, pagination.page * pagination.perPage],
       );
+
       return {
         pagination: {
           total: Number(total?.count) || 0,
@@ -85,7 +127,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
@@ -99,20 +141,46 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
-      const { input, ...rest } = score;
+      // Generate ID like other storage implementations
+      const id = crypto.randomUUID();
+
+      const {
+        scorer,
+        preprocessStepResult,
+        analyzeStepResult,
+        metadata,
+        input,
+        output,
+        additionalContext,
+        runtimeContext,
+        entity,
+        ...rest
+      } = score;
+
+      console.log(`saving score with id: ${id}`);
+
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
+          id,
           ...rest,
-          input: JSON.stringify(input),
+          input: JSON.stringify(input) || '',
+          output: JSON.stringify(output) || '',
+          scorer: scorer ? JSON.stringify(scorer) : null,
+          preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
+          analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
+          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
+          entity: entity ? JSON.stringify(entity) : null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
+      const scoreFromDb = await this.getScoreById({ id });
       return { score: scoreFromDb! };
     } catch (error) {
       throw new MastraError(
@@ -135,11 +203,9 @@ export class ScoresPG extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "runId" = $1`,
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1`,
         [runId],
       );
-      console.log(`total: ${total?.count}`);
-      console.log(`typeof total: ${typeof total?.count}`);
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
@@ -153,7 +219,7 @@ export class ScoresPG extends ScoresStorage {
       }
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${TABLE_SCORERS} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
         [runId, pagination.perPage, pagination.page * pagination.perPage],
       );
       return {
@@ -163,7 +229,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
@@ -188,7 +254,7 @@ export class ScoresPG extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "entityId" = $1 AND "entityType" = $2`,
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2`,
         [entityId, entityType],
       );
 
@@ -205,7 +271,7 @@ export class ScoresPG extends ScoresStorage {
       }
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${TABLE_SCORERS} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
         [entityId, entityType, pagination.perPage, pagination.page * pagination.perPage],
       );
       return {
@@ -215,7 +281,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(

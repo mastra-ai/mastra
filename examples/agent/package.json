@@ -15,6 +15,7 @@
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/evals": "latest",
     "ai": "^4.3.16",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
@@ -29,6 +30,7 @@
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/evals": "link:../../packages/evals",
       "mastra": "link:../../packages/cli"
     }
   },

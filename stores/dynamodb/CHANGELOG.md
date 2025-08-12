@@ -1,5 +1,101 @@
 # @mastra/dynamodb
 
+## 0.14.1
+
+### Patch Changes
+
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
+## 0.14.0
+
+### Minor Changes
+
+- ea0c5f2: Add store support to new score api
+
+### Patch Changes
+
+- 604b1d4: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.859.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.859.0) (from `^3.848.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.859.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.859.0) (from `^3.840.0`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+
+## 0.14.0-alpha.2
+
+### Patch Changes
+
+- 604b1d4: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.859.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.859.0) (from `^3.848.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.859.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.859.0) (from `^3.840.0`, in `dependencies`)
+- Updated dependencies [d0496e6]
+  - @mastra/core@0.13.0-alpha.3
+
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
+## 0.14.0-alpha.0
+
+### Minor Changes
+
+- ea0c5f2: Add store support to new score api
+
+### Patch Changes
+
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
 ## 0.13.3
 
 ### Patch Changes

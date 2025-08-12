@@ -2314,7 +2314,11 @@ describe('LegacyWorkflow', async () => {
       });
 
       const workflow = new LegacyWorkflow({ name: 'test-workflow' });
-      workflow.step(step1).after(step1).step(randomTool).commit();
+      workflow
+        .step(step1)
+        .after(step1)
+        .step(randomTool, { variables: { name: { step: step1, path: 'name' } } })
+        .commit();
 
       await workflow.createRun().start();
 

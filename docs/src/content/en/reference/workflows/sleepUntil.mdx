@@ -1,16 +1,16 @@
 ---
-title: "Reference: Workflow.sleepUntil() | Building Workflows | Mastra Docs"
-description: Documentation for the `.sleepUntil()` method in workflows, which pauses execution until a specified date.
+title: "Reference: Workflow.sleepUntil() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.sleepUntil()` method in workflows, which pauses execution until a specified date.
 ---
 
 # Workflow.sleepUntil()
 
 The `.sleepUntil()` method pauses execution until a specified date.
 
-## Usage
+## Usage example
 
-```typescript
-workflow.sleepUntil(new Date(Date.now() + 1000));
+```typescript copy
+workflow.sleepUntil(new Date(Date.now() + 5000));
 ```
 
 ## Parameters
@@ -18,9 +18,9 @@ workflow.sleepUntil(new Date(Date.now() + 1000));
 <PropertiesTable
   content={[
     {
-      name: "date",
-      type: "Date",
-      description: "The date until which to pause execution",
+      name: "dateOrCallback",
+      type: "Date | ((params: ExecuteFunctionParams) => Promise<Date>)",
+      description: "Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.",
       isOptional: false,
     },
   ]}
@@ -37,6 +37,14 @@ workflow.sleepUntil(new Date(Date.now() + 1000));
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+workflow.sleepUntil(async ({ inputData }) => {
+  return new Date(Date.now() + inputData.value);
+});
+```
 
 ## Related
 

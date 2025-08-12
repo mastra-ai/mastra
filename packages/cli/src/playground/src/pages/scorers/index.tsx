@@ -7,8 +7,8 @@ export default function Scorers() {
 
   const scorerListData = Object.entries(scorers || {}).map(([key, scorer]) => ({
     id: key,
-    name: scorer.scorer.name,
-    description: scorer.scorer.description,
+    name: scorer.scorer.config.name,
+    description: scorer.scorer.config.description,
   }));
 
   return (
@@ -20,14 +20,7 @@ export default function Scorers() {
         {isLoading ? (
           <div className="text-center text-icon3 m-[2rem]">Loading...</div>
         ) : (
-          <DataTable
-            columns={scorersTableColumns}
-            data={scorerListData || []}
-            isLoading={isLoading}
-            onClick={props => {
-              console.log(props);
-            }}
-          />
+          <DataTable columns={scorersTableColumns} data={scorerListData || []} isLoading={isLoading} />
         )}
       </div>
     </MainContentLayout>

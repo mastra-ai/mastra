@@ -1,5 +1,130 @@
 # @mastra/pg
 
+## 0.14.0
+
+### Minor Changes
+
+- 79d34ce: improve cloudflare workers compatibility
+
+### Patch Changes
+
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+
+## 0.14.0-alpha.0
+
+### Minor Changes
+
+- 79d34ce: improve cloudflare workers compatibility
+
+### Patch Changes
+
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
+## 0.13.3
+
+### Patch Changes
+
+- 3e49b7a: Fix PostgreSQL vector metadata filtering for Memory system - changed default minScore to -1 to include all similarity results and added comprehensive metadata filtering tests
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- 3e49b7a: Fix PostgreSQL vector metadata filtering for Memory system - changed default minScore to -1 to include all similarity results and added comprehensive metadata filtering tests
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1-alpha.0
+
+## 0.13.2
+
+### Patch Changes
+
+- a780fcd: ensure score id is generated for postgres store
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- a780fcd: ensure score id is generated for postgres store
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+
+## 0.13.1
+
+### Patch Changes
+
+- bf6c955: fix: Fix schema support to PostgreSQL scores and workflows storage
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- bf6c955: fix: Fix schema support to PostgreSQL scores and workflows storage
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 0.13.0
 
 ### Minor Changes

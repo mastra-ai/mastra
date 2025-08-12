@@ -165,7 +165,7 @@ export abstract class Bundler extends MastraBundler {
     serverFile: string,
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
-    toolsPaths: string[],
+    toolsPaths: (string | string[])[],
     sourcemapEnabled: boolean = false,
   ) {
     const inputOptions: InputOptions = await getInputOptions(
@@ -196,7 +196,7 @@ export abstract class Bundler extends MastraBundler {
     return inputOptions;
   }
 
-  async getToolsInputOptions(toolsPaths: string[]) {
+  async getToolsInputOptions(toolsPaths: (string | string[])[]) {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
@@ -232,7 +232,7 @@ export abstract class Bundler extends MastraBundler {
     serverFile: string,
     mastraEntryFile: string,
     outputDirectory: string,
-    toolsPaths: string[] = [],
+    toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
@@ -467,7 +467,7 @@ export const tools = [${toolsExports.join(', ')}]`,
     }
   }
 
-  async lint(_entryFile: string, _outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(_entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
