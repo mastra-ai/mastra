@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as p from '@clack/prompts';
+import pc from 'picocolors';
 
 const DEFAULT_SCORERS_DIR = 'src/mastra/scorers';
 
@@ -29,6 +30,10 @@ export function writeScorer(filename: string, content: string, customPath?: stri
   try {
     fs.writeFileSync(filePath, content);
     p.log.success(`Created scorer at ${path.relative(rootDir, filePath)}`);
+
+    p.note(`
+      ${pc.green('To use: Add the Scorer to your workflow or agent!')}
+      `);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to write scorer: ${errorMessage}`);
