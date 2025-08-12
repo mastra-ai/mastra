@@ -1,14 +1,16 @@
-import { MCPServer } from '@mastra/mcp';
-import { docsTool } from '../tools/docs-tool';
+#!/usr/bin/env tsx
 
+import { MCPServer } from '@mastra/mcp';
+import { docsTool } from './tools/docs-tool';
 import { config } from 'dotenv';
+
 config();
 
-// Create MCP server with tools and agents for HTTP/SSE transport
-export const mcpServer = new MCPServer({
-  name: 'Kepler docs chatbot MCP server',
+// Create MCP server with tools for HTTP/SSE transport
+const mcpServer = new MCPServer({
+  name: 'Kepler docs MCP server',
   version: '1.0.0',
-  description: 'Provides access to documentation, planet information tools and intelligent agents via HTTP/SSE',
+  description: 'Provides access to documentation and planet information tools via HTTP/SSE',
 
   // Expose individual tools
   tools: {
@@ -16,7 +18,7 @@ export const mcpServer = new MCPServer({
   },
 });
 
-// Export a function to start the server via HTTP/SSE manually
+// Function to start the server via HTTP/SSE
 export async function startHttpServer(port: number = 4111) {
   const { createServer } = await import('http');
 
