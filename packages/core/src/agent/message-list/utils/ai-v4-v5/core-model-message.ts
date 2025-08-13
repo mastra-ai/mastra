@@ -5,7 +5,8 @@ export function hasAIV5CoreMessageCharacteristics(
 ): msg is AIV5Type.ModelMessage {
   if (`experimental_providerMetadata` in msg) return false; // is v4 cause v5 doesn't have this property
 
-  // it's compatible with either if content is a string, no difference
+  // String content is identical in both v4 and v5, so we can safely treat it as v5-compatible
+  // This doesn't misclassify v4 messages because the format is the same
   if (typeof msg.content === `string`) return true;
 
   for (const part of msg.content) {
@@ -26,5 +27,7 @@ export function hasAIV5CoreMessageCharacteristics(
     if (part.type === `redacted-reasoning`) return false; // only in v4, seems like in v5 they add it to providerOptions or something? https://github.com/vercel/ai/blob/main/packages/codemod/src/codemods/v5/replace-redacted-reasoning-type.ts#L90
   }
 
+  // If no distinguishing features were found, the message format is identical in v4 and v5
+  // We return true (v5-compatible) because the message can be used as-is with v5
   return true;
 }
