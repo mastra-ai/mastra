@@ -1275,16 +1275,6 @@ export class MessageList {
       };
     }
 
-    // Preserve the fact that toolInvocations field existed for UI messages (for round-trip)
-    if (v2Msg.content.toolInvocations !== undefined && (v2Msg.content.metadata as any)?.__fromUIWithToolInvocations) {
-      v3Msg.content.metadata = {
-        ...(v3Msg.content.metadata || {}),
-        __hadToolInvocations: true,
-      };
-      // Remove the temporary flag
-      delete (v3Msg.content.metadata as any).__fromUIWithToolInvocations;
-    }
-
     const fileUrls = new Set<string>();
     for (const part of v2Msg.content.parts) {
       switch (part.type) {
@@ -1524,8 +1514,11 @@ export class MessageList {
       v2Msg.content.toolInvocations = toolInvocations;
     }
 
+    // Copy metadata but exclude internal fields that will be handled separately
     if (v3Msg.content.metadata) {
-      v2Msg.content.metadata = { ...v3Msg.content.metadata } as any;
+      const { __originalContent, __originalExperimentalAttachments, __attachmentUrls, ...userMetadata } = v3Msg.content
+        .metadata as any;
+      v2Msg.content.metadata = userMetadata;
     }
 
     // Restore original content from metadata if it exists
@@ -1537,13 +1530,6 @@ export class MessageList {
       ) {
         v2Msg.content.content = originalContent;
       }
-
-      if (v2Msg.content.metadata) {
-        delete (v2Msg.content.metadata as any).__originalContent;
-        if (Object.keys(v2Msg.content.metadata).length === 0) {
-          delete v2Msg.content.metadata;
-        }
-      }
     }
     // Note: We don't synthesize content from parts - only use __originalContent
     // This preserves the original V2 format where content.content was optional
@@ -1552,20 +1538,6 @@ export class MessageList {
     const originalAttachments = (v3Msg.content.metadata as any)?.__originalExperimentalAttachments;
     if (originalAttachments && Array.isArray(originalAttachments)) {
       v2Msg.content.experimental_attachments = originalAttachments || [];
-    }
-    if (v2Msg.content.metadata) {
-      delete (v2Msg.content.metadata as any).__originalExperimentalAttachments;
-      if (Object.keys(v2Msg.content.metadata).length === 0) {
-        delete v2Msg.content.metadata;
-      }
-    }
-
-    // Clean up __attachmentUrls metadata field that was used for filtering
-    if (v2Msg.content.metadata && (v2Msg.content.metadata as any).__attachmentUrls) {
-      delete (v2Msg.content.metadata as any).__attachmentUrls;
-      if (Object.keys(v2Msg.content.metadata).length === 0) {
-        delete v2Msg.content.metadata;
-      }
     }
 
     // Set toolInvocations on V2
@@ -1764,7 +1736,7 @@ export class MessageList {
       return undefined;
     })();
 
-    if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
+    if ('metadata' in message && message.metadata) {
       content.metadata = { ...message.metadata } as Record<string, unknown>;
     }
 
@@ -1917,11 +1889,6 @@ export class MessageList {
       const resultInvocations = message.toolInvocations.filter(t => t.state === 'result');
       // Always preserve the field, even if it becomes an empty array after filtering
       content.toolInvocations = resultInvocations;
-      // Mark that this came from a UI message with toolInvocations (for round-trip preservation)
-      content.metadata = {
-        ...(content.metadata || {}),
-        __fromUIWithToolInvocations: true,
-      };
     }
     if (message.reasoning !== undefined) content.reasoning = message.reasoning;
     if (message.annotations !== undefined) content.annotations = message.annotations;
@@ -1929,8 +1896,9 @@ export class MessageList {
     if (message.experimental_attachments !== undefined) {
       content.experimental_attachments = message.experimental_attachments;
     }
-    // Always preserve content field for AI4 UI messages
-    if (message.content !== undefined) content.content = message.content;
+    if (`metadata` in message && message.metadata) {
+      content.metadata = message.metadata;
+    }
 
     const result = {
       id: message.id || this.newMessageId(),
