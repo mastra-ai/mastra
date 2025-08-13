@@ -2399,6 +2399,7 @@ describe('MessageList', () => {
           type: 'tool-invocation',
           toolInvocation: {
             state: 'result',
+            step: 0,
             toolCallId: 'call-2',
             toolName: 'getLuckyNumber',
             args: {},
@@ -2416,6 +2417,7 @@ describe('MessageList', () => {
           state: 'result',
           toolCallId: 'call-2',
           toolName: 'getLuckyNumber',
+          step: 0,
           args: {},
           result: 42,
         },
@@ -2760,7 +2762,8 @@ describe('MessageList', () => {
           metadata: {},
         };
 
-        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
+        const list = new MessageList({ threadId, resourceId });
+        list.add(uiMessage, 'input');
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);

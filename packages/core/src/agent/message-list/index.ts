@@ -842,7 +842,139 @@ export class MessageList {
       parts: filteredParts,
     };
   }
+  private static mastraMessageV2ToAIV4UIMessage(m: MastraMessageV2): UIMessageWithMetadata {
+    const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
+      .experimental_attachments
+      ? [...m.content.experimental_attachments]
+      : [];
+    const contentString =
+      typeof m.content.content === `string` && m.content.content !== ''
+        ? m.content.content
+        : m.content.parts.reduce((prev, part) => {
+            if (part.type === `text`) {
+              // return only the last text part like AI SDK does
+              return part.text;
+            }
+            return prev;
+          }, '');
 
+    const parts: MastraMessageContentV2['parts'] = [];
+    const toolInvocations: AIV4Type.UIMessage['toolInvocations'] = [];
+
+    if (m.content.parts.length) {
+      for (const part of m.content.parts) {
+        if (part.type === `file`) {
+          experimentalAttachments.push({
+            contentType: part.mimeType,
+            url: part.data,
+          });
+        } else if (
+          part.type === 'tool-invocation' &&
+          (part.toolInvocation.state === 'call' || part.toolInvocation.state === 'partial-call')
+        ) {
+          // Filter out tool invocations with call or partial-call states
+          continue;
+        } else if (part.type === 'tool-invocation') {
+          // Handle tool invocations with step number logic
+          const toolInvocation = { ...part.toolInvocation };
+
+          // Find the step number for this tool invocation
+          let currentStep = -1;
+          let toolStep = -1;
+          for (const innerPart of m.content.parts) {
+            if (innerPart.type === `step-start`) currentStep++;
+            if (
+              innerPart.type === `tool-invocation` &&
+              innerPart.toolInvocation.toolCallId === part.toolInvocation.toolCallId
+            ) {
+              toolStep = currentStep;
+              break;
+            }
+          }
+
+          if (toolStep >= 0) {
+            const preparedInvocation = {
+              step: toolStep,
+              ...toolInvocation,
+            };
+            parts.push({
+              type: 'tool-invocation',
+              toolInvocation: preparedInvocation,
+            });
+
+            if (part.toolInvocation.state === 'result') {
+              // Exclude the step field when adding to toolInvocations array
+              const { step, ...invocationWithoutStep } = preparedInvocation;
+              toolInvocations.push(invocationWithoutStep);
+            }
+          } else {
+            parts.push({
+              type: 'tool-invocation',
+              toolInvocation,
+            });
+            // Also add to toolInvocations array if it's a result
+            if (part.toolInvocation.state === 'result') {
+              // Exclude the step field if it exists
+              const { step, ...invocationWithoutStep } = toolInvocation;
+              toolInvocations.push(invocationWithoutStep);
+            }
+          }
+        } else {
+          parts.push(part);
+        }
+      }
+    }
+
+    if (parts.length === 0 && experimentalAttachments.length > 0) {
+      // make sure we have atleast one part so this message doesn't get removed when converting to core message
+      parts.push({ type: 'text', text: '' });
+    }
+
+    if (m.role === `user`) {
+      const uiMessage: UIMessageWithMetadata = {
+        id: m.id,
+        role: m.role,
+        content: m.content.content || contentString,
+        createdAt: m.createdAt,
+        parts,
+        experimental_attachments: experimentalAttachments,
+      };
+      // Preserve metadata if present
+      if (m.content.metadata) {
+        uiMessage.metadata = m.content.metadata;
+      }
+      return uiMessage;
+    } else if (m.role === `assistant`) {
+      const uiMessage: UIMessageWithMetadata = {
+        id: m.id,
+        role: m.role,
+        content: m.content.content || contentString,
+        createdAt: m.createdAt,
+        parts,
+        reasoning: undefined,
+        toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
+      };
+      // Preserve metadata if present
+      if (m.content.metadata) {
+        uiMessage.metadata = m.content.metadata;
+      }
+      return uiMessage;
+    }
+
+    const uiMessage: UIMessageWithMetadata = {
+      id: m.id,
+      role: m.role,
+      content: m.content.content || contentString,
+      createdAt: m.createdAt,
+      parts,
+      experimental_attachments: experimentalAttachments,
+    };
+    // Preserve metadata if present
+    if (m.content.metadata) {
+      uiMessage.metadata = m.content.metadata;
+    }
+    return uiMessage;
+  }
   private getMessageById(id: string) {
     return this.messages.find(m => m.id === id);
   }
@@ -1551,138 +1683,6 @@ export class MessageList {
     if (v3Msg.type) v2Msg.type = v3Msg.type;
 
     return v2Msg;
-  }
-
-  private static mastraMessageV2ToAIV4UIMessage(v2Msg: MastraMessageV2): AIV4Type.UIMessage {
-    const parts: AIV4Type.UIMessage['parts'] = [];
-    const toolInvocations: AIV4Type.UIMessage['toolInvocations'] = [];
-
-    for (const part of v2Msg.content.parts) {
-      switch (part.type) {
-        case 'text':
-          parts.push({
-            type: 'text',
-            text: part.text,
-          });
-          break;
-
-        case 'tool-invocation':
-          if (
-            part.type === 'tool-invocation' &&
-            (part.toolInvocation.state === 'call' || part.toolInvocation.state === 'partial-call')
-          ) {
-            break;
-          }
-          const toolInvocation = { ...part.toolInvocation };
-
-          let currentStep = -1;
-          let toolStep = -1;
-          for (const innerPart of v2Msg.content.parts) {
-            if (innerPart.type === `step-start`) currentStep++;
-            if (
-              innerPart.type === `tool-invocation` &&
-              innerPart.toolInvocation.toolCallId === part.toolInvocation.toolCallId
-            ) {
-              toolStep = currentStep;
-              break;
-            }
-          }
-
-          if (toolStep >= 0) {
-            const preparedInvocation = {
-              step: toolStep,
-              ...toolInvocation,
-            };
-            parts.push({
-              type: 'tool-invocation',
-              toolInvocation: preparedInvocation,
-            });
-
-            if (part.toolInvocation.state === 'result') {
-              toolInvocations.push(preparedInvocation);
-            }
-          } else {
-            parts.push({
-              type: 'tool-invocation',
-              toolInvocation,
-            });
-            // Also add to toolInvocations array if it's a result
-            if (part.toolInvocation.state === 'result') {
-              toolInvocations.push(part.toolInvocation);
-            }
-          }
-
-          break;
-
-        case 'reasoning':
-          parts.push({
-            type: 'reasoning',
-            reasoning: part.reasoning || '',
-            details: part.details || [],
-          });
-          break;
-
-        case 'source':
-          parts.push({
-            type: 'source',
-            source: part.source,
-          });
-          break;
-
-        case 'file':
-          parts.push({
-            type: 'file',
-            mimeType: part.mimeType,
-            data: part.data,
-          });
-          break;
-
-        case 'step-start':
-          parts.push({
-            type: 'step-start',
-          });
-          break;
-      }
-    }
-
-    const uiMessage: AIV4Type.UIMessage = {
-      id: v2Msg.id,
-      role: v2Msg.role,
-      content: v2Msg.content.content !== undefined ? v2Msg.content.content : '',
-      createdAt: v2Msg.createdAt,
-      parts,
-    };
-
-    if (!uiMessage.content) {
-      let lastTextPartInFinalStep: Extract<AIV4Type.UIMessage['parts'][0], { type: 'text' }> | null = null;
-      for (const part of parts) {
-        if (part.type === `step-start`) lastTextPartInFinalStep = null;
-        if (part.type === `text`) lastTextPartInFinalStep = part;
-      }
-      uiMessage.content = lastTextPartInFinalStep?.text || '';
-    }
-
-    // For user messages, include experimental_attachments if present (even if empty array)
-    if (v2Msg.role === 'user' && v2Msg.content.experimental_attachments !== undefined) {
-      uiMessage.experimental_attachments = v2Msg.content.experimental_attachments;
-    }
-
-    // For assistant messages, always include these fields
-    if (v2Msg.role === 'assistant') {
-      // Include toolInvocations if present in the original V2 message
-      // This includes both filled arrays and empty arrays
-      // Filter to only include result invocations for UI messages
-      uiMessage.toolInvocations = toolInvocations;
-
-      // Always include reasoning field for assistant
-      uiMessage.reasoning = v2Msg.content.reasoning || undefined;
-    }
-
-    if (v2Msg.content.annotations) {
-      uiMessage.annotations = v2Msg.content.annotations;
-    }
-
-    return uiMessage;
   }
 
   private hydrateMastraMessageV3Fields(message: MastraMessageV3): MastraMessageV3 {
