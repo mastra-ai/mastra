@@ -1054,57 +1054,6 @@ export class MessageList {
     return message;
   }
 
-  private aiV5UIMessageToMastraMessageV3(message: AIV5Type.UIMessage, messageSource: MessageSource): MastraMessageV3 {
-    const content: MastraMessageContentV3 = {
-      format: 3,
-      parts: message.parts,
-      metadata: message.metadata,
-    };
-
-    const metadata = message.metadata as any;
-    // Check for createdAt in both direct property and metadata
-    const createdAt = (() => {
-      if ('createdAt' in message && message.createdAt instanceof Date) {
-        return message.createdAt;
-      }
-      if (metadata && 'createdAt' in metadata && metadata.createdAt instanceof Date) {
-        return metadata.createdAt;
-      }
-      return undefined;
-    })();
-
-    if ('metadata' in message && message.metadata) {
-      content.metadata = { ...message.metadata } as Record<string, unknown>;
-    }
-
-    if (`experimental_attachments` in message && (message as any).experimental_attachments !== undefined) {
-      const attachments = (message as any).experimental_attachments as AIV4Type.UIMessage['experimental_attachments'];
-      // Preserve experimental_attachments in metadata for round-trip (even if empty array)
-      content.metadata = {
-        ...(content.metadata || {}),
-        __originalExperimentalAttachments: attachments,
-      };
-      if (attachments?.length) {
-        for (const attachment of attachments) {
-          content.parts.push({
-            type: 'file',
-            url: attachment.url,
-            mediaType: attachment.contentType || 'unknown',
-          } as any);
-        }
-      }
-    }
-
-    return {
-      id: message.id || this.newMessageId(),
-      role: MessageList.getRole(message),
-      createdAt: this.generateCreatedAt(messageSource, createdAt),
-      threadId: this.memoryInfo?.threadId,
-      resourceId: this.memoryInfo?.resourceId,
-      content,
-    } satisfies MastraMessageV3;
-  }
-
   private aiV5ModelMessageToMastraMessageV3(
     coreMessage: AIV5Type.ModelMessage,
     messageSource: MessageSource,
@@ -2364,5 +2313,56 @@ export class MessageList {
         .map(m => this.mastraMessageV2ToMastraMessageV3(m))
         .map(m => MessageList.mastraMessageV3ToAIV5UIMessage(m)),
     );
+  }
+
+  private aiV5UIMessageToMastraMessageV3(message: AIV5Type.UIMessage, messageSource: MessageSource): MastraMessageV3 {
+    const content: MastraMessageContentV3 = {
+      format: 3,
+      parts: message.parts,
+      metadata: message.metadata,
+    };
+
+    const metadata = message.metadata as any;
+    // Check for createdAt in both direct property and metadata
+    const createdAt = (() => {
+      if ('createdAt' in message && message.createdAt instanceof Date) {
+        return message.createdAt;
+      }
+      if (metadata && 'createdAt' in metadata && metadata.createdAt instanceof Date) {
+        return metadata.createdAt;
+      }
+      return undefined;
+    })();
+
+    if ('metadata' in message && message.metadata) {
+      content.metadata = { ...message.metadata } as Record<string, unknown>;
+    }
+
+    if (`experimental_attachments` in message && (message as any).experimental_attachments !== undefined) {
+      const attachments = (message as any).experimental_attachments as AIV4Type.UIMessage['experimental_attachments'];
+      // Preserve experimental_attachments in metadata for round-trip (even if empty array)
+      content.metadata = {
+        ...(content.metadata || {}),
+        __originalExperimentalAttachments: attachments,
+      };
+      if (attachments?.length) {
+        for (const attachment of attachments) {
+          content.parts.push({
+            type: 'file',
+            url: attachment.url,
+            mediaType: attachment.contentType || 'unknown',
+          } as any);
+        }
+      }
+    }
+
+    return {
+      id: message.id || this.newMessageId(),
+      role: MessageList.getRole(message),
+      createdAt: this.generateCreatedAt(messageSource, createdAt),
+      threadId: this.memoryInfo?.threadId,
+      resourceId: this.memoryInfo?.resourceId,
+      content,
+    } satisfies MastraMessageV3;
   }
 }
