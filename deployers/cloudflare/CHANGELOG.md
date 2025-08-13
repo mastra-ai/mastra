@@ -1,5 +1,131 @@
 # @mastra/deployer-cloudflare
 
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [c30bca8]
+  - @mastra/core@0.13.3-alpha.0
+  - @mastra/deployer@0.13.3-alpha.0
+
+## 0.12.0
+
+### Minor Changes
+
+- 79d34ce: improve cloudflare workers compatibility
+
+### Patch Changes
+
+- Updated dependencies [d5330bf]
+- Updated dependencies [aaf0224]
+- Updated dependencies [2e74797]
+- Updated dependencies [42cb4e9]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [96169cc]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [c6d2603]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+  - @mastra/deployer@0.13.2
+
+## 0.12.0-alpha.1
+
+### Minor Changes
+
+- 79d34ce: improve cloudflare workers compatibility
+
+### Patch Changes
+
+- Updated dependencies [d5330bf]
+- Updated dependencies [aaf0224]
+- Updated dependencies [42cb4e9]
+- Updated dependencies [a239d41]
+- Updated dependencies [96169cc]
+- Updated dependencies [b32c50d]
+- Updated dependencies [c6d2603]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+  - @mastra/deployer@0.13.2-alpha.2
+
+## 0.11.6-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+  - @mastra/core@0.13.2-alpha.0
+  - @mastra/deployer@0.13.2-alpha.0
+
+## 0.11.5
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1
+  - @mastra/deployer@0.13.1
+
+## 0.11.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1-alpha.0
+  - @mastra/deployer@0.13.1-alpha.0
+
+## 0.11.4
+
+### Patch Changes
+
+- 7b8172f: dependencies updates:
+  - Updated dependency [`rollup@~4.46.2` ↗︎](https://www.npmjs.com/package/rollup/v/4.46.2) (from `~4.44.2`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [7b8172f]
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+  - @mastra/deployer@0.13.0
+
+## 0.11.4-alpha.2
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+  - @mastra/deployer@0.13.0-alpha.2
+
 ## 0.11.4-alpha.1
 
 ### Patch Changes

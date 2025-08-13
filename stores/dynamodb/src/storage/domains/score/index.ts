@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
@@ -115,14 +115,14 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     pagination,
     entityId,
     entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    this.logger.debug('Getting scores by scorer ID', { scorerId, pagination, entityId, entityType });
-
     try {
       // Query scores by scorer ID using the GSI
       const query = this.service.entities.score.query.byScorer({ entity: 'score', scorerId });
@@ -137,6 +137,9 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       }
       if (entityType) {
         allScores = allScores.filter((score: ScoreRowData) => score.entityType === entityType);
+      }
+      if (source) {
+        allScores = allScores.filter((score: ScoreRowData) => score.source === source);
       }
 
       // Sort by createdAt DESC (newest first)
@@ -170,6 +173,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
             scorerId: scorerId || '',
             entityId: entityId || '',
             entityType: entityType || '',
+            source: source || '',
             page: pagination.page,
             perPage: pagination.perPage,
           },

@@ -11,34 +11,50 @@ description: Overview of scorers in Mastra, detailing their capabilities for eva
 
 ## Evaluation pipeline
 
-Mastra scorers follow an optional three-step pipeline that allows for evaluation workflows:
+Mastra scorers follow a flexible four-step pipeline that allows for simple to complex evaluation workflows:
 
-1. **Extract** (Optional): Identify and isolate relevant content for focused evaluation
-2. **Analyze** (Required): Perform the core evaluation and generate a score
-3. **Reason** (Optional): Provide explanations or justifications for the score
+1. **preprocess** (Optional): Prepare or transform input/output data for evaluation
+2. **analyze** (Optional): Perform evaluation analysis and gather insights
+3. **generateScore** (Required): Convert analysis into a numerical score
+4. **generateReason** (Optional): Generate explanations or justifications for the score
 
 This modular structure enables both simple single-step evaluations and complex multi-stage analysis workflows, allowing you to build evaluations that match your specific needs.
 
 ### When to use each step
 
-**Extract step** - Use when your content is complex or needs preprocessing:
-- Separating facts from opinions in mixed responses
-- Focusing evaluation on specific sections of long outputs
+**preprocess step** - Use when your content is complex or needs preprocessing:
+- Extracting specific elements from complex data structures
+- Cleaning or normalizing text before analysis
 - Parsing multiple claims that need individual evaluation
-- Example: Bias detection that first identifies opinion statements
+- Filtering content to focus evaluation on relevant sections
 
-**Analyze step** - Always required for core evaluation:
-- Straightforward scenarios: Direct scoring of input/output pairs
-- Complex scenarios: Evaluate preprocessed content and generate detailed results
-- Applies your scoring criteria and calculates the numerical score
+**analyze step** - Use when you need structured evaluation analysis:
+- Gathering insights that inform the scoring decision
+- Breaking down complex evaluation criteria into components
+- Performing detailed analysis that generateScore will use
+- Collecting evidence or reasoning data for transparency
 
-**Reason step** - Use when explanations are important:
+**generateScore step** - Always required for converting analysis to scores:
+- Simple scenarios: Direct scoring of input/output pairs
+- Complex scenarios: Converting detailed analysis results into numerical scores
+- Applying business logic and weighting to analysis results
+- The only step that produces the final numerical score
+
+**generateReason step** - Use when explanations are important:
 - Users need to understand why a score was assigned
 - Debugging and transparency are critical
 - Compliance or auditing requires explanations
 - Providing actionable feedback for improvement
 
 To learn how to create your own Scorers, see [Creating Custom Scorers](/docs/scorers/custom-scorers).
+
+## Installation
+
+To access Mastra's scorers feature install the `@mastra/evals` package.
+
+```bash copy
+npm install @mastra/evals@latest
+```
 
 ## Live evaluations
 

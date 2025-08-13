@@ -1,17 +1,18 @@
 import { randomUUID } from 'crypto';
-import type { ScoreRowData, ScoringEntityType } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/scores';
 
 export function createSampleScore({
   scorerId,
   entityId,
   entityType,
+  source,
 }: {
   scorerId: string;
   entityId?: string;
   entityType?: ScoringEntityType;
-}): ScoreRowData {
+  source?: ScoringSource;
+}): Omit<ScoreRowData, 'id'> {
   return {
-    id: randomUUID(),
     entityId: entityId ?? 'eval-agent',
     entityType: entityType ?? 'AGENT',
     scorerId,
@@ -44,7 +45,7 @@ export function createSampleScore({
     output: {
       text: 'Sample output',
     },
-    source: 'LIVE',
+    source: source ?? 'LIVE',
     entity: {
       id: entityId ?? 'eval-agent',
       name: 'Sample entity',

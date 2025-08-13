@@ -1,5 +1,101 @@
 # @mastra/libsql
 
+## 0.13.2
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
+## 0.13.1
+
+### Patch Changes
+
+- 8888b57: Fix LibSQL vector metadata filtering for Memory system - corrected JSON path syntax for simple fields and changed default minScore to -1 to include all similarity results
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- 8888b57: Fix LibSQL vector metadata filtering for Memory system - corrected JSON path syntax for simple fields and changed default minScore to -1 to include all similarity results
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1-alpha.0
+
+## 0.13.0
+
+### Minor Changes
+
+- ea0c5f2: Add store support to new score api
+
+### Patch Changes
+
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
 ## 0.13.0-alpha.0
 
 ### Minor Changes

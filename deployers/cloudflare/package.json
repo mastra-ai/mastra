@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.11.4-alpha.1",
+  "version": "0.12.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -15,7 +15,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -25,7 +25,7 @@
         "default": "./dist/secrets-manager/index.js"
       },
       "require": {
-        "types": "./dist/secrets-manager/index.d.cts",
+        "types": "./dist/secrets-manager/index.d.ts",
         "default": "./dist/secrets-manager/index.cjs"
       }
     },
@@ -49,9 +49,12 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
+    "@babel/types": "^7.28.2",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
+    "@types/babel__core": "^7.20.5",
     "@types/node": "^20.19.0",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
@@ -59,6 +62,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.1-0 <0.13.0-0"
+    "@mastra/core": ">=0.10.1-0 <0.14.0-0"
   }
 }

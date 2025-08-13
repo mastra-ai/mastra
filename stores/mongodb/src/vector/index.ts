@@ -302,12 +302,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const mongoFilter = this.transformFilter(filter);
       const documentMongoFilter = documentFilter ? { [this.documentFieldName]: documentFilter } : {};
 
+      // Transform metadata field filters to use dot notation
+      const transformedMongoFilter = this.transformMetadataFilter(mongoFilter);
+
       // Combine the filters
       let combinedFilter: any = {};
-      if (Object.keys(mongoFilter).length > 0 && Object.keys(documentMongoFilter).length > 0) {
-        combinedFilter = { $and: [mongoFilter, documentMongoFilter] };
-      } else if (Object.keys(mongoFilter).length > 0) {
-        combinedFilter = mongoFilter;
+      if (Object.keys(transformedMongoFilter).length > 0 && Object.keys(documentMongoFilter).length > 0) {
+        combinedFilter = { $and: [transformedMongoFilter, documentMongoFilter] };
+      } else if (Object.keys(transformedMongoFilter).length > 0) {
+        combinedFilter = transformedMongoFilter;
       } else if (Object.keys(documentMongoFilter).length > 0) {
         combinedFilter = documentMongoFilter;
       }
@@ -329,6 +332,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
         if (candidateIds.length > 0) {
           vectorSearch.filter = { _id: { $in: candidateIds } };
+        } else {
+          // No documents match the filter, return empty results
+          return [];
         }
       }
 
@@ -587,5 +593,64 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const translator = new MongoDBFilterTranslator();
     if (!filter) return {};
     return translator.translate(filter);
+  }
+
+  /**
+   * Transform metadata field filters to use MongoDB dot notation.
+   * Fields that are stored in the metadata subdocument need to be prefixed with 'metadata.'
+   * This handles filters from the Memory system which expects direct field access.
+   *
+   * @param filter - The filter object to transform
+   * @returns Transformed filter with metadata fields properly prefixed
+   */
+  private transformMetadataFilter(filter: any): any {
+    if (!filter || typeof filter !== 'object') return filter;
+
+    const transformed: any = {};
+
+    for (const [key, value] of Object.entries(filter)) {
+      // Check if this is a MongoDB operator (starts with $)
+      if (key.startsWith('$')) {
+        // For logical operators like $and, $or, recursively transform their contents
+        if (Array.isArray(value)) {
+          transformed[key] = value.map(item => this.transformMetadataFilter(item));
+        } else {
+          transformed[key] = this.transformMetadataFilter(value);
+        }
+      }
+      // Check if the key already has 'metadata.' prefix
+      else if (key.startsWith('metadata.')) {
+        // Already prefixed, keep as is
+        transformed[key] = value;
+      }
+      // Check if this is a known metadata field that needs prefixing
+      else if (this.isMetadataField(key)) {
+        // Add metadata. prefix for fields stored in metadata subdocument
+        transformed[`metadata.${key}`] = value;
+      } else {
+        // Keep other fields as is
+        transformed[key] = value;
+      }
+    }
+
+    return transformed;
+  }
+
+  /**
+   * Determine if a field should be treated as a metadata field.
+   * Common metadata fields include thread_id, resource_id, message_id, and any field
+   * that doesn't start with underscore (MongoDB system fields).
+   */
+  private isMetadataField(key: string): boolean {
+    // MongoDB system fields start with underscore
+    if (key.startsWith('_')) return false;
+
+    // Document-level fields that are NOT in metadata
+    const documentFields = ['_id', this.embeddingFieldName, this.documentFieldName];
+    if (documentFields.includes(key)) return false;
+
+    // Everything else is assumed to be in metadata
+    // This includes thread_id, resource_id, message_id, and any custom fields
+    return true;
   }
 }

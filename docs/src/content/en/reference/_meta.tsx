@@ -7,7 +7,6 @@ const meta: Meta = {
   },
   core: "Core",
   cli: "CLI",
-  templates: "Templates",
   agents: "Agents",
   tools: "Tools",
   workflows: "Workflows",
@@ -26,6 +25,7 @@ const meta: Meta = {
   observability: "Observability",
   "client-js": "Client SDK",
   deployer: "Deployer",
+  templates: "Templates",
 };
 
 export default meta;
