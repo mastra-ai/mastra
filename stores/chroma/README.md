@@ -43,7 +43,7 @@ const vectorStore = new ChromaVector({
 
 Provide your Chroma Cloud API key, tenant, and database.
 
-You can use the [Chroma CLI]() to set these as environment variables: `chroma db connect [DB-NAME] --env-file`.
+You can use the [Chroma CLI](https://docs.trychroma.com/docs/cli/db) to set these as environment variables: `chroma db connect [DB-NAME] --env-file`.
 
 ```typescript
 import { ChromaVector } from '@mastra/chroma';
