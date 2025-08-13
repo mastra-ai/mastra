@@ -4,6 +4,7 @@ import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV1 } from '../../memory';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../message-list';
+import type { AIV4Type } from './types';
 import { MessageList } from './index';
 
 type VercelUIMessage = Message;
@@ -14,6 +15,60 @@ const resourceId = `user`;
 
 describe('MessageList', () => {
   describe('add message', () => {
+    it('should skip over system messages that are retrieved from the db', async () => {
+      // this is to fix a bug detailed in https://github.com/mastra-ai/mastra/issues/6689
+      // in the past we accidentally introduced a bug where system messages were saved in memory unintentionally.
+      // so the fix is to skip any system messages with a message source of memory
+      // memory source means it was retrieved from the db via memory
+
+      const list = new MessageList().add(
+        {
+          id: 'one',
+          role: 'system',
+          content: 'test',
+          createdAt: new Date(),
+          resourceId,
+          threadId,
+          type: 'text',
+        } satisfies MastraMessageV1,
+        'memory',
+      );
+
+      expect(list.get.all.aiV4.core()).toHaveLength(0);
+      expect(list.get.all.aiV4.ui()).toHaveLength(0);
+      expect(list.get.all.aiV5.model()).toHaveLength(0);
+      expect(list.get.all.aiV5.ui()).toHaveLength(0);
+      expect(list.get.all.v1()).toHaveLength(0);
+      expect(list.get.all.v2()).toHaveLength(0);
+      expect(list.get.all.v3()).toHaveLength(0);
+
+      list.add(
+        {
+          id: 'one',
+          role: 'user',
+          content: '',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+        } satisfies AIV4Type.Message,
+        'memory',
+      );
+
+      list.addSystem(`test system message`, `memory`);
+
+      expect(list.get.all.aiV4.core()).toHaveLength(1);
+      expect(list.get.all.aiV4.ui()).toHaveLength(1);
+      expect(list.get.all.aiV5.model()).toHaveLength(1);
+      expect(list.get.all.aiV5.ui()).toHaveLength(1);
+      expect(list.get.all.v1()).toHaveLength(1);
+      expect(list.get.all.v2()).toHaveLength(1);
+      expect(list.get.all.v3()).toHaveLength(1);
+
+      expect(list.getSystemMessages(`memory`)).toHaveLength(1);
+      expect(list.get.all.aiV4.prompt()).toHaveLength(2); // system message + user message
+      expect(list.get.all.aiV4.llmPrompt()).toHaveLength(2); // system message + user message
+      expect(list.get.all.aiV5.prompt()).toHaveLength(2); // system message + user message
+      expect(list.get.all.aiV5.llmPrompt()).toHaveLength(2); // system message + user message
+    });
+
     it('should correctly convert and add a Vercel UIMessage', () => {
       const input = {
         id: 'ui-msg-1',

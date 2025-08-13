@@ -648,9 +648,14 @@ export class MessageList {
       });
     }
 
-    if (message.role === `system` && (MessageList.isAIV4CoreMessage(message) || MessageList.isAIV5CoreMessage(message)))
-      return this.addSystem(message);
     if (message.role === `system`) {
+      // In the past system messages were accidentally stored in the db. these should be ignored because memory is not supposed to store system messages.
+      if (messageSource === `memory`) return null;
+
+      if (MessageList.isAIV4CoreMessage(message) || MessageList.isAIV5CoreMessage(message))
+        return this.addSystem(message);
+
+      // if we didn't add the message and we didn't ignore this intentionally, then it's a problem!
       throw new MastraError({
         id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
         domain: ErrorDomain.AGENT,
