@@ -76,7 +76,7 @@ It offers efficient vector search with metadata filtering and hybrid search capa
 
 ## Running a Chroma Server
 
-If you are a Chroma Cloud user, simply provide the `ChromaVector` constructor you API key, tenant, and database name.
+If you are a Chroma Cloud user, simply provide the `ChromaVector` constructor your API key, tenant, and database name.
 
 When you install the `@mastra/chroma` package, you get access to the [Chroma CLI](https://docs.trychroma.com/docs/cli/db), which can set these as environment variables for you: `chroma db connect [DB-NAME] --env-file`.
 
@@ -122,7 +122,7 @@ Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS *
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index to create",
+      description: "Name of the index to fork",
     },
     {
       name: "newIndexName",
@@ -180,7 +180,7 @@ Query an index using a `queryVector`. Returns an array of semantically similar r
   metadata?: Record<string, string | number | boolean>;
   embedding?: number[]
 }
-````
+```
 
 You can also provide the shape of your metadata to a `query` call for type inference: `query<T>()`.
 

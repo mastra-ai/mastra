@@ -156,7 +156,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     });
 
     // Running Chroma locally
-    // const store = new ChromaVector();
+    const store = new ChromaVector();
 
     // Running on Chroma Cloud
     const store = new ChromaVector({
@@ -165,7 +165,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       database: process.env.CHROMA_DATABASE
     });
 
-    await chroma.createIndex({
+    await store.createIndex({
       indexName: 'test_collection',
       dimension: 1536,
     });

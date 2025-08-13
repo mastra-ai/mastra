@@ -35,7 +35,7 @@ This example demonstrates how to store embeddings in [Chroma](https://docs.trych
    cp .env.example .env
    ```
 
-   Then edit `.env` and add your OpenAI API:
+   Then edit `.env` and add your OpenAI API key:
 
    ```env
    OPENAI_API_KEY=sk-your-api-key-here
