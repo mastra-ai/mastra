@@ -597,7 +597,7 @@ export class MessageList {
       this.cleanV3Metadata(
         this.messages.filter(m => this.newUserMessages.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: () => this.messages,
+    v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
     v1: () => convertToV1Messages(this.input.v2()),
 
     aiV5: {
