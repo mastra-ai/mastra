@@ -24,7 +24,7 @@ describe('MessageList', () => {
         experimental_attachments: [],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(input, 'input');
 
       const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
@@ -52,7 +52,7 @@ describe('MessageList', () => {
       const list = new MessageList({
         threadId,
         resourceId,
-      }).add(input, 'user');
+      }).add(input, 'input');
 
       const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
@@ -80,7 +80,7 @@ describe('MessageList', () => {
 
       const initialMessages = [messageOne, messageTwo];
 
-      const list = new MessageList().add(initialMessages[0], 'user').add(initialMessages[1], 'response');
+      const list = new MessageList().add(initialMessages[0], 'input').add(initialMessages[1], 'response');
 
       const messageThree = {
         role: 'tool',
@@ -240,7 +240,7 @@ describe('MessageList', () => {
 
       // Add messages as they would arrive from the AI SDK
       const list = new MessageList()
-        .add(userMessage, 'user')
+        .add(userMessage, 'input')
         .add(toolCallMessage, 'response')
         .add(toolResultMessage, 'response');
 
@@ -359,7 +359,7 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'input');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -391,7 +391,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -502,7 +502,7 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'user').get.all.v2()).toEqual(
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.v2()).toEqual(
         expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
 
@@ -511,10 +511,10 @@ describe('MessageList', () => {
 
       // msg1
       messages = appendClientMessage({ messages, message: msg1 });
-      expect(new MessageList().add(messages, 'user').get.all.ui()).toEqual(
+      expect(new MessageList().add(messages, 'input').get.all.ui()).toEqual(
         messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
-      list.add(messages, 'user');
+      list.add(messages, 'input');
       expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg2
@@ -565,7 +565,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -599,7 +599,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -673,7 +673,7 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'input');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -932,7 +932,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -972,7 +972,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(input, 'input');
 
       const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
@@ -1013,7 +1013,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(input, 'input');
 
       const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
@@ -1235,7 +1235,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -1754,7 +1754,7 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
-      const newUIMessages4 = list.add(newClientMessage, 'user').get.all.ui();
+      const newUIMessages4 = list.add(newClientMessage, 'input').get.all.ui();
       expect(newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) }))).toEqual(
         newUIMessages3.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
@@ -1857,7 +1857,7 @@ describe('MessageList', () => {
 
       it('should handle system messages added amidst other messages', () => {
         const list = new MessageList({ threadId, resourceId });
-        list.add({ role: 'user', content: 'Hello' }, 'user');
+        list.add({ role: 'user', content: 'Hello' }, 'input');
         list.add({ role: 'system', content: 'System setup complete.' }, 'system');
         list.add({ role: 'assistant', content: 'Hi there!' }, 'response');
         list.add({ role: 'system', content: 'Another system note.' }, 'system');
@@ -2179,7 +2179,7 @@ describe('MessageList', () => {
         ],
       };
 
-      list.add(userMessage, 'user');
+      list.add(userMessage, 'input');
       list.add(assistantMessageWithOrphanedCall, 'response');
 
       const coreMessages = list.get.all.core();
@@ -2238,7 +2238,7 @@ describe('MessageList', () => {
       };
 
       // This should work fine and the content should remain as a string
-      expect(() => list.add(messageWithStringContent, 'user')).not.toThrow();
+      expect(() => list.add(messageWithStringContent, 'input')).not.toThrow();
 
       // Verify the content remains as a JSON string (not parsed back to object)
       const messages = list.get.all.v2();
@@ -2257,7 +2257,7 @@ describe('MessageList', () => {
       };
 
       // This should work and the content should remain as a string
-      expect(() => list.add(messageWithJSONString, 'user')).not.toThrow();
+      expect(() => list.add(messageWithJSONString, 'input')).not.toThrow();
 
       // The content should stay as a string, not be parsed to an object
       const messages = list.get.all.v2();
@@ -2646,7 +2646,7 @@ describe('MessageList', () => {
           resourceId,
         };
 
-        const list = new MessageList({ threadId, resourceId }).add(v2Message, 'user');
+        const list = new MessageList({ threadId, resourceId }).add(v2Message, 'input');
         const messages = list.get.all.v2();
 
         expect(messages.length).toBe(1);
@@ -2697,7 +2697,7 @@ describe('MessageList', () => {
           metadata,
         };
 
-        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
@@ -2718,7 +2718,7 @@ describe('MessageList', () => {
           metadata: { preserved: true },
         } as UIMessageWithMetadata & { context: string; customField: string };
 
-        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
@@ -2737,7 +2737,7 @@ describe('MessageList', () => {
           createdAt: new Date(),
         };
 
-        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
@@ -2754,7 +2754,7 @@ describe('MessageList', () => {
           metadata: {},
         };
 
-        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'input');
         const v2Messages = list.get.all.v2();
 
         expect(v2Messages.length).toBe(1);
@@ -2780,8 +2780,8 @@ describe('MessageList', () => {
           metadata: undefined,
         };
 
-        const list1 = new MessageList({ threadId, resourceId }).add(uiMessageNull, 'user');
-        const list2 = new MessageList({ threadId, resourceId }).add(uiMessageUndefined, 'user');
+        const list1 = new MessageList({ threadId, resourceId }).add(uiMessageNull, 'input');
+        const list2 = new MessageList({ threadId, resourceId }).add(uiMessageUndefined, 'input');
 
         expect(list1.get.all.v2()[0].content.metadata).toBeUndefined();
         expect(list2.get.all.v2()[0].content.metadata).toBeUndefined();
@@ -2830,7 +2830,7 @@ describe('MessageList', () => {
         const list = new MessageList({ threadId, resourceId });
 
         // Add user message (like what happens in agent.__primitive)
-        list.add(userMessage, 'user');
+        list.add(userMessage, 'input');
 
         // Simulate assistant response
         const assistantResponse = {
@@ -2877,7 +2877,7 @@ describe('MessageList', () => {
         };
 
         const list = new MessageList({ threadId: 'onlook-thread', resourceId: 'onlook-project' });
-        list.add(onlookMessage, 'user');
+        list.add(onlookMessage, 'input');
 
         // Verify it's saved correctly as v2
         const v2Messages = list.get.all.v2();
@@ -2921,7 +2921,7 @@ describe('MessageList', () => {
         },
       ];
 
-      messageList.add(messagesWithMetadata[0], 'user');
+      messageList.add(messagesWithMetadata[0], 'input');
       messageList.add(messagesWithMetadata[1], 'response');
 
       // Get messages in v2 format (what would be saved to memory)

@@ -1035,7 +1035,7 @@ export class MessageList {
     } else if (messageSource === `response`) {
       this.newResponseMessages.add(messageV2);
       this.newResponseMessagesPersisted.add(messageV2);
-    } else if (messageSource === `user`) {
+    } else if (messageSource === `input`) {
       this.newUserMessages.add(messageV2);
       this.newUserMessagesPersisted.add(messageV2);
     } else if (messageSource === `context`) {
