@@ -1,3 +1,4 @@
+import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -18,7 +19,6 @@ import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
 import type { CoreTool, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
-import type { FlexibleSchema, ToolCallOptions, ToolExecuteFunction } from '@ai-sdk/provider-utils-v5';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
