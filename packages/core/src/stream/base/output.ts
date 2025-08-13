@@ -230,17 +230,17 @@ export class MastraModelOutput extends MastraBase {
                 let onFinishPayload: any = {};
 
                 messageList.add(chunk.payload.messages.all, 'response');
+
                 if (model.version === 'v2') {
                   onFinishPayload = {
                     text: baseFinishStep.text,
                     warnings: baseFinishStep.warnings ?? [],
                     finishReason: chunk.payload.stepResult.reason,
-                    content:
-                      transformResponse({
-                        response: { ...this.response, messages: messageList.get.response.v2() },
-                        isMessages: true,
-                        runId: chunk.runId,
-                      }),
+                    content: transformResponse({
+                      response: { ...this.response, messages: messageList.get.response.v2() },
+                      isMessages: true,
+                      runId: chunk.runId,
+                    }),
                     request: this.request,
                     reasoning: this.aisdk.v5.reasoning,
                     reasoningText: !this.aisdk.v5.reasoningText ? undefined : this.aisdk.v5.reasoningText,
@@ -274,30 +274,30 @@ export class MastraModelOutput extends MastraBase {
                 options.rootSpan.setAttributes({
                   ...(baseFinishStep?.usage.reasoningTokens
                     ? {
-                      'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
-                    }
+                        'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
+                      }
                     : {}),
 
                   ...(baseFinishStep?.usage.totalTokens
                     ? {
-                      'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
-                    }
+                        'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
+                      }
                     : {}),
 
                   ...(baseFinishStep?.usage.inputTokens
                     ? {
-                      'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
-                    }
+                        'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
+                      }
                     : {}),
                   ...(baseFinishStep?.usage.outputTokens
                     ? {
-                      'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
-                    }
+                        'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
+                      }
                     : {}),
                   ...(baseFinishStep?.usage.cachedInputTokens
                     ? {
-                      'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
-                    }
+                        'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
+                      }
                     : {}),
 
                   ...(baseFinishStep?.providerMetadata
@@ -311,15 +311,15 @@ export class MastraModelOutput extends MastraBase {
                     : {}),
                   ...(baseFinishStep?.toolCalls && options?.experimental_telemetry?.recordOutputs !== false
                     ? {
-                      'stream.response.toolCalls': JSON.stringify(
-                        baseFinishStep?.toolCalls?.map(chunk => {
-                          return {
-                            type: chunk.type,
-                            ...chunk.payload,
-                          };
-                        }),
-                      ),
-                    }
+                        'stream.response.toolCalls': JSON.stringify(
+                          baseFinishStep?.toolCalls?.map(chunk => {
+                            return {
+                              type: chunk.type,
+                              ...chunk.payload,
+                            };
+                          }),
+                        ),
+                      }
                     : {}),
                 });
 
