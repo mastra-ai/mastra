@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSampleMessageV1, createSampleMessageV2 } from './data';
 import { resetRole, createSampleThread } from './data';
 import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
@@ -486,19 +486,26 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
     });
 
     it('should throw if threadId is an empty string or whitespace only', async () => {
-      await expect(storage.getMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+      // intercept calls to the Error constructor
+      const originalError = global.Error;
+      const errorSpy = vi.fn().mockImplementation((...args) => new originalError(...args));
+      global.Error = errorSpy as any;
 
-      await expect(storage.getMessagesPaginated({ threadId: '' })).rejects.toThrowError(
-        'threadId must be a non-empty string',
-      );
+      expect((await storage.getMessagesPaginated({ threadId: '' })).messages).toHaveLength(0);
+      expect(errorSpy.mock.calls).toMatchObject([
+        ['threadId must be a non-empty string'],
+        ['Error: threadId must be a non-empty string'],
+      ]);
+      errorSpy.mockClear();
 
-      await expect(storage.getMessages({ threadId: '   ' })).rejects.toThrowError(
-        'threadId must be a non-empty string',
-      );
+      expect((await storage.getMessagesPaginated({ threadId: '   ' })).messages).toHaveLength(0);
+      expect(errorSpy.mock.calls).toMatchObject([
+        ['threadId must be a non-empty string'],
+        ['Error: threadId must be a non-empty string'],
+      ]);
+      errorSpy.mockClear();
 
-      await expect(storage.getMessagesPaginated({ threadId: '   ' })).rejects.toThrowError(
-        'threadId must be a non-empty string',
-      );
+      global.Error = originalError;
     });
   });
 }

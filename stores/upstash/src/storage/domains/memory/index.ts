@@ -456,13 +456,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    const threadMessagesKey = getThreadMessagesKey(threadId);
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
+      const threadMessagesKey = getThreadMessagesKey(threadId);
       const allMessageIds = await this.client.zrange(threadMessagesKey, 0, -1);
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
 
@@ -549,6 +550,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
           },
         },
         error,
@@ -561,9 +563,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format } = args;
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
+    const { threadId, resourceId, selectBy, format } = args;
     const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
@@ -571,8 +571,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const messages: (MastraMessageV2 | MastraMessageV1)[] = [];
 
     try {
-      const includedMessages = await this._getIncludedMessages(threadId, selectBy);
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
+      const includedMessages = await this._getIncludedMessages(threadId, selectBy);
       messages.push(...includedMessages);
 
       const allMessageIds = await this.client.zrange(
@@ -642,6 +643,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
           },
         },
         error,

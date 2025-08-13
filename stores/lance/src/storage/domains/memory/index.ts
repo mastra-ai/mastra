@@ -194,9 +194,9 @@ export class StoreMemoryLance extends MemoryStorage {
     format,
     threadConfig,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       if (threadConfig) {
         throw new Error('ThreadConfig is not supported by LanceDB storage');
       }
@@ -269,6 +269,10 @@ export class StoreMemoryLance extends MemoryStorage {
           id: 'LANCE_STORE_GET_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
@@ -470,12 +474,13 @@ export class StoreMemoryLance extends MemoryStorage {
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    const page = selectBy?.pagination?.page ?? 0;
+    const perPage = selectBy?.pagination?.perPage ?? 10;
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       // Extract pagination and dateRange from selectBy.pagination
-      const page = selectBy?.pagination?.page ?? 0;
-      const perPage = selectBy?.pagination?.perPage ?? 10;
       const dateRange = selectBy?.pagination?.dateRange;
       const fromDate = dateRange?.start;
       const toDate = dateRange?.end;
@@ -614,14 +619,21 @@ export class StoreMemoryLance extends MemoryStorage {
         hasMore: total > (page + 1) * perPage,
       };
     } catch (error: any) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'LANCE_STORE_GET_MESSAGES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 

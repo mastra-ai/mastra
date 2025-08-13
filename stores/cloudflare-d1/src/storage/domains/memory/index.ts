@@ -601,11 +601,12 @@ export class MemoryStorageD1 extends MemoryStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
       const limit = resolveMessageLimit({
         last: selectBy?.last,
@@ -671,7 +672,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           text: `Failed to retrieve messages for thread ${threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );
@@ -683,13 +684,12 @@ export class MemoryStorageD1 extends MemoryStorage {
 
   public async getMessagesPaginated({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
     PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
   > {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
     const { dateRange, page = 0, perPage: perPageInput } = selectBy?.pagination || {};
     const { start: fromDate, end: toDate } = dateRange || {};
     const perPage =
@@ -699,6 +699,8 @@ export class MemoryStorageD1 extends MemoryStorage {
     const messages: any[] = [];
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       if (selectBy?.include?.length) {
         const includeResult = await this._getIncludedMessages(threadId, selectBy);
         if (Array.isArray(includeResult)) messages.push(...includeResult);
@@ -812,7 +814,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           text: `Failed to retrieve messages for thread ${threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );

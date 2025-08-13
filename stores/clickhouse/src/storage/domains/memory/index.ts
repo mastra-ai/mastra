@@ -668,14 +668,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   async getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format = 'v1' } = args;
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    const page = selectBy?.pagination?.page || 0;
+    const perPageInput = selectBy?.pagination?.perPage;
+    const perPage =
+      perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 20 });
 
     try {
-      const page = selectBy?.pagination?.page || 0;
-      const perPageInput = selectBy?.pagination?.perPage;
-      const perPage =
-        perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 20 });
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
       const offset = page * perPage;
       const dateRange = selectBy?.pagination?.dateRange;
       const fromDate = dateRange?.start;
@@ -863,14 +863,21 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore: offset + perPage < total,
       };
     } catch (error: any) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
   }
 

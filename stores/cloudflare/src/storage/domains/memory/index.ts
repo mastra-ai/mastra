@@ -719,8 +719,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     console.log(`getMessages called with format: ${format}, threadId: ${threadId}`);
-    // Ensure threadId is provided
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
     // Default to v1 format if not specified
     const actualFormat = format || 'v1';
@@ -731,6 +729,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     if (limit === 0 && !selectBy?.include?.length) return [];
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       // Get included messages and recent messages in parallel
       await Promise.all([
         selectBy?.include?.length
@@ -808,6 +808,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           text: `Error retrieving messages for thread ${threadId}`,
           details: {
             threadId,
+            resourceId: resourceId ?? '',
           },
         },
         error,
@@ -821,11 +822,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   async getMessagesPaginated(
     args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format = 'v1' } = args;
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+    const { threadId, resourceId, selectBy, format = 'v1' } = args;
+    const { page = 0, perPage = 100 } = selectBy?.pagination || {};
 
     try {
-      const { page = 0, perPage = 100 } = selectBy?.pagination || {};
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
       // Get all messages for the thread
       const messages =
@@ -858,15 +859,22 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         messages: paginatedMessages as MastraMessageV1[] | MastraMessageV2[],
       };
     } catch (error) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to get messages with pagination',
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { messages: [], total: 0, page, perPage: perPage || 40, hasMore: false };
     }
   }
 
