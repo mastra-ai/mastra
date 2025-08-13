@@ -12,3 +12,15 @@ export const llmIterationOutputSchema = z.object({
   metadata: z.any(),
   stepResult: z.any().optional(),
 });
+
+export const toolCallInputSchema = z.object({
+  toolCallId: z.string(),
+  toolName: z.string(),
+  args: z.any(),
+  providerMetadata: z.any(),
+});
+
+export const toolCallOutputSchema = toolCallInputSchema.extend({
+  result: z.any(),
+  error: z.any().optional(),
+});
