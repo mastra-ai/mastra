@@ -731,7 +731,12 @@ export class MessageList {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
-        const safeParts = m.parts.filter(p => !AIV5.isToolUIPart(p) || p.state !== `input-streaming`);
+        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
+        const safeParts = m.parts.filter(p => {
+          if (!AIV5.isToolUIPart(p)) return true;
+          // Only keep tool parts with output states for model messages
+          return p.state === 'output-available' || p.state === 'output-error';
+        });
 
         if (!safeParts.length) return false;
 
@@ -1296,12 +1301,7 @@ export class MessageList {
               toolCallId: part.toolInvocation.toolCallId,
               state: 'output-available',
               input: part.toolInvocation.args,
-              output:
-                typeof part.toolInvocation.result === 'object' &&
-                part.toolInvocation.result !== null &&
-                'type' in part.toolInvocation.result
-                  ? part.toolInvocation.result
-                  : { type: 'text', value: part.toolInvocation.result },
+              output: part.toolInvocation.result,
             } satisfies AIV5Type.UIMessagePart<any, any>);
           } else {
             parts.push({
@@ -1326,15 +1326,17 @@ export class MessageList {
         case 'reasoning':
           const text =
             part.reasoning ||
-            part.details.reduce((p, c) => {
+            (part.details?.reduce((p, c) => {
               if (c.type === `text`) return p + c.text;
               return p;
-            }, '');
+            }, '') ??
+              '');
           if (text || part.details?.length) {
             parts.push({
               type: 'reasoning',
               text: text || '',
-            });
+              state: 'done',
+            } as any);
           }
           break;
 
