@@ -484,31 +484,6 @@ export class MessageList {
     );
   }
 
-  private aiV5ModelMessagesToAIV4CoreMessages(
-    messages: AIV5Type.ModelMessage[],
-    messageSource: MessageSource,
-  ): AIV4Type.CoreMessage[] {
-    const v3 = messages.map(msg => this.aiV5ModelMessageToMastraMessageV3(msg, messageSource));
-    const v2 = v3.map(MessageList.mastraMessageV3ToV2);
-    const ui = v2.map(MessageList.mastraMessageV2ToAIV4UIMessage);
-    const core = this.aiV4UIMessagesToAIV4CoreMessages(ui);
-    return core;
-  }
-
-  private aiV4CoreMessagesToAIV5ModelMessages(
-    messages: AIV4Type.CoreMessage[],
-    source: MessageSource,
-  ): AIV5Type.ModelMessage[] {
-    // kinda janky but we can pipe from v5model->mastra3->mastra2->v4ui->v4core to convert our v5 messages to v4 messages
-    // TODO: probably a good idea to make a direct v4->v5 converter
-    return this.aiV5UIMessagesToAIV5ModelMessages(
-      messages
-        .map(m => this.aiV4CoreMessageToMastraMessageV2(m, source))
-        .map(m => this.mastraMessageV2ToMastraMessageV3(m))
-        .map(m => MessageList.mastraMessageV3ToAIV5UIMessage(m)),
-    );
-  }
-
   private static mastraMessageV2ToAIV4UIMessage(m: MastraMessageV2): UIMessageWithMetadata {
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
@@ -526,7 +501,6 @@ export class MessageList {
           }, '');
 
     const parts: MastraMessageContentV2['parts'] = [];
-    const toolInvocations: AIV4Type.UIMessage['toolInvocations'] = [];
 
     if (m.content.parts.length) {
       for (const part of m.content.parts) {
@@ -568,23 +542,11 @@ export class MessageList {
               type: 'tool-invocation',
               toolInvocation: preparedInvocation,
             });
-
-            if (part.toolInvocation.state === 'result') {
-              // Exclude the step field when adding to toolInvocations array
-              const { step, ...invocationWithoutStep } = preparedInvocation;
-              toolInvocations.push(invocationWithoutStep);
-            }
           } else {
             parts.push({
               type: 'tool-invocation',
               toolInvocation,
             });
-            // Also add to toolInvocations array if it's a result
-            if (part.toolInvocation.state === 'result') {
-              // Exclude the step field if it exists
-              const { step, ...invocationWithoutStep } = toolInvocation;
-              toolInvocations.push(invocationWithoutStep);
-            }
           }
         } else {
           parts.push(part);
@@ -2377,5 +2339,30 @@ export class MessageList {
       metadata,
       parts: filteredParts,
     };
+  }
+
+  private aiV5ModelMessagesToAIV4CoreMessages(
+    messages: AIV5Type.ModelMessage[],
+    messageSource: MessageSource,
+  ): AIV4Type.CoreMessage[] {
+    const v3 = messages.map(msg => this.aiV5ModelMessageToMastraMessageV3(msg, messageSource));
+    const v2 = v3.map(MessageList.mastraMessageV3ToV2);
+    const ui = v2.map(MessageList.mastraMessageV2ToAIV4UIMessage);
+    const core = this.aiV4UIMessagesToAIV4CoreMessages(ui);
+    return core;
+  }
+
+  private aiV4CoreMessagesToAIV5ModelMessages(
+    messages: AIV4Type.CoreMessage[],
+    source: MessageSource,
+  ): AIV5Type.ModelMessage[] {
+    // kinda janky but we can pipe from v5model->mastra3->mastra2->v4ui->v4core to convert our v5 messages to v4 messages
+    // TODO: probably a good idea to make a direct v4->v5 converter
+    return this.aiV5UIMessagesToAIV5ModelMessages(
+      messages
+        .map(m => this.aiV4CoreMessageToMastraMessageV2(m, source))
+        .map(m => this.mastraMessageV2ToMastraMessageV3(m))
+        .map(m => MessageList.mastraMessageV3ToAIV5UIMessage(m)),
+    );
   }
 }
