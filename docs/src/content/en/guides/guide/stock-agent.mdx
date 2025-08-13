@@ -26,9 +26,9 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 
 ### Define the Agent
 
-Create a new file `src/agents/stockAgent.ts` and define your agent:
+Create a new file `src/mastra/agents/stockAgent.ts` and define your agent:
 
-```ts copy filename="src/agents/stockAgent.ts"
+```ts copy filename="src/mastra/agents/stockAgent.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
  
@@ -63,9 +63,9 @@ So far the Stock Agent doesn't know anything about the current stock prices. To 
 
 ### Define the Tool
 
-Create a new file `src/tools/stockPrices.ts`. Inside, add a `stockPrices` tool that will fetch the last day's closing stock price for a given symbol:
+Create a new file `src/mastra/tools/stockPrices.ts`. Inside, add a `stockPrices` tool that will fetch the last day's closing stock price for a given symbol:
 
-```ts filename="src/tools/stockPrices.ts"
+```ts filename="src/mastra/tools/stockPrices.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -94,9 +94,9 @@ export const stockPrices = createTool({
 
 ### Add the Tool to the Stock Agent
 
-Inside `src/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
+Inside `src/mastra/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
 
-```ts copy filename="src/agents/stockAgent.ts" {3, 10-12}
+```ts copy filename="src/mastra/agents/stockAgent.ts" {3, 10-12}
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
