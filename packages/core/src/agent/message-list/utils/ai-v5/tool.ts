@@ -11,7 +11,7 @@
  * @param type - The tool type string from AI SDK v5
  * @returns The tool name or 'dynamic-tool' if it's a dynamic tool
  */
-export function getToolName(type: string | { type: string } | any): string {
+export function getToolName(type: string | { type: string }): string {
   // Handle objects with type property
   if (typeof type === 'object' && type && 'type' in type) {
     type = type.type;
