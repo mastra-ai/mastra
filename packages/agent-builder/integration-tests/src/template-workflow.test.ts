@@ -87,11 +87,11 @@ describe('Template Workflow Integration Tests', () => {
     }
 
     // Cleanup temp directory
-    // try {
-    //   rmSync(tempRoot, { recursive: true, force: true });
-    // } catch {
-    //   // Ignore cleanup errors
-    // }
+    try {
+      rmSync(tempRoot, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   it.only('should merge csv-to-questions template and validate functionality', async () => {
@@ -136,7 +136,7 @@ describe('Template Workflow Integration Tests', () => {
     // Verify expected template files were created
     const expectedPaths = [
       'src/mastra/agents/csvQuestionAgent.ts',
-      'src/mastra/tools/csvTool.ts',
+      'src/mastra/tools/csvFetcherTool.ts',
       'src/mastra/workflows/csvToQuestionsWorkflow.ts',
     ];
 

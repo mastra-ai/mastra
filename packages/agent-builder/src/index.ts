@@ -3440,6 +3440,7 @@ const intelligentMergeStep = createStep({
       }),
     ),
     error: z.string().optional(),
+    branchName: z.string().optional(),
   }),
   execute: async ({ inputData }) => {
     console.log('Intelligent merge step starting...');
@@ -3681,104 +3682,6 @@ Start by listing your tasks and work through them systematically!
     }
   },
 });
-
-// export const packageUpdaterStep = createStep({
-//   id: 'package-updater-step',
-//   description: 'Updates packages using a specialized agent with package management tools',
-//   inputSchema: z.object({
-//     projectPath: z.string().optional().describe('Path to the project to update'),
-//     packageJson: z.object({
-//       dependencies: z.record(z.string()).optional(),
-//       devDependencies: z.record(z.string()).optional(),
-//       peerDependencies: z.record(z.string()).optional(),
-//       scripts: z.record(z.string()).optional(),
-//       packageInfo: z.object({
-//         name: z.string().optional(),
-//         version: z.string().optional(),
-//         description: z.string().optional(),
-//       }),
-//     }),
-//   }),
-//   outputSchema: z.object({
-//     success: z.boolean(),
-//     message: z.string(),
-//     upgraded: z.array(z.string()).optional(),
-//     details: z.string().optional(),
-//   }),
-//   execute: async ({ inputData }) => {
-//     console.log('Package updater step...');
-//     const { projectPath, packageJson } = inputData;
-//     console.log('Package JSON', JSON.stringify(packageJson, null, 2));
-//     try {
-//       const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(projectPath);
-
-//       const packageManagementAgent = new Agent({
-//         name: 'package-manager',
-//         description: 'Specialized agent for package management operations',
-//         instructions: `You are a package management specialist. Your sole purpose is to update packages in projects.
-
-// When asked to update packages:
-// 1. Use the manageProject tool with action "upgrade"
-// 2. If specific packages are provided, update only those packages
-// 3. If no specific packages are provided, update all packages
-// 4. Always provide clear feedback about what was updated
-
-// Package Dependencies from Template:
-// - Dependencies: ${JSON.stringify(packageJson.dependencies || {}, null, 2)}
-// - Dev Dependencies: ${JSON.stringify(packageJson.devDependencies || {}, null, 2)}
-// - Peer Dependencies: ${JSON.stringify(packageJson.peerDependencies || {}, null, 2)}
-// - Scripts: ${JSON.stringify(packageJson.scripts || {}, null, 2)}
-// - Package Info: ${JSON.stringify(packageJson.packageInfo || {}, null, 2)}
-
-// Be concise and focused only on package management tasks.`,
-//         model: openai('gpt-4o-mini'),
-//         tools: {
-//           manageProject: allTools.manageProject,
-//           validateCode: allTools.validateCode,
-//         },
-//       });
-
-//       // Create a message for the package management agent
-//       let message: string;
-//       if (packageJson.dependencies && Object.keys(packageJson.dependencies).length > 0) {
-//         const packageList = Object.keys(packageJson.dependencies).join(', ');
-//         message = `Please update the following packages: ${packageList}`;
-//       } else {
-//         message = 'Please update all packages in the project to their latest versions';
-//       }
-
-//       // Call the agent to handle the package update
-//       const result = await packageManagementAgent.stream(message);
-
-//       // let buffer = []
-//       const chunks: any[] = [];
-
-//       for await (const chunk of result.fullStream) {
-//         if (chunk.type === 'text-delta' || chunk.type === 'reasoning' || chunk.type === 'tool-result') {
-//           // buffer.push(chunk.textDelta);
-//           console.log(JSON.stringify(chunk, null, 2));
-//           chunks.push(chunk);
-//           // if (buffer.length > 20) {
-//           //   console.log(buffer.join(''));
-//           //   buffer = [];
-//         }
-//       }
-
-//       return {
-//         success: true,
-//         message: `Package update completed.`,
-//         upgraded: Object.keys(packageJson.dependencies || {}),
-//         details: chunks.map(c => c.textDelta).join(''),
-//       };
-//     } catch (error) {
-//       console.error('Package update failed:', error);
-//       return {
-//         success: false,
-//         message: `Package update failed: ${error instanceof Error ? error.message : String(error)}`,
-//       };
-//     }
-//   },
-// });
 
 // Step 6: Programmatic File Copy Step - copies template files to target project
 const programmaticFileCopyStep = createStep({
@@ -4320,13 +4223,14 @@ export const mergeTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const initData = getInitData();
     const validationResult = getStepResult(validationAndFixStep);
+    const intelligentMergeResult = getStepResult(intelligentMergeStep);
     return {
       success: validationResult.success,
       applied: validationResult.applied,
       message: validationResult.message,
       validationResults: validationResult.validationResults,
       error: validationResult.error,
-      branchName: initData.branch,
+      branchName: intelligentMergeResult.branchName,
     };
   })
   .commit();
