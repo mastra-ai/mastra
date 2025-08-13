@@ -1,10 +1,10 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2 } from '../agent/types';
 import { MastraError } from '../error';
-import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
+import type { StorageThreadType, MemoryConfig, MastraMessageV1, MastraMessageV3 } from '../memory';
 import { MastraMemory } from '../memory/memory';
 import { RuntimeContext } from '../runtime-context';
 import type { StorageGetMessagesArg, PaginationInfo, ThreadSortOptions } from '../storage';
@@ -56,20 +56,41 @@ class MockMemory extends MastraMemory {
   }
 
   async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
+    messages:
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[]
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1' | undefined;
   }): Promise<MastraMessageV1[]>;
   async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
+    messages:
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[]
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[];
     memoryConfig?: MemoryConfig | undefined;
     format: 'v2';
   }): Promise<MastraMessageV2[]>;
   async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
+    messages:
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[]
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[];
     memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    format: 'v3';
+  }): Promise<MastraMessageV3[]>;
+  async saveMessages(args: {
+    messages:
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[]
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1' | 'v2' | 'v3';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[] | MastraMessageV3[]> {
     const { messages } = args as any;
     for (const msg of messages) {
       const existing = this.messages.get(msg.id);
@@ -182,12 +203,18 @@ function createMastraWithMemory(idGenerator?: () => string) {
   const agent = new Agent({
     name: 'testAgent',
     instructions: 'You are a test agent',
-    model: new MockLanguageModelV1({
+    model: new MockLanguageModelV2({
       doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Test response',
+        finishReason: 'stop' as const,
+        usage: {
+          promptTokens: 10,
+          completionTokens: 20,
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+        },
+        content: [{ type: 'text', text: 'Test response' }],
+        warnings: [],
       }),
     }),
     memory,
@@ -462,12 +489,11 @@ describe('Mastra ID Generator', () => {
       const agent1 = new Agent({
         name: 'agent1',
         instructions: 'You are agent 1',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Response 1',
+            content: [{ type: 'text', text: 'Response 1' }],
           }),
         }),
         memory: memory1,
@@ -477,12 +503,11 @@ describe('Mastra ID Generator', () => {
       const agent2 = new Agent({
         name: 'agent2',
         instructions: 'You are agent 2',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Response 2',
+            content: [{ type: 'text', text: 'Response 2' }],
           }),
         }),
         memory: memory2,
@@ -520,12 +545,18 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'testAgent',
         instructions: 'You are a test agent',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Test response',
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [{ type: 'text', text: 'Test response' }],
+            warnings: [],
           }),
         }),
         memory: ({ runtimeContext, mastra: mastraInstance }) => {
@@ -567,12 +598,11 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'testAgent',
         instructions: 'You are a context-aware agent',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Context-aware response',
+            content: [{ type: 'text', text: 'Context-aware response' }],
           }),
         }),
         memory: ({ runtimeContext, mastra: mastraInstance }) => {
@@ -620,12 +650,11 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'testAgent',
         instructions: 'You are a multi-context agent',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Multi-context response',
+            content: [{ type: 'text', text: 'Multi-context response' }],
           }),
         }),
         memory: ({ runtimeContext, mastra: mastraInstance }) => {
@@ -672,12 +701,18 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'testAgent',
         instructions: 'You are a test agent',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Test response',
+            finishReason: 'stop' as const,
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              inputTokens: 10,
+              outputTokens: 20,
+              totalTokens: 30,
+            },
+            content: [{ type: 'text', text: 'Test response' }],
+            warnings: [],
           }),
         }),
         memory: ({ runtimeContext, mastra: mastraInstance }) => {
@@ -768,12 +803,11 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'helpAgent',
         instructions: 'You are a helpful assistant',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'I can help you with that!',
+            content: [{ type: 'text', text: 'I can help you with that!' }],
           }),
         }),
         memory,
@@ -800,12 +834,11 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'multiUserAgent',
         instructions: 'You are a multi-user assistant',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Hello! I can help multiple users.',
+            content: [{ type: 'text', text: 'Hello! I can help multiple users.' }],
           }),
         }),
         memory,
@@ -842,12 +875,11 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'workflowAgent',
         instructions: 'You are a workflow assistant',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Workflow step completed.',
+            content: [{ type: 'text', text: 'Workflow step completed.' }],
           }),
         }),
         memory,
@@ -869,15 +901,12 @@ describe('Mastra ID Generator', () => {
         title: 'Multi-step Workflow',
       });
 
-      // Add workflow steps
+      // Add workflow steps using agent to ensure ID generator is used
       const steps = ['Initialize', 'Process', 'Validate', 'Complete'];
       for (const step of steps) {
-        await agentMemory.addMessage({
+        await agent.generate(`${step} workflow step`, {
           threadId: thread.id,
           resourceId: 'workflow-resource',
-          content: `${step} workflow step`,
-          role: 'user',
-          type: 'text',
         });
       }
 
@@ -889,12 +918,11 @@ describe('Mastra ID Generator', () => {
       const agent = new Agent({
         name: 'streamingAgent',
         instructions: 'You are a streaming assistant',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
             usage: { promptTokens: 10, completionTokens: 20 },
-            text: 'Streaming response content.',
+            content: [{ type: 'text', text: 'Streaming response content.' }],
           }),
         }),
         memory,

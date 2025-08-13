@@ -49,7 +49,7 @@ import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MCPTool } from './types';
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from './types';
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
@@ -220,7 +220,7 @@ export class MCPServer extends MCPServerBase {
           const toolSpec: any = {
             name: tool.name,
             description: tool.description,
-            inputSchema: tool.parameters.jsonSchema,
+            inputSchema: tool.inputSchema.jsonSchema,
           };
           if (tool.outputSchema) {
             toolSpec.outputSchema = tool.outputSchema.jsonSchema;
@@ -234,7 +234,7 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const startTime = Date.now();
       try {
-        const tool = this.convertedTools[request.params.name] as MCPTool;
+        const tool = this.convertedTools[request.params.name];
         if (!tool) {
           this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
           return {
@@ -243,31 +243,39 @@ export class MCPServer extends MCPServerBase {
           };
         }
 
-        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
-        if (validation && !validation.success) {
-          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
-            errors: validation.error,
-          });
+        // Validate tool input similar to executeTool method
+        let validation: any = undefined;
+        let validatedArgs = request.params.arguments ?? {};
 
-          // Format validation errors for agent understanding
-          let errorMessages = 'Validation failed';
-          if ('errors' in validation.error && Array.isArray(validation.error.errors)) {
-            errorMessages = validation.error.errors
-              .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-              .join('\n');
-          } else if (validation.error instanceof Error) {
-            errorMessages = validation.error.message;
+        // Check if inputSchema is a Zod schema
+        if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'safeParse' in tool.inputSchema) {
+          validation = (tool.inputSchema as any).safeParse(validatedArgs);
+          if (!validation.success) {
+            this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
+              errors: validation.error,
+            });
+
+            // Format validation errors for agent understanding
+            let errorMessages = 'Validation failed';
+            if (validation.error && 'errors' in validation.error && Array.isArray(validation.error.errors)) {
+              errorMessages = validation.error.errors
+                .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+                .join('\n');
+            } else if (validation.error instanceof Error) {
+              errorMessages = validation.error.message;
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(request.params.arguments, null, 2)}`,
+                },
+              ],
+              isError: true, // Set to true so the LLM sees the error and can self-correct
+            };
           }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(request.params.arguments, null, 2)}`,
-              },
-            ],
-            isError: true, // Set to true so the LLM sees the error and can self-correct
-          };
+          validatedArgs = validation.data;
         }
         if (!tool.execute) {
           this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
@@ -284,12 +292,13 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, {
+        const args = validatedArgs;
+        const result = await tool.execute(args, {
           messages: [],
           toolCallId: '',
           elicitation: sessionElicitation,
           extra,
-        });
+        } as any);
 
         this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         const duration = Date.now() - startTime;
@@ -307,8 +316,7 @@ export class MCPServer extends MCPServerBase {
             // Tool returned plain object, wrap it automatically for backward compatibility
             structuredContent = result;
           }
-
-          const outputValidation = tool.outputSchema.validate?.(structuredContent ?? {});
+          const outputValidation = await tool.outputSchema.validate?.(structuredContent ?? {});
           if (outputValidation && !outputValidation.success) {
             this.logger.warn(`CallTool: Invalid structured content for '${request.params.name}'`, {
               errors: outputValidation.error,
@@ -634,7 +642,7 @@ export class MCPServer extends MCPServerBase {
       agentTools[agentToolName] = {
         name: agentToolName,
         description: coreTool.description,
-        parameters: coreTool.parameters,
+        inputSchema: coreTool.inputSchema,
         execute: coreTool.execute!,
         toolType: 'agent',
       };
@@ -714,7 +722,7 @@ export class MCPServer extends MCPServerBase {
       workflowTools[workflowToolName] = {
         name: workflowToolName,
         description: coreTool.description,
-        parameters: coreTool.parameters,
+        inputSchema: coreTool.inputSchema,
         outputSchema: coreTool.outputSchema,
         execute: coreTool.execute!,
         toolType: 'workflow',
@@ -751,6 +759,12 @@ export class MCPServer extends MCPServerBase {
         continue;
       }
 
+      // Ensure MCP tools are properly marked as Mastra tools
+      const toolWithMastraFlag = {
+        ...toolInstance,
+        __isMastraTool: true as const,
+      };
+
       const options = {
         name: toolName,
         runtimeContext: new RuntimeContext(),
@@ -759,12 +773,12 @@ export class MCPServer extends MCPServerBase {
         description: toolInstance?.description,
       };
 
-      const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
+      const coreTool = makeCoreTool(toolWithMastraFlag, options) as InternalCoreTool;
 
       definedConvertedTools[toolName] = {
         name: toolName,
         description: coreTool.description,
-        parameters: coreTool.parameters,
+        inputSchema: coreTool.inputSchema,
         outputSchema: coreTool.outputSchema,
         execute: coreTool.execute!,
       };
@@ -1315,7 +1329,7 @@ export class MCPServer extends MCPServerBase {
         id: toolId,
         name: tool.name,
         description: tool.description,
-        inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+        inputSchema: tool.inputSchema?.jsonSchema || tool.inputSchema,
         outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
         toolType: tool.toolType,
       })),
@@ -1339,7 +1353,7 @@ export class MCPServer extends MCPServerBase {
     return {
       name: tool.name,
       description: tool.description,
-      inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+      inputSchema: tool.inputSchema?.jsonSchema || tool.inputSchema,
       outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
       toolType: tool.toolType,
     };
@@ -1368,8 +1382,8 @@ export class MCPServer extends MCPServerBase {
 
       this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
 
-      if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
-        const validation = tool.parameters.safeParse(args ?? {});
+      if (tool.inputSchema instanceof z.ZodType && typeof tool.inputSchema.safeParse === 'function') {
+        const validation = tool.inputSchema.safeParse(args ?? {});
         if (!validation.success) {
           const errorMessages = validation.error.errors
             .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)

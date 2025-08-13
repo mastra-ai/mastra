@@ -71,11 +71,14 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
+    const clientSdkCompat = c.req.header('x-ai-sdk-compat');
+
     const streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
       runtimeContext,
       networkId,
       body,
+      clientSdkCompat,
     });
 
     return streamResponse;

@@ -81,18 +81,28 @@ export function createCompletenessScorer() {
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid =
-        !run.input ||
-        run.input.inputMessages.some((i: { content: string }) => i.content === null || i.content === undefined);
+        !run.input || run.input.inputMessages.some((i: any) => i.content === null || i.content === undefined);
 
-      const isOutputInvalid =
-        !run.output || run.output.some((i: { content: string }) => i.content === null || i.content === undefined);
+      const isOutputInvalid = !run.output || run.output.some((i: any) => i.content === null || i.content === undefined);
 
       if (isInputInvalid || isOutputInvalid) {
         throw new Error('Inputs cannot be null or undefined');
       }
 
-      const input = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map(({ content }: { content: string }) => content).join(', ') || '';
+      const input =
+        run.input?.inputMessages
+          .map((message: any) => {
+            if (typeof message.content === 'string') return message.content;
+            return message.content;
+          })
+          .join(', ') || '';
+      const output =
+        run.output
+          ?.map((message: any) => {
+            if (typeof message.content === 'string') return message.content;
+            return message.content;
+          })
+          .join(', ') || '';
 
       const inputToProcess = input;
       const outputToProcess = output;

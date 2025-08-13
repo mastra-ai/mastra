@@ -14,7 +14,6 @@ import type {
   ToolCallStartEvent,
 } from '@ag-ui/client';
 import { AbstractAgent, EventType } from '@ag-ui/client';
-import type { CoreMessage } from '@mastra/core';
 import { Observable } from 'rxjs';
 import type { Agent } from '../resources/agent';
 
@@ -186,8 +185,8 @@ export function generateUUID(): string {
   });
 }
 
-export function convertMessagesToMastraMessages(messages: Message[]): CoreMessage[] {
-  const result: CoreMessage[] = [];
+export function convertMessagesToMastraMessages(messages: Message[]): any[] {
+  const result: any[] = [];
 
   // First pass: identify which tool calls already have corresponding tool messages
   const toolCallsWithResults = new Set<string>();
@@ -199,18 +198,25 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
 
   for (const message of messages) {
     if (message.role === 'assistant') {
-      const parts: any[] = message.content ? [{ type: 'text', text: message.content }] : [];
+      const content: any[] = [];
+
+      if (message.content) {
+        content.push({ type: 'text', text: message.content });
+      }
+
       for (const toolCall of message.toolCalls ?? []) {
-        parts.push({
+        content.push({
           type: 'tool-call',
           toolCallId: toolCall.id,
           toolName: toolCall.function.name,
           args: JSON.parse(toolCall.function.arguments),
         });
       }
+
+      // Always add the assistant message
       result.push({
         role: 'assistant',
-        content: parts,
+        content: content.length > 0 ? content : message.content || '',
       });
 
       // Only create automatic tool results if there are no corresponding tool messages

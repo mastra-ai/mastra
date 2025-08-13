@@ -14,8 +14,9 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
   shouldApply(): boolean {
     if (
-      !this.getModel().supportsStructuredOutputs &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
+      // !this.getModel().supportsStructuredOutputs && // <- TODO: this no longer exists, do we need it?
+      this.getModel().provider.includes(`openai`) ||
+      this.getModel().modelId.includes(`openai`)
     ) {
       return true;
     }

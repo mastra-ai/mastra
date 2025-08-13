@@ -1,4 +1,4 @@
-import type { LanguageModelV1StreamPart } from 'ai';
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 import type { RegisteredLogger } from '../../../logger';
 import { MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';
@@ -15,7 +15,7 @@ export class AISDKV4InputStream extends MastraModelInput {
     controller,
   }: {
     runId: string;
-    stream: ReadableStream<LanguageModelV1StreamPart>;
+    stream: ReadableStream<LanguageModelV2StreamPart>;
     controller: ReadableStreamDefaultController<ChunkType>;
   }) {
     // ReadableStream throws TS errors, if imported not imported. What an annoying thing.

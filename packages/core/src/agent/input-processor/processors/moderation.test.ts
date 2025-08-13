@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../message-list';
 import { TripWire } from '../../trip-wire';
@@ -64,21 +64,26 @@ function createMockModerationResult(flagged: boolean, categories: string[] = [])
   };
 }
 
-function setupMockModel(result: { object: ModerationResult } | { object: ModerationResult }[]): MockLanguageModelV1 {
+function setupMockModel(result: { object: ModerationResult } | { object: ModerationResult }[]): MockLanguageModelV2 {
   const results = Array.isArray(result) ? result : [result];
   let callCount = 0;
 
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
+  return new MockLanguageModelV2({
     doGenerate: async () => {
       const currentResult = results[callCount % results.length];
       callCount++;
 
       return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `${JSON.stringify(currentResult.object)}`,
+        finishReason: 'stop' as const,
+        usage: {
+          promptTokens: 10,
+          completionTokens: 20,
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+        },
+        content: [{ type: 'text', text: JSON.stringify(currentResult.object) }],
+        warnings: [],
       };
     },
   });
@@ -419,8 +424,7 @@ describe('ModerationInputProcessor', () => {
 
   describe('error handling', () => {
     it('should fail open when moderation agent fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
+      const model = new MockLanguageModelV2({
         doGenerate: async () => {
           throw new TripWire('Agent failed');
         },
@@ -517,13 +521,18 @@ describe('ModerationInputProcessor', () => {
 
   describe('edge cases', () => {
     it('should handle malformed moderation results gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
+      const model = new MockLanguageModelV2({
         doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'invalid json',
+          finishReason: 'stop' as const,
+          usage: {
+            promptTokens: 10,
+            completionTokens: 20,
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 30,
+          },
+          content: [{ type: 'text', text: 'invalid json' }],
+          warnings: [],
         }),
       });
       const moderator = new ModerationInputProcessor({

@@ -11,7 +11,7 @@ import type {
   streamObject,
   generateText,
   generateObject,
-  UIMessage,
+  StopCondition,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
 } from 'ai';
@@ -21,7 +21,7 @@ import type { z, ZodSchema } from 'zod';
 import type { MastraLanguageModel } from '../agent/types';
 import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
-import type { CoreTool } from '../tools/types';
+import type { ConvertedCoreTool } from '../tools/types';
 
 export type LanguageModel = MastraLanguageModel;
 
@@ -79,10 +79,18 @@ export type {
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
-type GenerateTextOptions = Parameters<typeof generateText>[0];
-type StreamTextOptions = Parameters<typeof streamText>[0];
-type GenerateObjectOptions = Parameters<typeof generateObject>[0];
-type StreamObjectOptions = Parameters<typeof streamObject>[0];
+type JSONValue = null | string | number | boolean | JSONObject | JSONArray;
+type JSONObject = {
+  [key: string]: JSONValue;
+};
+type JSONArray = JSONValue[];
+
+// without <any> there's extremely deep type recursion happening here.
+// not sure if there's a better fix than any, or if we even need one
+type GenerateTextOptions = Parameters<typeof generateText<any, any, any>>[0];
+type StreamTextOptions = Parameters<typeof streamText<any, any, any>>[0];
+type GenerateObjectOptions = Parameters<typeof generateObject<any, any, any>>[0];
+type StreamObjectOptions = Parameters<typeof streamObject<any, any, any>>[0];
 
 type MastraCustomLLMOptionsKeys =
   | 'messages'
@@ -100,18 +108,27 @@ export type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCust
 export type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOptionsKeys>;
 export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
 
+export type StopConditionArgs = {
+  // maxSteps was replaced with stopWhen. mapping it to stopWhen: stepCountIs(maxSteps) for now to make this easier on us
+  maxSteps?: number;
+  stopWhen?:
+    | ((StopCondition<any> | StopCondition<any>[]) & (StopCondition<any> | StopCondition<any>[] | undefined))
+    | undefined;
+};
+
 type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  tools?: Record<string, CoreTool>;
+  tools?: Record<string, ConvertedCoreTool>;
   onStepFinish?: (step: unknown) => Promise<void> | void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
   runtimeContext: RuntimeContext;
-} & Run;
+} & Run &
+  StopConditionArgs;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  messages: UIMessage[] | CoreMessage[];
+  messages: CoreMessage[];
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMTextOptions;
 
@@ -127,7 +144,8 @@ export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = und
   DefaultLLMStreamOptions;
 
 export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  messages: UIMessage[] | CoreMessage[];
+  messages: CoreMessage[];
+  onFinish?: (result: string) => Promise<void> | void;
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;
 

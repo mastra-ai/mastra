@@ -109,7 +109,7 @@
     "eslint": "^9.30.1",
     "memfs": "^4.17.2",
     "npm-run-all2": "^8.0.4",
-    "rollup": "^4.42.0",
+    "rollup": "^4.46.2",
     "tsup": "^8.5.0",
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",

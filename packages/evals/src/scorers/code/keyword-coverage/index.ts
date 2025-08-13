@@ -9,8 +9,20 @@ export function createKeywordCoverageScorer() {
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
   })
     .preprocess(async ({ run }) => {
-      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const input =
+        run.input?.inputMessages
+          ?.map((message: any) => {
+            if (typeof message.content === 'string') return message.content;
+            return message.content;
+          })
+          .join(', ') || '';
+      const output =
+        run.output
+          ?.map((message: any) => {
+            if (typeof message.content === 'string') return message.content;
+            return message.content;
+          })
+          .join(', ') || '';
 
       if (!input && !output) {
         return {

@@ -9,7 +9,7 @@ import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
-import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+import { MockLanguageModelV2, simulateReadableStream } from 'ai/test';
 import { $ } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7531,20 +7531,26 @@ describe('MastraInngestWorkflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Paris' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage: {
+                    completionTokens: 10,
+                    promptTokens: 3,
+                    inputTokens: 3,
+                    outputTokens: 10,
+                    totalTokens: 13,
+                  },
                 },
               ],
             }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         }),
       });
@@ -7552,20 +7558,26 @@ describe('MastraInngestWorkflow', () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
-                { type: 'text-delta', textDelta: 'London' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'London' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
+                  usage: {
+                    completionTokens: 10,
+                    promptTokens: 3,
+                    inputTokens: 3,
+                    outputTokens: 10,
+                    totalTokens: 13,
+                  },
                 },
               ],
             }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
           }),
         }),
       });

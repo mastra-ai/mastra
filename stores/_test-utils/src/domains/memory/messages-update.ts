@@ -88,7 +88,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       await storage.updateMessages({
         messages: [
           { id: msg1.id, role: 'assistant' } as MastraMessageV2,
-          { id: msg2.id, content: { content: 'updated' } as any },
+          { id: msg2.id, content: { content: 'updated', parts: [{ type: 'text', text: 'updated' }] } as any },
         ],
       });
 

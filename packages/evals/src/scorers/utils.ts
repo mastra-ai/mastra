@@ -1,6 +1,15 @@
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/scores';
-import type { ToolInvocation, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
+
+// Define ToolInvocation type locally since it's from AI SDK v4
+type ToolInvocation = {
+  state: 'call' | 'result';
+  toolCallId: string;
+  toolName: string;
+  args?: any;
+  result?: any;
+};
 
 export const roundToTwoDecimals = (num: number) => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
@@ -33,11 +42,37 @@ export const createTestRun = (input: string, output: string, context?: string[])
 };
 
 export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent) => {
-  return input?.inputMessages.find(({ role }) => role === 'user')?.content;
+  const message = input?.inputMessages.find(({ role }) => role === 'user');
+  if (!message) return undefined;
+  // Handle both string content and part array content
+  if (typeof (message as any).content === 'string') {
+    return (message as any).content;
+  }
+  // If content is an array of parts, extract text parts
+  if (Array.isArray((message as any).content)) {
+    return (message as any).content
+      .filter((part: any) => part.type === 'text')
+      .map((part: any) => part.text)
+      .join('');
+  }
+  return undefined;
 };
 
 export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
-  return output?.find(({ role }) => role === 'assistant')?.content;
+  const message = output?.find(({ role }) => role === 'assistant');
+  if (!message) return undefined;
+  // Handle both string content and part array content
+  if (typeof (message as any).content === 'string') {
+    return (message as any).content;
+  }
+  // If content is an array of parts, extract text parts
+  if (Array.isArray((message as any).content)) {
+    return (message as any).content
+      .filter((part: any) => part.type === 'text')
+      .map((part: any) => part.text)
+      .join('');
+  }
+  return undefined;
 };
 
 export const createToolInvocation = ({
@@ -66,7 +101,6 @@ export const createUIMessage = ({
   content,
   role,
   id = 'test-message',
-  toolInvocations = [],
 }: {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -82,10 +116,9 @@ export const createUIMessage = ({
   return {
     id,
     role,
-    content,
+    content: [{ type: 'text', text: content }],
     parts: [{ type: 'text', text: content }],
-    toolInvocations,
-  };
+  } as UIMessage;
 };
 
 export const createAgentTestRun = ({

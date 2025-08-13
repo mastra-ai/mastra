@@ -114,6 +114,8 @@ export function MastraRuntimeProvider({
     runtimeContextInstance.set(key, value);
   });
 
+  const mastra = useMastraClient();
+
   useEffect(() => {
     const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
     if (
@@ -121,7 +123,65 @@ export function MastraRuntimeProvider({
       currentThreadId !== threadId ||
       (hasNewInitialMessages && currentThreadId === threadId)
     ) {
-      if (initialMessages && threadId && memory) {
+      // When switching threads with memory enabled, always fetch from memory API for correct format
+      // this prevents errors where the frontend stops displaying data when switching back/forth between threads
+      if (threadId && memory && agentId && currentThreadId !== threadId) {
+        const loadMessagesFromMemory = async () => {
+          try {
+            const memoryThread = mastra.getMemoryThread(threadId, agentId);
+            const result = await memoryThread.getMessages({ limit: 50, format: 'aiv4' });
+
+            if (result?.uiMessages && result.uiMessages.length > 0) {
+              const convertedMessages: ThreadMessageLike[] = result.uiMessages
+                ?.map((message: any) => {
+                  const toolInvocationsAsContentParts = (message.toolInvocations || []).map((toolInvocation: any) => ({
+                    type: 'tool-call',
+                    toolCallId: toolInvocation?.toolCallId,
+                    toolName: toolInvocation?.toolName,
+                    args: toolInvocation?.args,
+                    result: toolInvocation?.result,
+                  }));
+
+                  const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+                    type: image.contentType.startsWith(`image/`)
+                      ? 'image'
+                      : image.contentType.startsWith(`audio/`)
+                        ? 'audio'
+                        : 'file',
+                    mimeType: image.contentType,
+                    image: image.url,
+                  }));
+
+                  return {
+                    ...message,
+                    content: [
+                      ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
+                      ...toolInvocationsAsContentParts,
+                      ...attachmentsAsContentParts,
+                    ],
+                  };
+                })
+                .filter(Boolean);
+
+              setMessages(convertedMessages);
+            } else {
+              console.log('🗑️ MastraRuntimeProvider: Clearing messages (no results)', { threadId });
+              setMessages([]);
+            }
+            setCurrentThreadId(threadId);
+          } catch (error) {
+            console.error('❌ MastraRuntimeProvider: Error loading messages from memory', {
+              threadId,
+              agentId,
+              error,
+            });
+            setMessages([]);
+            setCurrentThreadId(threadId);
+          }
+        };
+
+        loadMessagesFromMemory();
+      } else if (initialMessages && threadId && memory) {
         const convertedMessages: ThreadMessageLike[] = initialMessages
           ?.map((message: Message) => {
             const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
@@ -184,9 +244,62 @@ export function MastraRuntimeProvider({
           .filter(Boolean);
         setMessages(convertedMessages);
         setCurrentThreadId(threadId);
+      } else if (threadId && memory && agentId && !initialMessages) {
+        // Fetch messages from memory API when no initialMessages provided
+        const loadMessagesFromMemory = async () => {
+          try {
+            const memoryThread = mastra.getMemoryThread(threadId, agentId);
+            const result = await memoryThread.getMessages({ limit: 50, format: 'aiv4' });
+            if (result?.uiMessages && result.uiMessages.length > 0) {
+              const convertedMessages: ThreadMessageLike[] = result.uiMessages
+                ?.map((message: any) => {
+                  const toolInvocationsAsContentParts = (message.toolInvocations || []).map((toolInvocation: any) => ({
+                    type: 'tool-call',
+                    toolCallId: toolInvocation?.toolCallId,
+                    toolName: toolInvocation?.toolName,
+                    args: toolInvocation?.args,
+                    result: toolInvocation?.result,
+                  }));
+
+                  const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+                    type: image.contentType.startsWith(`image/`)
+                      ? 'image'
+                      : image.contentType.startsWith(`audio/`)
+                        ? 'audio'
+                        : 'file',
+                    mimeType: image.contentType,
+                    image: image.url,
+                  }));
+
+                  return {
+                    ...message,
+                    content: [
+                      ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
+                      ...toolInvocationsAsContentParts,
+                      ...attachmentsAsContentParts,
+                    ],
+                  };
+                })
+                .filter(Boolean);
+              setMessages(convertedMessages);
+            } else {
+              setMessages([]);
+            }
+            setCurrentThreadId(threadId);
+          } catch (error) {
+            console.error('❌ MastraRuntimeProvider: Error loading messages from memory', {
+              threadId,
+              agentId,
+              error,
+            });
+            setMessages([]);
+            setCurrentThreadId(threadId);
+          }
+        };
+        loadMessagesFromMemory();
       }
     }
-  }, [initialMessages, threadId, memory]);
+  }, [initialMessages, threadId, memory, agentId, mastra]);
 
   const baseClient = useMastraClient();
 
@@ -228,7 +341,7 @@ export function MastraRuntimeProvider({
           presencePenalty,
           maxRetries,
           maxSteps,
-          maxTokens,
+          maxOutputTokens: maxTokens,
           temperature,
           topK,
           topP,
@@ -299,7 +412,7 @@ export function MastraRuntimeProvider({
                 if (toolResult) {
                   const newContent = _content.map(c => {
                     if (c.type === 'tool-call' && c.toolCallId === toolResult?.toolCallId) {
-                      return { ...c, result: toolResult.result };
+                      return { ...c, result: toolResult.output };
                     }
                     return c;
                   });
@@ -311,7 +424,7 @@ export function MastraRuntimeProvider({
                       ? newContent
                       : [
                           ..._content,
-                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
+                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output },
                         ],
                   } as ThreadMessageLike;
                 }
@@ -342,7 +455,7 @@ export function MastraRuntimeProvider({
           presencePenalty,
           maxRetries,
           maxSteps,
-          maxTokens,
+          maxOutputTokens: maxTokens,
           temperature,
           topK,
           topP,

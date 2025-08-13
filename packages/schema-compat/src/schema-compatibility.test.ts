@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from './schema-compatibility';
@@ -36,9 +36,8 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 }
 
-const mockModel = new MockLanguageModelV1({
+const mockModel = new MockLanguageModelV2({
   modelId: 'test-model',
-  defaultObjectGenerationMode: 'json',
 });
 
 describe('SchemaCompatLayer', () => {
@@ -47,7 +46,6 @@ describe('SchemaCompatLayer', () => {
   beforeEach(() => {
     compatibility = new MockSchemaCompatibility({
       modelId: mockModel.modelId,
-      supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? false,
       provider: mockModel.provider,
     });
   });
@@ -56,7 +54,6 @@ describe('SchemaCompatLayer', () => {
     it('should store and return the model', () => {
       expect(compatibility.getModel()).toEqual({
         modelId: mockModel.modelId,
-        supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? false,
         provider: mockModel.provider,
       });
     });
@@ -361,7 +358,6 @@ describe('SchemaCompatLayer', () => {
 
       const testCompat = new TestCompatibility({
         modelId: mockModel.modelId,
-        supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? false,
         provider: mockModel.provider,
       });
       const result = testCompat.defaultZodOptionalHandler(optionalSchema);
@@ -395,9 +391,11 @@ describe('SchemaCompatLayer', () => {
       expect(result.jsonSchema.type).toBe('array');
       expect(result.jsonSchema.description).toContain('minLength');
       // The validator itself should be gone
+      // TODO: success type is messed up in AI SDK V5 for us
       expect(
         result.validate?.([
           /* empty array */
+          // @ts-expect-error
         ]).success,
       ).toBe(true);
 
@@ -414,7 +412,6 @@ describe('SchemaCompatLayer', () => {
       }
       const preservingCompat = new PreservingMock({
         modelId: mockModel.modelId,
-        supportsStructuredOutputs: mockModel.supportsStructuredOutputs ?? false,
         provider: mockModel.provider,
       });
       const preservingResult = preservingCompat.processToAISDKSchema(arraySchema);
@@ -422,6 +419,7 @@ describe('SchemaCompatLayer', () => {
       expect(
         preservingResult.validate?.([
           /* empty array */
+          // @ts-expect-error
         ]).success,
       ).toBe(false); // validator preserved
     });
@@ -453,7 +451,9 @@ describe('SchemaCompatLayer', () => {
         .optional();
 
       const result = compatibility.processToAISDKSchema(optionalSchema);
+      // @ts-expect-error
       expect(result.validate!({ name: 'test' }).success).toBe(true);
+      // @ts-expect-error
       expect(result.validate!(undefined).success).toBe(true);
 
       const jsonSchema = result.jsonSchema;
@@ -464,7 +464,9 @@ describe('SchemaCompatLayer', () => {
     it('should handle optional array schemas', () => {
       const optionalSchema = z.array(z.string()).optional();
       const result = compatibility.processToAISDKSchema(optionalSchema);
+      // @ts-expect-error
       expect(result.validate!(['test']).success).toBe(true);
+      // @ts-expect-error
       expect(result.validate!(undefined).success).toBe(true);
 
       const jsonSchema = result.jsonSchema;
@@ -476,7 +478,9 @@ describe('SchemaCompatLayer', () => {
     it('should handle optional scalar schemas', () => {
       const optionalSchema = z.string().optional();
       const result = compatibility.processToAISDKSchema(optionalSchema);
+      // @ts-expect-error
       expect(result.validate!('test').success).toBe(true);
+      // @ts-expect-error
       expect(result.validate!(undefined).success).toBe(true);
 
       const jsonSchema = result.jsonSchema;

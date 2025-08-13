@@ -1,9 +1,11 @@
-import type { Schema } from 'ai';
+import type { Schema, LanguageModel } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault, ZodNull } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { convertZodSchemaToAISDKSchema } from './utils';
+
+export type SchemaCompatModel = Exclude<LanguageModel, string>;
 
 /**
  * All supported string validation check types that can be processed or converted to descriptions.
@@ -145,7 +147,6 @@ type DateConstraints = {
 export type ModelInformation = {
   modelId: string;
   provider: string;
-  supportsStructuredOutputs: boolean;
 };
 
 /**

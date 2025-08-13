@@ -1,10 +1,11 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { generateText } from 'ai';
 import { PromptTemplate, defaultQuestionExtractPrompt } from '../prompts';
 import type { QuestionExtractPrompt } from '../prompts';
 import type { BaseNode } from '../schema';
 import { TextNode } from '../schema';
 import { BaseExtractor } from './base';
-import { baseLLM, STRIP_REGEX } from './types';
+import { STRIP_REGEX } from './types';
 import type { QuestionAnswerExtractArgs } from './types';
 
 type ExtractQuestion = {
@@ -25,19 +26,16 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
 
   /**
    * Constructor for the QuestionsAnsweredExtractor class.
-   * @param {MastraLanguageModel} llm MastraLanguageModel instance.
-   * @param {number} questions Number of questions to generate.
-   * @param {QuestionExtractPrompt['template']} promptTemplate Optional custom prompt template (should include {context}).
-   * @param {boolean} embeddingOnly Whether to use metadata for embeddings only.
+   * @param {QuestionAnswerExtractArgs} options Configuration options including required llm instance.
    */
-  constructor(options?: QuestionAnswerExtractArgs) {
-    if (options?.questions && options.questions < 1) throw new Error('Questions must be greater than 0');
+  constructor(options: QuestionAnswerExtractArgs) {
+    if (options.questions && options.questions < 1) throw new Error('Questions must be greater than 0');
 
     super();
 
-    this.llm = options?.llm ?? baseLLM;
-    this.questions = options?.questions ?? 5;
-    this.promptTemplate = options?.promptTemplate
+    this.llm = options.llm;
+    this.questions = options.questions ?? 5;
+    this.promptTemplate = options.promptTemplate
       ? new PromptTemplate({
           templateVars: ['numQuestions', 'context'],
           template: options.promptTemplate,
@@ -45,7 +43,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
           numQuestions: '5',
         })
       : defaultQuestionExtractPrompt;
-    this.embeddingOnly = options?.embeddingOnly ?? false;
+    this.embeddingOnly = options.embeddingOnly ?? false;
   }
 
   /**
@@ -69,27 +67,18 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
       numQuestions: this.questions.toString(),
     });
 
-    const questions = await this.llm.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
-      prompt: [
+    const response = await generateText({
+      model: this.llm,
+      messages: [
         {
           role: 'user',
-          content: [{ type: 'text', text: prompt }],
+          content: prompt,
         },
       ],
     });
 
-    let result = '';
-    try {
-      if (typeof questions.text === 'string') {
-        result = questions.text.replace(STRIP_REGEX, '').trim();
-      } else {
-        console.warn('Question extraction LLM output was not a string:', questions.text);
-      }
-    } catch (err) {
-      console.warn('Question extraction failed:', err);
-    }
+    const result = response.text.replace(STRIP_REGEX, '').trim();
+
     return {
       questionsThisExcerptCanAnswer: result,
     };

@@ -2,6 +2,15 @@
   "name": "template-docs-chatbot",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "zod": "^3.25.67"
+  },
   "description": "A monorepo template for building documentation chatbots with separate MCP server and agent components",
   "scripts": {
     "build": "turbo run build",

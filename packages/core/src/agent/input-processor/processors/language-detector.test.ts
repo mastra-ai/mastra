@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../message-list';
 import { TripWire } from '../../trip-wire';
@@ -36,21 +36,26 @@ function createMockLanguageResult(
   };
 }
 
-function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResult[]): MockLanguageModelV1 {
+function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResult[]): MockLanguageModelV2 {
   const results = Array.isArray(result) ? result : [result];
   let callCount = 0;
 
-  return new MockLanguageModelV1({
-    defaultObjectGenerationMode: 'json',
+  return new MockLanguageModelV2({
     doGenerate: async () => {
       const currentResult = results[callCount % results.length];
       callCount++;
 
       return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `${JSON.stringify(currentResult)}`,
+        finishReason: 'stop' as const,
+        usage: {
+          promptTokens: 10,
+          completionTokens: 20,
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+        },
+        content: [{ type: 'text', text: JSON.stringify(currentResult) }],
+        warnings: [],
       };
     },
   });
@@ -502,8 +507,7 @@ describe('LanguageDetector', () => {
 
   describe('error handling', () => {
     it('should fail open when detection agent fails', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
+      const model = new MockLanguageModelV2({
         doGenerate: async () => {
           throw new TripWire('Detection agent failed');
         },
@@ -646,13 +650,18 @@ describe('LanguageDetector', () => {
 
   describe('edge cases', () => {
     it('should handle malformed detection results gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
+      const model = new MockLanguageModelV2({
         doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: 'invalid json',
+          finishReason: 'stop' as const,
+          usage: {
+            promptTokens: 10,
+            completionTokens: 20,
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 30,
+          },
+          content: [{ type: 'text', text: 'invalid json' }],
+          warnings: [],
         }),
       });
       const detector = new LanguageDetector({

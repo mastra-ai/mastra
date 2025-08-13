@@ -107,7 +107,7 @@ describe('Agent Handlers', () => {
           instructions: 'test instructions',
           tools: {},
           workflows: {},
-          provider: 'openai.chat',
+          provider: 'openai.responses',
           modelId: 'gpt-4o',
           defaultGenerateOptions: {},
           defaultStreamOptions: {},
@@ -169,7 +169,7 @@ describe('Agent Handlers', () => {
             },
           },
         },
-        provider: 'openai.chat',
+        provider: 'openai.responses',
         modelId: 'gpt-4o',
         defaultGenerateOptions: {},
         defaultStreamOptions: {},
@@ -271,7 +271,7 @@ describe('Agent Handlers', () => {
     it('should stream response from agent', async () => {
       const mockStreamResult = {
         toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
-        toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        toUIMessageStreamResponse: vi.fn().mockReturnValue(new Response()),
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 

@@ -1,3 +1,4 @@
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import type { TiktokenEncoding, TiktokenModel } from 'js-tiktoken';
 import type {
   TitleExtractorsArgs,
@@ -36,6 +37,7 @@ export enum Language {
 }
 
 export type ExtractParams = {
+  llm?: MastraLanguageModel;
   title?: TitleExtractorsArgs | boolean;
   summary?: SummaryExtractArgs | boolean;
   questions?: QuestionAnswerExtractArgs | boolean;

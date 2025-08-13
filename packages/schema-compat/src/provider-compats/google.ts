@@ -13,7 +13,6 @@ import {
   isString,
   isUnion,
 } from '../schema-compatibility';
-
 export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
     super(model);

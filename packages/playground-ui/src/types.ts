@@ -1,6 +1,6 @@
-import type { AiMessageType } from '@mastra/core/memory';
+import type { Message as AIMessage } from '@ai-sdk/ui-utils';
 
-export type Message = AiMessageType;
+export type Message = AIMessage;
 
 export interface AssistantMessage {
   id: string;

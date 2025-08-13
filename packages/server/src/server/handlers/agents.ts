@@ -1,3 +1,4 @@
+import { createV4CompatibleResponse } from '@mastra/core/agent';
 import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
@@ -232,6 +233,8 @@ export async function generateHandler({
   try {
     const agent = mastra.getAgent(agentId);
 
+    console.log('agent', agent);
+
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
@@ -257,6 +260,7 @@ export async function generateHandler({
 
     return result;
   } catch (error) {
+    console.log('error', error);
     return handleError(error, 'Error generating from agent');
   }
 }
@@ -266,15 +270,15 @@ export async function streamGenerateHandler({
   runtimeContext,
   agentId,
   body,
+  clientSdkCompat,
   abortSignal,
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
   body: GetBody<'stream'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
     runtimeContext?: string;
   };
+  clientSdkCompat?: string;
   abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
   try {
@@ -284,9 +288,7 @@ export async function streamGenerateHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, resourceId, resourceid, runtimeContext: agentRuntimeContext, ...rest } = body;
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
+    const { messages, resourceId, runtimeContext: agentRuntimeContext, ...rest } = body;
 
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
       ...Array.from(runtimeContext.entries()),
@@ -298,27 +300,35 @@ export async function streamGenerateHandler({
     const streamResult = await agent.stream(messages, {
       ...rest,
       // @ts-expect-error TODO fix types
-      resourceId: finalResourceId,
+      resourceId,
       runtimeContext: finalRuntimeContext,
       signal: abortSignal,
     });
 
-    const streamResponse = rest.output
-      ? streamResult.toTextStreamResponse({
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        })
-      : streamResult.toDataStreamResponse({
-          sendUsage: true,
-          sendReasoning: true,
-          getErrorMessage: (error: any) => {
-            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-          },
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        });
+    const headers = {
+      'Transfer-Encoding': 'chunked',
+    };
+
+    // Handle text output mode (always returns raw text stream)
+    if (rest.output) {
+      return streamResult.toTextStreamResponse({ headers });
+    }
+
+    // For UI message streams, determine compatibility mode
+    // Check for client header override first, then fall back to Mastra config
+    const useV4Compat = clientSdkCompat === 'v4' || mastra.getAiSdkCompatMode() === 'v4';
+
+    const uiMessageStream = streamResult.toUIMessageStreamResponse({
+      headers,
+      sendReasoning: true,
+      sendSources: true,
+      onError: (error: any) => {
+        return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+      },
+    });
+
+    // Apply v4 compatibility transformation if needed
+    const streamResponse = useV4Compat ? createV4CompatibleResponse(uiMessageStream.body!) : uiMessageStream;
 
     return streamResponse;
   } catch (error) {

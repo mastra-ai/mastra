@@ -1,6 +1,6 @@
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { config } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
@@ -15,12 +15,15 @@ describe('agent telemetry', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: new MockLanguageModelV1({
+      model: new MockLanguageModelV2({
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.`,
+          content: [
+            { type: 'text', text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.` },
+          ],
+          warnings: [],
+          usage: { promptTokens: 10, completionTokens: 20, inputTokens: 10, outputTokens: 10, totalTokens: 100 },
         }),
       }),
     });

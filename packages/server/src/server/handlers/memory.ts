@@ -365,10 +365,14 @@ export async function getMessagesHandler({
   agentId,
   threadId,
   limit,
+  format,
+  clientSdkCompat,
   networkId,
   runtimeContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
   limit?: number;
+  format?: 'aiv4' | 'aiv5';
+  clientSdkCompat?: string;
 }) {
   if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
     throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
@@ -391,6 +395,23 @@ export async function getMessagesHandler({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
+
+    // Determine format: explicit format parameter, auto-detection, or default to v5
+    let useV4Format = false;
+    if (format === 'aiv4') {
+      useV4Format = true;
+    } else if (format === 'aiv5') {
+      useV4Format = false;
+    } else {
+      // No explicit format - check for client header override first, then fall back to Mastra config
+      useV4Format = clientSdkCompat === 'v4' || mastra.getAiSdkCompatMode() === 'v4';
+    }
+
+    // Return appropriate format
+    if (useV4Format) {
+      return { messages: result.messages, uiMessages: result.uiMessagesV4 };
+    }
+
     return { messages: result.messages, uiMessages: result.uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
@@ -615,7 +636,7 @@ export async function searchMemoryHandler({
         });
 
         // Get thread messages for context
-        const threadMessages = (await memory.query({ threadId: thread.id })).uiMessages;
+        const threadMessages = (await memory.query({ threadId: thread.id, format: 'v2' })).uiMessages;
 
         // Process results
         result.messagesV2.forEach(msg => {
@@ -645,13 +666,21 @@ export async function searchMemoryHandler({
               before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
                 id: m.id,
                 role: m.role,
-                content: m.content,
+                content: m.parts
+                  .map(p => (p.type === `text` ? p.text : null))
+                  .filter(Boolean)
+                  .join(`\n`),
+                // @ts-ignore
                 createdAt: m.createdAt || new Date(),
               })),
               after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
                 id: m.id,
                 role: m.role,
-                content: m.content,
+                content: m.parts
+                  .map(p => (p.type === `text` ? p.text : null))
+                  .filter(Boolean)
+                  .join(`\n`),
+                // @ts-ignore
                 createdAt: m.createdAt || new Date(),
               })),
             };
@@ -681,7 +710,7 @@ export async function searchMemoryHandler({
         config,
       });
 
-      const threadMessages = (await memory.query({ threadId })).uiMessages;
+      const threadMessages = (await memory.query({ threadId, format: 'v2' })).uiMessages;
 
       result.messagesV2.forEach(msg => {
         // Skip duplicates
@@ -715,13 +744,21 @@ export async function searchMemoryHandler({
             before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
               id: m.id,
               role: m.role,
-              content: m.content,
+              content: m.parts
+                .map(p => (p.type === `text` ? p.text : null))
+                .filter(Boolean)
+                .join(`\n`),
+              // @ts-ignore
               createdAt: m.createdAt || new Date(),
             })),
             after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
               id: m.id,
               role: m.role,
-              content: m.content,
+              content: m.parts
+                .map(p => (p.type === `text` ? p.text : null))
+                .filter(Boolean)
+                .join(`\n`),
+              // @ts-ignore
               createdAt: m.createdAt || new Date(),
             })),
           };

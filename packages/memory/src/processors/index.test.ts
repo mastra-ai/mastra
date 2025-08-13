@@ -85,7 +85,7 @@ describe('TokenLimiter', () => {
     const { messages, fakeCore, counts } = generateConversationHistory(config);
 
     const estimate = estimateTokens(messages);
-    const used = (await agent.generate(fakeCore)).usage.promptTokens;
+    const used = (await agent.generate(fakeCore)).usage.inputTokens!;
 
     console.log(`Estimated ${estimate} tokens, used ${used} tokens.\n`, counts);
 

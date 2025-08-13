@@ -1,17 +1,10 @@
-import type {
-  CoreMessage,
-  GenerateObjectResult,
-  GenerateTextResult,
-  LanguageModelV1,
-  StreamObjectResult,
-  StreamTextResult,
-} from 'ai';
+import type { CoreMessage, GenerateObjectResult, GenerateTextResult, StreamObjectResult, StreamTextResult } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 
 import { Agent } from '../agent';
-import type { AgentGenerateOptions, AgentStreamOptions, AiMessageType } from '../agent';
+import type { AgentGenerateOptions, AgentStreamOptions, MastraLanguageModel, AiMessageType } from '../agent';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 
@@ -26,7 +19,7 @@ import type { AgentNetworkConfig } from './types';
 export class AgentNetwork extends MastraBase {
   #instructions: string;
   #agents: Agent[];
-  #model: LanguageModelV1;
+  #model: MastraLanguageModel;
   #routingAgent: Agent;
   #agentHistory: Record<
     string,

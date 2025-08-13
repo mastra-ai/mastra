@@ -14,7 +14,7 @@ export function processClientTools(clientTools: ToolsInput | undefined): ToolsIn
           key,
           {
             ...value,
-            parameters: value.parameters ? zodToJsonSchema(value.parameters) : undefined,
+            inputSchema: value.inputSchema ? zodToJsonSchema(value.inputSchema) : undefined,
           },
         ];
       } else {

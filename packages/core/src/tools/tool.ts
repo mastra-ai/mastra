@@ -1,4 +1,4 @@
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolCallOptions } from 'ai';
 import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
@@ -17,6 +17,7 @@ export class Tool<
   outputSchema?: TSchemaOut;
   execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
   mastra?: Mastra;
+  __isMastraTool: true = true;
 
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
     this.id = opts.id;
@@ -24,11 +25,12 @@ export class Tool<
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.mastra = opts.mastra;
+    this.__isMastraTool = true;
 
     // Wrap the execute function with validation if it exists
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (context: TContext, options?: ToolExecutionOptions) => {
+      this.execute = async (context: TContext, options?: ToolCallOptions) => {
         // Validate input if schema exists
         const { data, error } = validateToolInput(this.inputSchema, context, this.id);
         if (error) {
