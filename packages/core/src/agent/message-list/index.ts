@@ -765,8 +765,7 @@ export class MessageList {
 
     const coreMessage = MessageList.isAIV4CoreMessage(message)
       ? message
-      : // TODO: yikes this is rough, we need a cleaner way to map any message through to any other format
-        this.aiV5ModelMessagesToAIV4CoreMessages([message], `system`)[0]!;
+      : this.aiV5ModelMessagesToAIV4CoreMessages([message], `system`)[0]!;
 
     if (coreMessage.role !== `system`) {
       throw new Error(
@@ -2341,18 +2340,14 @@ export class MessageList {
     for (const part of parts) {
       key += part.type;
       if (part.type === `text`) {
-        // TODO: we may need to hash this with something like xxhash instead of using length
-        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
-        key += `${part.text.length}${part.text}`;
+        key += part.text;
       }
       if (part.type === `tool-invocation`) {
         key += part.toolInvocation.toolCallId;
         key += part.toolInvocation.state;
       }
       if (part.type === `reasoning`) {
-        // TODO: we may need to hash this with something like xxhash instead of using length
-        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
-        key += part.reasoning.length;
+        key += part.reasoning;
         key += part.details.reduce((prev, current) => {
           if (current.type === `text`) {
             return prev + current.text.length + (current.signature?.length || 0);
@@ -2361,9 +2356,7 @@ export class MessageList {
         }, 0);
       }
       if (part.type === `file`) {
-        // TODO: we may need to hash this with something like xxhash instead of using length
-        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
-        key += part.data.length;
+        key += part.data;
         key += part.mimeType;
       }
     }
