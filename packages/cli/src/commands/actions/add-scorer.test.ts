@@ -62,7 +62,7 @@ describe('addScorer', () => {
       origin: undefined,
     });
 
-    expect(addNewScorer).toHaveBeenCalledWith('answer-relevancy');
+    expect(addNewScorer).toHaveBeenCalledWith('answer-relevancy', undefined);
   });
 
   it('should handle undefined scorer name', async () => {
@@ -84,7 +84,7 @@ describe('addScorer', () => {
       origin: undefined,
     });
 
-    expect(addNewScorer).toHaveBeenCalledWith(undefined);
+    expect(addNewScorer).toHaveBeenCalledWith(undefined, undefined);
   });
 
   it('should pass analytics origin from environment variable', async () => {
@@ -110,8 +110,6 @@ describe('addScorer', () => {
   });
 
   it('should handle errors from addNewScorer gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
     const { analytics } = await import('../..');
     const { addNewScorer } = await import('../scorers/add-new-scorer');
     const { addScorer } = await import('./add-scorer');
@@ -123,27 +121,19 @@ describe('addScorer', () => {
     });
     vi.mocked(addNewScorer).mockRejectedValue(testError);
 
-    await addScorer('hallucination', {});
-
-    expect(console.error).toHaveBeenCalledWith(testError);
-
-    consoleSpy.mockRestore();
+    // Should propagate the error since there's no error handling in addScorer
+    await expect(addScorer('hallucination', {})).rejects.toThrow('Failed to add scorer');
   });
 
   it('should handle analytics tracking errors gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
     const { analytics } = await import('../..');
     const { addScorer } = await import('./add-scorer');
 
     const analyticsError = new Error('Analytics tracking failed');
     vi.mocked(analytics.trackCommandExecution).mockRejectedValue(analyticsError);
 
-    await addScorer('completeness', { debug: true });
-
-    expect(console.error).toHaveBeenCalledWith(analyticsError);
-
-    consoleSpy.mockRestore();
+    // Should propagate the error since there's no error handling in addScorer
+    await expect(addScorer('completeness', { debug: true })).rejects.toThrow('Analytics tracking failed');
   });
 
   it('should merge scorer name into args correctly', async () => {
@@ -154,7 +144,7 @@ describe('addScorer', () => {
     vi.mocked(analytics.trackCommandExecution).mockImplementation(mockAnalytics.trackCommandExecution);
     vi.mocked(addNewScorer).mockImplementation(mockAddNewScorer);
 
-    const args = { customPath: 'src/scorers', force: true };
+    const args = { customPath: 'src/scorers', force: true, dir: '/custom/path' };
     const scorerName = 'content-similarity';
 
     await addScorer(scorerName, args);
@@ -164,11 +154,14 @@ describe('addScorer', () => {
       args: {
         customPath: 'src/scorers',
         force: true,
+        dir: '/custom/path',
         scorerName: 'content-similarity',
       },
       execution: expect.any(Function),
       origin: undefined,
     });
+
+    expect(addNewScorer).toHaveBeenCalledWith('content-similarity', '/custom/path');
   });
 
   it('should handle empty args object', async () => {
@@ -188,7 +181,7 @@ describe('addScorer', () => {
       origin: undefined,
     });
 
-    expect(addNewScorer).toHaveBeenCalledWith('textual-difference');
+    expect(addNewScorer).toHaveBeenCalledWith('textual-difference', undefined);
   });
 
   it('should execute the analytics tracking execution function', async () => {
@@ -207,6 +200,6 @@ describe('addScorer', () => {
     await addScorer('tone-consistency', {});
 
     expect(executionFunctionCalled).toBe(true);
-    expect(addNewScorer).toHaveBeenCalledWith('tone-consistency');
+    expect(addNewScorer).toHaveBeenCalledWith('tone-consistency', undefined);
   });
 });
