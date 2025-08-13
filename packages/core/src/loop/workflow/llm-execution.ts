@@ -1,9 +1,25 @@
+import { execute } from '../../stream/aisdk/v5/execute';
 import { createStep } from '../../workflows';
 import type { OuterLLMRun } from '../types';
 import { AgenticRunState } from './run-state';
 import { llmIterationOutputSchema } from './schema';
 
-export function createLLMExecutionStep({ model, _internal, messageId }: OuterLLMRun) {
+export function createLLMExecutionStep({
+  model,
+  _internal,
+  messageId,
+  runId,
+  modelStreamSpan,
+  telemetry_settings,
+  tools,
+  toolChoice,
+  messageList,
+  includeRawChunks,
+  modelSettings,
+  providerOptions,
+  options,
+  controller,
+}: OuterLLMRun) {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
@@ -16,14 +32,46 @@ export function createLLMExecutionStep({ model, _internal, messageId }: OuterLLM
 
       console.log(inputData, runState.state);
 
-      // let modelResult;
-      // let warnings: any;
-      // let request: any;
-      // let rawResponse: any;
+      let modelResult;
+      let warnings: any;
+      let request: any;
+      let rawResponse: any;
 
       switch (model.specificationVersion) {
         case 'v2': {
-          console.error('AISDK v2 Language models are not supported. Stay tuned.');
+          modelResult = await execute({
+            runId,
+            model,
+            providerOptions,
+            inputMessages: messageList.get.all.prompt() as any,
+            tools,
+            toolChoice,
+            options,
+            modelSettings,
+            telemetry_settings,
+            includeRawChunks,
+            onResult: ({
+              warnings: warningsFromStream,
+              request: requestFromStream,
+              rawResponse: rawResponseFromStream,
+            }) => {
+              warnings = warningsFromStream;
+              request = requestFromStream || {};
+              rawResponse = rawResponseFromStream;
+
+              controller.enqueue({
+                runId,
+                from: 'AGENT',
+                type: 'step-start',
+                payload: {
+                  request: request || {},
+                  warnings: [],
+                  messageId: messageId,
+                },
+              });
+            },
+            modelStreamSpan,
+          });
           break;
         }
         default: {
@@ -31,10 +79,16 @@ export function createLLMExecutionStep({ model, _internal, messageId }: OuterLLM
         }
       }
 
+      console.log(modelResult);
+
       return {
         messageId,
         stepResult: {},
-        metadata: {},
+        metadata: {
+          warnings,
+          request,
+          rawResponse,
+        },
         output: {},
         messages: {
           all: [],
