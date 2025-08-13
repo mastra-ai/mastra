@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -98,21 +98,21 @@
 }
 
 body {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     background: var(--light-color-surface-15);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     background: var(--primary-bg);
   }
 }
 
-html[class~='light'] *::selection {
+html[class~="light"] *::selection {
   background: #e3e3e3 !important;
   color: #158d29 !important;
 }
 
-html[class~='dark'] *::selection {
+html[class~="dark"] *::selection {
   background: #2a2a2a !important;
   color: #46f488 !important;
 }
@@ -192,17 +192,17 @@ header {
   position: static;
   background: var(--primary-bg);
 
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     background: var(--light-color-surface-15);
   }
 }
 
 header > * {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     background: var(--light-color-surface-15);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     background: var(--primary-bg);
   }
 }
@@ -212,11 +212,11 @@ header nav > div:nth-child(2) {
 }
 
 header nav:nth-child(2) {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     border-bottom: 0.5px solid var(--light-border-muted);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     color: white;
     border-bottom: 0.5px solid var(--border);
   }
@@ -234,17 +234,17 @@ header nav:nth-child(2) {
   }
 }
 
-.nextra-navbar input[type='search'] {
+.nextra-navbar input[type="search"] {
   width: 180px;
   height: 34px;
   font-size: 14px;
   border-radius: 0.375rem;
 
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     background: var(--light-color-surface-1);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     background: #121212;
     border: 0.5px solid #343434;
   }
@@ -271,7 +271,7 @@ header nav:nth-child(2) {
   height: 1.375rem;
   background: var(--light-color-surface-15);
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     background: var(--primary-bg);
   }
 }
@@ -314,7 +314,7 @@ header nav:nth-child(2) {
 }
 
 /* Hack for Tabs / Nextra auto-inserted h3s */
-div[role='tabpanel'] > h3:first-child {
+div[role="tabpanel"] > h3:first-child {
   display: none;
 }
 
@@ -327,7 +327,7 @@ aside {
 
 article main a {
   font-weight: 500;
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-primary-600: var(--light-color-text-6);
     text-decoration-thickness: 1px;
     text-decoration-line: underline;
@@ -336,11 +336,11 @@ article main a {
 }
 
 article {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-gray-400: var(--light-color-text-3);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --x-color-gray-400: var(--color-el-3);
   }
 }
@@ -364,7 +364,7 @@ article strong > a {
 }
 
 .nextra-breadcrumb {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-gray-700: var(--light-color-text-5);
   }
   margin-bottom: 1.12rem;
@@ -374,23 +374,23 @@ article strong > a {
 
 pre code {
   --x-text-sm: 13px;
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-gray-500: var(--light-color-text-2);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --x-color-gray-500: var(--color-el-2);
   }
 }
 
 pre,
 div:has(+ pre) {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     border: 0.5px solid var(--light-border-muted);
     background: var(--light-color-surface-2);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     border: 0.5px solid var(--border);
     background: var(--tertiary-bg);
   }
@@ -408,15 +408,15 @@ div + pre {
   border-top-right-radius: 0;
 }
 
-button[title='Copy code'] {
+button[title="Copy code"] {
   border: none;
 }
 
-pre code.nextra-code:not([class*='twoslash-']) > span[data-highlighted-line] {
+pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
   --bg-color: var(--light-color-surface-5);
   background-color: color-mix(in oklab, var(--bg-color) 90%, transparent);
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     background-color: var(--color-surface-5);
   }
 }
@@ -427,35 +427,37 @@ pre code.nextra-code:not([class*='twoslash-']) > span[data-highlighted-line] {
 
 /*****Sidebar******/
 aside {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     border-right: 0.5px solid var(--light-border-muted);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     border-right: 0.5px solid var(--border);
   }
 }
 
 aside > * {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-primary-600: var(--light-color-text-5);
     --x-color-primary-400: var(--light-color-text-4);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --x-color-primary-600: #fff;
-    --x-color-primary-400: oklab(18.2% -0.000000000000000147 0.0000000000000000204);
+    --x-color-primary-400: oklab(
+      18.2% -0.000000000000000147 0.0000000000000000204
+    );
   }
 }
 
 aside > div:first-child button {
   font-weight: 500;
 
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     color: var(--light-color-text-6);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     color: var(--color-primary);
   }
 }
@@ -479,7 +481,7 @@ aside > div:nth-child(1) ul li a {
   padding-block: 0.25rem;
   background: transparent;
 
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-primary-800: var(--light-color-text-6);
   }
 
@@ -490,7 +492,7 @@ aside > div:nth-child(1) ul li a {
 
 aside > div:nth-child(1) ul li.active:has(> a) {
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     left: -8px;
     top: 0px;
@@ -502,12 +504,12 @@ aside > div:nth-child(1) ul li.active:has(> a) {
   }
 }
 
-aside > div:nth-child(1) ul li.active:has(a[href='/docs']),
-aside > div:nth-child(1) ul li.active:has(a[href='/examples']),
-aside > div:nth-child(1) ul li.active:has(a[href='/guides']),
-aside > div:nth-child(1) ul li.active:has(a[href='/reference']) {
+aside > div:nth-child(1) ul li.active:has(a[href="/docs"]),
+aside > div:nth-child(1) ul li.active:has(a[href="/examples"]),
+aside > div:nth-child(1) ul li.active:has(a[href="/guides"]),
+aside > div:nth-child(1) ul li.active:has(a[href="/reference"]) {
   &::before {
-    content: '';
+    content: "";
     background: transparent;
   }
 }
@@ -516,21 +518,21 @@ article main li:has(ul) ul {
   margin-top: calc(var(--x-spacing) * 2);
 }
 
-aside a[href='/docs'],
-aside button[data-href='/docs/reference'],
-aside a[href='/examples'],
-aside a[href='/guides'],
-aside a[href='/reference'] {
+aside a[href="/docs"],
+aside button[data-href="/docs/reference"],
+aside a[href="/examples"],
+aside a[href="/guides"],
+aside a[href="/reference"] {
   position: relative;
   padding-inline-start: calc((var(--button-gap) * 3) + var(--icon-position));
 }
 
-aside a[href='/docs']::before,
-aside button[data-href='/docs/reference']::before,
-aside a[href='/examples']::before,
-aside a[href='/guides']::before,
-aside a[href='/reference']::before {
-  content: '';
+aside a[href="/docs"]::before,
+aside button[data-href="/docs/reference"]::before,
+aside a[href="/examples"]::before,
+aside a[href="/guides"]::before,
+aside a[href="/reference"]::before {
+  content: "";
   position: absolute;
   left: var(--icon-position);
   top: 50%;
@@ -541,32 +543,32 @@ aside a[href='/reference']::before {
   background-repeat: no-repeat;
 }
 
-aside a[href='/docs']::before,
-aside a[href='/examples']::before,
-aside a[href='/guides']::before {
-  background-image: url('icons/introduction.svg');
+aside a[href="/docs"]::before,
+aside a[href="/examples"]::before,
+aside a[href="/guides"]::before {
+  background-image: url("icons/introduction.svg");
 }
 
-aside button[data-href='/docs/reference']::before,
-aside a[href='/reference']::before {
-  background-image: url('icons/reference.svg');
+aside button[data-href="/docs/reference"]::before,
+aside a[href="/reference"]::before {
+  background-image: url("icons/reference.svg");
 }
 
-button[data-href='/docs/reference'] svg {
+button[data-href="/docs/reference"] svg {
   display: none;
 }
 
-button[title='Collapse sidebar'] {
+button[title="Collapse sidebar"] {
   display: none;
 }
 
 aside > div:nth-child(2) {
   display: flex;
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-nextra-bg: var(--light-color-surface-15);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --x-color-nextra-bg: var(--primary-bg);
   }
 }
@@ -580,11 +582,11 @@ aside > div:nth-child(1) button {
 /*** Table of Contents ***/
 
 .nextra-toc > * {
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-gray-400: var(--light-color-text-3);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --x-color-gray-400: var(--color-el-3);
   }
 }
@@ -596,7 +598,7 @@ aside > div:nth-child(1) button {
   padding-inline-start: 2.24rem;
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 12px;
     bottom: 1;
@@ -604,20 +606,20 @@ aside > div:nth-child(1) button {
     height: 1rem;
     background-size: contain;
     background-repeat: no-repeat;
-    background-image: url('icons/on-this-page.svg');
+    background-image: url("icons/on-this-page.svg");
   }
 }
 
 .nextra-toc ul a {
   --x-font-weight-semibold: 400;
 
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-gray-400: var(--light-color-text-3);
     --x-color-primary-600: var(--light-color-text-6);
     --x-color-gray-600: var(--light-color-text-4);
   }
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --x-color-gray-400: var(--color-el-3);
     --x-color-primary-600: var(--color-primary);
     --x-color-gray-600: var(--color-el-3);
@@ -638,14 +640,14 @@ a:focus-visible {
 
 /* Tab selector */
 
-div[role='tablist'] button {
-  &:is(html[class~='light'] *):not([aria-selected='true']) {
+div[role="tablist"] button {
+  &:is(html[class~="light"] *):not([aria-selected="true"]) {
     --x-color-primary-600: var(--light-color-text-3);
   }
 }
 
-div[role='tablist'] button[aria-selected='true'] {
-  &:is(html[class~='light'] *) {
+div[role="tablist"] button[aria-selected="true"] {
+  &:is(html[class~="light"] *) {
     --x-color-primary-600: var(--light-color-text-6);
     border-color: hsla(125, 66%, 50%, 1);
   }
@@ -685,7 +687,7 @@ table tbody td {
   color: var(--color-text-icon-5);
 }
 
-table td code.nextra-code:not([class*='twoslash-']) {
+table td code.nextra-code:not([class*="twoslash-"]) {
   border: 1px solid var(--border-2);
   border-radius: var(--border-radius-lg);
   background: transparent;
@@ -700,7 +702,7 @@ table td code.nextra-code:not([class*='twoslash-']) {
 }
 
 @media screen and (min-width: 1024px) {
-  button[title='Change theme'] {
+  button[title="Change theme"] {
     display: none;
   }
 }
@@ -709,12 +711,12 @@ table td code.nextra-code:not([class*='twoslash-']) {
   background: oklch(0.65 0.22 16.44 / 0.16);
   --content-color: var(--light-color-text-4);
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --content-color: white;
   }
 
   &::after {
-    content: '-';
+    content: "-";
     position: absolute;
     left: 2.6rem;
     color: var(--content-color);
@@ -725,12 +727,12 @@ table td code.nextra-code:not([class*='twoslash-']) {
   background: var(--diff-color);
   --content-color: var(--light-color-text-4);
 
-  &:is(html[class~='dark'] *) {
+  &:is(html[class~="dark"] *) {
     --content-color: white;
   }
 
   &::after {
-    content: '+';
+    content: "+";
     position: absolute;
     left: 2.6rem;
     color: var(--content-color);
