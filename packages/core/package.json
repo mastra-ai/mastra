@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.13.2",
+  "version": "0.13.3-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -147,6 +147,7 @@
     "@ai-sdk/provider": "^1.1.3",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/provider-utils": "^2.2.8",
+    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.0",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@mastra/schema-compat": "workspace:*",
     "@opentelemetry/api": "^1.9.0",

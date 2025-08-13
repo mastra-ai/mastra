@@ -1259,6 +1259,9 @@ importers:
       '@ai-sdk/provider-utils':
         specifier: ^2.2.8
         version: 2.2.8(zod@3.25.76)
+      '@ai-sdk/provider-utils-v5':
+        specifier: npm:@ai-sdk/provider-utils@3.0.0
+        version: '@ai-sdk/provider-utils@3.0.0(zod@3.25.76)'
       '@ai-sdk/provider-v5':
         specifier: npm:@ai-sdk/provider@2.0.0
         version: '@ai-sdk/provider@2.0.0'
