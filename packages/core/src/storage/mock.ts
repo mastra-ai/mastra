@@ -1,6 +1,6 @@
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
-import type { ScoreRowData } from '../scores/types';
+import type { ScoreRowData, ScoringSource } from '../scores/types';
 import type { Trace } from '../telemetry';
 import type { WorkflowRunState } from '../workflows';
 import { MastraStorage } from './base';
@@ -307,12 +307,18 @@ export class InMemoryStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
   async getScoresByRunId({

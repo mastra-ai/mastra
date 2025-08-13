@@ -2,7 +2,7 @@ import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -401,12 +401,18 @@ export class CloudflareStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

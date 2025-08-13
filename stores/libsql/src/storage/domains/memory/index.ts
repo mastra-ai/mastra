@@ -609,7 +609,6 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    console.log('resource', resource);
     await this.operations.insert({
       tableName: TABLE_RESOURCES,
       record: {

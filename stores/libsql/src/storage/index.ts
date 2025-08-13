@@ -2,7 +2,7 @@ import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -295,14 +295,16 @@ export class LibSQLStore extends MastraStorage {
     scorerId,
     entityId,
     entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, entityId, entityType, pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
   async getScoresByRunId({

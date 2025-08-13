@@ -1,16 +1,16 @@
 ---
-title: "Reference: getWorkflows() | Agents | Mastra Docs"
-description: "Documentation for the `.getWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute."
+title: "Reference: Agent.getWorkflows() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute."
 ---
 
-# getWorkflows()
+# Agent.getWorkflows()
 
 The `.getWorkflows()` method retrieves the workflows configured for an agent, resolving them if they're a function. These workflows enable the agent to execute complex, multi-step processes with defined execution paths.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const workflows = await agent.getWorkflows();
+```typescript copy
+await agent.getWorkflows();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const workflows = await agent.getWorkflows();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Promise<Record<string, Workflow>>",
+      description: "A promise that resolves to a record of workflow names to their corresponding Workflow instances.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const workflows = await agent.getWorkflows({
+```typescript copy
+await agent.getWorkflows({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -49,14 +61,7 @@ const workflows = await agent.getWorkflows({
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "workflows",
-      type: "Promise<Record<string, Workflow>>",
-      description: "A promise that resolves to a record of workflow names to their corresponding Workflow instances.",
-    },
-  ]}
-/>
+- [Agents overview](../../docs/agents/overview.mdx)
+- [Workflows overview](../../docs/workflows/overview.mdx)

@@ -122,7 +122,7 @@ export class Agent<
   public name: TAgentId;
   #instructions: DynamicArgument<string>;
   readonly #description?: string;
-  readonly model?: DynamicArgument<MastraLanguageModel>;
+  model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
   #workflows?: DynamicArgument<Record<string, Workflow>>;
@@ -639,6 +639,11 @@ export class Agent<
   __updateInstructions(newInstructions: string) {
     this.#instructions = newInstructions;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
+  }
+
+  __updateModel({ model }: { model: DynamicArgument<MastraLanguageModel> }) {
+    this.model = model;
+    this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
 
   #primitives?: MastraPrimitives;
@@ -1526,18 +1531,18 @@ export class Agent<
           });
         }
 
-        let [memoryMessages, memorySystemMessage] = existingThread
-          ? await Promise.all([
-              this.getMemoryMessages({
+        let [memoryMessages, memorySystemMessage] = await Promise.all([
+          existingThread
+            ? this.getMemoryMessages({
                 resourceId,
                 threadId: threadObject.id,
                 vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                 memoryConfig,
                 runtimeContext,
-              }),
-              memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
-            ])
-          : [[], null];
+              })
+            : [],
+          memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+        ]);
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,

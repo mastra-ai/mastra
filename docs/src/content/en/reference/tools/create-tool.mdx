@@ -1,37 +1,39 @@
 ---
 title: "Reference: createTool() | Tools | Mastra Docs"
-description: Documentation for the createTool function in Mastra, used to define custom tools for agents.
+description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
 ---
 
 # createTool()
 
 The `createTool()` function is used to define custom tools that your Mastra agents can execute. Tools extend an agent's capabilities by allowing it to interact with external systems, perform calculations, or access specific data.
 
-## Basic Usage
+## Usage example
 
-Here is a basic example of creating a tool that fetches weather information:
-
-```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+```typescript filename="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-export const weatherInfo = createTool({
-  id: "Get Weather Information",
+export const tool = createTool({
+  id: "test-tool",
+  description: "Reverse the input string",
   inputSchema: z.object({
-    city: z.string(),
+    input: z.string()
   }),
-  description: `Fetches the current weather information for a given city`,
-  execute: async ({ context: { city } }) => {
-    // Tool logic here (e.g., API call)
-    console.log("Using tool to fetch weather information for", city);
-    return { temperature: 20, conditions: "Sunny" }; // Example return
-  },
+  outputSchema: z.object({
+    output: z.string()
+  }),
+  execute: async ({ context }) => {
+    const { input } = context;
+    const reversed = input.split("").reverse().join("");
+
+    return {
+      output: reversed
+    };
+  }
 });
 ```
 
 ## Parameters
-
-The `createTool()` function accepts an object with the following parameters:
 
 <PropertiesTable
   content={[
@@ -87,18 +89,9 @@ The `createTool()` function returns a `Tool` object.
   ]}
 />
 
-## Tool Details
-
-The `Tool` object returned by `createTool()` has the following key properties:
-
-- **ID**: The unique identifier provided in the `id` parameter.
-- **Description**: The description provided in the `description` parameter.
-- **Parameters**: Derived from the `inputSchema`, defining the structure of inputs the tool expects.
-- **Execute Function**: The logic defined in the `execute` parameter, which is called when the agent decides to use the tool.
-
 ## Related
 
-- [Tools Overview](/docs/tools-mcp/overview)
-- [Using Tools with Agents](/docs/agents/using-tools-and-mcp)
-- [Dynamic Tool Context](/docs/tools-mcp/dynamic-context)
-- [Advanced Tool Usage](/docs/tools-mcp/advanced-usage)
+- [Tools Overview](/docs/tools-mcp/overview.mdx)
+- [Using Tools with Agents](/docs/agents/using-tools-and-mcp.mdx)
+- [Dynamic Tool Context](/docs/tools-mcp/dynamic-context.mdx)
+- [Advanced Tool Usage](/docs/tools-mcp/advanced-usage.mdx)

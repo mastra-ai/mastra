@@ -1,6 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '../../sql-builder';
@@ -13,21 +13,23 @@ export interface D1Client {
 }
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let input = undefined;
+  const deserialized: Record<string, any> = { ...row };
 
-  if (row.input) {
-    try {
-      input = JSON.parse(row.input);
-    } catch {
-      input = row.input;
-    }
-  }
-  return {
-    ...row,
-    input,
-    createdAt: row.createdAtZ || row.createdAt,
-    updatedAt: row.updatedAtZ || row.updatedAt,
-  } as ScoreRowData;
+  // Reverse serialized JSON fields (stored as strings in D1)
+  deserialized.input = safelyParseJSON(row.input);
+  deserialized.output = safelyParseJSON(row.output);
+  deserialized.scorer = safelyParseJSON(row.scorer);
+  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
+  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
+  deserialized.metadata = safelyParseJSON(row.metadata);
+  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
+  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
+  deserialized.entity = safelyParseJSON(row.entity);
+
+  deserialized.createdAt = row.createdAtZ || row.createdAt;
+  deserialized.updatedAt = row.updatedAtZ || row.updatedAt;
+
+  return deserialized as ScoreRowData;
 }
 
 export class ScoresStorageD1 extends ScoresStorage {
@@ -65,6 +67,7 @@ export class ScoresStorageD1 extends ScoresStorage {
 
   async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      const id = crypto.randomUUID();
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
       const { input, ...rest } = score;
 
@@ -82,6 +85,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         }
       }
 
+      serializedRecord.id = id;
       serializedRecord.input = JSON.stringify(input);
       serializedRecord.createdAt = new Date().toISOString();
       serializedRecord.updatedAt = new Date().toISOString();
@@ -94,7 +98,7 @@ export class ScoresStorageD1 extends ScoresStorage {
 
       await this.operations.executeQuery({ sql, params });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
+      const scoreFromDb = await this.getScoreById({ id });
       return { score: scoreFromDb! };
     } catch (error) {
       throw new MastraError(
@@ -110,9 +114,15 @@ export class ScoresStorageD1 extends ScoresStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
+    source,
     pagination,
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
@@ -120,6 +130,15 @@ export class ScoresStorageD1 extends ScoresStorage {
 
       // Get total count
       const countQuery = createSqlBuilder().count().from(fullTableName).where('scorerId = ?', scorerId);
+      if (entityId) {
+        countQuery.andWhere('entityId = ?', entityId);
+      }
+      if (entityType) {
+        countQuery.andWhere('entityType = ?', entityType);
+      }
+      if (source) {
+        countQuery.andWhere('source = ?', source);
+      }
       const countResult = await this.operations.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
@@ -136,12 +155,18 @@ export class ScoresStorageD1 extends ScoresStorage {
       }
 
       // Get paginated results
-      const selectQuery = createSqlBuilder()
-        .select('*')
-        .from(fullTableName)
-        .where('scorerId = ?', scorerId)
-        .limit(pagination.perPage)
-        .offset(pagination.page * pagination.perPage);
+      const selectQuery = createSqlBuilder().select('*').from(fullTableName).where('scorerId = ?', scorerId);
+
+      if (entityId) {
+        selectQuery.andWhere('entityId = ?', entityId);
+      }
+      if (entityType) {
+        selectQuery.andWhere('entityType = ?', entityType);
+      }
+      if (source) {
+        selectQuery.andWhere('source = ?', source);
+      }
+      selectQuery.limit(pagination.perPage).offset(pagination.page * pagination.perPage);
 
       const { sql, params } = selectQuery.build();
       const results = await this.operations.executeQuery({ sql, params });

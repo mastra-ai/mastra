@@ -1,45 +1,19 @@
 ---
-title: "Reference: Workflow.execute() | Building Workflows | Mastra Docs"
-description: Documentation for the `.execute()` method in workflows, which executes a step with input data and returns the output.
+title: "Reference: Workflow.execute() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.execute()` method in workflows, which executes a workflow directly and returns the output.
 ---
 
 # Workflow.execute()
 
-The `.execute()` method executes a step with input data and returns the output, allowing you to process data within a workflow.
+The `.execute()` method executes a workflow directly and returns the output, allowing you to run a workflow without creating a separate run instance.
 
-## Usage
+## Usage example
 
-```typescript
-const inputSchema = z.object({
-  inputValue: z.string(),
-});
-
-const myStep = createStep({
-  id: "my-step",
-  description: "Does something useful",
-  inputSchema,
-  outputSchema: z.object({
-    outputValue: z.string(),
-  }),
-  resumeSchema: z.object({
-    resumeValue: z.string(),
-  }),
-  suspendSchema: z.object({
-    suspendValue: z.string(),
-  }),
-  execute: async ({
-    inputData,
-    mastra,
-    getStepResult,
-    getInitData,
-    runtimeContext,
-  }) => {
-    const otherStepOutput = getStepResult(step2);
-    const initData = getInitData<typeof inputSchema>(); // typed as the input schema variable (zod schema)
-    return {
-      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (runtimeContextValue: ${runtimeContext.get("runtimeContextValue")})`,
-    };
-  },
+```typescript showLineNumbers copy
+await workflow.execute({
+  inputData: {
+    value: "hello world"
+  }
 });
 ```
 
@@ -48,76 +22,92 @@ const myStep = createStep({
 <PropertiesTable
   content={[
     {
-      name: "params",
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "Input data that matches the workflow's input schema",
+      isOptional: false,
+    },
+    {
+      name: "resumeData",
+      type: "any",
+      description: "Data for resuming a suspended workflow",
+      isOptional: true,
+    },
+    {
+      name: "suspend",
+      type: "(suspendPayload: any) => Promise<any>",
+      description: "Function to suspend workflow execution",
+      isOptional: false,
+    },
+    {
+      name: "resume",
       type: "object",
-      description: "Configuration object for executing the step",
+      description: "Configuration for resuming workflow execution",
+      isOptional: true,
+      properties: [
+        {
+          name: "steps",
+          type: "string[]",
+          description: "Steps to resume",
+          isOptional: false,
+        },
+        {
+          name: "resumePayload",
+          type: "any",
+          description: "Payload data for resuming",
+          isOptional: false,
+        },
+        {
+          name: "runId",
+          type: "string",
+          description: "ID of the run to resume",
+          isOptional: true,
+        },
+      ],
+    },
+    {
+      name: "emitter",
+      type: "object",
+      description: "Event emitter object for workflow events",
       isOptional: false,
       properties: [
         {
-          name: "inputData",
-          type: "z.infer<TInput>",
-          description: "Input data matching the step's input schema",
-          isOptional: false,
-        },
-        {
-          name: "resumeData",
-          type: "ResumeSchema",
-          description: "Data for resuming a suspended step",
-          isOptional: true,
-        },
-        {
-          name: "suspend",
-          type: "(suspendPayload: any) => Promise<void>",
-          description: "Function to suspend step execution",
-          isOptional: false,
-        },
-        {
-          name: "resume",
-          type: "object",
-          description: "Configuration for resuming execution",
-          isOptional: true,
-          properties: [
-            {
-              name: "steps",
-              type: "string[]",
-              description: "Steps to resume",
-              isOptional: false,
-            },
-            {
-              name: "resumePayload",
-              type: "any",
-              description: "Payload data for resuming",
-              isOptional: false,
-            },
-            {
-              name: "runId",
-              type: "string",
-              description: "ID of the run to resume",
-              isOptional: true,
-            },
-          ],
-        },
-        {
-          name: "emitter",
-          type: "object",
-          description: "Event emitter object",
-          isOptional: false,
-          properties: [
-            {
-              name: "emit",
-              type: "(event: string, data: any) => void",
-              description: "Function to emit events",
-              isOptional: false,
-            },
-          ],
-        },
-        {
-          name: "mastra",
-          type: "Mastra",
-          description: "Mastra instance",
+          name: "emit",
+          type: "(event: string, data: any) => void",
+          description: "Function to emit events",
           isOptional: false,
         },
       ],
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "Runtime context data to use during workflow execution",
+      isOptional: true,
+    },
+    {
+      name: "abort",
+      type: "() => any",
+      description: "Function to abort workflow execution",
+      isOptional: false,
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      description: "Abort signal for workflow execution",
+      isOptional: false,
+    },
+    {
+      name: "runCount",
+      type: "number",
+      description: "Number of times the workflow has been run",
+      isOptional: true,
     },
   ]}
 />
@@ -129,11 +119,13 @@ const myStep = createStep({
     {
       name: "result",
       type: "Promise<z.infer<TOutput>>",
-      description: "A promise that resolves to the output of the executed step",
+      description: "A promise that resolves to the output of the executed workflow",
     },
   ]}
 />
 
 ## Related
 
-- [Running workflows](../../docs/workflows/overview.mdx#running-workflows)
+- [Workflow.createRunAsync()](./create-run.mdx) - Alternative method for creating workflow runs
+- [WorkflowRun.start()](./run-methods/start.mdx) - Starting workflow execution
+- [Workflows overview](../../docs/workflows/overview.mdx#run-workflow)
