@@ -5,7 +5,7 @@ description: "Documentation for the `Agent.getDefaultVNextStreamOptions()` metho
 
 # Agent.getDefaultVNextStreamOptions()
 
-The `.getDefaultVNextStreamOptions()` method retrieves the default vNext streaming options configured for an agent, resolving them if they're a function. These options are used as the base configuration for all `streamVNext()` calls unless overridden.
+Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultVNextStreamOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `streamVNext()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 

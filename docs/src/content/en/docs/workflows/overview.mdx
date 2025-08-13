@@ -179,7 +179,7 @@ if (result.status === 'success') {
   console.log(`output value: ${result.result.output}`);
 }
 ```
-> see [createRunAsync](/reference/workflows/create-run) and [start](/reference/workflows/start) for more information.
+> see [createRunAsync](/reference/workflows/create-run) and [start](/reference/workflows/run-methods/start) for more information.
 
 To trigger this workflow, run the following:
 
@@ -277,7 +277,7 @@ for await (const chunk of result.stream) {
 }
 ```
 
-> See [stream](/reference/workflows/stream) and [messages](/reference/workflows/stream#messages) for more information.
+> See [stream](/reference/workflows/run-methods/stream) and [messages](/reference/workflows/run-methods/stream#messages) for more information.
 
 ### Watch Workflow
 
@@ -299,7 +299,7 @@ const result = await run.start({
 });
 ```
 
-> See [watch](/reference/workflows/watch) for more information.
+> See [watch](/reference/workflows/run-methods/watch) for more information.
 
 ## More resources
 
