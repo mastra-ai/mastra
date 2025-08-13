@@ -447,6 +447,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
     return [];
   }
 
+  private parseStoredMessage(storedMessage: MastraMessageV2 & { _index?: number }): MastraMessageV2 {
+    const defaultMessageContent = { format: 2, parts: [{ type: 'text', text: '' }] };
+    const { _index, ...rest } = storedMessage;
+    return {
+      ...rest,
+      createdAt: new Date(rest.createdAt),
+      content: rest.content || defaultMessageContent,
+    } satisfies MastraMessageV2;
+  }
+
   /**
    * @deprecated use getMessagesPaginated instead
    */
@@ -550,16 +560,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
-  }
-
-  private parseStoredMessage(storedMessage: MastraMessageV2 & { _index?: number }): MastraMessageV2 {
-    const defaultMessageContent = { format: 2, parts: [{ type: 'text', text: '' }] };
-    const { _index, ...rest } = storedMessage;
-    return {
-      ...rest,
-      createdAt: new Date(rest.createdAt),
-      content: rest.content || defaultMessageContent,
-    } satisfies MastraMessageV2;
   }
 
   public async getMessagesById({

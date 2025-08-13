@@ -595,7 +595,6 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
       });
 
       expect(messages).toHaveLength(thread1Messages.length + thread2Messages.length + resource2Messages.length);
-      // expect(messages.map((message) => message.id)).toMatchObject(messageIds);
       expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
     });
 

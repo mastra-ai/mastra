@@ -383,6 +383,24 @@ export class MemoryPG extends MemoryStorage {
     return dedupedRows;
   }
 
+  private parseRow(row: any): MastraMessageV2 {
+    let content = row.content;
+    try {
+      content = JSON.parse(row.content);
+    } catch {
+      // use content as is if it's not JSON
+    }
+    return {
+      id: row.id,
+      content,
+      role: row.role,
+      createdAt: new Date(row.createdAt as string),
+      threadId: row.threadId,
+      resourceId: row.resourceId,
+      ...(row.type && row.type !== 'v2' ? { type: row.type } : {}),
+    } satisfies MastraMessageV2;
+  }
+
   /**
    * @deprecated use getMessagesPaginated instead
    */
@@ -461,24 +479,6 @@ export class MemoryPG extends MemoryStorage {
       this.logger?.trackException(mastraError);
       return [];
     }
-  }
-
-  private parseRow(row: any): MastraMessageV2 {
-    let content = row.content;
-    try {
-      content = JSON.parse(row.content);
-    } catch {
-      // use content as is if it's not JSON
-    }
-    return {
-      id: row.id,
-      content,
-      role: row.role,
-      createdAt: new Date(row.createdAt as string),
-      threadId: row.threadId,
-      resourceId: row.resourceId,
-      ...(row.type && row.type !== 'v2' ? { type: row.type } : {}),
-    } satisfies MastraMessageV2;
   }
 
   public async getMessagesById({

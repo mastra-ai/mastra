@@ -185,6 +185,24 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
+  private normalizeMessage(message: any): MastraMessageV1 | MastraMessageV2 {
+    const { thread_id, ...rest } = message;
+    return {
+      ...rest,
+      threadId: thread_id,
+      content:
+        typeof message.content === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(message.content);
+              } catch {
+                return message.content;
+              }
+            })()
+          : message.content,
+    };
+  }
+
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
@@ -255,24 +273,6 @@ export class StoreMemoryLance extends MemoryStorage {
         error,
       );
     }
-  }
-
-  private normalizeMessage(message: any): MastraMessageV1 | MastraMessageV2 {
-    const { thread_id, ...rest } = message;
-    return {
-      ...rest,
-      threadId: thread_id,
-      content:
-        typeof message.content === 'string'
-          ? (() => {
-              try {
-                return JSON.parse(message.content);
-              } catch {
-                return message.content;
-              }
-            })()
-          : message.content,
-    };
   }
 
   public async getMessagesById({
