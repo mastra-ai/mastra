@@ -1,30 +1,19 @@
-import { spawn } from 'child_process';
+import { exec as originalExec } from 'child_process';
+import { promisify } from 'util';
 import { globby } from 'globby';
 import fs from 'fs/promises';
 import path from 'path';
 import { statSync } from 'fs';
 
+const exec = promisify(originalExec);
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
 
 // @see https://blog.devgenius.io/compiling-from-typescript-with-js-extension-e2b6de3e6baf
 export async function generateTypes(rootDir) {
   try {
-    // Use spawn instead of exec to properly inherit stdio
-    const tscProcess = spawn('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
-      cwd: rootDir,
+    await exec('pnpm tsc -p tsconfig.build.json', {
       stdio: 'inherit',
-    });
-
-    await new Promise((resolve, reject) => {
-      tscProcess.on('close', code => {
-        if (code !== 0) {
-          reject({ code });
-        } else {
-          resolve();
-        }
-      });
-
-      tscProcess.on('error', reject);
+      cwd: rootDir,
     });
 
     const dtsFiles = await globby('dist/**/*.d.ts', {
