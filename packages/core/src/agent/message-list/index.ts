@@ -184,277 +184,6 @@ export class MessageList {
     };
   }
 
-  private cleanV3Metadata(messages: MastraMessageV3[]): MastraMessageV3[] {
-    return messages.map(msg => {
-      if (!msg.content.metadata || typeof msg.content.metadata !== 'object') {
-        return msg;
-      }
-
-      const metadata = { ...msg.content.metadata } as any;
-      const hasOriginalContent = '__originalContent' in metadata;
-      const hasOriginalAttachments = '__originalExperimentalAttachments' in metadata;
-
-      if (!hasOriginalContent && !hasOriginalAttachments) {
-        return msg;
-      }
-
-      const { __originalContent, __originalExperimentalAttachments, ...cleanMetadata } = metadata;
-
-      if (Object.keys(cleanMetadata).length === 0) {
-        // Remove metadata entirely if it only had internal fields
-        const { metadata, ...contentWithoutMetadata } = msg.content;
-        return { ...msg, content: contentWithoutMetadata };
-      }
-
-      return { ...msg, content: { ...msg.content, metadata: cleanMetadata } };
-    });
-  }
-
-  static aiV4CoreMessageToV1PromptMessage(coreMessage: AIV4Type.CoreMessage): LanguageModelV1Message {
-    if (coreMessage.role === `system`) {
-      return coreMessage;
-    }
-
-    if (typeof coreMessage.content === `string` && (coreMessage.role === `assistant` || coreMessage.role === `user`)) {
-      return {
-        ...coreMessage,
-        content: [{ type: 'text', text: coreMessage.content }],
-      };
-    }
-
-    if (typeof coreMessage.content === `string`) {
-      throw new Error(
-        `Saw text content for input CoreMessage, but the role is ${coreMessage.role}. This is only allowed for "system", "assistant", and "user" roles.`,
-      );
-    }
-
-    const roleContent: {
-      user: Exclude<Extract<LanguageModelV1Message, { role: 'user' }>['content'], string>;
-      assistant: Exclude<Extract<LanguageModelV1Message, { role: 'assistant' }>['content'], string>;
-      tool: Exclude<Extract<LanguageModelV1Message, { role: 'tool' }>['content'], string>;
-    } = {
-      user: [],
-      assistant: [],
-      tool: [],
-    };
-
-    const role = coreMessage.role;
-
-    for (const part of coreMessage.content) {
-      const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
-
-      switch (part.type) {
-        case 'text': {
-          if (role === `tool`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'redacted-reasoning':
-        case 'reasoning': {
-          if (role !== `assistant`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'tool-call': {
-          if (role === `tool` || role === `user`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'tool-result': {
-          if (role === `assistant` || role === `user`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'image': {
-          if (role === `tool` || role === `assistant`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push({
-            ...part,
-            image:
-              part.image instanceof URL || part.image instanceof Uint8Array
-                ? part.image
-                : Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer
-                  ? new Uint8Array(part.image)
-                  : new URL(part.image),
-          });
-          break;
-        }
-
-        case 'file': {
-          if (role === `tool`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push({
-            ...part,
-            data:
-              part.data instanceof URL
-                ? part.data
-                : typeof part.data === 'string'
-                  ? part.data
-                  : convertDataContentToBase64String(part.data),
-          });
-          break;
-        }
-      }
-    }
-
-    if (role === `tool`) {
-      return {
-        ...coreMessage,
-        content: roleContent[role],
-      };
-    }
-    if (role === `user`) {
-      return {
-        ...coreMessage,
-        content: roleContent[role],
-      };
-    }
-    if (role === `assistant`) {
-      return {
-        ...coreMessage,
-        content: roleContent[role],
-      };
-    }
-
-    throw new Error(
-      `Encountered unknown role ${role} when converting V4 CoreMessage -> V4 LanguageModelV1Prompt, input message: ${JSON.stringify(coreMessage, null, 2)}`,
-    );
-  }
-
-  static aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMessage): AIV5LanguageModelV2Message {
-    if (modelMessage.role === `system`) {
-      return modelMessage;
-    }
-
-    if (
-      typeof modelMessage.content === `string` &&
-      (modelMessage.role === `assistant` || modelMessage.role === `user`)
-    ) {
-      return {
-        role: modelMessage.role,
-        content: [{ type: 'text', text: modelMessage.content }],
-        providerOptions: modelMessage.providerOptions,
-      };
-    }
-
-    if (typeof modelMessage.content === `string`) {
-      throw new Error(
-        `Saw text content for input ModelMessage, but the role is ${modelMessage.role}. This is only allowed for "system", "assistant", and "user" roles.`,
-      );
-    }
-
-    const roleContent: {
-      user: Extract<AIV5LanguageModelV2Message, { role: 'user' }>['content'];
-      assistant: Extract<AIV5LanguageModelV2Message, { role: 'assistant' }>['content'];
-      tool: Extract<AIV5LanguageModelV2Message, { role: 'tool' }>['content'];
-    } = {
-      user: [],
-      assistant: [],
-      tool: [],
-    };
-
-    const role = modelMessage.role;
-
-    for (const part of modelMessage.content) {
-      const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
-
-      switch (part.type) {
-        case 'text': {
-          if (role === `tool`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'reasoning': {
-          if (role === `tool` || role === `user`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'tool-call': {
-          if (role !== `assistant`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'tool-result': {
-          if (role === `assistant` || role === `user`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push(part);
-          break;
-        }
-
-        case 'file': {
-          if (role === `tool`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push({
-            ...part,
-            data: part.data instanceof ArrayBuffer ? new Uint8Array(part.data) : part.data,
-          });
-          break;
-        }
-
-        case 'image': {
-          if (role === `tool`) {
-            throw new Error(incompatibleMessage);
-          }
-          roleContent[role].push({
-            ...part,
-            mediaType: part.mediaType || 'image/unknown',
-            type: 'file',
-            data: part.image instanceof ArrayBuffer ? new Uint8Array(part.image) : part.image,
-          });
-          break;
-        }
-      }
-    }
-
-    if (role === `tool`) {
-      return {
-        ...modelMessage,
-        content: roleContent[role],
-      };
-    }
-    if (role === `user`) {
-      return {
-        ...modelMessage,
-        content: roleContent[role],
-      };
-    }
-    if (role === `assistant`) {
-      return {
-        ...modelMessage,
-        content: roleContent[role],
-      };
-    }
-
-    throw new Error(
-      `Encountered unknown role ${role} when converting V5 ModelMessage -> V5 LanguageModelV2Message, input message: ${JSON.stringify(modelMessage, null, 2)}`,
-    );
-  }
-
   private all = {
     v3: (): MastraMessageV3[] => this.cleanV3Metadata(this.messages.map(this.mastraMessageV2ToMastraMessageV3)),
     v2: (): MastraMessageV2[] => this.messages,
@@ -946,7 +675,8 @@ export class MessageList {
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
-        toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
+        toolInvocations:
+          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
       };
       // Preserve metadata if present
       if (m.content.metadata) {
@@ -2375,5 +2105,276 @@ export class MessageList {
     }
 
     return true;
+  }
+
+  private cleanV3Metadata(messages: MastraMessageV3[]): MastraMessageV3[] {
+    return messages.map(msg => {
+      if (!msg.content.metadata || typeof msg.content.metadata !== 'object') {
+        return msg;
+      }
+
+      const metadata = { ...msg.content.metadata } as any;
+      const hasOriginalContent = '__originalContent' in metadata;
+      const hasOriginalAttachments = '__originalExperimentalAttachments' in metadata;
+
+      if (!hasOriginalContent && !hasOriginalAttachments) {
+        return msg;
+      }
+
+      const { __originalContent, __originalExperimentalAttachments, ...cleanMetadata } = metadata;
+
+      if (Object.keys(cleanMetadata).length === 0) {
+        // Remove metadata entirely if it only had internal fields
+        const { metadata, ...contentWithoutMetadata } = msg.content;
+        return { ...msg, content: contentWithoutMetadata };
+      }
+
+      return { ...msg, content: { ...msg.content, metadata: cleanMetadata } };
+    });
+  }
+
+  static aiV4CoreMessageToV1PromptMessage(coreMessage: AIV4Type.CoreMessage): LanguageModelV1Message {
+    if (coreMessage.role === `system`) {
+      return coreMessage;
+    }
+
+    if (typeof coreMessage.content === `string` && (coreMessage.role === `assistant` || coreMessage.role === `user`)) {
+      return {
+        ...coreMessage,
+        content: [{ type: 'text', text: coreMessage.content }],
+      };
+    }
+
+    if (typeof coreMessage.content === `string`) {
+      throw new Error(
+        `Saw text content for input CoreMessage, but the role is ${coreMessage.role}. This is only allowed for "system", "assistant", and "user" roles.`,
+      );
+    }
+
+    const roleContent: {
+      user: Exclude<Extract<LanguageModelV1Message, { role: 'user' }>['content'], string>;
+      assistant: Exclude<Extract<LanguageModelV1Message, { role: 'assistant' }>['content'], string>;
+      tool: Exclude<Extract<LanguageModelV1Message, { role: 'tool' }>['content'], string>;
+    } = {
+      user: [],
+      assistant: [],
+      tool: [],
+    };
+
+    const role = coreMessage.role;
+
+    for (const part of coreMessage.content) {
+      const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
+
+      switch (part.type) {
+        case 'text': {
+          if (role === `tool`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'redacted-reasoning':
+        case 'reasoning': {
+          if (role !== `assistant`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'tool-call': {
+          if (role === `tool` || role === `user`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'tool-result': {
+          if (role === `assistant` || role === `user`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'image': {
+          if (role === `tool` || role === `assistant`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push({
+            ...part,
+            image:
+              part.image instanceof URL || part.image instanceof Uint8Array
+                ? part.image
+                : Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer
+                  ? new Uint8Array(part.image)
+                  : new URL(part.image),
+          });
+          break;
+        }
+
+        case 'file': {
+          if (role === `tool`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push({
+            ...part,
+            data:
+              part.data instanceof URL
+                ? part.data
+                : typeof part.data === 'string'
+                  ? part.data
+                  : convertDataContentToBase64String(part.data),
+          });
+          break;
+        }
+      }
+    }
+
+    if (role === `tool`) {
+      return {
+        ...coreMessage,
+        content: roleContent[role],
+      };
+    }
+    if (role === `user`) {
+      return {
+        ...coreMessage,
+        content: roleContent[role],
+      };
+    }
+    if (role === `assistant`) {
+      return {
+        ...coreMessage,
+        content: roleContent[role],
+      };
+    }
+
+    throw new Error(
+      `Encountered unknown role ${role} when converting V4 CoreMessage -> V4 LanguageModelV1Prompt, input message: ${JSON.stringify(coreMessage, null, 2)}`,
+    );
+  }
+
+  static aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMessage): AIV5LanguageModelV2Message {
+    if (modelMessage.role === `system`) {
+      return modelMessage;
+    }
+
+    if (
+      typeof modelMessage.content === `string` &&
+      (modelMessage.role === `assistant` || modelMessage.role === `user`)
+    ) {
+      return {
+        role: modelMessage.role,
+        content: [{ type: 'text', text: modelMessage.content }],
+        providerOptions: modelMessage.providerOptions,
+      };
+    }
+
+    if (typeof modelMessage.content === `string`) {
+      throw new Error(
+        `Saw text content for input ModelMessage, but the role is ${modelMessage.role}. This is only allowed for "system", "assistant", and "user" roles.`,
+      );
+    }
+
+    const roleContent: {
+      user: Extract<AIV5LanguageModelV2Message, { role: 'user' }>['content'];
+      assistant: Extract<AIV5LanguageModelV2Message, { role: 'assistant' }>['content'];
+      tool: Extract<AIV5LanguageModelV2Message, { role: 'tool' }>['content'];
+    } = {
+      user: [],
+      assistant: [],
+      tool: [],
+    };
+
+    const role = modelMessage.role;
+
+    for (const part of modelMessage.content) {
+      const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
+
+      switch (part.type) {
+        case 'text': {
+          if (role === `tool`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'reasoning': {
+          if (role === `tool` || role === `user`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'tool-call': {
+          if (role !== `assistant`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'tool-result': {
+          if (role === `assistant` || role === `user`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push(part);
+          break;
+        }
+
+        case 'file': {
+          if (role === `tool`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push({
+            ...part,
+            data: part.data instanceof ArrayBuffer ? new Uint8Array(part.data) : part.data,
+          });
+          break;
+        }
+
+        case 'image': {
+          if (role === `tool`) {
+            throw new Error(incompatibleMessage);
+          }
+          roleContent[role].push({
+            ...part,
+            mediaType: part.mediaType || 'image/unknown',
+            type: 'file',
+            data: part.image instanceof ArrayBuffer ? new Uint8Array(part.image) : part.image,
+          });
+          break;
+        }
+      }
+    }
+
+    if (role === `tool`) {
+      return {
+        ...modelMessage,
+        content: roleContent[role],
+      };
+    }
+    if (role === `user`) {
+      return {
+        ...modelMessage,
+        content: roleContent[role],
+      };
+    }
+    if (role === `assistant`) {
+      return {
+        ...modelMessage,
+        content: roleContent[role],
+      };
+    }
+
+    throw new Error(
+      `Encountered unknown role ${role} when converting V5 ModelMessage -> V5 LanguageModelV2Message, input message: ${JSON.stringify(modelMessage, null, 2)}`,
+    );
   }
 }
