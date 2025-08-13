@@ -39,11 +39,11 @@ export function createLLMExecutionStep({
 
       switch (model.specificationVersion) {
         case 'v2': {
-          modelResult = await execute({
+          modelResult = execute({
             runId,
             model,
             providerOptions,
-            inputMessages: messageList.get.all.prompt() as any,
+            inputMessages: messageList.get.all.aiV5.llmPrompt(),
             tools,
             toolChoice,
             options,

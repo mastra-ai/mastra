@@ -49,7 +49,7 @@ export async function loop({
   rootSpan.setAttributes({
     ...(telemetry_settings?.recordOutputs !== false
       ? {
-          'stream.prompt.messages': JSON.stringify(messageList.get.input.core()),
+          'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
         }
       : {}),
   });
