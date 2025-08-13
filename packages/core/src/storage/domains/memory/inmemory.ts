@@ -216,15 +216,7 @@ export class InMemoryMemory extends MemoryStorage {
       } else if (!selectBy?.include || selectBy.include.length === 0) {
         // Convert and add all thread messages only if no include items
         for (const msg of threadMessages) {
-          const convertedMessage = {
-            id: msg.id,
-            threadId: msg.thread_id,
-            content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content,
-            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: msg.type,
-            createdAt: msg.createdAt,
-            resourceId: msg.resourceId,
-          } as MastraMessageV2;
+          const convertedMessage = this.parseStoredMessage(msg);
           messages.push(convertedMessage);
         }
       }
@@ -236,15 +228,14 @@ export class InMemoryMemory extends MemoryStorage {
     return messages as T;
   }
 
-  protected convertMessageToV2(message: StorageMessageType): MastraMessageV2 {
+  protected parseStoredMessage(message: StorageMessageType): MastraMessageV2 {
+    const { resourceId, content, role, thread_id, ...rest } = message;
     return {
-      id: message.id,
-      threadId: message.thread_id,
+      ...rest,
+      threadId: thread_id,
       ...(message.resourceId && { resourceId: message.resourceId }),
-      content: typeof message.content === 'string' ? message.content : JSON.parse(message.content),
-      role: message.role as MastraMessageV2['role'],
-      type: message.type,
-      createdAt: message.createdAt,
+      content: typeof content === 'string' ? content : JSON.parse(content),
+      role: role as MastraMessageV2['role'],
     } satisfies MastraMessageV2;
   }
 
@@ -259,16 +250,9 @@ export class InMemoryMemory extends MemoryStorage {
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     this.logger.debug(`MockStore: getMessagesById called`);
 
-    const messages = messageIds.reduce((acc: MastraMessageV2[], id) => {
-      const storedMessage = this.collection.messages.get(id);
-      if (storedMessage) acc.push(this.convertMessageToV2(storedMessage));
-      return acc;
-    }, []);
+    const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
 
-    // Sort by createdAt
-    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    const list = new MessageList().add(messages, 'memory');
+    const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
     if (format === 'v1') return list.get.all.v1();
     return list.get.all.v2();
   }
