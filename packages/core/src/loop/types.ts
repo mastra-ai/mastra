@@ -1,6 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { CallSettings, TelemetrySettings } from 'ai-v5';
-import type { MessageList } from '../agent';
+import type { MessageList } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
 import type { MastraIdGenerator } from '../types';
 
