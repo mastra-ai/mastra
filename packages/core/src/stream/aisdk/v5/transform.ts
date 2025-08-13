@@ -4,20 +4,21 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
+import type { ChunkType } from '../../types';
 
 type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
-      type: 'finish';
-      finishReason: LanguageModelV2FinishReason;
-      usage: LanguageModelV2Usage;
-      providerMetadata: SharedV2ProviderMetadata;
-      messages: {
-        all: any[];
-        user: any[];
-        nonUser: any[];
-      };
+    type: 'finish';
+    finishReason: LanguageModelV2FinishReason;
+    usage: LanguageModelV2Usage;
+    providerMetadata: SharedV2ProviderMetadata;
+    messages: {
+      all: any[];
+      user: any[];
+      nonUser: any[];
     };
+  };
 
 export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }) {
   switch (value.type) {
@@ -293,4 +294,14 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   //         },
   //     };
   // }
+}
+
+export function convertFullStreamChunkToAISDKv5({
+  chunk,
+  getErrorMessage,
+}: {
+  chunk: ChunkType,
+  getErrorMessage: (error: Error) => string,
+}) {
+
 }
