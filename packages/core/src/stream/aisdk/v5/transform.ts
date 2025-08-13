@@ -4,6 +4,8 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
+import type { TextStreamPart, ToolSet } from 'ai-v5';
+import type { ChunkType } from '../../types';
 
 type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
@@ -293,4 +295,59 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   //         },
   //     };
   // }
+}
+
+type OutputChunkType = TextStreamPart<ToolSet> | undefined;
+
+export function convertMastraChunkToAISDKv5({
+  chunk,
+  includeRawChunks,
+}: {
+  chunk: ChunkType;
+  includeRawChunks?: boolean;
+}): OutputChunkType {
+  switch (chunk.type) {
+    case 'start':
+      return {
+        type: 'start',
+      };
+    case 'step-start':
+      const { messageId: _messageId, ...rest } = chunk.payload;
+      return {
+        type: 'start-step',
+        request: rest.request,
+        warnings: rest.warnings,
+      };
+    case 'raw':
+      if (includeRawChunks) {
+        return {
+          type: 'raw',
+          rawValue: chunk.payload,
+        };
+      }
+      return;
+
+    case 'file':
+      return {
+        type: 'file',
+        file: {
+          base64: chunk.payload.base64,
+          uint8Array: chunk.payload.uint8Array,
+          mediaType: chunk.payload.mediaType,
+        },
+      };
+
+    case 'abort':
+      return {
+        type: 'abort',
+      };
+
+    case 'error':
+      return {
+        type: 'error',
+        error: chunk.payload.error,
+      };
+  }
+
+  return;
 }

@@ -15,6 +15,7 @@ export function createOuterLLMWorkflow({
   const llmExecutionStep = createLLMExecutionStep({
     model,
     _internal,
+    modelStreamSpan,
     ...rest,
   });
 
@@ -22,6 +23,7 @@ export function createOuterLLMWorkflow({
     model,
     telemetry_settings,
     _internal,
+    modelStreamSpan,
     ...rest,
   });
 

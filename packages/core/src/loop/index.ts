@@ -14,6 +14,7 @@ export async function loop({
   includeRawChunks,
   modelSettings,
   tools,
+  ...rest
 }: LoopOptions) {
   let loggerToUse =
     logger ||
@@ -48,7 +49,7 @@ export async function loop({
   rootSpan.setAttributes({
     ...(telemetry_settings?.recordOutputs !== false
       ? {
-          'stream.prompt.messages': JSON.stringify(messageList.get.input.core()),
+          'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
         }
       : {}),
   });
@@ -62,6 +63,7 @@ export async function loop({
     includeRawChunks,
     _internal,
     tools,
+    ...rest,
   };
 
   const streamFn = workflowLoopStream(workflowLoopProps);

@@ -1,4 +1,3 @@
-import type { ModelMessage } from 'ai-v5';
 import { createStep } from '../../workflows';
 import { getRootSpan } from '../telemetry';
 import type { OuterLLMRun } from '../types';
@@ -18,21 +17,12 @@ export function createToolCallStep({ tools, model, messageList, options, telemet
         throw new Error(`Tool ${inputData.toolName} not found`);
       }
 
-      // const initialResult = getStepResult({
-      //   id: 'generateText',
-      // } as any);
-
-      // messageList.add(initialResult.messages.user, 'input');
-
       if (tool && 'onInputAvailable' in tool) {
         try {
           await tool?.onInputAvailable?.({
             toolCallId: inputData.toolCallId,
             input: inputData.args,
-            messages: messageList.get.input.core()?.map(message => ({
-              role: message.role,
-              content: message.content,
-            })) as ModelMessage[],
+            messages: messageList.get.input.aiV5.model(),
             abortSignal: options?.abortSignal,
           });
         } catch (error) {
@@ -63,7 +53,7 @@ export function createToolCallStep({ tools, model, messageList, options, telemet
         const result = await tool.execute(inputData.args, {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          messages: messageList.get.input.core() as ModelMessage[],
+          messages: messageList.get.input.aiV5.model(),
         });
 
         span.setAttributes({
