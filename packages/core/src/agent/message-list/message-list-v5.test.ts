@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
 import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
-import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage, LanguageModelV2Prompt } from 'ai-v5';
-import { MessageList } from './index';
+import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
+import { describe, expect, it } from 'vitest';
 import { hasAIV5CoreMessageCharacteristics } from './utils/ai-v4-v5/core-model-message';
 import { hasAIV5UIMessageCharacteristics } from './utils/ai-v4-v5/ui-message';
-import type { MastraMessageV2, MastraMessageV3 } from './types';
+import type { MastraMessageV2 } from './index';
+import { MessageList } from './index';
 
 const threadId = 'test-thread';
 const resourceId = 'test-resource';
@@ -19,7 +19,8 @@ describe('MessageList V5 Support', () => {
             {
               type: 'tool-result',
               toolCallId: 'call-1',
-              output: { result: 'success' }, // v5 uses output
+              toolName: 'example',
+              output: { type: 'text', value: 'success' }, // v5 uses output
             },
           ],
         };
@@ -29,10 +30,11 @@ describe('MessageList V5 Support', () => {
 
       it('should detect v4 messages with result in tool-result parts', () => {
         const v4Message: AIV4CoreMessage = {
-          role: 'assistant',
+          role: 'tool',
           content: [
             {
               type: 'tool-result',
+              toolName: 'test',
               toolCallId: 'call-1',
               result: { data: 'success' }, // v4 uses result
             },
@@ -108,7 +110,7 @@ describe('MessageList V5 Support', () => {
         const v4Message: AIV4CoreMessage = {
           role: 'assistant',
           content: 'Hello',
-          experimental_providerMetadata: { custom: 'data' }, // v4-only property
+          experimental_providerMetadata: { custom: { stuff: 'data' } }, // v4-only property
         };
 
         expect(hasAIV5CoreMessageCharacteristics(v4Message)).toBe(false);
@@ -156,10 +158,11 @@ describe('MessageList V5 Support', () => {
 
     describe('hasAIV5UIMessageCharacteristics', () => {
       it('should detect v4 messages with toolInvocations array', () => {
-        const v4Message: AIV4UIMessage = {
+        const v4Message = {
           id: 'msg-1',
           role: 'assistant',
           content: 'Processing...',
+          parts: [],
           toolInvocations: [
             {
               toolCallId: 'call-1',
@@ -169,7 +172,7 @@ describe('MessageList V5 Support', () => {
               result: { data: 'success' },
             },
           ],
-        };
+        } satisfies AIV4UIMessage;
 
         expect(hasAIV5UIMessageCharacteristics(v4Message)).toBe(false);
       });
@@ -225,8 +228,8 @@ describe('MessageList V5 Support', () => {
           parts: [
             {
               type: 'source-url', // v5 type
+              sourceId: '1',
               url: 'https://example.com',
-              metadata: { title: 'Example' },
             },
           ],
         };
@@ -244,7 +247,9 @@ describe('MessageList V5 Support', () => {
               type: 'source', // v4 type
               source: {
                 url: 'https://example.com',
-                providerMetadata: { title: 'Example' },
+                sourceType: 'url',
+                id: '1',
+                providerMetadata: { custom: { stuff: 'ok' } },
               },
             },
           ],
@@ -665,6 +670,7 @@ describe('MessageList V5 Support', () => {
         id: 'msg-1',
         role: 'user',
         content: 'Hello from v4',
+        parts: [{ type: 'text', text: 'Hello from v4' }],
         createdAt: new Date(),
       };
 
