@@ -41,7 +41,7 @@ export async function selectScorer(): Promise<ScorerTemplate[] | null> {
   return selectedScorers;
 }
 
-export async function addNewScorer(scorerId?: string) {
+export async function addNewScorer(scorerId?: string, customDir?: string) {
   const depServce = new DepsService();
   const needsEvals = (await depServce.checkDependencies(['@mastra/evals'])) !== `ok`;
 
@@ -50,7 +50,7 @@ export async function addNewScorer(scorerId?: string) {
   }
 
   if (!scorerId) {
-    await showInteractivePrompt();
+    await showInteractivePrompt(customDir);
     return;
   }
 
@@ -63,7 +63,7 @@ export async function addNewScorer(scorerId?: string) {
   const { id, filename } = foundScorer;
 
   try {
-    const res = await initializeScorer(id, filename);
+    const res = await initializeScorer(id, filename, customDir);
     if (!res.ok) {
       return;
     }
@@ -96,34 +96,38 @@ function showSuccessNote() {
         `);
 }
 
-async function showInteractivePrompt() {
+async function showInteractivePrompt(providedCustomDir?: string) {
   let selectedScorers = await selectScorer();
   if (!selectedScorers) {
     return;
   }
 
-  const useCustomDir = await p.confirm({
-    message: `Would you like to use a custom directory?${pc.gray('(Default: src/mastra/scorers)')}`,
-    initialValue: false,
-  });
+  let customPath: string | undefined = providedCustomDir;
 
-  if (p.isCancel(useCustomDir)) {
-    p.log.info('Operation cancelled.');
-    return;
-  }
-
-  let customPath: string | undefined;
-  if (useCustomDir) {
-    const dirPath = await p.text({
-      message: 'Enter the directory path (relative to project root):',
-      placeholder: 'src/scorers',
+  // Only ask for custom directory if one wasn't provided via --dir flag
+  if (!providedCustomDir) {
+    const useCustomDir = await p.confirm({
+      message: `Would you like to use a custom directory?${pc.gray('(Default: src/mastra/scorers)')}`,
+      initialValue: false,
     });
 
-    if (p.isCancel(dirPath)) {
+    if (p.isCancel(useCustomDir)) {
       p.log.info('Operation cancelled.');
       return;
     }
-    customPath = dirPath as string;
+
+    if (useCustomDir) {
+      const dirPath = await p.text({
+        message: 'Enter the directory path (relative to project root):',
+        placeholder: 'src/scorers',
+      });
+
+      if (p.isCancel(dirPath)) {
+        p.log.info('Operation cancelled.');
+        return;
+      }
+      customPath = dirPath as string;
+    }
   }
 
   const result = await Promise.allSettled(
@@ -140,15 +144,15 @@ async function showInteractivePrompt() {
     }
     const errorMessage = String(op.reason);
     const coreError = errorMessage.replace('Error:', '').trim();
-    if (errorMessage.includes('Skipped')) {
+    if (coreError.includes('Skipped')) {
       return p.log.warning(coreError);
     }
     p.log.error(coreError);
   });
 
-  const isAllGood = result.some(item => item.status === 'fulfilled');
+  const containsSuccessfulWrites = result.some(item => item.status === 'fulfilled');
 
-  if (isAllGood) {
+  if (containsSuccessfulWrites) {
     showSuccessNote();
   }
   return;

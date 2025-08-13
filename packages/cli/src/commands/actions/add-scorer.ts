@@ -10,7 +10,7 @@ export const addScorer = async (scorerName: string | undefined, args: any) => {
       command: 'scorers-add',
       args: { ...args, scorerName },
       execution: async () => {
-        await addNewScorer(scorerName);
+        await addNewScorer(scorerName, args.dir);
       },
       origin,
     });
