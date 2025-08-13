@@ -39,7 +39,6 @@ const DEFAULT_VOICE: GeminiVoiceName = 'Puck';
  *
  * Features:
  * - Bidirectional audio streaming
- * - Video input support
  * - Built-in VAD and interrupt handling
  * - Tool calling capabilities
  * - Session management and resumption
@@ -801,21 +800,6 @@ export class GeminiLiveVoice extends MastraVoice<
       this.sessionHandle = undefined;
       throw new Error(`Failed to resume session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }
-
-  /**
-   * Send video frame for multimodal processing
-   */
-  async sendVideo(_videoData: Buffer | Uint8Array): Promise<void> {
-    if (this.state !== 'connected') {
-      throw new Error('Not connected to Gemini Live API. Call connect() first.');
-    }
-
-    // TODO: Implement video streaming
-    // - Convert video frame to JPEG format
-    // - Send via WebSocket with appropriate metadata
-
-    throw new Error('Video streaming not yet implemented');
   }
 
   /**
@@ -1667,6 +1651,7 @@ export class GeminiLiveVoice extends MastraVoice<
     if (data.serverContent?.modelTurn?.parts?.some(part => part.inlineData?.mimeType?.includes('audio'))) {
       return 'audio';
     }
+    // Support for video is not yet implemented, leaving this here for future use if needed
     if (data.serverContent?.modelTurn?.parts?.some(part => part.inlineData?.mimeType?.includes('video'))) {
       return 'video';
     }
