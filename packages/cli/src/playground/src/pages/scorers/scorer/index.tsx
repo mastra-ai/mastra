@@ -441,8 +441,6 @@ function ScoreDetails({
     generateReasonPrompt: score?.generateReasonPrompt,
   };
 
-  console.log('Score details:', JSON.stringify(score, null, 2));
-
   return (
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
       <Dialog.Portal>

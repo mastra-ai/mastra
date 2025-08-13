@@ -1,5 +1,61 @@
 # @mastra/deployer
 
+## 0.13.2
+
+### Patch Changes
+
+- aaf0224: improve dev playground request detection
+- 42cb4e9: Add warning message when an invalid `src/mastra/index.ts` configuration file is found
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [f6a1ae7]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+  - @mastra/server@0.13.2
+
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+  - @mastra/server@0.13.2-alpha.3
+
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- aaf0224: improve dev playground request detection
+- 42cb4e9: Add warning message when an invalid `src/mastra/index.ts` configuration file is found
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [f6a1ae7]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+  - @mastra/server@0.13.2-alpha.2
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

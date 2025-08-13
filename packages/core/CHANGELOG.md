@@ -1,5 +1,44 @@
 # @mastra/core
 
+## 0.13.2
+
+### Patch Changes
+
+- d5330bf: Allow agent model to be updated after the agent is created
+- 2e74797: Fix tool arguments being lost when tool-result messages arrive separately from tool-call messages or when messages are restored from database. Tool invocations now correctly preserve their arguments in all scenarios.
+- 8388649: Allow array of messages in vnext agent network
+- a239d41: Updated A2A syntax to v0.3.0
+- dd94a26: Dont rely on the full language model for schema compat
+- 3ba6772: MastraModelInput
+- b5cf2a3: make system message always available during agent calls
+- 2fff911: Fix vnext working memory tool schema when model is incompatible with schema
+- b32c50d: Filter scores by source
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+- 121a3f8: Fixed an issue where telemetry logs were displaying promise statuses when `agent.stream` is called
+- ec510e7: Tool input validation now returns errors as tool results instead of throwing, allowing agents to understand validation failures and retry with corrected parameters.
+- Updated dependencies [dd94a26]
+- Updated dependencies [2fff911]
+- Updated dependencies [ae2eb63]
+  - @mastra/schema-compat@0.10.7
+
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- d5330bf: Allow agent model to be updated after the agent is created
+- a239d41: Updated A2A syntax to v0.3.0
+- b32c50d: Filter scores by source
+- 121a3f8: Fixed an issue where telemetry logs were displaying promise statuses when `agent.stream` is called
+- ec510e7: Tool input validation now returns errors as tool results instead of throwing, allowing agents to understand validation failures and retry with corrected parameters.
+- Updated dependencies [ae2eb63]
+  - @mastra/schema-compat@0.10.7-alpha.1
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes
