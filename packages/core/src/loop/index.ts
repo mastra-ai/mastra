@@ -1,6 +1,7 @@
+import { generateId } from 'ai-v5';
 import { ConsoleLogger } from '../logger';
 import { getRootSpan } from './telemetry';
-import type { LoopOptions, LoopRun } from './types';
+import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflow/stream';
 
 export async function loop({
@@ -25,7 +26,13 @@ export async function loop({
     runIdToUse = idGenerator?.() || crypto.randomUUID();
   }
 
-  let startTimestamp = Date.now();
+  const _internal: StreamInternal = {
+    now: () => Date.now(),
+    generateId: () => generateId(),
+    currentDate: () => new Date(),
+  };
+
+  let startTimestamp = _internal.now?.();
 
   const { rootSpan } = getRootSpan({
     operationId: `mastra.stream`,
@@ -52,6 +59,7 @@ export async function loop({
     startTimestamp: startTimestamp!,
     messageList,
     includeRawChunks,
+    _internal,
   };
 
   const streamFn = workflowLoopStream(workflowLoopProps);

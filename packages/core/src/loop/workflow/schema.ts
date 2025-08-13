@@ -10,5 +10,5 @@ export const llmIterationOutputSchema = z.object({
   }),
   output: z.any(),
   metadata: z.any(),
-  stepResult: z.any(),
+  stepResult: z.any().optional(),
 });
