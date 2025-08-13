@@ -3,6 +3,7 @@ import { createWorkflow } from '../../workflows';
 import type { OuterLLMRun } from '../types';
 import { createLLMExecutionStep } from './llm-execution';
 import { llmIterationOutputSchema } from './schema';
+import { createToolCallStep } from './tool-call-step';
 
 export function createOuterLLMWorkflow({
   model,
@@ -13,6 +14,13 @@ export function createOuterLLMWorkflow({
 }: OuterLLMRun) {
   const llmExecutionStep = createLLMExecutionStep({
     model,
+    _internal,
+    ...rest,
+  });
+
+  const toolCallStep = createToolCallStep({
+    model,
+    telemetry_settings,
     _internal,
     ...rest,
   });
@@ -30,7 +38,7 @@ export function createOuterLLMWorkflow({
         }
         return inputData.output.toolCalls || [];
       })
-      // .foreach(toolCallExecutionStep)
+      .foreach(toolCallStep)
       // .then(llmExecutionMappingStep)
       .commit()
   );
