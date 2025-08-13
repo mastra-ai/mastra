@@ -3,7 +3,7 @@ import color from 'picocolors';
 import { AVAILABLE_SCORERS } from './available-scorers';
 import type { ScorerTemplate } from './types';
 
-export async function listAllScorers(): Promise<void> {
+export function listAllScorers(): void {
   p.intro(color.inverse(' Available Scorers '));
 
   const groupedScorers = AVAILABLE_SCORERS.reduce(
