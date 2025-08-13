@@ -1,16 +1,10 @@
 const meta = {
-  workflow: "Workflow",
-  step: "Step",
+  workflow: "Workflow Class",
+  step: "Step Class",
   then: ".then()",
   branch: ".branch()",
   parallel: ".parallel()",
   commit: ".commit()",
-  "create-run": ".createRunAsync()",
-  start: ".start()",
-  resume: ".resume()",
-  watch: ".watch()",
-  stream: ".stream()",
-  streamVNext: ".streamVNext() (Experimental)",
   dowhile: ".dowhile()",
   dountil: ".dountil()",
   foreach: ".foreach()",
@@ -20,7 +14,9 @@ const meta = {
   waitForEvent: ".waitForEvent()",
   sendEvent: ".sendEvent()",
   execute: ".execute()",
-  snapshots: "Snapshots",
+  "create-run": ".createRunAsync()",
+  run: "Run Class",
+  "run-methods": { title: "Methods", theme: { collapsed: false } },
 };
 
 export default meta;

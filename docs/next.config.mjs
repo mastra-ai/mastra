@@ -735,6 +735,36 @@ export default withGT(
         destination: "/reference/tools/create-tool",
         permanent: true,
       },
+      {
+        source: "/reference/workflows/start",
+        destination: "/reference/workflows/run-methods/start",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/streamVNext",
+        destination: "/reference/workflows/run-methods/streamVNext",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/resume",
+        destination: "/reference/workflows/run-methods/resume",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/watch",
+        destination: "/reference/workflows/run-methods/watch",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/stream",
+        destination: "/reference/workflows/run-methods/stream",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/snapshots",
+        destination: "/docs/server-db/snapshots",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

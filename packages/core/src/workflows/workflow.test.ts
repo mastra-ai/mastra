@@ -5937,6 +5937,115 @@ describe('Workflow', () => {
       expect(autoResumeResult.status).toBe('success');
       expect(autoResumeResult.result.final).toBe('Completed: processed-auto-resume');
     });
+
+    it('should have access to the correct input value when resuming in a loop. bug #6669', async () => {
+      const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      const step1 = createStep({
+        id: 'step-1',
+        inputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean().default(false),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+        resumeSchema: z.object({
+          shouldContinue: z.boolean(),
+        }),
+        suspendSchema: z.object({
+          message: z.string(),
+        }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          let { condition, value } = inputData;
+          const { shouldContinue } = resumeData ?? {};
+
+          if (!shouldContinue) {
+            await suspend({
+              message: `Continue with value ${value}?`,
+            });
+            return { value, condition };
+          }
+
+          await delay(500);
+
+          value = value + 1;
+          condition = value >= 10;
+
+          console.log(value);
+
+          return {
+            value,
+            condition,
+          };
+        },
+      });
+
+      const step2 = createStep({
+        id: 'step-2',
+        inputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+        execute: async ({ inputData }) => {
+          const { condition, value } = inputData;
+
+          return {
+            value,
+            condition,
+          };
+        },
+      });
+
+      const workflowUntilVar = createWorkflow({
+        id: 'workflow-until-var',
+        inputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean().default(false),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+          condition: z.boolean(),
+        }),
+      })
+        .dountil(step1, async ({ inputData: { condition } }) => condition)
+        .then(step2)
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { workflowUntilVar },
+      });
+
+      const run = await workflowUntilVar.createRunAsync();
+
+      const result = await run.start({
+        inputData: { value: 0, condition: false },
+      });
+
+      if (result.status !== 'suspended') {
+        expect.fail('Workflow should be suspended');
+      }
+
+      const firstResume = await run.resume({ resumeData: { shouldContinue: true } });
+
+      expect(firstResume.steps['step-1'].payload.value).toBe(1);
+
+      const secondResume = await run.resume({ resumeData: { shouldContinue: true } });
+      expect(secondResume.steps['step-1'].payload.value).toBe(2);
+
+      const thridResume = await run.resume({ resumeData: { shouldContinue: true } });
+
+      expect(thridResume.steps['step-1'].payload.value).toBe(3);
+
+      expect(thridResume.status).toBe('suspended');
+    });
   });
 
   it('should auto-resume simple suspended step without specifying step parameter', async () => {

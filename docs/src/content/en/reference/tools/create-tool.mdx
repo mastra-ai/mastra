@@ -13,8 +13,8 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-export const reverseTool = createTool({
-  id: "reverse-tool",
+export const tool = createTool({
+  id: "test-tool",
   description: "Reverse the input string",
   inputSchema: z.object({
     input: z.string()
