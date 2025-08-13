@@ -174,12 +174,6 @@ export class MessageList {
   public get clear() {
     return {
       input: {
-        v3: (): MastraMessageV3[] => {
-          const userMessages = Array.from(this.newUserMessages);
-          this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
-          this.newUserMessages.clear();
-          return userMessages.map(this.mastraMessageV2ToMastraMessageV3);
-        },
         v2: (): MastraMessageV2[] => {
           const userMessages = Array.from(this.newUserMessages);
           this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
