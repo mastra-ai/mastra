@@ -71,7 +71,7 @@ export type MessageInput =
   | AIV5Type.UIMessage
   | AIV5Type.ModelMessage
   | UIMessageWithMetadata
-  | AIV4Type.UIMessage
+  | AIV4Type.Message
   | AIV4Type.CoreMessage // v4 CoreMessage support
   // db messages in various formats
   | MastraMessageV1
@@ -518,11 +518,11 @@ export class MessageList {
     /* @deprecated use list.get.all.aiV4.prompt() instead */
     prompt: () => this.all.aiV4.prompt(),
     /* @deprecated use list.get.all.aiV4.ui() */
-    ui: (): AIV4Type.UIMessage[] => this.all.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    ui: (): UIMessageWithMetadata[] => this.all.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     /* @deprecated use list.get.all.aiV4.core() */
     core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
     aiV4: {
-      ui: (): AIV4Type.UIMessage[] => this.all.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.all.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
 
       // Used when calling AI SDK streamText/generateText
@@ -576,11 +576,11 @@ export class MessageList {
     },
 
     /* @deprecated use list.get.remembered.aiV4.ui() */
-    ui: (): AIV4Type.UIMessage[] => this.remembered.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    ui: (): UIMessageWithMetadata[] => this.remembered.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     /* @deprecated use list.get.remembered.aiV4.core() */
     core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
     aiV4: {
-      ui: (): AIV4Type.UIMessage[] => this.remembered.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.remembered.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.all.aiV4.ui()),
     },
   };
@@ -610,19 +610,19 @@ export class MessageList {
     /* @deprecated use list.get.core.aiV4.ui() instead */
     core: () => this.aiV4UIMessagesToAIV4CoreMessages(this.input.ui()),
     aiV4: {
-      ui: (): AIV4Type.UIMessage[] => this.input.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.input.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.input.aiV4.ui()),
     },
   };
   // TODO: need to update this for new .aiV4/5.x() pattern
   private inputPersisted = {
-    v3: () =>
+    v3: (): MastraMessageV3[] =>
       this.cleanV3Metadata(
         this.messages.filter(m => this.newUserMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: () => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
-    v1: () => convertToV1Messages(this.inputPersisted.v2()),
-    ui: () => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    v2: (): MastraMessageV2[] => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
+    v1: (): MastraMessageV1[] => convertToV1Messages(this.inputPersisted.v2()),
+    ui: (): UIMessageWithMetadata[] => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
     core: () => this.aiV4UIMessagesToAIV4CoreMessages(this.inputPersisted.ui()),
   };
 
@@ -637,18 +637,18 @@ export class MessageList {
     },
 
     aiV4: {
-      ui: (): AIV4Type.UIMessage[] => this.response.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+      ui: (): UIMessageWithMetadata[] => this.response.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
       core: (): AIV4Type.CoreMessage[] => this.aiV4UIMessagesToAIV4CoreMessages(this.response.aiV4.ui()),
     },
   };
   // TODO: need to update this for new .aiV4/5.x() pattern
   private responsePersisted = {
-    v3: () =>
+    v3: (): MastraMessageV3[] =>
       this.cleanV3Metadata(
         this.messages.filter(m => this.newResponseMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
-    v2: () => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
-    ui: () => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    v2: (): MastraMessageV2[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
+    ui: (): UIMessageWithMetadata[] => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
   };
 
   public drainUnsavedMessages(): MastraMessageV2[] {
@@ -2079,7 +2079,9 @@ export class MessageList {
     };
   }
 
-  static hasAIV5UIMessageCharacteristics(msg: AIV5Type.UIMessage | AIV4Type.UIMessage): msg is AIV5Type.UIMessage {
+  static hasAIV5UIMessageCharacteristics(
+    msg: AIV5Type.UIMessage | AIV4Type.UIMessage | AIV4Type.Message,
+  ): msg is AIV5Type.UIMessage {
     // ai v4 has these separated arrays of parts that don't record overall order
     // so we can check for their presence as a faster/early check
     if (
@@ -2091,6 +2093,8 @@ export class MessageList {
       // don't check `content` in msg because it fully narrows the type to v5 and there's a chance someone might mess up and add content to a v5 message, that's more likely than the other keys
     )
       return false;
+
+    if (!msg.parts) return false; // this is likely an AIV4Type.Message
 
     for (const part of msg.parts) {
       if (`metadata` in part) return true;
@@ -2136,7 +2140,11 @@ export class MessageList {
   }
 
   static hasAIV5CoreMessageCharacteristics(
-    msg: AIV4Type.CoreMessage | AIV5Type.ModelMessage,
+    msg:
+      | AIV4Type.CoreMessage
+      | AIV5Type.ModelMessage
+      // This is here because AIV4 "Message" type can omit parts! 😱
+      | AIV4Type.Message,
   ): msg is AIV5Type.ModelMessage {
     if (`experimental_providerMetadata` in msg) return false; // is v4 cause v5 doesn't have this property
 
