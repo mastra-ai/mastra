@@ -827,17 +827,8 @@ export class MessageList {
     if (m.threadId) metadata.threadId = m.threadId;
     if (m.resourceId) metadata.resourceId = m.resourceId;
 
-    // Filter out tool parts with non-result states (input-available, input-streaming)
-    // These represent pending tool calls that shouldn't be shown to the client
-    const filteredParts = m.content.parts.filter(part => {
-      // Check if it's a V5 tool part (starts with 'tool-')
-      if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-        const toolPart = part as any;
-        // Only include if it has output (result state)
-        return toolPart.state === 'output-available' || toolPart.state === 'output-streaming';
-      }
-      return true; // Keep all non-tool parts
-    });
+    // Convert parts, keeping all v5 tool parts regardless of state
+    const filteredParts = m.content.parts;
 
     return {
       id: m.id,
@@ -1652,8 +1643,8 @@ export class MessageList {
         case 'reasoning':
           parts.push({
             type: 'reasoning',
-            reasoning: part.reasoning,
-            details: part.details,
+            reasoning: part.reasoning || '',
+            details: part.details || [],
           });
           break;
 

@@ -301,11 +301,16 @@ describe('MessageList V5 Support', () => {
         list.add(v2Message, 'response');
         const v5Messages = list.get.all.aiV5.ui();
 
-        expect(v5Messages[0].parts[0]).toMatchObject({
+        // Find the tool part
+        const toolPart = v5Messages[0].parts.find(
+          p => p.type && typeof p.type === 'string' && p.type.startsWith('tool-'),
+        );
+
+        expect(toolPart).toMatchObject({
           type: 'tool-test-tool',
           toolCallId: 'call-1',
           input: { param: 'value' },
-          state: 'input-submitted',
+          state: 'input-available', // Correct v5 state
         });
       });
 
@@ -338,7 +343,12 @@ describe('MessageList V5 Support', () => {
         list.add(v2Message, 'response');
         const v5Messages = list.get.all.aiV5.ui();
 
-        expect(v5Messages[0].parts[0]).toMatchObject({
+        // Find the tool part
+        const toolPart = v5Messages[0].parts.find(
+          p => p.type && typeof p.type === 'string' && p.type.startsWith('tool-'),
+        );
+
+        expect(toolPart).toMatchObject({
           type: 'tool-test-tool',
           toolCallId: 'call-1',
           input: { param: 'value' },
