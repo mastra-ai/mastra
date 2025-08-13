@@ -1,6 +1,7 @@
 import { ConsoleLogger } from '../logger';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun } from './types';
+import { workflowLoopStream } from './workflow/stream';
 
 export async function loop({
   model,
@@ -27,14 +28,21 @@ export async function loop({
   let startTimestamp = Date.now();
 
   const { rootSpan } = getRootSpan({
-    operationId: runIdToUse,
+    operationId: `mastra.stream`,
     model: {
       modelId: model.modelId,
       provider: model.provider,
     },
     modelSettings,
     telemetry_settings,
-    messageList,
+  });
+
+  rootSpan.setAttributes({
+    ...(telemetry_settings?.recordOutputs !== false
+      ? {
+          'stream.prompt.messages': JSON.stringify(messageList.get.input.core()),
+        }
+      : {}),
   });
 
   const workflowLoopProps: LoopRun = {
@@ -46,8 +54,11 @@ export async function loop({
     includeRawChunks,
   };
 
+  const streamFn = workflowLoopStream(workflowLoopProps);
+
   return {
     rootSpan,
     workflowLoopProps,
+    streamFn,
   };
 }
