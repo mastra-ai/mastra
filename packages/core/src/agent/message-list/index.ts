@@ -914,6 +914,8 @@ export class MessageList {
 
   private inputToMastraMessageV2(message: MessageInput, messageSource: MessageSource): MastraMessageV2 {
     if (
+      // we can't throw if the threadId doesn't match and this message came from memory
+      // this is because per-user semantic recall can retrieve messages from other threads
       messageSource !== `memory` &&
       `threadId` in message &&
       message.threadId &&
@@ -942,20 +944,21 @@ export class MessageList {
     if (MessageList.isMastraMessageV2(message)) {
       return this.hydrateMastraMessageV2Fields(message);
     }
-    if (MessageList.isMastraMessageV3(message)) {
-      return MessageList.mastraMessageV3ToV2(this.hydrateMastraMessageV3Fields(message));
-    }
     if (MessageList.isAIV4CoreMessage(message)) {
       return this.aiV4CoreMessageToMastraMessageV2(message, messageSource);
     }
+    if (MessageList.isAIV4UIMessage(message)) {
+      return this.aiV4UIMessageToMastraMessageV2(message, messageSource);
+    }
+
     if (MessageList.isAIV5CoreMessage(message)) {
       return MessageList.mastraMessageV3ToV2(this.aiV5ModelMessageToMastraMessageV3(message, messageSource));
     }
     if (MessageList.isAIV5UIMessage(message)) {
       return MessageList.mastraMessageV3ToV2(this.aiV5UIMessageToMastraMessageV3(message, messageSource));
     }
-    if (MessageList.isAIV4UIMessage(message)) {
-      return this.aiV4UIMessageToMastraMessageV2(message, messageSource);
+    if (MessageList.isMastraMessageV3(message)) {
+      return MessageList.mastraMessageV3ToV2(this.hydrateMastraMessageV3Fields(message));
     }
 
     throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
@@ -1239,38 +1242,6 @@ export class MessageList {
     );
   }
 
-  static hasAIV5CoreMessageCharacteristics(
-    msg:
-      | AIV4Type.CoreMessage
-      | AIV5Type.ModelMessage
-      // This is here because AIV4 "Message" type can omit parts! 😱
-      | AIV4Type.Message,
-  ): msg is AIV5Type.ModelMessage {
-    if (`experimental_providerMetadata` in msg) return false; // is v4 cause v5 doesn't have this property
-
-    // it's compatible with either if content is a string, no difference
-    if (typeof msg.content === `string`) return true;
-
-    for (const part of msg.content) {
-      if (part.type === `tool-result` && `output` in part) return true; // v5 renamed result->output,
-      if (part.type === `tool-call` && `input` in part) return true; // v5 renamed args->input
-      if (part.type === `tool-result` && `result` in part) return false; // v5 renamed result->output,
-      if (part.type === `tool-call` && `args` in part) return false; // v5 renamed args->input
-
-      // for file and image
-      if (`mediaType` in part) return true; // v5 renamed mimeType->mediaType
-      if (`mimeType` in part) return false;
-
-      // applies to multiple part types
-      if (`experimental_providerMetadata` in part) return false; // was in v4 but deprecated for providerOptions, v4+5 have providerOptions though, can't check the other way
-
-      if (part.type === `reasoning` && `signature` in part) return false; // v5 doesn't have signature, which is optional in v4
-
-      if (part.type === `redacted-reasoning`) return false; // only in v4, seems like in v5 they add it to providerOptions or something? https://github.com/vercel/ai/blob/main/packages/codemod/src/codemods/v5/replace-redacted-reasoning-type.ts#L90
-    }
-
-    return true;
-  }
   static isAIV5CoreMessage(msg: MessageInput): msg is AIV5Type.ModelMessage {
     return (
       !MessageList.isMastraMessage(msg) &&
@@ -1334,29 +1305,6 @@ export class MessageList {
     );
   }
 
-  private static cacheKeyFromAIV5Parts(parts: AIV5Type.UIMessage['parts']): string {
-    let key = ``;
-    for (const part of parts) {
-      key += part.type;
-      if (part.type === `text`) {
-        key += part.text;
-      }
-      if (AIV5.isToolUIPart(part) || (part as any).type === 'dynamic-tool') {
-        key += (part as any).toolCallId;
-        key += (part as any).state;
-      }
-      if (part.type === `reasoning`) {
-        key += (part as any).text;
-      }
-      if (part.type === `file`) {
-        key += (part as any).url.length;
-        key += (part as any).mediaType;
-        key += (part as any).filename || '';
-      }
-    }
-    return key;
-  }
-
   private static cacheKeyFromAIV4Parts(parts: AIV4Type.UIMessage['parts']): string {
     let key = ``;
     for (const part of parts) {
@@ -1385,6 +1333,29 @@ export class MessageList {
     return key;
   }
 
+  private static cacheKeyFromAIV5Parts(parts: AIV5Type.UIMessage['parts']): string {
+    let key = ``;
+    for (const part of parts) {
+      key += part.type;
+      if (part.type === `text`) {
+        key += part.text;
+      }
+      if (AIV5.isToolUIPart(part) || (part as any).type === 'dynamic-tool') {
+        key += (part as any).toolCallId;
+        key += (part as any).state;
+      }
+      if (part.type === `reasoning`) {
+        key += (part as any).text;
+      }
+      if (part.type === `file`) {
+        key += (part as any).url.length;
+        key += (part as any).mediaType;
+        key += (part as any).filename || '';
+      }
+    }
+    return key;
+  }
+
   private static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
     if (typeof content === `string`) return content;
 
@@ -1396,37 +1367,6 @@ export class MessageList {
     }, '');
   }
 
-  private static cacheKeyFromAIV5ModelMessageContent(content: AIV5Type.CoreMessage['content']): string {
-    if (typeof content === `string`) return content;
-    let key = ``;
-    for (const part of content) {
-      key += part.type;
-      if (part.type === `text`) {
-        key += part.text.length;
-      }
-      if (part.type === `reasoning`) {
-        key += part.text.length;
-      }
-      if (part.type === `tool-call`) {
-        key += part.toolCallId;
-        key += part.toolName;
-      }
-      if (part.type === `tool-result`) {
-        key += part.toolCallId;
-        key += part.toolName;
-      }
-      if (part.type === `file`) {
-        key += (part as any).filename || '';
-        key += part.mediaType;
-        key += part.data instanceof URL ? part.data.toString() : part.data.toString().length;
-      }
-      if (part.type === `image`) {
-        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
-        key += part.mediaType;
-      }
-    }
-    return key;
-  }
   private static cacheKeyFromAIV4CoreMessageContent(content: AIV4Type.CoreMessage['content']): string {
     if (typeof content === `string`) return content;
     let key = ``;
@@ -1458,25 +1398,39 @@ export class MessageList {
     }
     return key;
   }
+  private static cacheKeyFromAIV5ModelMessageContent(content: AIV5Type.CoreMessage['content']): string {
+    if (typeof content === `string`) return content;
+    let key = ``;
+    for (const part of content) {
+      key += part.type;
+      if (part.type === `text`) {
+        key += part.text.length;
+      }
+      if (part.type === `reasoning`) {
+        key += part.text.length;
+      }
+      if (part.type === `tool-call`) {
+        key += part.toolCallId;
+        key += part.toolName;
+      }
+      if (part.type === `tool-result`) {
+        key += part.toolCallId;
+        key += part.toolName;
+      }
+      if (part.type === `file`) {
+        key += (part as any).filename || '';
+        key += part.mediaType;
+        key += part.data instanceof URL ? part.data.toString() : part.data.toString().length;
+      }
+      if (part.type === `image`) {
+        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
+        key += part.mediaType;
+      }
+    }
+    return key;
+  }
 
   private static messagesAreEqual(one: MessageInput, two: MessageInput) {
-    const oneUIV5 = MessageList.isAIV5UIMessage(one) && one;
-    const twoUIV5 = MessageList.isAIV5UIMessage(two) && two;
-    if (oneUIV5 && !twoUIV5) return false;
-    if (oneUIV5 && twoUIV5) {
-      return MessageList.cacheKeyFromAIV5Parts(one.parts) === MessageList.cacheKeyFromAIV5Parts(two.parts);
-    }
-
-    const oneCMV5 = MessageList.isAIV5CoreMessage(one) && one;
-    const twoCMV5 = MessageList.isAIV5CoreMessage(two) && two;
-    if (oneCMV5 && !twoCMV5) return false;
-    if (oneCMV5 && twoCMV5) {
-      return (
-        MessageList.cacheKeyFromAIV5ModelMessageContent(oneCMV5.content) ===
-        MessageList.cacheKeyFromAIV5ModelMessageContent(twoCMV5.content)
-      );
-    }
-
     const oneUIV4 = MessageList.isAIV4UIMessage(one) && one;
     const twoUIV4 = MessageList.isAIV4UIMessage(two) && two;
     if (oneUIV4 && !twoUIV4) return false;
@@ -1498,14 +1452,22 @@ export class MessageList {
     const twoMM1 = MessageList.isMastraMessageV1(two) && two;
     if (oneMM1 && !twoMM1) return false;
     if (oneMM1 && twoMM1) {
-      return oneMM1.id === twoMM1.id;
+      return (
+        oneMM1.id === twoMM1.id &&
+        MessageList.cacheKeyFromAIV4CoreMessageContent(oneMM1.content) ===
+          MessageList.cacheKeyFromAIV4CoreMessageContent(twoMM1.content)
+      );
     }
 
     const oneMM2 = MessageList.isMastraMessageV2(one) && one;
     const twoMM2 = MessageList.isMastraMessageV2(two) && two;
     if (oneMM2 && !twoMM2) return false;
     if (oneMM2 && twoMM2) {
-      return oneMM2.id === twoMM2.id;
+      return (
+        oneMM2.id === twoMM2.id &&
+        MessageList.cacheKeyFromAIV4Parts(oneMM2.content.parts) ===
+          MessageList.cacheKeyFromAIV4Parts(twoMM2.content.parts)
+      );
     }
 
     const oneMM3 = MessageList.isMastraMessageV3(one) && one;
@@ -1519,6 +1481,24 @@ export class MessageList {
       );
     }
 
+    const oneUIV5 = MessageList.isAIV5UIMessage(one) && one;
+    const twoUIV5 = MessageList.isAIV5UIMessage(two) && two;
+    if (oneUIV5 && !twoUIV5) return false;
+    if (oneUIV5 && twoUIV5) {
+      return MessageList.cacheKeyFromAIV5Parts(one.parts) === MessageList.cacheKeyFromAIV5Parts(two.parts);
+    }
+
+    const oneCMV5 = MessageList.isAIV5CoreMessage(one) && one;
+    const twoCMV5 = MessageList.isAIV5CoreMessage(two) && two;
+    if (oneCMV5 && !twoCMV5) return false;
+    if (oneCMV5 && twoCMV5) {
+      return (
+        MessageList.cacheKeyFromAIV5ModelMessageContent(oneCMV5.content) ===
+        MessageList.cacheKeyFromAIV5ModelMessageContent(twoCMV5.content)
+      );
+    }
+
+    // default to it did change. we'll likely never reach this codepath
     return true;
   }
 
@@ -2374,5 +2354,38 @@ export class MessageList {
       `parts` in msg &&
       MessageList.hasAIV5UIMessageCharacteristics(msg)
     );
+  }
+
+  static hasAIV5CoreMessageCharacteristics(
+    msg:
+      | AIV4Type.CoreMessage
+      | AIV5Type.ModelMessage
+      // This is here because AIV4 "Message" type can omit parts! 😱
+      | AIV4Type.Message,
+  ): msg is AIV5Type.ModelMessage {
+    if (`experimental_providerMetadata` in msg) return false; // is v4 cause v5 doesn't have this property
+
+    // it's compatible with either if content is a string, no difference
+    if (typeof msg.content === `string`) return true;
+
+    for (const part of msg.content) {
+      if (part.type === `tool-result` && `output` in part) return true; // v5 renamed result->output,
+      if (part.type === `tool-call` && `input` in part) return true; // v5 renamed args->input
+      if (part.type === `tool-result` && `result` in part) return false; // v5 renamed result->output,
+      if (part.type === `tool-call` && `args` in part) return false; // v5 renamed args->input
+
+      // for file and image
+      if (`mediaType` in part) return true; // v5 renamed mimeType->mediaType
+      if (`mimeType` in part) return false;
+
+      // applies to multiple part types
+      if (`experimental_providerMetadata` in part) return false; // was in v4 but deprecated for providerOptions, v4+5 have providerOptions though, can't check the other way
+
+      if (part.type === `reasoning` && `signature` in part) return false; // v5 doesn't have signature, which is optional in v4
+
+      if (part.type === `redacted-reasoning`) return false; // only in v4, seems like in v5 they add it to providerOptions or something? https://github.com/vercel/ai/blob/main/packages/codemod/src/codemods/v5/replace-redacted-reasoning-type.ts#L90
+    }
+
+    return true;
   }
 }
