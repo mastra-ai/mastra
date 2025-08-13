@@ -148,7 +148,7 @@ export class MessageList {
   }
 
   public getLatestUserContent(): string | null {
-    const currentUserMessages = this.all.aiV5.model().filter(m => m.role === 'user');
+    const currentUserMessages = this.all.core().filter(m => m.role === 'user');
     const content = currentUserMessages.at(-1)?.content;
     if (!content) return null;
     return MessageList.coreContentToString(content);
@@ -1097,135 +1097,6 @@ export class MessageList {
     return randomUUID();
   }
 
-  private mastraMessageV2ToMastraMessageV3(v2Msg: MastraMessageV2): MastraMessageV3 {
-    const parts: MastraMessageContentV3['parts'] = [];
-    const v3Msg: MastraMessageV3 = {
-      id: v2Msg.id,
-      content: {
-        format: 3 as const,
-        parts,
-      },
-      role: v2Msg.role,
-      createdAt: v2Msg.createdAt instanceof Date ? v2Msg.createdAt : new Date(v2Msg.createdAt),
-      resourceId: v2Msg.resourceId,
-      threadId: v2Msg.threadId,
-      type: v2Msg.type,
-    };
-
-    if (v2Msg.content.metadata) {
-      v3Msg.content.metadata = { ...v2Msg.content.metadata };
-    }
-
-    // Preserve original content and experimental_attachments for round-trip
-    if (v2Msg.content.content !== undefined) {
-      v3Msg.content.metadata = {
-        ...(v3Msg.content.metadata || {}),
-        __originalContent: v2Msg.content.content,
-      };
-    }
-
-    if (v2Msg.content.experimental_attachments !== undefined) {
-      v3Msg.content.metadata = {
-        ...(v3Msg.content.metadata || {}),
-        __originalExperimentalAttachments: v2Msg.content.experimental_attachments,
-      };
-    }
-
-    const fileUrls = new Set<string>();
-    for (const part of v2Msg.content.parts) {
-      switch (part.type) {
-        case 'step-start':
-        case 'text':
-          parts.push(part);
-          break;
-
-        case 'tool-invocation':
-          // Convert to dynamic-tool format for v5
-          if (part.toolInvocation.state === `result`) {
-            parts.push({
-              type: `tool-${part.toolInvocation.toolName}` as const,
-              toolCallId: part.toolInvocation.toolCallId,
-              state: 'output-available',
-              input: part.toolInvocation.args,
-              output: part.toolInvocation.result,
-            } satisfies AIV5Type.UIMessagePart<any, any>);
-          } else {
-            parts.push({
-              type: `tool-${part.toolInvocation.toolName}` as const,
-              toolCallId: part.toolInvocation.toolCallId,
-              state: part.toolInvocation.state === `call` ? `input-available` : `input-streaming`,
-              input: part.toolInvocation.args,
-            } satisfies AIV5Type.UIMessagePart<any, any>);
-          }
-          break;
-
-        case 'source':
-          parts.push({
-            type: 'source-url',
-            sourceId: part.source.id,
-            url: part.source.url,
-            title: part.source.title,
-            providerMetadata: part.source.providerMetadata,
-          } as any);
-          break;
-
-        case 'reasoning':
-          const text =
-            part.reasoning ||
-            (part.details?.reduce((p, c) => {
-              if (c.type === `text`) return p + c.text;
-              return p;
-            }, '') ??
-              '');
-          if (text || part.details?.length) {
-            parts.push({
-              type: 'reasoning',
-              text: text || '',
-              state: 'done',
-            } as any);
-          }
-          break;
-
-        case 'file':
-          parts.push({
-            type: 'file',
-            url: part.data,
-            mediaType: part.mimeType,
-          } as any);
-          fileUrls.add(part.data);
-          break;
-      }
-    }
-
-    if (v2Msg.content.content && !v3Msg.content.parts?.some(p => p.type === `text`)) {
-      v3Msg.content.parts.push({ type: 'text', text: v2Msg.content.content });
-    }
-
-    // Track which file URLs came from experimental_attachments
-    const attachmentUrls: string[] = [];
-    if (v2Msg.content.experimental_attachments?.length) {
-      for (const attachment of v2Msg.content.experimental_attachments) {
-        if (fileUrls.has(attachment.url)) continue;
-        attachmentUrls.push(attachment.url);
-        parts.push({
-          url: attachment.url,
-          mediaType: attachment.contentType || 'unknown',
-          type: 'file',
-        });
-      }
-    }
-
-    // Store attachment URLs in metadata so we can filter them out when converting back to V2
-    if (attachmentUrls.length > 0) {
-      v3Msg.content.metadata = {
-        ...(v3Msg.content.metadata || {}),
-        __attachmentUrls: attachmentUrls,
-      };
-    }
-
-    return v3Msg;
-  }
-
   private mastraMessageV1ToMastraMessageV2(message: MastraMessageV1, messageSource: MessageSource): MastraMessageV2 {
     const coreV2 = this.aiV4CoreMessageToMastraMessageV2(
       {
@@ -1243,170 +1114,6 @@ export class MessageList {
       resourceId: message.resourceId,
       content: coreV2.content,
     };
-  }
-
-  private static mastraMessageV3ToV2(v3Msg: MastraMessageV3): MastraMessageV2 {
-    const toolInvocationParts = v3Msg.content.parts.filter(p => AIV5.isToolUIPart(p));
-
-    // Check if the original V2 message had toolInvocations field
-    const hadToolInvocations = (v3Msg.content.metadata as any)?.__hadToolInvocations === true;
-
-    // Build tool invocations list
-    let toolInvocations: MastraMessageV2['content']['toolInvocations'] = undefined;
-    if (toolInvocationParts.length > 0) {
-      // Build the invocations array from tool parts
-      const invocations = toolInvocationParts.map(p => {
-        const toolName = getToolName(p);
-        if (p.state === `output-available`) {
-          return {
-            args: p.input,
-            result:
-              typeof p.output === 'object' && p.output && 'value' in p.output
-                ? (p.output as { value: unknown }).value
-                : p.output,
-            toolCallId: p.toolCallId,
-            toolName,
-            state: 'result',
-          } satisfies NonNullable<MastraMessageV2['content']['toolInvocations']>[0];
-        }
-        return {
-          args: p.input,
-          state: 'call',
-          toolName,
-          toolCallId: p.toolCallId,
-        } satisfies NonNullable<MastraMessageV2['content']['toolInvocations']>[0];
-      });
-      toolInvocations = invocations;
-    } else if (hadToolInvocations && v3Msg.role === 'assistant') {
-      // Original V2 message had toolInvocations field but no tool parts remain
-      // This happens when all tool invocations were 'call' state and got filtered
-      toolInvocations = [];
-    }
-
-    // Get attachment URLs from metadata to filter out duplicate file parts
-    const attachmentUrls = new Set<string>((v3Msg.content.metadata as any)?.__attachmentUrls || []);
-
-    const v2Msg: MastraMessageV2 = {
-      id: v3Msg.id,
-      resourceId: v3Msg.resourceId,
-      threadId: v3Msg.threadId,
-      createdAt: v3Msg.createdAt,
-      role: v3Msg.role,
-      content: {
-        format: 2,
-        parts: v3Msg.content.parts
-          .map((p): any => {
-            if (AIV5.isToolUIPart(p) || (p as any).type === 'dynamic-tool') {
-              const toolName = getToolName(p as any);
-              const shared = {
-                state: (p as any).state,
-                args: (p as any).input,
-                toolCallId: (p as any).toolCallId,
-                toolName,
-              };
-
-              if ((p as any).state === `output-available`) {
-                return {
-                  type: 'tool-invocation',
-                  toolInvocation: {
-                    ...shared,
-                    state: 'result',
-                    result:
-                      typeof (p as any).output === 'object' && (p as any).output && 'value' in (p as any).output
-                        ? (p as any).output.value
-                        : (p as any).output,
-                  },
-                };
-              }
-              return {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  ...shared,
-                  state: (p as any).state === `input-available` ? `call` : `partial-call`,
-                },
-              };
-            }
-            switch (p.type) {
-              case 'text':
-                return p;
-              case 'file':
-                // Skip file parts that came from experimental_attachments
-                // They will be restored separately from __originalExperimentalAttachments
-                if (attachmentUrls.has((p as any).url)) {
-                  return null;
-                }
-                return {
-                  type: 'file',
-                  mimeType: (p as any).mediaType,
-                  data: (p as any).url,
-                };
-              case 'reasoning':
-                if ((p as any).text === '') return null;
-                return {
-                  type: 'reasoning',
-                  reasoning: '',
-                  details: [{ type: 'text', text: (p as any).text }],
-                };
-              case 'source-url':
-                return {
-                  type: 'source',
-                  source: {
-                    url: (p as any).url,
-                    id: (p as any).sourceId,
-                    sourceType: 'url',
-                  },
-                };
-              case 'step-start':
-                return p;
-            }
-            return null;
-          })
-          .filter((p): p is any => Boolean(p)),
-      },
-    };
-
-    // Assign toolInvocations if present
-    if (toolInvocations !== undefined) {
-      v2Msg.content.toolInvocations = toolInvocations;
-    }
-
-    // Copy metadata but exclude internal fields that will be handled separately
-    if (v3Msg.content.metadata) {
-      const { __originalContent, __originalExperimentalAttachments, __attachmentUrls, ...userMetadata } = v3Msg.content
-        .metadata as any;
-      v2Msg.content.metadata = userMetadata;
-    }
-
-    // Restore original content from metadata if it exists
-    const originalContent = (v3Msg.content.metadata as any)?.__originalContent;
-    if (originalContent !== undefined) {
-      if (
-        typeof originalContent !== `string` ||
-        v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`)
-      ) {
-        v2Msg.content.content = originalContent;
-      }
-    }
-    // Note: We don't synthesize content from parts - only use __originalContent
-    // This preserves the original V2 format where content.content was optional
-
-    // Restore experimental_attachments from metadata if it exists
-    const originalAttachments = (v3Msg.content.metadata as any)?.__originalExperimentalAttachments;
-    if (originalAttachments && Array.isArray(originalAttachments)) {
-      v2Msg.content.experimental_attachments = originalAttachments || [];
-    }
-
-    // Set toolInvocations on V2
-    // Only add toolInvocations if there are actual result invocations
-    if (toolInvocations && toolInvocations.length > 0) {
-      const resultToolInvocations = toolInvocations.filter(t => t.state === 'result');
-      if (resultToolInvocations.length > 0) {
-        v2Msg.content.toolInvocations = resultToolInvocations;
-      }
-    }
-    if (v3Msg.type) v2Msg.type = v3Msg.type;
-
-    return v2Msg;
   }
 
   private hydrateMastraMessageV3Fields(message: MastraMessageV3): MastraMessageV3 {
@@ -1970,7 +1677,7 @@ export class MessageList {
     return key;
   }
 
-  private static coreContentToString(content: AIV5Type.ModelMessage['content']): string {
+  private static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
     if (typeof content === `string`) return content;
 
     return content.reduce((p, c) => {
@@ -2376,5 +2083,298 @@ export class MessageList {
     throw new Error(
       `Encountered unknown role ${role} when converting V5 ModelMessage -> V5 LanguageModelV2Message, input message: ${JSON.stringify(modelMessage, null, 2)}`,
     );
+  }
+
+  private static mastraMessageV3ToV2(v3Msg: MastraMessageV3): MastraMessageV2 {
+    const toolInvocationParts = v3Msg.content.parts.filter(p => AIV5.isToolUIPart(p));
+
+    // Check if the original V2 message had toolInvocations field
+    const hadToolInvocations = (v3Msg.content.metadata as any)?.__hadToolInvocations === true;
+
+    // Build tool invocations list
+    let toolInvocations: MastraMessageV2['content']['toolInvocations'] = undefined;
+    if (toolInvocationParts.length > 0) {
+      // Build the invocations array from tool parts
+      const invocations = toolInvocationParts.map(p => {
+        const toolName = getToolName(p);
+        if (p.state === `output-available`) {
+          return {
+            args: p.input,
+            result:
+              typeof p.output === 'object' && p.output && 'value' in p.output
+                ? (p.output as { value: unknown }).value
+                : p.output,
+            toolCallId: p.toolCallId,
+            toolName,
+            state: 'result',
+          } satisfies NonNullable<MastraMessageV2['content']['toolInvocations']>[0];
+        }
+        return {
+          args: p.input,
+          state: 'call',
+          toolName,
+          toolCallId: p.toolCallId,
+        } satisfies NonNullable<MastraMessageV2['content']['toolInvocations']>[0];
+      });
+      toolInvocations = invocations;
+    } else if (hadToolInvocations && v3Msg.role === 'assistant') {
+      // Original V2 message had toolInvocations field but no tool parts remain
+      // This happens when all tool invocations were 'call' state and got filtered
+      toolInvocations = [];
+    }
+
+    // Get attachment URLs from metadata to filter out duplicate file parts
+    const attachmentUrls = new Set<string>((v3Msg.content.metadata as any)?.__attachmentUrls || []);
+
+    const v2Msg: MastraMessageV2 = {
+      id: v3Msg.id,
+      resourceId: v3Msg.resourceId,
+      threadId: v3Msg.threadId,
+      createdAt: v3Msg.createdAt,
+      role: v3Msg.role,
+      content: {
+        format: 2,
+        parts: v3Msg.content.parts
+          .map((p): any => {
+            if (AIV5.isToolUIPart(p) || (p as any).type === 'dynamic-tool') {
+              const toolName = getToolName(p as any);
+              const shared = {
+                state: (p as any).state,
+                args: (p as any).input,
+                toolCallId: (p as any).toolCallId,
+                toolName,
+              };
+
+              if ((p as any).state === `output-available`) {
+                return {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    ...shared,
+                    state: 'result',
+                    result:
+                      typeof (p as any).output === 'object' && (p as any).output && 'value' in (p as any).output
+                        ? (p as any).output.value
+                        : (p as any).output,
+                  },
+                };
+              }
+              return {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  ...shared,
+                  state: (p as any).state === `input-available` ? `call` : `partial-call`,
+                },
+              };
+            }
+            switch (p.type) {
+              case 'text':
+                return p;
+              case 'file':
+                // Skip file parts that came from experimental_attachments
+                // They will be restored separately from __originalExperimentalAttachments
+                if (attachmentUrls.has((p as any).url)) {
+                  return null;
+                }
+                return {
+                  type: 'file',
+                  mimeType: (p as any).mediaType,
+                  data: (p as any).url,
+                };
+              case 'reasoning':
+                if ((p as any).text === '') return null;
+                return {
+                  type: 'reasoning',
+                  reasoning: '',
+                  details: [{ type: 'text', text: (p as any).text }],
+                };
+              case 'source-url':
+                return {
+                  type: 'source',
+                  source: {
+                    url: (p as any).url,
+                    id: (p as any).sourceId,
+                    sourceType: 'url',
+                  },
+                };
+              case 'step-start':
+                return p;
+            }
+            return null;
+          })
+          .filter((p): p is any => Boolean(p)),
+      },
+    };
+
+    // Assign toolInvocations if present
+    if (toolInvocations !== undefined) {
+      v2Msg.content.toolInvocations = toolInvocations;
+    }
+
+    // Copy metadata but exclude internal fields that will be handled separately
+    if (v3Msg.content.metadata) {
+      const { __originalContent, __originalExperimentalAttachments, __attachmentUrls, ...userMetadata } = v3Msg.content
+        .metadata as any;
+      v2Msg.content.metadata = userMetadata;
+    }
+
+    // Restore original content from metadata if it exists
+    const originalContent = (v3Msg.content.metadata as any)?.__originalContent;
+    if (originalContent !== undefined) {
+      if (
+        typeof originalContent !== `string` ||
+        v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`)
+      ) {
+        v2Msg.content.content = originalContent;
+      }
+    }
+    // Note: We don't synthesize content from parts - only use __originalContent
+    // This preserves the original V2 format where content.content was optional
+
+    // Restore experimental_attachments from metadata if it exists
+    const originalAttachments = (v3Msg.content.metadata as any)?.__originalExperimentalAttachments;
+    if (originalAttachments && Array.isArray(originalAttachments)) {
+      v2Msg.content.experimental_attachments = originalAttachments || [];
+    }
+
+    // Set toolInvocations on V2
+    // Only add toolInvocations if there are actual result invocations
+    if (toolInvocations && toolInvocations.length > 0) {
+      const resultToolInvocations = toolInvocations.filter(t => t.state === 'result');
+      if (resultToolInvocations.length > 0) {
+        v2Msg.content.toolInvocations = resultToolInvocations;
+      }
+    }
+    if (v3Msg.type) v2Msg.type = v3Msg.type;
+
+    return v2Msg;
+  }
+
+  private mastraMessageV2ToMastraMessageV3(v2Msg: MastraMessageV2): MastraMessageV3 {
+    const parts: MastraMessageContentV3['parts'] = [];
+    const v3Msg: MastraMessageV3 = {
+      id: v2Msg.id,
+      content: {
+        format: 3 as const,
+        parts,
+      },
+      role: v2Msg.role,
+      createdAt: v2Msg.createdAt instanceof Date ? v2Msg.createdAt : new Date(v2Msg.createdAt),
+      resourceId: v2Msg.resourceId,
+      threadId: v2Msg.threadId,
+      type: v2Msg.type,
+    };
+
+    if (v2Msg.content.metadata) {
+      v3Msg.content.metadata = { ...v2Msg.content.metadata };
+    }
+
+    // Preserve original content and experimental_attachments for round-trip
+    if (v2Msg.content.content !== undefined) {
+      v3Msg.content.metadata = {
+        ...(v3Msg.content.metadata || {}),
+        __originalContent: v2Msg.content.content,
+      };
+    }
+
+    if (v2Msg.content.experimental_attachments !== undefined) {
+      v3Msg.content.metadata = {
+        ...(v3Msg.content.metadata || {}),
+        __originalExperimentalAttachments: v2Msg.content.experimental_attachments,
+      };
+    }
+
+    const fileUrls = new Set<string>();
+    for (const part of v2Msg.content.parts) {
+      switch (part.type) {
+        case 'step-start':
+        case 'text':
+          parts.push(part);
+          break;
+
+        case 'tool-invocation':
+          // Convert to dynamic-tool format for v5
+          if (part.toolInvocation.state === `result`) {
+            parts.push({
+              type: `tool-${part.toolInvocation.toolName}` as const,
+              toolCallId: part.toolInvocation.toolCallId,
+              state: 'output-available',
+              input: part.toolInvocation.args,
+              output: part.toolInvocation.result,
+            } satisfies AIV5Type.UIMessagePart<any, any>);
+          } else {
+            parts.push({
+              type: `tool-${part.toolInvocation.toolName}` as const,
+              toolCallId: part.toolInvocation.toolCallId,
+              state: part.toolInvocation.state === `call` ? `input-available` : `input-streaming`,
+              input: part.toolInvocation.args,
+            } satisfies AIV5Type.UIMessagePart<any, any>);
+          }
+          break;
+
+        case 'source':
+          parts.push({
+            type: 'source-url',
+            sourceId: part.source.id,
+            url: part.source.url,
+            title: part.source.title,
+            providerMetadata: part.source.providerMetadata,
+          } as any);
+          break;
+
+        case 'reasoning':
+          const text =
+            part.reasoning ||
+            (part.details?.reduce((p, c) => {
+              if (c.type === `text`) return p + c.text;
+              return p;
+            }, '') ??
+              '');
+          if (text || part.details?.length) {
+            parts.push({
+              type: 'reasoning',
+              text: text || '',
+              state: 'done',
+            } as any);
+          }
+          break;
+
+        case 'file':
+          parts.push({
+            type: 'file',
+            url: part.data,
+            mediaType: part.mimeType,
+          } as any);
+          fileUrls.add(part.data);
+          break;
+      }
+    }
+
+    if (v2Msg.content.content && !v3Msg.content.parts?.some(p => p.type === `text`)) {
+      v3Msg.content.parts.push({ type: 'text', text: v2Msg.content.content });
+    }
+
+    // Track which file URLs came from experimental_attachments
+    const attachmentUrls: string[] = [];
+    if (v2Msg.content.experimental_attachments?.length) {
+      for (const attachment of v2Msg.content.experimental_attachments) {
+        if (fileUrls.has(attachment.url)) continue;
+        attachmentUrls.push(attachment.url);
+        parts.push({
+          url: attachment.url,
+          mediaType: attachment.contentType || 'unknown',
+          type: 'file',
+        });
+      }
+    }
+
+    // Store attachment URLs in metadata so we can filter them out when converting back to V2
+    if (attachmentUrls.length > 0) {
+      v3Msg.content.metadata = {
+        ...(v3Msg.content.metadata || {}),
+        __attachmentUrls: attachmentUrls,
+      };
+    }
+
+    return v3Msg;
   }
 }
