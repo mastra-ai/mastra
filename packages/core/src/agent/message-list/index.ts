@@ -648,7 +648,8 @@ export class MessageList {
       });
     }
 
-    if (message.role === `system` && MessageList.isAIV4CoreMessage(message)) return this.addSystem(message);
+    if (message.role === `system` && (MessageList.isAIV4CoreMessage(message) || MessageList.isAIV5CoreMessage(message)))
+      return this.addSystem(message);
     if (message.role === `system`) {
       throw new MastraError({
         id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
@@ -1363,9 +1364,8 @@ export class MessageList {
         key += part.toolName;
       }
       if (part.type === `file`) {
-        key += (part as any).filename || '';
+        key += part.filename;
         key += part.mimeType;
-        key += part.data instanceof URL ? part.data.toString() : part.data.toString().length;
       }
       if (part.type === `image`) {
         key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
@@ -2293,7 +2293,7 @@ export class MessageList {
       if (part.type === `file` && `mediaType` in part) return true;
     }
 
-    return true;
+    return false; // default to v4 for backwards compat
   }
   static isAIV5UIMessage(msg: MessageInput): msg is AIV5Type.UIMessage {
     return (
@@ -2314,7 +2314,7 @@ export class MessageList {
     if (`experimental_providerMetadata` in msg) return false; // is v4 cause v5 doesn't have this property
 
     // it's compatible with either if content is a string, no difference
-    if (typeof msg.content === `string`) return true;
+    if (typeof msg.content === `string`) return false; // default to v4 for backwards compat
 
     for (const part of msg.content) {
       if (part.type === `tool-result` && `output` in part) return true; // v5 renamed result->output,
@@ -2334,7 +2334,7 @@ export class MessageList {
       if (part.type === `redacted-reasoning`) return false; // only in v4, seems like in v5 they add it to providerOptions or something? https://github.com/vercel/ai/blob/main/packages/codemod/src/codemods/v5/replace-redacted-reasoning-type.ts#L90
     }
 
-    return true;
+    return false; // default to v4 for backwards compat
   }
 
   private static cacheKeyFromAIV5Parts(parts: AIV5Type.UIMessage['parts']): string {
