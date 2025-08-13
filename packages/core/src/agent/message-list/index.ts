@@ -1063,21 +1063,15 @@ export class MessageList {
       parts: message.parts,
     };
 
-    // Preserve all AI4 UI message fields
-    if (message.toolInvocations !== undefined) {
-      // Filter out 'call' state tool invocations, keeping only 'result' states
-      const resultInvocations = message.toolInvocations.filter(t => t.state === 'result');
-      // Always preserve the field, even if it becomes an empty array after filtering
-      content.toolInvocations = resultInvocations;
-    }
-    if (message.reasoning !== undefined) content.reasoning = message.reasoning;
-    if (message.annotations !== undefined) content.annotations = message.annotations;
-    // Always preserve experimental_attachments for AI4 UI messages (even if empty array)
-    if (message.experimental_attachments !== undefined) {
+    if (message.toolInvocations) content.toolInvocations = message.toolInvocations;
+    if (message.reasoning) content.reasoning = message.reasoning;
+    if (message.annotations) content.annotations = message.annotations;
+    if (message.experimental_attachments) {
       content.experimental_attachments = message.experimental_attachments;
     }
-    if (`metadata` in message && message.metadata) {
-      content.metadata = message.metadata;
+    // Preserve metadata field if present
+    if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
+      content.metadata = message.metadata as Record<string, unknown>;
     }
 
     const result = {
