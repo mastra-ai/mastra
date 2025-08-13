@@ -645,10 +645,7 @@ export class MessageList {
   private responsePersisted = {
     v3: () =>
       this.cleanV3Metadata(
-        this.input
-          .v2()
-          .filter(m => this.newResponseMessagesPersisted.has(m))
-          .map(this.mastraMessageV2ToMastraMessageV3),
+        this.messages.filter(m => this.newResponseMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
     v2: () => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
     ui: () => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
