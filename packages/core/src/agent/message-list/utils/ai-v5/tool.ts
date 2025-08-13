@@ -28,7 +28,7 @@ export function getToolName(type: string | { type: string } | any): string {
 
   // Extract tool name from "tool-${toolName}" format
   if (type.startsWith('tool-')) {
-    return type.slice(5); // Remove "tool-" prefix
+    return type.slice('tool-'.length); // Remove "tool-" prefix
   }
 
   // Fallback for unexpected formats
