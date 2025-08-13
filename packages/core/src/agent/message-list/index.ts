@@ -1054,112 +1054,6 @@ export class MessageList {
     return message;
   }
 
-  private aiV5ModelMessageToMastraMessageV3(
-    coreMessage: AIV5Type.ModelMessage,
-    messageSource: MessageSource,
-  ): MastraMessageV3 {
-    const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
-    const parts: AIV5Type.UIMessage['parts'] = [];
-
-    // Add step-start for input messages
-    if (messageSource === 'input' && coreMessage.role === 'user') {
-      parts.push({ type: 'step-start' } as any);
-    }
-
-    if (typeof coreMessage.content === 'string') {
-      parts.push({
-        type: 'text',
-        text: coreMessage.content,
-      });
-    } else if (Array.isArray(coreMessage.content)) {
-      for (const part of coreMessage.content) {
-        switch (part.type) {
-          case 'text':
-            parts.push({
-              type: 'text',
-              text: part.text,
-            });
-            break;
-
-          case 'tool-call':
-            parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
-              state: 'input-available',
-              toolCallId: part.toolCallId,
-              input: part.input,
-            });
-            break;
-
-          case 'tool-result':
-            parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
-              state: 'output-available',
-              toolCallId: part.toolCallId,
-              output:
-                typeof part.output === 'string'
-                  ? { type: 'text', value: part.output }
-                  : (part.output ?? { type: 'text', value: '' }),
-              input: {},
-            });
-            break;
-
-          case 'reasoning':
-            parts.push({
-              type: 'reasoning',
-              text: part.text,
-            });
-            break;
-          case 'image':
-            parts.push({ type: 'file', url: part.image.toString(), mediaType: part.mediaType || 'unknown' } as any);
-            break;
-          case 'file':
-            if (part.data instanceof URL) {
-              parts.push({
-                type: 'file',
-                url: part.data.toString(),
-                mediaType: part.mediaType,
-              });
-            } else {
-              try {
-                parts.push({
-                  type: 'file',
-                  mediaType: part.mediaType,
-                  url: convertDataContentToBase64String(part.data),
-                });
-              } catch (error) {
-                console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
-              }
-            }
-            break;
-        }
-      }
-    }
-
-    const content: MastraMessageV3['content'] = {
-      format: 3,
-      parts,
-    };
-
-    // Preserve original string content for round-trip
-    if (coreMessage.content) {
-      content.metadata = {
-        ...(content.metadata || {}),
-        __originalContent: coreMessage.content,
-      };
-    }
-
-    return {
-      id,
-      role: MessageList.getRole(coreMessage),
-      createdAt: this.generateCreatedAt(messageSource),
-      threadId: this.memoryInfo?.threadId,
-      resourceId: this.memoryInfo?.resourceId,
-      content,
-    };
-  }
-
   private aiV4UIMessageToMastraMessageV2(
     message: AIV4Type.UIMessage | UIMessageWithMetadata,
     messageSource: MessageSource,
@@ -2364,5 +2258,111 @@ export class MessageList {
       resourceId: this.memoryInfo?.resourceId,
       content,
     } satisfies MastraMessageV3;
+  }
+
+  private aiV5ModelMessageToMastraMessageV3(
+    coreMessage: AIV5Type.ModelMessage,
+    messageSource: MessageSource,
+  ): MastraMessageV3 {
+    const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
+    const parts: AIV5Type.UIMessage['parts'] = [];
+
+    // Add step-start for input messages
+    if (messageSource === 'input' && coreMessage.role === 'user') {
+      parts.push({ type: 'step-start' } as any);
+    }
+
+    if (typeof coreMessage.content === 'string') {
+      parts.push({
+        type: 'text',
+        text: coreMessage.content,
+      });
+    } else if (Array.isArray(coreMessage.content)) {
+      for (const part of coreMessage.content) {
+        switch (part.type) {
+          case 'text':
+            parts.push({
+              type: 'text',
+              text: part.text,
+            });
+            break;
+
+          case 'tool-call':
+            parts.push({
+              type: 'dynamic-tool',
+              toolName: part.toolName,
+              state: 'input-available',
+              toolCallId: part.toolCallId,
+              input: part.input,
+            });
+            break;
+
+          case 'tool-result':
+            parts.push({
+              type: 'dynamic-tool',
+              toolName: part.toolName,
+              state: 'output-available',
+              toolCallId: part.toolCallId,
+              output:
+                typeof part.output === 'string'
+                  ? { type: 'text', value: part.output }
+                  : (part.output ?? { type: 'text', value: '' }),
+              input: {},
+            });
+            break;
+
+          case 'reasoning':
+            parts.push({
+              type: 'reasoning',
+              text: part.text,
+            });
+            break;
+          case 'image':
+            parts.push({ type: 'file', url: part.image.toString(), mediaType: part.mediaType || 'unknown' } as any);
+            break;
+          case 'file':
+            if (part.data instanceof URL) {
+              parts.push({
+                type: 'file',
+                url: part.data.toString(),
+                mediaType: part.mediaType,
+              });
+            } else {
+              try {
+                parts.push({
+                  type: 'file',
+                  mediaType: part.mediaType,
+                  url: convertDataContentToBase64String(part.data),
+                });
+              } catch (error) {
+                console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+              }
+            }
+            break;
+        }
+      }
+    }
+
+    const content: MastraMessageV3['content'] = {
+      format: 3,
+      parts,
+    };
+
+    // Preserve original string content for round-trip
+    if (coreMessage.content) {
+      content.metadata = {
+        ...(content.metadata || {}),
+        __originalContent: coreMessage.content,
+      };
+    }
+
+    return {
+      id,
+      role: MessageList.getRole(coreMessage),
+      createdAt: this.generateCreatedAt(messageSource),
+      threadId: this.memoryInfo?.threadId,
+      resourceId: this.memoryInfo?.resourceId,
+      content,
+    };
   }
 }
