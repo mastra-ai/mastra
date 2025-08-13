@@ -1074,15 +1074,14 @@ export class MessageList {
       content.metadata = message.metadata as Record<string, unknown>;
     }
 
-    const result = {
+    return {
       id: message.id || this.newMessageId(),
       role: MessageList.getRole(message),
       createdAt: this.generateCreatedAt(messageSource, message.createdAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
-    } satisfies MastraMessageV2;
-    return result;
+    };
   }
 
   private aiV4CoreMessageToMastraMessageV2(
@@ -1092,7 +1091,7 @@ export class MessageList {
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
     const parts: AIV4Type.UIMessage['parts'] = [];
     const experimentalAttachments: AIV4Type.UIMessage['experimental_attachments'] = [];
-    const toolInvocations: any[] = [];
+    const toolInvocations: AIV4Type.ToolInvocation[] = [];
 
     if (typeof coreMessage.content === 'string') {
       parts.push({ type: 'step-start' });
@@ -1104,7 +1103,10 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
-            parts.push(part);
+            parts.push({
+              type: 'text',
+              text: part.text,
+            });
             break;
 
           case 'tool-call':
@@ -1120,12 +1122,44 @@ export class MessageList {
             break;
 
           case 'tool-result':
+            // Try to find args from the corresponding tool-call in previous messages
+            let toolArgs: Record<string, unknown> = {};
+
+            // First, check if there's a tool-call in the same message
+            const toolCallInSameMsg = coreMessage.content.find(
+              p => p.type === 'tool-call' && p.toolCallId === part.toolCallId,
+            );
+            if (toolCallInSameMsg && toolCallInSameMsg.type === 'tool-call') {
+              toolArgs = toolCallInSameMsg.args as Record<string, unknown>;
+            }
+
+            // If not found, look in previous messages for the corresponding tool-call
+            // Search from most recent messages first (more likely to find the match)
+            if (Object.keys(toolArgs).length === 0) {
+              // Iterate in reverse order (most recent first) for better performance
+              for (let i = this.messages.length - 1; i >= 0; i--) {
+                const msg = this.messages[i];
+                if (msg && msg.role === 'assistant' && msg.content.parts) {
+                  const toolCallPart = msg.content.parts.find(
+                    p =>
+                      p.type === 'tool-invocation' &&
+                      p.toolInvocation.toolCallId === part.toolCallId &&
+                      p.toolInvocation.state === 'call',
+                  );
+                  if (toolCallPart && toolCallPart.type === 'tool-invocation' && toolCallPart.toolInvocation.args) {
+                    toolArgs = toolCallPart.toolInvocation.args;
+                    break;
+                  }
+                }
+              }
+            }
+
             const invocation = {
               state: 'result' as const,
               toolCallId: part.toolCallId,
               toolName: part.toolName,
-              result: part.result ?? '',
-              args: {},
+              result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
+              args: toolArgs, // Use the args from the corresponding tool-call
             };
             parts.push({
               type: 'tool-invocation',
@@ -1137,14 +1171,14 @@ export class MessageList {
           case 'reasoning':
             parts.push({
               type: 'reasoning',
-              reasoning: '',
+              reasoning: '', // leave this blank so we aren't double storing it in the db along with details
               details: [{ type: 'text', text: part.text, signature: part.signature }],
             });
             break;
           case 'redacted-reasoning':
             parts.push({
               type: 'reasoning',
-              reasoning: '',
+              reasoning: '', // No text reasoning for redacted parts
               details: [{ type: 'redacted', data: part.data }],
             });
             break;
@@ -1152,6 +1186,7 @@ export class MessageList {
             parts.push({ type: 'file', data: part.image.toString(), mimeType: part.mimeType! });
             break;
           case 'file':
+            // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
             if (part.data instanceof URL) {
               parts.push({
                 type: 'file',
@@ -1159,6 +1194,7 @@ export class MessageList {
                 mimeType: part.mimeType,
               });
             } else {
+              // If it's binary data, convert to base64 and add to parts
               try {
                 parts.push({
                   type: 'file',
@@ -1174,95 +1210,24 @@ export class MessageList {
       }
     }
 
-    const coreContentTextParts =
-      Array.isArray(coreMessage.content) &&
-      // match AI sdk v4 which will only populate content as a string if there are only text parts in the message
-      coreMessage.content.every(c => c.type === `text`)
-        ? coreMessage.content.filter(c => c.type === `text`)
-        : null;
     const content: MastraMessageV2['content'] = {
       format: 2,
       parts,
-      metadata: {},
     };
 
-    if (coreContentTextParts && coreContentTextParts.length > 0) {
-      content.metadata!.__originalContent = coreContentTextParts.map(p => p.text).join(`\n`);
-    } else if (typeof coreMessage.content === `string` && !!coreMessage.content) {
-      content.metadata!.__originalContent = coreMessage.content;
-    }
-
-    // Only add toolInvocations if there are actual invocations
-    if (toolInvocations.length > 0) {
-      content.toolInvocations = toolInvocations;
-    }
+    if (toolInvocations.length) content.toolInvocations = toolInvocations;
+    if (typeof coreMessage.content === `string`) content.content = coreMessage.content;
 
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
-    const role = (() => {
-      if (coreMessage.role === `assistant` || coreMessage.role === `tool`) return `assistant`;
-      return coreMessage.role;
-    })();
-
     return {
       id,
-      role,
+      role: MessageList.getRole(coreMessage),
       createdAt: this.generateCreatedAt(messageSource),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
     };
-  }
-
-  static hasAIV5UIMessageCharacteristics(
-    msg: AIV5Type.UIMessage | AIV4Type.UIMessage | AIV4Type.Message,
-  ): msg is AIV5Type.UIMessage {
-    // ai v4 has these separated arrays of parts that don't record overall order
-    // so we can check for their presence as a faster/early check
-    if (
-      `toolInvocations` in msg ||
-      `reasoning` in msg ||
-      `experimental_attachments` in msg ||
-      `data` in msg ||
-      `annotations` in msg
-      // don't check `content` in msg because it fully narrows the type to v5 and there's a chance someone might mess up and add content to a v5 message, that's more likely than the other keys
-    )
-      return false;
-
-    if (!msg.parts) return false; // this is likely an AIV4Type.Message
-
-    for (const part of msg.parts) {
-      if (`metadata` in part) return true;
-
-      // tools are annoying cause ai v5 has the type as
-      // tool-${toolName}
-      // in v4 we had tool-invocation
-      // technically
-      // v4 tool
-      if (`toolInvocation` in part) return false;
-      // v5 tool
-      if (`toolCallId` in part) return true;
-
-      if (part.type === `source`) return false;
-      if (part.type === `source-url`) return true;
-
-      if (part.type === `reasoning`) {
-        if (`state` in part || `text` in part) return true; // v5
-        if (`reasoning` in part || `details` in part) return false; // v4
-      }
-
-      if (part.type === `file` && `mediaType` in part) return true;
-    }
-
-    return true;
-  }
-  static isAIV5UIMessage(msg: MessageInput): msg is AIV5Type.UIMessage {
-    return (
-      !MessageList.isMastraMessage(msg) &&
-      !MessageList.isAIV5CoreMessage(msg) &&
-      `parts` in msg &&
-      MessageList.hasAIV5UIMessageCharacteristics(msg)
-    );
   }
 
   static isAIV4UIMessage(msg: MessageInput): msg is AIV4Type.UIMessage {
@@ -2358,5 +2323,56 @@ export class MessageList {
       resourceId: this.memoryInfo?.resourceId,
       content,
     };
+  }
+
+  static hasAIV5UIMessageCharacteristics(
+    msg: AIV5Type.UIMessage | AIV4Type.UIMessage | AIV4Type.Message,
+  ): msg is AIV5Type.UIMessage {
+    // ai v4 has these separated arrays of parts that don't record overall order
+    // so we can check for their presence as a faster/early check
+    if (
+      `toolInvocations` in msg ||
+      `reasoning` in msg ||
+      `experimental_attachments` in msg ||
+      `data` in msg ||
+      `annotations` in msg
+      // don't check `content` in msg because it fully narrows the type to v5 and there's a chance someone might mess up and add content to a v5 message, that's more likely than the other keys
+    )
+      return false;
+
+    if (!msg.parts) return false; // this is likely an AIV4Type.Message
+
+    for (const part of msg.parts) {
+      if (`metadata` in part) return true;
+
+      // tools are annoying cause ai v5 has the type as
+      // tool-${toolName}
+      // in v4 we had tool-invocation
+      // technically
+      // v4 tool
+      if (`toolInvocation` in part) return false;
+      // v5 tool
+      if (`toolCallId` in part) return true;
+
+      if (part.type === `source`) return false;
+      if (part.type === `source-url`) return true;
+
+      if (part.type === `reasoning`) {
+        if (`state` in part || `text` in part) return true; // v5
+        if (`reasoning` in part || `details` in part) return false; // v4
+      }
+
+      if (part.type === `file` && `mediaType` in part) return true;
+    }
+
+    return true;
+  }
+  static isAIV5UIMessage(msg: MessageInput): msg is AIV5Type.UIMessage {
+    return (
+      !MessageList.isMastraMessage(msg) &&
+      !MessageList.isAIV5CoreMessage(msg) &&
+      `parts` in msg &&
+      MessageList.hasAIV5UIMessageCharacteristics(msg)
+    );
   }
 }
