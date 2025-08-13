@@ -509,7 +509,7 @@ export class MemoryMSSQL extends MemoryStorage {
     format,
   }: {
     messageIds: string[];
-    format?: 'v1';
+    format: 'v1';
   }): Promise<MastraMessageV1[]>;
   public async getMessagesById({
     messageIds,
@@ -544,7 +544,8 @@ export class MemoryMSSQL extends MemoryStorage {
         return timeDiff;
       });
       rows = rows.map(({ seq_id, ...rest }) => rest);
-      return this._parseAndFormatMessages(rows, format);
+      if (format === `v1`) return this._parseAndFormatMessages(rows, format);
+      return this._parseAndFormatMessages(rows, `v2`);
     } catch (error) {
       const mastraError = new MastraError(
         {

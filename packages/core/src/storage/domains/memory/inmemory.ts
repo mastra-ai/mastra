@@ -248,7 +248,7 @@ export class InMemoryMemory extends MemoryStorage {
     } satisfies MastraMessageV2;
   }
 
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
   async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
   async getMessagesById({
     messageIds,
@@ -269,8 +269,8 @@ export class InMemoryMemory extends MemoryStorage {
     messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const list = new MessageList().add(messages, 'memory');
-    if (format === 'v2') return list.get.all.v2();
-    return list.get.all.v1();
+    if (format === 'v1') return list.get.all.v1();
+    return list.get.all.v2();
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;

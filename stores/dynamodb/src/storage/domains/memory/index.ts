@@ -355,7 +355,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     format,
   }: {
     messageIds: string[];
-    format?: 'v1';
+    format: 'v1';
   }): Promise<MastraMessageV1[]>;
   public async getMessagesById({
     messageIds,
@@ -391,8 +391,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       );
 
       const list = new MessageList().add(uniqueMessages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
     } catch (error) {
       throw new MastraError(
         {

@@ -683,7 +683,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     format,
   }: {
     messageIds: string[];
-    format?: 'v1';
+    format: 'v1';
   }): Promise<MastraMessageV1[]>;
   public async getMessagesById({
     messageIds,
@@ -730,8 +730,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       });
       this.logger.debug(`Retrieved ${messages.length} messages`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
     } catch (error) {
       const mastraError = new MastraError(
         {

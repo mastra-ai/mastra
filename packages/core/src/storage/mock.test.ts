@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
-import type { MastraMessageV1, StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
+import { MessageList } from '../agent';
 import { InMemoryStore } from './mock';
 
 describe('InMemoryStore - Thread Sorting', () => {
@@ -307,18 +308,29 @@ describe('InMemoryStore - getMessagesById', () => {
     expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1].createdAt)).toBe(true);
   });
 
-  it('should return V1 messages by default', async () => {
-    const messages = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
+  it('should return V2 messages by default', async () => {
+    const messages: MastraMessageV2[] = await store.getMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
 
-    expect(messages.every(msg => typeof msg.content === 'string')).toBe(true);
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
   });
 
-  it('should return V2 messages if specified', async () => {
-    const messages = await store.getMessagesById({
+  it('should return messages in the specified format', async () => {
+    const v1messages: MastraMessageV1[] = await store.getMessagesById({
+      messageIds: thread1Messages.map(msg => msg.id),
+      format: 'v1',
+    });
+
+    expect(v1messages.length).toBeGreaterThan(0);
+    expect(v1messages.every(MessageList.isMastraMessageV1)).toBe(true);
+
+    const v2messages: MastraMessageV2[] = await store.getMessagesById({
       messageIds: thread1Messages.map(msg => msg.id),
       format: 'v2',
     });
-    expect(messages.every(msg => msg.content?.format === 2)).toBe(true);
+
+    expect(v2messages.length).toBeGreaterThan(0);
+    expect(v2messages.every(MessageList.isMastraMessageV2)).toBe(true);
   });
 
   it('should return messages from multiple threads', async () => {

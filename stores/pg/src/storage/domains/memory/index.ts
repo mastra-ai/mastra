@@ -486,7 +486,7 @@ export class MemoryPG extends MemoryStorage {
     format,
   }: {
     messageIds: string[];
-    format?: 'v1';
+    format: 'v1';
   }): Promise<MastraMessageV1[]>;
   public async getMessagesById({
     messageIds,
@@ -515,8 +515,8 @@ export class MemoryPG extends MemoryStorage {
       const resultRows = await this.client.manyOrNone(query, messageIds);
 
       const list = new MessageList().add(resultRows.map(this.parseRow), 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
     } catch (error) {
       const mastraError = new MastraError(
         {
