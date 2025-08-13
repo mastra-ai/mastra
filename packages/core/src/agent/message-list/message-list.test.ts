@@ -299,11 +299,17 @@ describe('MessageList', () => {
       const assistantCoreMessage = coreMessages[1];
       expect(assistantCoreMessage.role).toBe('assistant');
 
+      if (typeof assistantCoreMessage.content === `string`) {
+        throw new Error(`Expected message to have non-string content`);
+      }
       // Find the tool-call part in the content
       const toolCallPart = assistantCoreMessage.content.find((part: any) => part.type === 'tool-call');
       // This is the bug - the tool-call part doesn't exist in core messages after sanitization
       expect(toolCallPart).toBeDefined();
-      expect(toolCallPart?.args).toEqual({ location: 'Paris' });
+      if (toolCallPart?.type !== `tool-call`) {
+        throw new Error(`expected tool call part`);
+      }
+      expect(toolCallPart.args).toEqual({ location: 'Paris' });
     });
 
     it('should correctly convert and add a Mastra V1 MessageType with array content (text and tool-call)', () => {
