@@ -447,44 +447,6 @@ export class MessageList {
     return msgs;
   }
 
-  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    return AIV5.convertToModelMessages(this.sanitizeV5UIMessages(messages));
-  }
-  private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
-    const msgs = messages
-      .map(m => {
-        if (m.parts.length === 0) return false;
-        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
-        const safeParts = m.parts.filter(p => {
-          if (!AIV5.isToolUIPart(p)) return true;
-          // Only keep tool parts with output states for model messages
-          return p.state === 'output-available' || p.state === 'output-error';
-        });
-
-        if (!safeParts.length) return false;
-
-        const sanitized = {
-          ...m,
-          parts: safeParts.map(part => {
-            if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
-              return {
-                ...part,
-                output:
-                  typeof part.output === 'object' && part.output && 'value' in part.output
-                    ? part.output.value
-                    : part.output,
-              };
-            }
-            return part;
-          }),
-        };
-
-        return sanitized;
-      })
-      .filter((m): m is AIV5Type.UIMessage => Boolean(m));
-    return msgs;
-  }
-
   private addOneSystem(message: AIV4Type.CoreMessage | AIV5Type.ModelMessage | string, tag?: string) {
     if (typeof message === `string`) message = { role: 'system', content: message };
 
@@ -547,24 +509,6 @@ export class MessageList {
     );
   }
 
-  private static mastraMessageV3ToAIV5UIMessage(m: MastraMessageV3): AIV5Type.UIMessage {
-    const metadata: Record<string, any> = {
-      ...(m.content.metadata || {}),
-    };
-    if (m.createdAt) metadata.createdAt = m.createdAt;
-    if (m.threadId) metadata.threadId = m.threadId;
-    if (m.resourceId) metadata.resourceId = m.resourceId;
-
-    // Convert parts, keeping all v5 tool parts regardless of state
-    const filteredParts = m.content.parts;
-
-    return {
-      id: m.id,
-      role: m.role,
-      metadata,
-      parts: filteredParts,
-    };
-  }
   private static mastraMessageV2ToAIV4UIMessage(m: MastraMessageV2): UIMessageWithMetadata {
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
@@ -2376,5 +2320,62 @@ export class MessageList {
     }
 
     return v3Msg;
+  }
+
+  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
+    return AIV5.convertToModelMessages(this.sanitizeV5UIMessages(messages));
+  }
+  private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+    const msgs = messages
+      .map(m => {
+        if (m.parts.length === 0) return false;
+        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
+        const safeParts = m.parts.filter(p => {
+          if (!AIV5.isToolUIPart(p)) return true;
+          // Only keep tool parts with output states for model messages
+          return p.state === 'output-available' || p.state === 'output-error';
+        });
+
+        if (!safeParts.length) return false;
+
+        const sanitized = {
+          ...m,
+          parts: safeParts.map(part => {
+            if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
+              return {
+                ...part,
+                output:
+                  typeof part.output === 'object' && part.output && 'value' in part.output
+                    ? part.output.value
+                    : part.output,
+              };
+            }
+            return part;
+          }),
+        };
+
+        return sanitized;
+      })
+      .filter((m): m is AIV5Type.UIMessage => Boolean(m));
+    return msgs;
+  }
+
+  private static mastraMessageV3ToAIV5UIMessage(m: MastraMessageV3): AIV5Type.UIMessage {
+    const metadata: Record<string, any> = {
+      ...(m.content.metadata || {}),
+    };
+    if (m.createdAt) metadata.createdAt = m.createdAt;
+    if (m.threadId) metadata.threadId = m.threadId;
+    if (m.resourceId) metadata.resourceId = m.resourceId;
+
+    // Convert parts, keeping all v5 tool parts regardless of state
+    const filteredParts = m.content.parts;
+
+    return {
+      id: m.id,
+      role: m.role,
+      metadata,
+      parts: filteredParts,
+    };
   }
 }
