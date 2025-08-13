@@ -1084,9 +1084,8 @@ export class MessageList {
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
-    };
+    } satisfies MastraMessageV2;
   }
-
   private aiV4CoreMessageToMastraMessageV2(
     coreMessage: AIV4Type.CoreMessage,
     messageSource: MessageSource,
@@ -1333,29 +1332,6 @@ export class MessageList {
     return key;
   }
 
-  private static cacheKeyFromAIV5Parts(parts: AIV5Type.UIMessage['parts']): string {
-    let key = ``;
-    for (const part of parts) {
-      key += part.type;
-      if (part.type === `text`) {
-        key += part.text;
-      }
-      if (AIV5.isToolUIPart(part) || (part as any).type === 'dynamic-tool') {
-        key += (part as any).toolCallId;
-        key += (part as any).state;
-      }
-      if (part.type === `reasoning`) {
-        key += (part as any).text;
-      }
-      if (part.type === `file`) {
-        key += (part as any).url.length;
-        key += (part as any).mediaType;
-        key += (part as any).filename || '';
-      }
-    }
-    return key;
-  }
-
   private static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
     if (typeof content === `string`) return content;
 
@@ -1395,36 +1371,8 @@ export class MessageList {
         key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
         key += part.mimeType;
       }
-    }
-    return key;
-  }
-  private static cacheKeyFromAIV5ModelMessageContent(content: AIV5Type.CoreMessage['content']): string {
-    if (typeof content === `string`) return content;
-    let key = ``;
-    for (const part of content) {
-      key += part.type;
-      if (part.type === `text`) {
-        key += part.text.length;
-      }
-      if (part.type === `reasoning`) {
-        key += part.text.length;
-      }
-      if (part.type === `tool-call`) {
-        key += part.toolCallId;
-        key += part.toolName;
-      }
-      if (part.type === `tool-result`) {
-        key += part.toolCallId;
-        key += part.toolName;
-      }
-      if (part.type === `file`) {
-        key += (part as any).filename || '';
-        key += part.mediaType;
-        key += part.data instanceof URL ? part.data.toString() : part.data.toString().length;
-      }
-      if (part.type === `image`) {
-        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
-        key += part.mediaType;
+      if (part.type === `redacted-reasoning`) {
+        key += part.data.length;
       }
     }
     return key;
@@ -2387,5 +2335,59 @@ export class MessageList {
     }
 
     return true;
+  }
+
+  private static cacheKeyFromAIV5Parts(parts: AIV5Type.UIMessage['parts']): string {
+    let key = ``;
+    for (const part of parts) {
+      key += part.type;
+      if (part.type === `text`) {
+        key += part.text;
+      }
+      if (AIV5.isToolUIPart(part) || (part as any).type === 'dynamic-tool') {
+        key += (part as any).toolCallId;
+        key += (part as any).state;
+      }
+      if (part.type === `reasoning`) {
+        key += (part as any).text;
+      }
+      if (part.type === `file`) {
+        key += (part as any).url.length;
+        key += (part as any).mediaType;
+        key += (part as any).filename || '';
+      }
+    }
+    return key;
+  }
+
+  private static cacheKeyFromAIV5ModelMessageContent(content: AIV5Type.CoreMessage['content']): string {
+    if (typeof content === `string`) return content;
+    let key = ``;
+    for (const part of content) {
+      key += part.type;
+      if (part.type === `text`) {
+        key += part.text.length;
+      }
+      if (part.type === `reasoning`) {
+        key += part.text.length;
+      }
+      if (part.type === `tool-call`) {
+        key += part.toolCallId;
+        key += part.toolName;
+      }
+      if (part.type === `tool-result`) {
+        key += part.toolCallId;
+        key += part.toolName;
+      }
+      if (part.type === `file`) {
+        key += part.filename;
+        key += part.mediaType;
+      }
+      if (part.type === `image`) {
+        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
+        key += part.mediaType;
+      }
+    }
+    return key;
   }
 }
