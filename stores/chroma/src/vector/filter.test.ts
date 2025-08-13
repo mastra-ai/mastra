@@ -355,6 +355,7 @@ describe('ChromaFilterTranslator', () => {
           },
         ];
 
+        // @ts-ignore
         invalidFilters.forEach(filter => {
           expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
         });
@@ -390,6 +391,7 @@ describe('ChromaFilterTranslator', () => {
         { field: { $all: [{ $eq: 'value' }] } },
       ];
 
+      // @ts-ignore
       unsupportedFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
       });
@@ -402,6 +404,7 @@ describe('ChromaFilterTranslator', () => {
     it('throws error for non-logical operators at top level', () => {
       const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
+      // @ts-ignore
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
       });
