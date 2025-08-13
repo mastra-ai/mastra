@@ -39,3 +39,6 @@ CLAUDE.local.md
 
 # Generated source map files
 **/*.d.ts.map
+
+# User json files
+mastra-cli.json
