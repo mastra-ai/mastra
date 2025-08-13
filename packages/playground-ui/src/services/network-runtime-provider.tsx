@@ -29,7 +29,7 @@ export function MastraNetworkRuntimeProvider({
     modelSettings: ModelSettings;
   }) {
   const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessages || []);
+  const [messages, setMessages] = useState<ThreadMessageLike[]>((initialMessages as ThreadMessageLike[]) || []);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
   const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
@@ -38,7 +38,7 @@ export function MastraNetworkRuntimeProvider({
   useEffect(() => {
     if (messages.length === 0 || currentThreadId !== threadId) {
       if (initialMessages && threadId && memory) {
-        setMessages(initialMessages);
+        setMessages(initialMessages as ThreadMessageLike[]);
         setCurrentThreadId(threadId);
       }
     }

@@ -3,11 +3,13 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { CodeDisplay } from '@/components/ui/code-display';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useMemoryConfig } from '@/hooks/use-memory';
+import MarkdownRenderer from '@/components/ui/markdown-renderer';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { CodeDisplay } from '@/components/ui/code-display';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface AgentWorkingMemoryProps {
   agentId: string;
@@ -69,12 +71,45 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
       {isWorkingMemoryEnabled ? (
         <>
           {!isEditing ? (
-            <CodeDisplay
-              content={workingMemoryData || ''}
-              isCopied={isCopied}
-              onCopy={handleCopy}
-              className="bg-surface3 text-sm font-mono min-h-[150px] border border-border1 rounded-lg"
-            />
+            <>
+              {workingMemoryData ? (
+                <>
+                  {workingMemoryData.trim().startsWith('{') ? (
+                    <CodeDisplay
+                      content={workingMemoryData || ''}
+                      isCopied={isCopied}
+                      onCopy={handleCopy}
+                      className="bg-surface3 text-sm font-mono min-h-[150px] border border-border1 rounded-lg"
+                    />
+                  ) : (
+                    <>
+                      <div className="bg-surface3 border border-border1 rounded-lg" style={{ height: '300px' }}>
+                        <ScrollArea className="h-full">
+                          <div
+                            className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-[10px]"
+                            onClick={handleCopy}
+                          >
+                            <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
+                            {isCopied && (
+                              <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
+                                Copied!
+                              </span>
+                            )}
+                            <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-surface3 text-icon4 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Click to copy
+                            </span>
+                          </div>
+                        </ScrollArea>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="text-sm text-icon3 font-mono">
+                  No working memory content yet. Click "Edit Working Memory" to add content.
+                </div>
+              )}
+            </>
           ) : (
             <textarea
               className="w-full min-h-[150px] p-3 border border-border1 rounded-lg bg-surface3 font-mono text-sm text-icon5 resize-none focus:outline-none focus:ring-2 focus:ring-surface4"
@@ -86,15 +121,17 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           )}
           <div className="flex gap-2">
             {!isEditing ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-                disabled={!threadExists || isUpdating}
-                className="text-xs"
-              >
-                Edit Working Memory
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                  disabled={!threadExists || isUpdating}
+                  className="text-xs"
+                >
+                  Edit Working Memory
+                </Button>
+              </>
             ) : (
               <>
                 <Button

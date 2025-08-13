@@ -3,7 +3,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { ChunkType } from '../stream/MastraAgentStream';
+import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
@@ -1093,7 +1093,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
     let isTrue = true;
-    let result = { status: 'success', output: prevOutput } as unknown as StepResult<any, any, any, any>;
+    const prevPayload = stepResults[step.id]?.payload;
+    let result = { status: 'success', output: prevPayload ?? prevOutput } as unknown as StepResult<any, any, any, any>;
     let currentResume = resume;
 
     do {

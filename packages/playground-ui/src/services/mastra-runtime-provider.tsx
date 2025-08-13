@@ -9,7 +9,7 @@ import {
 import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 
-import { ChatProps } from '@/types';
+import { ChatProps, Message } from '@/types';
 
 import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
@@ -123,15 +123,7 @@ export function MastraRuntimeProvider({
     ) {
       if (initialMessages && threadId && memory) {
         const convertedMessages: ThreadMessageLike[] = initialMessages
-          ?.map((message: any) => {
-            const toolInvocationsAsContentParts = (message.toolInvocations || []).map((toolInvocation: any) => ({
-              type: 'tool-call',
-              toolCallId: toolInvocation?.toolCallId,
-              toolName: toolInvocation?.toolName,
-              args: toolInvocation?.args,
-              result: toolInvocation?.result,
-            }));
-
+          ?.map((message: Message) => {
             const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
               type: image.contentType.startsWith(`image/`)
                 ? 'image'
@@ -142,20 +134,52 @@ export function MastraRuntimeProvider({
               image: image.url,
             }));
 
-            const reasoning = message?.parts
-              ?.find(({ type }: { type: string }) => type === 'reasoning')
-              ?.details?.map((detail: { type: 'text'; text: string }) => detail?.text)
-              ?.join(' ');
+            const formattedParts = (message.parts || [])
+              .map(part => {
+                if (part.type === 'reasoning') {
+                  return {
+                    type: 'reasoning',
+                    text:
+                      part.reasoning ||
+                      part?.details
+                        ?.filter(detail => detail.type === 'text')
+                        ?.map(detail => detail.text)
+                        .join(' '),
+                  };
+                }
+                if (part.type === 'tool-invocation') {
+                  if (part.toolInvocation.state === 'result') {
+                    return {
+                      type: 'tool-call',
+                      toolCallId: part.toolInvocation.toolCallId,
+                      toolName: part.toolInvocation.toolName,
+                      args: part.toolInvocation.args,
+                      result: part.toolInvocation.result,
+                    };
+                  }
+                }
+
+                if (part.type === 'file') {
+                  return {
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: part.data,
+                  };
+                }
+
+                if (part.type === 'text') {
+                  return {
+                    type: 'text',
+                    text: part.text,
+                  };
+                }
+              })
+              .filter(Boolean);
 
             return {
               ...message,
-              content: [
-                ...(reasoning ? [{ type: 'reasoning', text: reasoning }] : []),
-                ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
-                ...toolInvocationsAsContentParts,
-                ...attachmentsAsContentParts,
-              ],
-            };
+              content: [...formattedParts, ...attachmentsAsContentParts],
+            } as ThreadMessageLike;
           })
           .filter(Boolean);
         setMessages(convertedMessages);

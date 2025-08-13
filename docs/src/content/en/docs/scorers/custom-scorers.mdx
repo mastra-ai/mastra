@@ -1,319 +1,217 @@
 ## Creating scorers
 
-Mastra provides two approaches for creating custom scorers:
+Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.
 
-**Code scorers** use programmatic logic and algorithms. They're ideal for deterministic evaluations, performance-critical scenarios, and cases where you have clear algorithmic criteria.
+### The Four-Step Pipeline
 
-**LLM scorers** use language models as judges. They're perfect for subjective evaluations, complex criteria that are difficult to code algorithmically, and cases where human-like judgment is needed.
+All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
-### Code-based scorers
+1. **preprocess** (optional): Prepare or transform input/output data
+2. **analyze** (optional): Perform evaluation analysis and gather insights
+3. **generateScore** (required): Convert analysis into a numerical score
+4. **generateReason** (optional): Generate human-readable explanations
 
-Code scorers use `createScorer` to build evaluation logic with programmatic algorithms. They're ideal for deterministic evaluations, performance-critical scenarios, and cases where you have clear algorithmic criteria or need integration with existing libraries.
+Each step can use either **functions** or **prompt objects** (LLM-based evaluation), giving you the flexibility to combine deterministic algorithms with AI judgment as needed.
 
-Code scorers follow Mastra's three-step evaluation pipeline: 
-- an optional **extract** step for preprocessing complex data
-- a required **analyze** step for core evaluation and scoring
-- and an optional **reason** step for generating explanations.
+### Functions vs Prompt Objects
 
-For the complete API reference, see [`createScorer`](/reference/scorers/custom-code-scorer), and for a detailed explanation of the pipeline, see [evaluation process](/docs/scorers/overview#evaluation-pipeline).
+**Functions** use JavaScript for deterministic logic. They're ideal for:
+- Algorithmic evaluations with clear criteria
+- Performance-critical scenarios
+- Integration with existing libraries
+- Consistent, reproducible results
 
-#### Extract Step
+**Prompt Objects** use LLMs as judges for evaluation. They're perfect for:
+- Subjective evaluations requiring human-like judgment
+- Complex criteria difficult to code algorithmically
+- Natural language understanding tasks
+- Nuanced context evaluation
 
-This optional step preprocesses input/output data when you need to evaluate multiple distinct elements, filter content, or focus analysis on specific parts of complex data.
+You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
-- **Receives:**
-  - `input`: User messages (when used with agents) or workflow step input (when used with workflow steps)
-  - `output`: Agent's response (when used with agents) or workflow step output (when used with workflow steps)
-  - `runtimeContext`: Runtime context from the agent or workflow step being evaluated
-- **Must return:** `{ results: any }`
-- **Data flow:** The `results` value is passed to the analyze step as `extractStepResult`
+### Initializing a Scorer
 
-```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
-import { createScorer } from "@mastra/core/scores";
-import keywordExtractor from "keyword-extractor";
+Every scorer starts with the `createScorer` factory function, which requires a name and description, and optionally accepts a judge configuration for LLM-based steps.
 
-export const keywordCoverageScorer = createScorer({
-  name: "Keyword Coverage",
-  description: "Evaluates how well the output covers keywords from the input",
+```typescript
+import { createScorer } from '@mastra/core/scores';
+import { openai } from '@ai-sdk/openai';
 
-  // Step 1: Extract keywords from input and output
-  extract: async ({ input, output }) => {
-    const inputText = input?.map(i => i.content).join(", ") || "";
-    const outputText = output.text;
-
-    const extractKeywords = (text: string) => {
-      return keywordExtractor.extract(text);
-    };
-
-    const inputKeywords = new Set(extractKeywords(inputText));
-    const outputKeywords = new Set(extractKeywords(outputText));
-    
-    return {
-      results: {
-        inputKeywords,
-        outputKeywords,
-      },
-    };
-  },
-
-  // ... analyze and reason steps
-});
-```
-
-#### Analyze Step
-
-This required step performs the core evaluation and generates the numerical score for all scorers.
-
-- **Receives:** Everything from extract step, plus:
-  - `extractStepResult`: Results from the extract step (if extract step was defined)
-- **Must return:** `{ score: number, results?: any }`
-- **Data flow:** The `score` and optional `results` are passed to the reason step
-
-```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
-export const keywordCoverageScorer = createScorer({
-  // ... name, description, extract step
-
-  // Step 2: Analyze keyword coverage and calculate score
-  analyze: async ({ input, output, extractStepResult }) => {
-    const { inputKeywords, outputKeywords } = extractStepResult.results;
-    
-    if (inputKeywords.size === 0) {
-      return { score: 1, results: { coverage: 1, matched: 0, total: 0 } };
-    }
-
-    const matchedKeywords = [...inputKeywords].filter(keyword =>
-      outputKeywords.has(keyword)
-    );
-    
-    const coverage = matchedKeywords.length / inputKeywords.size;
-
-    return {
-      score: coverage,
-      results: {
-        coverage,
-        matched: matchedKeywords.length,
-        total: inputKeywords.size,
-        matchedKeywords,
-      },
-    };
-  },
-
-  // ... reason step
-});
-```
-
-#### Reason Step
-
-This optional step generates human-readable explanations for scores, useful for actionable feedback, debugging transparency, or compliance documentation.
-
-- **Receives:** Everything from analyze step, plus:
-  - `score`: The numerical score (0-1) calculated by the analyze step
-  - `analyzeStepResult`: Results from the analyze step (contains the score and any additional results)
-- **Must return:** `{ reason: string }`
-
-```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
-export const keywordCoverageScorer = createScorer({
-  // ... name, description, extract and analyze steps
-
-  // Step 3: Generate explanation for the score
-  reason: async ({ score, analyzeStepResult, extractStepResult }) => {
-    const { matched, total, matchedKeywords } = analyzeStepResult.results;
-    const { inputKeywords } = extractStepResult.results;
-    
-    const percentage = Math.round(score * 100);
-    const missedKeywords = [...inputKeywords].filter(
-      keyword => !matchedKeywords.includes(keyword)
-    );
-
-    let reason = `The output achieved ${percentage}% keyword coverage (${matched}/${total} keywords).`;
-    
-    if (matchedKeywords.length > 0) {
-      reason += ` Covered keywords: ${matchedKeywords.join(", ")}.`;
-    }
-    
-    if (missedKeywords.length > 0) {
-      reason += ` Missing keywords: ${missedKeywords.join(", ")}.`;
-    }
-
-    return { reason };
-  },
-});
-```
-
-**Examples and Resources:**
-- [Custom Native JavaScript Scorer Example](/examples/scorers/custom-native-javascript-eval) - Example walkthrough.
-- [Built-in Code Scorers](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers/code) - Real implementations for reference
-  
-### LLM-based scorers
-
-LLM scorers use `createLLMScorer` to build evaluations that leverage language models as judges. They're perfect for subjective evaluations that require understanding context, complex criteria that are difficult to code algorithmically, natural language understanding tasks, and cases where human-like judgment is needed.
-
-LLM scorers follow the same evaluation pipeline as code scorers with an additional `calculateScore` function:
-- an optional **extract** step where the LLM processes input/output and returns structured data
-- a required **analyze** step where the LLM performs evaluation and returns structured analysis  
-- a required **calculateScore** function that converts LLM analysis into numerical score
-- and an optional **reason** step where the LLM generates human-readable explanations
-
-The `calculateScore` function leverages the best of both approaches: LLMs excel at qualitative analysis and understanding, while deterministic functions ensure precise and consistent numerical scoring.
-
-For the complete API reference, see [`createLLMScorer`](/reference/scorers/llm-scorer), and for a detailed explanation of the pipeline, see [evaluation process](/docs/scorers/overview#evaluation-pipeline).
-
-#### Judge Configuration
-
-All LLM scorer steps share this required configuration that defines the model and system instructions.
-
-- **Configuration:** `judge` object containing:
-  - **model:** The LLM model instance for evaluation
-  - **instructions:** System prompt that guides the LLM's behavior
-
-```typescript filename="src/mastra/scorers/tone-scorer.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { createLLMScorer } from "@mastra/core/scores";
-
-export const toneScorer = createLLMScorer({
-  name: 'Tone Scorer',
-  description: 'Evaluates the tone of the output',
-  
-  // Shared judge configuration
-  judge: {
+const glutenCheckerScorer = createScorer({
+  name: 'Gluten Checker',
+  description: 'Check if recipes contain gluten ingredients',
+  judge: {                    // Optional: for prompt object steps
     model: openai('gpt-4o'),
-    instructions: 'You are an expert in analyzing text tone and communication style.',
-  },
-  
-  // ... other steps
-});
+    instructions: 'You are a Chef that identifies if recipes contain gluten.'
+  }
+})
+// Chain step methods here
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason(...)
 ```
 
-#### Extract Step
+The judge configuration is only needed if you plan to use prompt objects in any step. Individual steps can override this default configuration with their own judge settings.
 
-This optional step uses an LLM to preprocess input/output data when you need to evaluate multiple distinct elements, filter content, or focus analysis on specific parts of complex data.
+### Step-by-Step Breakdown
 
-- **Configuration:** `{ description, outputSchema, createPrompt }`
-- **Data flow:** The structured output (defined by outputSchema) is passed to the analyze step as `extractStepResult`
+#### preprocess Step (Optional)
 
-```typescript filename="src/mastra/scorers/content-scorer.ts" showLineNumbers copy
-export const contentScorer = createLLMScorer({
-  // ... judge configuration
+Prepares input/output data when you need to extract specific elements, filter content, or transform complex data structures.
+
+**Functions:** `({ run, results }) => any`
+
+```typescript
+const glutenCheckerScorer = createScorer(...)
+.preprocess(({ run }) => {
+  // Extract and clean recipe text
+  const recipeText = run.output.text.toLowerCase();
+  const wordCount = recipeText.split(' ').length;
   
-  extract: {
-    description: 'Extract key themes and topics from the content',
-    outputSchema: z.object({
-      themes: z.array(z.string()),
-      topics: z.array(z.string()),
-      keyPhrases: z.array(z.string())
-    }),
-    createPrompt: ({ run }) => `
-      Analyze this content and extract:
-      1. Main themes (3-5 high-level concepts)
-      2. Specific topics mentioned
-      3. Key phrases that capture the essence
-      
-      Content: ${run.output.text}
-      
-      Return a JSON object with themes, topics, and keyPhrases arrays.
-    `,
-  },
-  
-  // ... other steps
-});
+  return {
+    recipeText,
+    wordCount,
+    hasCommonGlutenWords: /flour|wheat|bread|pasta/.test(recipeText)
+  };
+})
 ```
 
-#### Analyze Step
+**Prompt Objects:** Use `description`, `outputSchema`, and `createPrompt` to structure LLM-based preprocessing.
 
-This required step uses an LLM to perform the core evaluation and return structured analysis that will be converted to a numerical score.
-
-- **Configuration:** `{ description, outputSchema, createPrompt }`
-- **Data flow:** The structured output is passed to the calculateScore function and then to the reason step
-
-```typescript filename="src/mastra/scorers/quality-scorer.ts" showLineNumbers copy
-export const qualityScorer = createLLMScorer({
-  // ... judge configuration
-  
-  analyze: {
-    description: 'Evaluate content quality across multiple dimensions',
-    outputSchema: z.object({
-      clarity: z.number().min(1).max(5),
-      accuracy: z.number().min(1).max(5),
-      completeness: z.number().min(1).max(5),
-      relevance: z.number().min(1).max(5)
-    }),
-    createPrompt: ({ run }) => `
-      Evaluate this content on a scale of 1-5 for:
-      - Clarity: How clear and understandable is it?
-      - Accuracy: How factually correct does it appear?
-      - Completeness: How thorough is the response?
-      - Relevance: How well does it address the input?
-      
-      Input: ${run.input.map(i => i.content).join(', ')}
-      Output: ${run.output.text}
-      
-      Return a JSON object with numeric scores for each dimension.
-    `,
-  },
-  
-  // ... other steps
-});
-```
-
-#### Calculate Score Step
-
-This required function converts the LLM's structured analysis into a numerical score, providing deterministic scoring logic since LLMs aren't reliable for consistent numerical outputs.
-
-- **Configuration:** `calculateScore` function that receives `{ run }` and returns a number
-- **Data flow:** Converts the analyze step's structured output into a numerical score (0-1 range)
-
-```typescript filename="src/mastra/scorers/quality-scorer.ts" showLineNumbers copy
-export const qualityScorer = createLLMScorer({
-  // ... previous steps
-  
-  calculateScore: ({ run }) => {
-    const { clarity, accuracy, completeness, relevance } = run.analyzeStepResult;
+```typescript
+const glutenCheckerScorer = createScorer(...)
+.preprocess({
+  description: 'Extract ingredients from the recipe',
+  outputSchema: z.object({
+    ingredients: z.array(z.string()),
+    cookingMethods: z.array(z.string())
+  }),
+  createPrompt: ({ run }) => `
+    Extract all ingredients and cooking methods from this recipe:
+    ${run.output.text}
     
-    // Calculate weighted average (scale of 1-5 to 0-1)
-    const weights = { clarity: 0.3, accuracy: 0.3, completeness: 0.2, relevance: 0.2 };
-    const weightedSum = (clarity * weights.clarity) + 
-                       (accuracy * weights.accuracy) + 
-                       (completeness * weights.completeness) + 
-                       (relevance * weights.relevance);
-    
-    // Convert from 1-5 scale to 0-1 scale
-    return (weightedSum - 1) / 4;
-  },
-  
-  // ... other steps
-});
+    Return JSON with ingredients and cookingMethods arrays.
+  `
+})
 ```
 
-#### Reason Step
+**Data Flow:** Results are available to subsequent steps as `results.preprocessStepResult`
 
-This optional step uses an LLM to generate human-readable explanations for scores, useful for actionable feedback, debugging transparency, or compliance documentation.
+#### analyze Step (Optional)
 
-- **Configuration:** `{ description, createPrompt }`
-- **Data flow:** Receives all previous step results and score, returns a string explanation
+Performs core evaluation analysis, gathering insights that will inform the scoring decision.
 
-```typescript filename="src/mastra/scorers/quality-scorer.ts" showLineNumbers copy
-export const qualityScorer = createLLMScorer({
-  // ... previous steps
+**Functions:** `({ run, results }) => any`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(({ run, results }) => {
+  const { recipeText, hasCommonGlutenWords } = results.preprocessStepResult;
   
-  reason: {
-    createPrompt: ({ run }) => {
-      const { clarity, accuracy, completeness, relevance } = run.analyzeStepResult;
-      const percentage = Math.round(run.score * 100);
-      
-      return `
-        The content received a ${percentage}% quality score based on:
-        - Clarity: ${clarity}/5
-        - Accuracy: ${accuracy}/5  
-        - Completeness: ${completeness}/5
-        - Relevance: ${relevance}/5
-        
-        Provide a brief explanation of what contributed to this score.
-      `;
-    },
-  },
-});
+  // Simple gluten detection algorithm
+  const glutenKeywords = ['wheat', 'flour', 'barley', 'rye', 'bread'];
+  const foundGlutenWords = glutenKeywords.filter(word => 
+    recipeText.includes(word)
+  );
+  
+  return {
+    isGlutenFree: foundGlutenWords.length === 0,
+    detectedGlutenSources: foundGlutenWords,
+    confidence: hasCommonGlutenWords ? 0.9 : 0.7
+  };
+})
+```
+
+**Prompt Objects:** Use `description`, `outputSchema`, and `createPrompt` for LLM-based analysis.
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze({
+  description: 'Analyze recipe for gluten content',
+  outputSchema: z.object({
+    isGlutenFree: z.boolean(),
+    glutenSources: z.array(z.string()),
+    confidence: z.number().min(0).max(1)
+  }),
+  createPrompt: ({ run, results }) => `
+    Analyze this recipe for gluten content:
+    "${results.preprocessStepResult.recipeText}"
+    
+    Look for wheat, barley, rye, and hidden sources like soy sauce.
+    Return JSON with isGlutenFree, glutenSources array, and confidence (0-1).
+  `
+})
+```
+
+**Data Flow:** Results are available to subsequent steps as `results.analyzeStepResult`
+
+#### generateScore Step (Required)
+
+Converts analysis results into a numerical score. This is the only required step in the pipeline.
+
+**Functions:** `({ run, results }) => number`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(({ results }) => {
+  const { isGlutenFree, confidence } = results.analyzeStepResult;
+  
+  // Return 1 for gluten-free, 0 for contains gluten
+  // Weight by confidence level
+  return isGlutenFree ? confidence : 0;
+})
+```
+
+**Prompt Objects:** See the [`createScorer`](/reference/scorers/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
+
+**Data Flow:** The score is available to generateReason as the `score` parameter
+
+#### generateReason Step (Optional)
+
+Generates human-readable explanations for the score, useful for debugging, transparency, or user feedback.
+
+**Functions:** `({ run, results, score }) => string`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason(({ results, score }) => {
+  const { isGlutenFree, glutenSources } = results.analyzeStepResult;
+  
+  if (isGlutenFree) {
+    return `Score: ${score}. This recipe is gluten-free with no harmful ingredients detected.`;
+  } else {
+    return `Score: ${score}. Contains gluten from: ${glutenSources.join(', ')}`;
+  }
+})
+```
+
+**Prompt Objects:** Use `description` and `createPrompt` for LLM-generated explanations.
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason({
+  description: 'Explain the gluten assessment',
+  createPrompt: ({ results, score }) => `
+    Explain why this recipe received a score of ${score}.
+    Analysis: ${JSON.stringify(results.analyzeStepResult)}
+    
+    Provide a clear explanation for someone with dietary restrictions.
+  `
+})
 ```
 
 **Examples and Resources:**
-- [Custom LLM Judge Scorer Example](/examples/scorers/custom-llm-judge-eval) - Example Walkthrough with gluten checker
-- [Built-in LLM Scorers](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers/llm) - Real implementations for reference
+- [Custom Scorer Example](/examples/scorers/custom-scorer) - Complete walkthrough
+- [createScorer API Reference](/reference/scorers/create-scorer) - Complete technical documentation
+- [Built-in Scorers Source Code](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - Real implementations for reference

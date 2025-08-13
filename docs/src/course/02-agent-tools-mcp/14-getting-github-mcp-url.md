@@ -30,7 +30,6 @@ const smitheryGithubMCPServerUrl = createSmitheryUrl(
   {
     apiKey: process.env.SMITHERY_API_KEY,
     profile: process.env.SMITHERY_PROFILE,
-  }
+  },
 );
 ```
-

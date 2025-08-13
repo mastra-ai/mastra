@@ -28,6 +28,7 @@ export interface IExecutionContext<TSchemaIn extends z.ZodSchema | undefined = u
   runId?: string;
   threadId?: string;
   resourceId?: string;
+  memory?: MastraMemory;
 }
 
 export interface IAction<

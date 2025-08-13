@@ -8,6 +8,7 @@ import type { Mastra } from '@mastra/core';
 import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Tool } from '@mastra/core/tools';
+import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -20,6 +21,7 @@ import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/cl
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
 
+import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
@@ -40,6 +42,7 @@ type Variables = {
   runtimeContext: RuntimeContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
   tools: Record<string, Tool>;
+  taskStore: InMemoryTaskStore;
   playground: boolean;
   isDev: boolean;
 };
@@ -74,6 +77,7 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
+  const a2aTaskStore = new InMemoryTaskStore();
 
   // Middleware
   app.use('*', async function setTelemetryInfo(c, next) {
@@ -121,6 +125,7 @@ export async function createHonoServer(
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', options.tools);
+    c.set('taskStore', a2aTaskStore);
     c.set('playground', options.playground === true);
     c.set('isDev', options.isDev === true);
     return next();
@@ -216,7 +221,7 @@ export async function createHonoServer(
    */
 
   app.get(
-    '/.well-known/:agentId/agent.json',
+    '/.well-known/:agentId/agent-card.json',
     describeRoute({
       description: 'Get agent configuration',
       tags: ['agents'],
@@ -259,14 +264,14 @@ export async function createHonoServer(
               properties: {
                 method: {
                   type: 'string',
-                  enum: ['tasks/send', 'tasks/sendSubscribe', 'tasks/get', 'tasks/cancel'],
+                  enum: ['message/send', 'message/stream', 'tasks/get', 'tasks/cancel'],
                   description: 'The A2A protocol method to execute',
                 },
                 params: {
                   type: 'object',
                   oneOf: [
                     {
-                      // TaskSendParams
+                      // MessageSendParams
                       type: 'object',
                       properties: {
                         id: {
@@ -370,6 +375,21 @@ export async function createHonoServer(
     rootHandler,
   );
 
+  // Providers route
+  app.get(
+    '/api/model-providers',
+    describeRoute({
+      description: 'Get all model providers with available keys',
+      tags: ['agents'],
+      responses: {
+        200: {
+          description: 'All model providers with available keys',
+        },
+      },
+    }),
+    getModelProvidersHandler,
+  );
+
   // Agents routes
   app.route('/api/agents', agentsRouter(bodyLimitOptions));
   // Networks routes
@@ -456,17 +476,9 @@ export async function createHonoServer(
         root: './playground/assets',
       }),
     );
-
-    // Serve extra static files from playground directory
-    app.use(
-      '*',
-      serveStatic({
-        root: './playground',
-      }),
-    );
   }
 
-  // Catch-all route to serve index.html for any non-API routes
+  // Dynamic HTML handler - this must come before static file serving
   app.get('*', async (c, next) => {
     // Skip if it's an API route
     if (
@@ -477,18 +489,42 @@ export async function createHonoServer(
       return await next();
     }
 
+    // Skip if it's an asset file (has extension other than .html)
+    const path = c.req.path;
+    if (path.includes('.') && !path.endsWith('.html')) {
+      return await next();
+    }
+
     if (options?.playground) {
-      // For all other routes, serve index.html
+      // For HTML routes, serve index.html with dynamic replacements
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
       indexHtml = indexHtml.replace(
         `'%%MASTRA_TELEMETRY_DISABLED%%'`,
         `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
       );
+
+      // Inject the server port information
+      const serverOptions = mastra.getServer();
+      const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+      const host = serverOptions?.host ?? 'localhost';
+
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_URL%%'`, `'http://${host}:${port}'`);
+
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
     return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
   });
+
+  if (options?.playground) {
+    // Serve extra static files from playground directory (this comes after HTML handler)
+    app.use(
+      '*',
+      serveStatic({
+        root: './playground',
+      }),
+    );
+  }
 
   return app;
 }

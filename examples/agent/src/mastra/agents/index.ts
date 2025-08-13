@@ -13,6 +13,7 @@ import {
   ModerationInputProcessor,
 } from '@mastra/core/agent/input-processor/processors';
 import { MCPClient } from '@mastra/mcp';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const memory = new Memory();
 
@@ -187,4 +188,33 @@ export const chefAgentResponses = new Agent({
       },
     },
   ],
+});
+
+const answerRelevance = createAnswerRelevancyScorer({
+  model: openai('gpt-4o'),
+});
+
+console.log(`answerRelevance`, answerRelevance);
+
+export const evalAgent = new Agent({
+  name: 'Eval Agent',
+  instructions: `
+    You are a helpful assistant with a weather tool.
+    `,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherInfo,
+  },
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+  scorers: {
+    answerRelevance: {
+      scorer: answerRelevance,
+    },
+  },
 });
