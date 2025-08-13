@@ -1,7 +1,6 @@
 import type { Attributes, Tracer } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings } from 'ai-v5';
-import type { MessageList } from '../../agent/message-list';
 import { noopTracer } from './noop';
 
 export function getTracer({
@@ -64,13 +63,11 @@ export function getRootSpan({
   model,
   modelSettings,
   telemetry_settings,
-  messageList,
 }: {
   operationId: string;
   model: { modelId: string; provider: string };
   modelSettings?: CallSettings;
   telemetry_settings?: TelemetrySettings;
-  messageList: MessageList;
 }) {
   const tracer = getTracer({
     isEnabled: telemetry_settings?.isEnabled,
@@ -89,19 +86,11 @@ export function getRootSpan({
     headers: modelSettings?.headers,
   });
 
-  const inputMessages = messageList.get.input.core();
-
   const rootSpan = tracer.startSpan('mastra.stream').setAttributes({
     ...baseTelemetryAttributes,
-
     'mastra.operationId': operationId,
     'operation.name': `${operationId}${telemetry_settings?.functionId != null ? ` ${telemetry_settings.functionId}` : ''}`,
     ...(telemetry_settings?.functionId ? { 'resource.name': telemetry_settings?.functionId } : {}),
-    ...(telemetry_settings?.recordOutputs !== false
-      ? {
-          'stream.prompt.messages': JSON.stringify(inputMessages),
-        }
-      : {}),
   });
 
   return {
