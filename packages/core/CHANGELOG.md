@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- c30bca8: Fix do while resume-suspend in simple workflow losing data
+
 ## 0.13.2
 
 ### Patch Changes
