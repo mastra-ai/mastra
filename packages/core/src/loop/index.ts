@@ -13,6 +13,7 @@ export async function loop({
   messageList,
   includeRawChunks,
   modelSettings,
+  tools,
 }: LoopOptions) {
   let loggerToUse =
     logger ||
@@ -60,6 +61,7 @@ export async function loop({
     messageList,
     includeRawChunks,
     _internal,
+    tools,
   };
 
   const streamFn = workflowLoopStream(workflowLoopProps);
