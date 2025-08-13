@@ -20,6 +20,7 @@ type ExecutionProps = {
   telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
+  onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
 };
 
 export function execute({
@@ -35,11 +36,7 @@ export function execute({
   telemetry_settings,
   includeRawChunks,
   modelSettings,
-}: Omit<ExecutionProps, 'inputMessages'> & {
-  model: LanguageModelV2;
-  inputMessages: LanguageModelV2Prompt;
-  onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
-}) {
+}: ExecutionProps) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
     name: model.modelId,
