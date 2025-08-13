@@ -4,7 +4,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { Mastra, MastraMessageV2, Tool } from '../..';
 import { Agent, MessageList } from '../../agent';
 import type { MastraLanguageModel } from '../../agent';
-import type { MessageListAddInput } from '../../agent/message-list';
+import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 import type { MastraMemory } from '../../memory';
@@ -71,7 +71,7 @@ export class NewAgentNetwork extends MastraBase {
     this.#mastra = mastra;
   }
 
-  private getLastMessage(messages: MessageListAddInput) {
+  private getLastMessage(messages: MessageListInput) {
     let message = '';
     if (typeof messages === 'string') {
       message = messages;
@@ -104,7 +104,7 @@ export class NewAgentNetwork extends MastraBase {
     runtimeContext: RuntimeContext;
     threadId: string;
     resourceId: string;
-    messages: MessageListAddInput;
+    messages: MessageListInput;
   }) {
     const memory = await this.getMemory({ runtimeContext });
     let thread = await memory?.getThreadById({ threadId });
@@ -285,7 +285,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async loop(
-    messages: MessageListAddInput,
+    messages: MessageListInput,
     {
       runtimeContext,
       maxIterations,
@@ -366,7 +366,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async loopStream(
-    messages: MessageListAddInput,
+    messages: MessageListInput,
     {
       runtimeContext,
       maxIterations,
@@ -1023,7 +1023,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async generate(
-    messages: MessageListAddInput,
+    messages: MessageListInput,
     {
       runtimeContext,
       threadId,
@@ -1072,7 +1072,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async stream(
-    messages: MessageListAddInput,
+    messages: MessageListInput,
     {
       runtimeContext,
       threadId,

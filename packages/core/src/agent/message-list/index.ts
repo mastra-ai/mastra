@@ -89,7 +89,7 @@ type MessageSource =
 
 type MemoryInfo = { threadId: string; resourceId?: string };
 
-export type MessageListAddInput = string | string[] | MessageInput | MessageInput[];
+export type MessageListInput = string | string[] | MessageInput | MessageInput[];
 
 export class MessageList {
   private messages: MastraMessageV2[] = [];
@@ -129,7 +129,7 @@ export class MessageList {
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
-  public add(messages: MessageListAddInput, messageSource: MessageSource) {
+  public add(messages: MessageListInput, messageSource: MessageSource) {
     if (messageSource === `user`) messageSource = `input`;
 
     if (!messages) return this;
