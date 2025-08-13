@@ -24,10 +24,9 @@ await workflow.createRunAsync();
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "{ runId?: string }",
-      description:
-        "Optional configuration for the run, including a custom run ID",
+      name: "runId",
+      type: "string",
+      description: "Optional custom identifier for the workflow run",
       isOptional: true,
     },
   ]}
@@ -62,4 +61,5 @@ const result = await run.start({
 
 ## Related
 
+- [Run Class](./run.mdx)
 - [Running workflows](../../examples/workflows/running-workflows.mdx)

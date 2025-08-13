@@ -79,7 +79,7 @@ Mastra persists snapshots to the configured storage system. By default, snapshot
 The snapshots are stored in the `workflow_snapshots` table and identified uniquely by the `run_id` for the associated run when using libsql.
 Utilizing a persistence layer allows for the snapshots to be persisted across workflow runs, allowing for advanced human-in-the-loop functionality.
 
-Read more about [libsql storage](../storage/libsql.mdx) and [upstash storage](../storage/upstash.mdx) here.
+Read more about [libsql storage](../../reference/storage/libsql.mdx) and [upstash storage](../../reference/storage/upstash.mdx) here.
 
 ### Saving Snapshots
 
@@ -206,4 +206,4 @@ run.watch(async ({ activePaths }) => {
 
 - [Suspend and resume](../../docs/workflows/suspend-and-resume.mdx)
 - [Human in the loop example](../../examples/workflows/human-in-the-loop.mdx)
-- [Watch Function Reference](./watch.mdx)
+- [WorkflowRun.watch()](../../reference/workflows/run-methods/watch.mdx)

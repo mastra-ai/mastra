@@ -1,9 +1,9 @@
 ---
-title: "Reference: WorkflowRun.watch() | Workflows | Mastra Docs"
-description: Documentation for the `WorkflowRun.watch()` method in workflows, which allows you to monitor the execution of a workflow run.
+title: "Reference: Run.watch() | Workflows | Mastra Docs"
+description: Documentation for the `Run.watch()` method in workflows, which allows you to monitor the execution of a workflow run.
 ---
 
-# WorkflowRun.watch()
+# Run.watch()
 
 The `.watch()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
 
@@ -12,8 +12,8 @@ The `.watch()` method allows you to monitor the execution of a workflow run, pro
 ```typescript showLineNumbers copy
 const run = await workflow.createRunAsync();
 
-run.watch(event => {
-  console.log('Step completed:', event?.payload?.currentStep?.id);
+run.watch((event) => {
+  console.log(event?.payload?.currentStep?.id);
 });
 
 const result = await run.start({ inputData: { value: "initial data" } });
@@ -59,16 +59,16 @@ const result = await run.start({ inputData: { value: "initial data" } });
 const run = await workflow.createRunAsync();
 
 run.watch((event) => {
-  console.log("Step completed:", event?.payload?.currentStep?.id);
-}, 'watch');
-
+  console.log(event?.payload?.currentStep?.id);
+}, "watch");
 
 const result = await run.start({ inputData: { value: "initial data" } });
 ```
 
 ## Related
 
-- [Suspend and resume](../../docs/workflows/suspend-and-resume.mdx)
-- [Human in the loop example](../../examples/workflows/human-in-the-loop.mdx)
-- [Snapshot Reference](./snapshots.mdx)
-- [Workflow watch guide](../../docs/workflows/overview.mdx#watching-workflow-execution)
+## Related
+
+- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
+- [Workflow.createRunAsync()](../create-run.mdx)
+- [Watch Workflow](../../../docs/workflows/overview.mdx#watch-workflow)

@@ -5,7 +5,7 @@ description: "Documentation for the `Agent.getDefaultStreamOptions()` method in 
 
 # Agent.getDefaultStreamOptions()
 
-The `.getDefaultStreamOptions()` method retrieves the default streaming options configured for an agent, resolving them if they're a function. These options are used as the base configuration for all `stream()` calls unless overridden.
+Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
