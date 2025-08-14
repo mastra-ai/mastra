@@ -61,6 +61,13 @@ export default {
         ...Sizes,
       },
       colors: {
+        ui: {
+          mainBg: 'red',
+          dialogBg: 'blue',
+          primaryBtnBg: 'rgba(255,255,255,0.80)',
+          primaryBtnText: '#000',
+          mainText: 'green',
+        },
         ...Colors,
         ...IconColors,
         ...BorderColors,
