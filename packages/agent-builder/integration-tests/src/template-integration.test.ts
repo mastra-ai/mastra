@@ -39,7 +39,9 @@ function commitAll(repoDir: string, message: string) {
 }
 
 describe('Template Workflow Integration Tests', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'template-workflow-test-'));
+  const integrationProjectsDir = resolve(__dirname, '../integration-projects');
+  mkdirSync(integrationProjectsDir, { recursive: true });
+  const tempRoot = mkdtempSync(join(integrationProjectsDir, 'template-workflow-test-'));
   const fixtureProjectPath = resolve(__dirname, 'fixtures/minimal-mastra-project');
   const targetRepo = join(tempRoot, 'test-project');
   let mastraServer: ChildProcess;

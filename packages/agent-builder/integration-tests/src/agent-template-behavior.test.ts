@@ -30,7 +30,9 @@ function commitAll(repoDir: string, message: string) {
 }
 
 describe('agent-builder merge template via agent prompt (real template)', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'agent-builder-it-'));
+  const integrationProjectsDir = resolve(__dirname, '../integration-projects');
+  mkdirSync(integrationProjectsDir, { recursive: true });
+  const tempRoot = mkdtempSync(join(integrationProjectsDir, 'agent-builder-it-'));
   const fixtureProjectPath = resolve(__dirname, 'fixtures/minimal-mastra-project');
   const targetRepo = join(tempRoot, 'project-under-test');
   const realTemplateGit = 'https://github.com/mastra-ai/template-pdf-questions';
