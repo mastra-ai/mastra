@@ -1,16 +1,16 @@
 ---
-title: "Reference: getInstructions() | Agents | Mastra Docs"
-description: "Documentation for the `.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
+title: "Reference: Agent.getInstructions() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
 ---
 
-# getInstructions()
+# Agent.getInstructions()
 
 The `.getInstructions()` method retrieves the instructions configured for an agent, resolving them if they're a function. These instructions guide the agent's behavior and define its capabilities and constraints.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const instructions = await agent.getInstructions();
+```typescript copy
+await agent.getInstructions();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const instructions = await agent.getInstructions();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string | Promise<string>",
+      description: "The instructions configured for the agent, either as a direct string or a promise that resolves to the instructions.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const instructions = await agent.getInstructions({
+```typescript copy
+await agent.getInstructions({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -49,14 +61,7 @@ const instructions = await agent.getInstructions({
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "instructions",
-      type: "string | Promise<string>",
-      description: "The instructions configured for the agent, either as a direct string or a promise that resolves to the instructions.",
-    },
-  ]}
-/>
+- [Agents overview](../../docs/agents/overview.mdx)
+- [Runtime variables](../../docs/agents/runtime-variables.mdx)

@@ -20,14 +20,7 @@ export default function Scorers() {
         {isLoading ? (
           <div className="text-center text-icon3 m-[2rem]">Loading...</div>
         ) : (
-          <DataTable
-            columns={scorersTableColumns}
-            data={scorerListData || []}
-            isLoading={isLoading}
-            onClick={props => {
-              console.log(props);
-            }}
-          />
+          <DataTable columns={scorersTableColumns} data={scorerListData || []} isLoading={isLoading} />
         )}
       </div>
     </MainContentLayout>
