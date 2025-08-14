@@ -38,6 +38,11 @@ export function createObjectStreamTransformer({
 
   return new TransformStream({
     async transform(chunk, controller) {
+      if (!objectOptions) {
+        controller.enqueue(chunk);
+        return;
+      }
+
       if (responseFormat.type === 'json' && chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
         if (objectOptions?.output === 'array') {
           textAccumulatedText += chunk.payload.text;

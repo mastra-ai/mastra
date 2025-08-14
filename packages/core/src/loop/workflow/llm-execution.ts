@@ -46,6 +46,11 @@ async function processOutputStream({
       continue;
     }
 
+    if (chunk.type == 'object') {
+      controller.enqueue(chunk);
+      continue;
+    }
+
     // Reasoning
     if (
       chunk.type !== 'reasoning-delta' &&
@@ -332,7 +337,7 @@ async function processOutputStream({
   }
 }
 
-export function createLLMExecutionStep({
+export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
   model,
   _internal,
   messageId,
@@ -349,7 +354,7 @@ export function createLLMExecutionStep({
   toolCallStreaming,
   controller,
   objectOptions,
-}: OuterLLMRun) {
+}: OuterLLMRun<Tools>) {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
@@ -424,6 +429,7 @@ export function createLLMExecutionStep({
           toolCallStreaming,
           telemetry_settings,
           includeRawChunks,
+          objectOptions,
         },
       });
 

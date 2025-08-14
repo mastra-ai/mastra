@@ -1,9 +1,16 @@
+import type { ToolSet } from 'ai-v5';
 import { createStep } from '../../workflows';
 import { getRootSpan } from '../telemetry';
 import type { OuterLLMRun } from '../types';
 import { toolCallInputSchema, toolCallOutputSchema } from './schema';
 
-export function createToolCallStep({ tools, model, messageList, options, telemetry_settings }: OuterLLMRun) {
+export function createToolCallStep<Tools extends ToolSet = ToolSet>({
+  tools,
+  model,
+  messageList,
+  options,
+  telemetry_settings,
+}: OuterLLMRun<Tools>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,

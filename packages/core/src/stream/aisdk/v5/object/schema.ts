@@ -31,19 +31,19 @@ function getOutputSchema({ schema, output }: { schema?: Parameters<typeof asSche
   return jsonSchema;
 }
 
-export function getResponseFormat({
-  output,
-  schema,
-  schemaName,
-  schemaDescription,
-}: ObjectOptions): NonNullable<LanguageModelV2CallOptions['responseFormat']> {
+export function getResponseFormat(options: ObjectOptions): NonNullable<LanguageModelV2CallOptions['responseFormat']> {
   // response format type is 'json' when 'output' is 'object', 'array', or 'no-schema' OR if schema is provided
-  if ((!output && schema) || output === 'object' || output === 'array' || output === 'no-schema') {
+  if (
+    (!options?.output && options?.schema) ||
+    options?.output === 'object' ||
+    options?.output === 'array' ||
+    options?.output === 'no-schema'
+  ) {
     return {
       type: 'json',
-      schema: getOutputSchema({ schema, output }),
-      name: schemaName,
-      description: schemaDescription,
+      schema: getOutputSchema({ schema: options?.schema, output: options?.output }),
+      name: options?.schemaName,
+      description: options?.schemaDescription,
     };
   }
   // response format 'text' for everything else (regular text gen, tool calls, etc)

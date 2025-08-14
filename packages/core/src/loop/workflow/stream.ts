@@ -30,8 +30,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
       rootSpan.setAttributes({
         ...(telemetry_settings?.recordInputs !== false
           ? {
-            'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
-          }
+              'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
+            }
           : {}),
       });
 
@@ -56,7 +56,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
           let hasFinishedSteps = false;
 
           if (rest.stopWhen) {
-            console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
+            // console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
             const conditions = await Promise.all(
               (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
                 return condition({
@@ -92,9 +92,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
             'stream.usage.totalTokens': inputData.output.usage?.totalTokens,
             ...(telemetry_settings?.recordOutputs !== false
               ? {
-                'stream.response.text': inputData.output.text,
-                'stream.prompt.messages': JSON.stringify(rest.messageList.get.input.aiV5.model()),
-              }
+                  'stream.response.text': inputData.output.text,
+                  'stream.prompt.messages': JSON.stringify(rest.messageList.get.input.aiV5.model()),
+                }
               : {}),
           });
 

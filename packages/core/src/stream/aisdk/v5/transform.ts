@@ -4,9 +4,8 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { TextStreamPart, ToolSet } from 'ai-v5';
+import type { ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
 import type { ChunkType } from '../../types';
-import { transformResponse } from './output-helpers';
 import { DefaultGeneratedFileWithType } from './file';
 
 type StreamPart =
@@ -311,7 +310,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   // }
 }
 
-type OutputChunkType = TextStreamPart<ToolSet> | undefined;
+export type OutputChunkType = TextStreamPart<ToolSet> | ObjectStreamPart<any> | undefined;
 
 export function convertMastraChunkToAISDKv5({ chunk }: { chunk: ChunkType }): OutputChunkType {
   switch (chunk.type) {
@@ -483,6 +482,4 @@ export function convertMastraChunkToAISDKv5({ chunk }: { chunk: ChunkType }): Ou
         error: chunk.payload.error,
       };
   }
-
-  return;
 }

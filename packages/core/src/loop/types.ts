@@ -58,7 +58,8 @@ export type ObjectOptions =
       schema?: never;
       schemaName?: never;
       schemaDescription?: never;
-    };
+    }
+  | undefined;
 
 export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
   runId: string;
@@ -67,7 +68,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
   _internal: StreamInternal;
 };
 
-export type OuterLLMRun = {
+export type OuterLLMRun<Tools extends ToolSet = ToolSet> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
-} & LoopRun;
+} & LoopRun<Tools>;

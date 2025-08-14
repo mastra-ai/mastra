@@ -1,23 +1,26 @@
 import { TransformStream } from 'stream/web';
-import { getErrorMessage, type LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
-import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
-import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream, DelayedPromise } from './compat';
-import { getResponseFormat } from './object/schema';
-import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './object/stream-object';
+import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
 import { transformResponse, transformSteps } from './output-helpers';
-import { convertMastraChunkToAISDKv5 } from './transform';
+import { convertMastraChunkToAISDKv5, type OutputChunkType } from './transform';
+
+type AISDKV5OutputStreamOptions = {
+  toolCallStreaming?: boolean;
+  includeRawChunks?: boolean;
+  objectOptions?: ObjectOptions;
+};
 
 export class AISDKV5OutputStream {
   #modelOutput: MastraModelOutput;
-  #options: { toolCallStreaming?: boolean; includeRawChunks?: boolean; objectOptions?: ObjectOptions };
+  #options: AISDKV5OutputStreamOptions;
   #messageList: MessageList;
-  #objectPromise = new DelayedPromise<any>();
 
   constructor({
     modelOutput,
@@ -25,7 +28,7 @@ export class AISDKV5OutputStream {
     messageList,
   }: {
     modelOutput: MastraModelOutput;
-    options: { toolCallStreaming?: boolean; includeRawChunks?: boolean };
+    options: AISDKV5OutputStreamOptions;
     messageList: MessageList;
   }) {
     this.#modelOutput = modelOutput;
@@ -96,12 +99,12 @@ export class AISDKV5OutputStream {
       generateId: () => responseMessageId ?? generateMessageId?.(),
       execute: async ({ writer }) => {
         for await (const part of this.fullStream) {
-          const messageMetadataValue = messageMetadata?.({ part });
+          const messageMetadataValue = messageMetadata?.({ part: part as TextStreamPart<ToolSet> });
 
           const partType = part.type;
 
           const transformedChunk = convertFullStreamChunkToUIMessageStream({
-            part,
+            part: part as TextStreamPart<ToolSet>,
             sendReasoning,
             messageMetadataValue,
             sendSources,
@@ -228,48 +231,55 @@ export class AISDKV5OutputStream {
   }
 
   get fullStream() {
-    let startEvent: TextStreamPart<ToolSet> | undefined;
+    let startEvent: OutputChunkType;
     let hasStarted: boolean = false;
+
     // let stepCounter = 1;
-    return this.#modelOutput.fullStream
-      .pipeThrough(createObjectStreamTransformer({ objectOptions: this.#options.objectOptions }))
-      .pipeThrough(
-        new TransformStream<ChunkType, TextStreamPart<ToolSet>>({
-          transform(chunk, controller) {
-            if (chunk.type === 'step-start' && !startEvent) {
-              startEvent = convertMastraChunkToAISDKv5({
-                chunk,
-              });
-              // stepCounter++;
-              return;
-            } else if (chunk.type !== 'error') {
-              hasStarted = true;
-            }
+    const fullStream = this.#modelOutput.fullStream;
 
-            if (startEvent && hasStarted) {
-              controller.enqueue(startEvent as any);
-              startEvent = undefined;
-            }
-
-            const transformedChunk = convertMastraChunkToAISDKv5({
+    return fullStream.pipeThrough(
+      new TransformStream<ChunkType, NonNullable<OutputChunkType>>({
+        transform(chunk, controller) {
+          if (chunk.type === 'step-start' && !startEvent) {
+            startEvent = convertMastraChunkToAISDKv5({
               chunk,
             });
+            // stepCounter++;
+            return;
+          } else if (chunk.type !== 'error') {
+            hasStarted = true;
+          }
 
-            if (transformedChunk) {
-              // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
-              //   console.log('step counter', stepCounter);
-              //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
-              // }
+          if (startEvent && hasStarted) {
+            controller.enqueue(startEvent as any);
+            startEvent = undefined;
+          }
 
-              controller.enqueue(transformedChunk);
-            }
-          },
-        }),
-      );
+          const transformedChunk = convertMastraChunkToAISDKv5({
+            chunk,
+          });
+
+          if (transformedChunk) {
+            // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
+            //   console.log('step counter', stepCounter);
+            //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
+            // }
+
+            controller.enqueue(transformedChunk);
+          }
+        },
+      }),
+    );
   }
 
   async getFullOutput() {
     await this.consumeStream();
+
+    let object: any;
+    if (this.#options.objectOptions) {
+      object = await this.object;
+    }
+
     return {
       text: this.#modelOutput.text,
       usage: this.#modelOutput.usage,
@@ -287,92 +297,12 @@ export class AISDKV5OutputStream {
       response: this.response,
       content: this.content,
       totalUsage: this.#modelOutput.totalUsage,
+      ...(object ? { object } : {}),
       // experimental_output: // TODO
     };
   }
 
-  get objectStream() {
-    const self = this;
-    if (!self.#options.objectOptions) {
-      throw new Error('objectStream requires objectOptions');
-    }
-
-    return this.#modelOutput.fullStream
-      .pipeThrough(
-        createObjectStreamTransformer({
-          objectOptions: self.#options.objectOptions,
-          onFinish: data => self.#objectPromise.resolve(data),
-          onError: error => self.#objectPromise.reject(error),
-        }),
-      )
-      .pipeThrough(
-        new TransformStream<ChunkType | any, LanguageModelV2StreamPart>({
-          transform(chunk, controller) {
-            if (chunk.type === 'object') {
-              controller.enqueue(chunk.object);
-            }
-          },
-        }),
-      );
-  }
-
-  get elementStream() {
-    let publishedElements = 0;
-    const self = this;
-    if (!self.#options.objectOptions) {
-      throw new Error('elementStream requires objectOptions');
-    }
-
-    return this.#modelOutput.fullStream
-      .pipeThrough(
-        createObjectStreamTransformer({
-          objectOptions: self.#options.objectOptions,
-          onFinish: data => self.#objectPromise.resolve(data),
-          onError: error => self.#objectPromise.reject(error),
-        }),
-      )
-      .pipeThrough(
-        new TransformStream({
-          transform(chunk, controller) {
-            switch (chunk.type) {
-              case 'object': {
-                const array = chunk.object;
-                // Only process arrays - stream individual elements as they become available
-                if (Array.isArray(array)) {
-                  // Publish new elements one by one
-                  for (; publishedElements < array.length; publishedElements++) {
-                    controller.enqueue(array[publishedElements]);
-                  }
-                }
-                break;
-              }
-            }
-          },
-        }),
-      );
-  }
-
-  get textStream() {
-    const self = this;
-    if (!self.#options.objectOptions) {
-      return this.#modelOutput.textStream;
-    }
-    const responseFormat = getResponseFormat(self.#options.objectOptions);
-    if (responseFormat?.type === 'json') {
-      return this.#modelOutput.fullStream
-        .pipeThrough(
-          createObjectStreamTransformer({
-            objectOptions: self.#options.objectOptions,
-            onFinish: data => self.#objectPromise.resolve(data),
-            onError: error => self.#objectPromise.reject(error),
-          }),
-        )
-        .pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
-    }
-
-    return this.#modelOutput.textStream;
-  }
   get object() {
-    return this.#objectPromise.promise;
+    return this.#modelOutput.object;
   }
 }

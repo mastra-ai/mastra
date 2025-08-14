@@ -70,7 +70,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
           });
 
-          expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+          expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
             [
               {},
               {
@@ -111,18 +111,18 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should use name and description', async () => {
           const model = createTestModel();
 
-          const result = executeFn({
+          const result = loopFn({
             runId,
             model,
-            options: {
+            objectOptions: {
               schema: z.object({ content: z.string() }),
               schemaName: 'test-name',
               schemaDescription: 'test description',
             },
-            prompt: 'prompt',
+            messageList: new MessageList(),
           });
 
-          expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+          expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
           [
             {},
             {
@@ -173,36 +173,40 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         it('should suppress error in partialObjectStream', async () => {
-          const result = executeFn({
+          const result = loopFn({
             runId,
             model: new MockLanguageModelV2({
               doStream: async () => {
                 throw new Error('test error');
               },
             }),
-            options: {
+            objectOptions: {
               schema: z.object({ content: z.string() }),
+            },
+            messageList: new MessageList(),
+            options: {
               onError: () => {},
             },
-            prompt: 'prompt',
           });
 
-          expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toStrictEqual([]);
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([]);
         });
 
         it('should invoke onError callback with Error', async () => {
           const result: Array<{ error: unknown }> = [];
 
-          const resultObject = executeFn({
+          const resultObject = loopFn({
             runId,
             model: new MockLanguageModelV2({
               doStream: async () => {
                 throw new Error('test error');
               },
             }),
-            prompt: 'prompt',
-            options: {
+            objectOptions: {
               schema: z.object({ content: z.string() }),
+            },
+            messageList: new MessageList(),
+            options: {
               onError(event) {
                 result.push(event);
               },
@@ -210,7 +214,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
 
           // consume stream
-          await resultObject.aisdk.v5.consumeStream();
+          await resultObject.consumeStream();
           expect(result).toStrictEqual([{ error: new Error('test error') }]);
         });
       });
@@ -245,15 +249,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
 
           // consume stream (runs in parallel)
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          await convertAsyncIterableToArray(result.objectStream);
 
-          assert.deepStrictEqual(await result.aisdk.v5.object, {
+          assert.deepStrictEqual(await result.object, {
             content: 'Hello, world!',
           });
         });
 
         it.todo('should reject object promise when the streamed object does not match the schema', async () => {
-          const result = executeFn({
+          const result = loopFn({
             runId,
             model: new MockLanguageModelV2({
               doStream: async () => ({
@@ -274,22 +278,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 ]),
               }),
             }),
-            options: {
+            objectOptions: {
               schema: z.object({ content: z.string() }),
             },
-            prompt: 'prompt',
+            messageList: new MessageList(),
           });
 
           // consume stream (runs in parallel)
-          void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          const data = await result.aisdk.v5.object;
+          void convertAsyncIterableToArray(result.objectStream);
+          const data = await result.object;
           console.log('data22', data);
 
           // expect(result.aisdk.v5.object).rejects.toThrow(NoObjectGeneratedError);
         });
 
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
-          const result = executeFn({
+          const result = loopFn({
             runId,
             model: new MockLanguageModelV2({
               doStream: async () => ({
@@ -310,14 +314,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 ]),
               }),
             }),
-            options: {
+            objectOptions: {
               schema: z.object({ content: z.string() }),
             },
-            prompt: 'prompt',
+            messageList: new MessageList(),
           });
 
           // consume stream (runs in parallel)
-          void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          void convertAsyncIterableToArray(result.objectStream);
 
           // unhandled promise rejection should not be thrown (Vitest does this automatically)
         });
