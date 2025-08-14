@@ -37,6 +37,7 @@ export type LoopOptions = {
   options?: LoopConfig;
   providerOptions?: SharedV2ProviderOptions;
   tools: ToolSet;
+  experimental_generateMessageId?: () => string;
 };
 
 export type LoopRun = LoopOptions & {
