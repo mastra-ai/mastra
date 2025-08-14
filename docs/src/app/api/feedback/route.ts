@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       "unknown";
 
     const feedbackEntry = {
-      id: `feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `feedback_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       feedback: body.feedback.trim(),
       rating: body.rating || null,
       email: body.email?.trim() || null,
