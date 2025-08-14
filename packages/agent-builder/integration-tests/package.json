@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "test": "vitest run ./src/**/*.test.ts",
-    "test:agent-template-behavior": "vitest run ./src/agent-template-behavior.test.ts",
-    "test:template-integration": "vitest run ./src/template-integration.test.ts",
+    "test:agent": "vitest run ./src/agent-template-behavior.test.ts",
+    "test:template": "vitest run ./src/template-integration.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {
