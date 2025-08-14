@@ -7,7 +7,7 @@ export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/traces/index';
-export * from './domains/telemetry/index';
+export * from './domains/observability/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
 export * from './components/ui/data-table';

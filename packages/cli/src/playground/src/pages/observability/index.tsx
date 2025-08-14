@@ -4,8 +4,8 @@ import {
   Header,
   MainContentLayout,
   EntryList,
-  TelemetryEventDialog,
-  TelemetryEventsTools,
+  ObservabilityEventDialog,
+  ObservabilityEventsTools,
   PageHeader,
 } from '@mastra/playground-ui';
 import { useState } from 'react';
@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { Eye, EyeIcon } from 'lucide-react';
 
-export default function Telemetry() {
+export default function observability() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedEntity, setSelectedEntity] = useState<number | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
@@ -128,13 +128,13 @@ export default function Telemetry() {
     <>
       <MainContentLayout>
         <Header>
-          <HeaderTitle>AI Telemetry</HeaderTitle>
+          <HeaderTitle>Observability</HeaderTitle>
         </Header>
 
         <div className={cn(`h-full overflow-y-scroll `)}>
           <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid gap-[2rem]')}>
-            <PageHeader title="AI Telemetry" description="View and manage AI telemetry events." icon={<EyeIcon />} />
-            <TelemetryEventsTools
+            <PageHeader title="Observability" description="View and manage observability events." icon={<EyeIcon />} />
+            <ObservabilityEventsTools
               onEntityChange={handleEntityChange}
               onReset={handleReset}
               selectedEntity={selectedEntity?.toString() || ''}
@@ -150,7 +150,7 @@ export default function Telemetry() {
           </div>
         </div>
       </MainContentLayout>
-      <TelemetryEventDialog
+      <ObservabilityEventDialog
         isOpen={dialogIsOpen}
         event={selectedEvent}
         onClose={() => setDialogIsOpen(false)}

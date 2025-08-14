@@ -9,7 +9,7 @@ import { FileInputIcon, FileOutputIcon } from 'lucide-react';
 
 import { useState } from 'react';
 
-type TelemetryEventDialogProps = {
+type ObservabilityEventDialogProps = {
   event?: {
     id?: string;
     input?: string;
@@ -23,13 +23,19 @@ type TelemetryEventDialogProps = {
   onPrevious?: (() => void) | null;
 };
 
-export function TelemetryEventDialog({ event, isOpen, onClose, onNext, onPrevious }: TelemetryEventDialogProps) {
+export function ObservabilityEventDialog({
+  event,
+  isOpen,
+  onClose,
+  onNext,
+  onPrevious,
+}: ObservabilityEventDialogProps) {
   const [confirmationIsOpen, setConfirmationIsOpen] = useState<boolean>(false);
 
   return (
     <>
       <SideDialog
-        dialogTitle="AI Telemetry Event"
+        dialogTitle="Observability Event"
         isOpen={isOpen}
         onClose={onClose}
         hasCloseButton={!confirmationIsOpen}
@@ -41,7 +47,7 @@ export function TelemetryEventDialog({ event, isOpen, onClose, onNext, onPreviou
         <SideDialogContent>
           <>
             <SideDialogHeader>
-              <h2>AI Telemetry Event</h2>
+              <h2>Observability Event</h2>
             </SideDialogHeader>
 
             <SideDialogSection>

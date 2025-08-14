@@ -146,8 +146,8 @@ const links = [
     icon: GaugeIcon,
   },
   {
-    name: 'AI Telemetry',
-    url: '/telemetry',
+    name: 'Observability',
+    url: '/observability',
     icon: EyeIcon,
   },
   {
