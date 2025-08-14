@@ -202,11 +202,13 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     pagination,
     entityId,
     entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const query: any = { scorerId };
@@ -217,6 +219,10 @@ export class ScoresStorageMongoDB extends ScoresStorage {
 
       if (entityType) {
         query.entityType = entityType;
+      }
+
+      if (source) {
+        query.source = source;
       }
 
       const collection = await this.operations.getCollection(TABLE_SCORERS);
