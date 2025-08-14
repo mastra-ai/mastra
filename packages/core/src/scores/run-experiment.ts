@@ -18,6 +18,27 @@ type RunExperimentResult<TScorerName extends string = string> = {
   };
 };
 
+// Extract the return type of a scorer's run method
+type ScorerRunResult<T extends MastraScorer<any, any, any, any>> =
+  T extends MastraScorer<any, infer TInput, infer TRunOutput, infer TAccumulatedResults>
+    ? Awaited<ReturnType<T['run']>>
+    : never;
+
+// Create a mapped type for scorer results
+type ScorerResults<TScorers extends readonly MastraScorer<any, any, any, any>[]> = {
+  [K in TScorers[number]['name']]: ScorerRunResult<Extract<TScorers[number], { name: K }>>;
+};
+
+export type RunExperimentOnItemComplete<TScorers extends readonly MastraScorer<any, any, any, any>[]> = ({
+  item,
+  targetResult,
+  scorerResults,
+}: {
+  item: RunExperimentDataItem;
+  targetResult: any;
+  scorerResults: ScorerResults<TScorers>;
+}) => void;
+
 export const runExperiment = async <const TScorer extends readonly MastraScorer[]>({
   data,
   scorers,
@@ -29,15 +50,7 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
   scorers: TScorer;
   target: Agent;
   concurrency?: number;
-  onItemComplete?: ({
-    item,
-    targetResult,
-    scorerResults,
-  }: {
-    item: Record<string, any>;
-    targetResult: any;
-    scorerResults: Record<string, any>;
-  }) => void;
+  onItemComplete?: RunExperimentOnItemComplete<TScorer>;
 }): Promise<RunExperimentResult<TScorer[number]['name']>> => {
   const startTime = Date.now();
   let totalItems = 0;
@@ -52,7 +65,7 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
         runtimeContext: item.runtimeContext,
       });
 
-      const scorerResults: Record<string, any> = {};
+      const scorerResults: ScorerResults<TScorer> = {} as ScorerResults<TScorer>;
       for (const scorer of scorers) {
         const score = await scorer.run({
           input: targetResult.scoringData?.input,
@@ -61,14 +74,15 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
           runtimeContext: item.runtimeContext,
         });
 
-        scorerResults[scorer.name] = score;
+        scorerResults[scorer.name as keyof ScorerResults<TScorer>] =
+          score as ScorerResults<TScorer>[typeof scorer.name];
       }
 
       for (const [scorerName, result] of Object.entries(scorerResults)) {
         if (!scoreAccumulators[scorerName]) {
           scoreAccumulators[scorerName] = [];
         }
-        scoreAccumulators[scorerName].push(result.score);
+        scoreAccumulators[scorerName].push((result as { score: number }).score);
       }
 
       if (onItemComplete) {

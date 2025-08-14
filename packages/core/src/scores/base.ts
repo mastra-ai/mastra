@@ -547,8 +547,10 @@ class MastraScorer<
   }
 }
 
-export function createScorer<TName extends string>(config: ScorerConfig<TName>): MastraScorer<TName, any, any, {}> {
-  return new MastraScorer<TName, any, any, {}>({
+export function createScorer<TInput = any, TRunOutput = any, TName extends string = string>(
+  config: ScorerConfig<TName, TInput, TRunOutput>,
+): MastraScorer<TName, TInput, TRunOutput, {}> {
+  return new MastraScorer<TName, TInput, TRunOutput, {}>({
     name: config.name,
     description: config.description,
     judge: config.judge,
