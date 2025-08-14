@@ -2124,24 +2124,6 @@ export class MessageList {
       content.metadata = { ...message.metadata } as Record<string, unknown>;
     }
 
-    if (`experimental_attachments` in message && (message as any).experimental_attachments !== undefined) {
-      const attachments = (message as any).experimental_attachments as AIV4Type.UIMessage['experimental_attachments'];
-      // Preserve experimental_attachments in metadata for round-trip (even if empty array)
-      content.metadata = {
-        ...(content.metadata || {}),
-        __originalExperimentalAttachments: attachments,
-      };
-      if (attachments?.length) {
-        for (const attachment of attachments) {
-          content.parts.push({
-            type: 'file',
-            url: attachment.url,
-            mediaType: attachment.contentType || 'unknown',
-          } as any);
-        }
-      }
-    }
-
     return {
       id: message.id || this.newMessageId(),
       role: MessageList.getRole(message),
