@@ -989,7 +989,7 @@ const programmaticFileCopyStep = createStep({
                 unit: { kind: unit.kind, id: unit.id },
                 issue: `File exists - skipped: ${convertedFileName}`,
                 sourceFile: unit.file,
-                targetFile: convertedFileName,
+                targetFile: `${targetDir}/${convertedFileName}`,
               });
               console.log(`⏭️ Skipped ${unit.kind} "${unit.id}": file already exists`);
               continue;
@@ -1011,7 +1011,7 @@ const programmaticFileCopyStep = createStep({
                   unit: { kind: unit.kind, id: unit.id },
                   issue: `Failed to backup and replace: ${backupError instanceof Error ? backupError.message : String(backupError)}`,
                   sourceFile: unit.file,
-                  targetFile: convertedFileName,
+                  targetFile: `${targetDir}/${convertedFileName}`,
                 });
                 continue;
               }
@@ -1031,7 +1031,7 @@ const programmaticFileCopyStep = createStep({
                   unit: { kind: unit.kind, id: unit.id },
                   issue: `Failed to rename and copy: ${renameError instanceof Error ? renameError.message : String(renameError)}`,
                   sourceFile: unit.file,
-                  targetFile: convertedFileName,
+                  targetFile: `${targetDir}/${convertedFileName}`,
                 });
                 continue;
               }
@@ -1041,7 +1041,7 @@ const programmaticFileCopyStep = createStep({
                 unit: { kind: unit.kind, id: unit.id },
                 issue: `Unknown conflict strategy: ${strategy}`,
                 sourceFile: unit.file,
-                targetFile: convertedFileName,
+                targetFile: `${targetDir}/${convertedFileName}`,
               });
               continue;
           }
@@ -1064,7 +1064,7 @@ const programmaticFileCopyStep = createStep({
             unit: { kind: unit.kind, id: unit.id },
             issue: `Failed to copy file: ${copyError instanceof Error ? copyError.message : String(copyError)}`,
             sourceFile: unit.file,
-            targetFile: convertedFileName,
+            targetFile: `${targetDir}/${convertedFileName}`,
           });
         }
       }
