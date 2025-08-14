@@ -5,6 +5,7 @@ import { createRequire } from 'module';
 import semver from 'semver';
 import { readFile, writeFile, mkdir, stat, readdir, copyFile } from 'fs/promises';
 import { join, dirname, relative, basename } from 'path';
+import { UNIT_KINDS, type UnitKind } from './types';
 
 export const exec = promisify(execNodejs);
 
@@ -38,10 +39,9 @@ export async function spawnSWPM(cwd: string, command: string, packageNames: stri
 }
 
 // Utility functions
-export function kindWeight(kind: string): number {
-  const order = ['mcp-server', 'mcp-tool', 'tool', 'workflow', 'agent', 'integration'];
-  const idx = order.indexOf(kind);
-  return idx === -1 ? order.length : idx;
+export function kindWeight(kind: UnitKind): number {
+  const idx = UNIT_KINDS.indexOf(kind as any);
+  return idx === -1 ? UNIT_KINDS.length : idx;
 }
 
 function resolveVersionRange(

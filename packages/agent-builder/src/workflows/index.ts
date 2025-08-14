@@ -323,6 +323,7 @@ For each Mastra project directory you analyze:
 3. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} and identify ALL exported tools
 4. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']} and identify ALL exported MCP servers
 5. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network} and identify ALL exported networks
+6. Scan for any OTHER files in src/mastra that are NOT in the above default folders (e.g., lib/, utils/, types/, etc.) and identify them as 'other' files
 
 Return the actual exported names of the units, as well as the file names.`,
       name: 'Mastra Project Discoverer',
@@ -350,6 +351,7 @@ Return the actual exported names of the units, as well as the file names.`,
           tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
           mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
           networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
         }),
         maxSteps: 100,
       },
@@ -379,9 +381,14 @@ Return the actual exported names of the units, as well as the file names.`,
       units.push({ kind: 'mcp-server', id: mcpId.name, file: mcpId.file });
     });
 
-    // Add integration unit for general template files
+    // Add networks
     template.networks?.forEach((networkId: { name: string; file: string }) => {
       units.push({ kind: 'network', id: networkId.name, file: networkId.file });
+    });
+
+    // Add other files
+    template.other?.forEach((otherId: { name: string; file: string }) => {
+      units.push({ kind: 'other', id: otherId.name, file: otherId.file });
     });
 
     console.log('Discovered units:', JSON.stringify(units, null, 2));
@@ -1138,7 +1145,7 @@ const validationAndFixStep = createStep({
         }),
       )
       .optional(),
-    maxIterations: z.number().optional().default(3),
+    maxIterations: z.number().optional().default(5),
   }),
   outputSchema: z.object({
     success: z.boolean(),
@@ -1153,7 +1160,7 @@ const validationAndFixStep = createStep({
   }),
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Validation and fix step starting...');
-    const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 3 } = inputData;
+    const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 5 } = inputData;
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     // Skip validation if no changes were made

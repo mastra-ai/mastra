@@ -58,9 +58,14 @@ export type PackageManager = 'npm' | 'pnpm' | 'yarn';
  */
 export type ValidationType = 'types' | 'schemas' | 'tests' | 'integration';
 
+// Processing order for units (lower index = higher priority)
+export const UNIT_KINDS = ['mcp-server', 'tool', 'workflow', 'agent', 'integration', 'network', 'other'] as const;
+
 // Types for the merge template workflow
+export type UnitKind = (typeof UNIT_KINDS)[number];
+
 export interface TemplateUnit {
-  kind: 'agent' | 'workflow' | 'tool' | 'mcp-server' | 'network';
+  kind: UnitKind;
   id: string;
   file: string;
 }
@@ -81,7 +86,7 @@ export interface MergePlan {
 
 // Schema definitions
 export const TemplateUnitSchema = z.object({
-  kind: z.enum(['agent', 'workflow', 'tool', 'mcp-server', 'network']),
+  kind: z.enum(UNIT_KINDS),
   id: z.string(),
   file: z.string(),
 });
