@@ -1,13 +1,15 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import type { Span } from '@opentelemetry/api';
+import { consumeStream } from 'ai-v5';
 import type { TelemetrySettings } from 'ai-v5';
 import type { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
+import type { ObjectOptions } from '../../loop/types';
+import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformResponse, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
-import type { ObjectOptions } from '../../loop/types';
 
 export class MastraModelOutput extends MastraBase {
   #aisdkv5: AISDKV5OutputStream;
@@ -273,30 +275,30 @@ export class MastraModelOutput extends MastraBase {
                 options.rootSpan.setAttributes({
                   ...(baseFinishStep?.usage.reasoningTokens
                     ? {
-                        'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
-                      }
+                      'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
+                    }
                     : {}),
 
                   ...(baseFinishStep?.usage.totalTokens
                     ? {
-                        'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
-                      }
+                      'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
+                    }
                     : {}),
 
                   ...(baseFinishStep?.usage.inputTokens
                     ? {
-                        'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
-                      }
+                      'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
+                    }
                     : {}),
                   ...(baseFinishStep?.usage.outputTokens
                     ? {
-                        'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
-                      }
+                      'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
+                    }
                     : {}),
                   ...(baseFinishStep?.usage.cachedInputTokens
                     ? {
-                        'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
-                      }
+                      'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
+                    }
                     : {}),
 
                   ...(baseFinishStep?.providerMetadata
@@ -310,15 +312,15 @@ export class MastraModelOutput extends MastraBase {
                     : {}),
                   ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
                     ? {
-                        'stream.response.toolCalls': JSON.stringify(
-                          baseFinishStep?.toolCalls?.map(chunk => {
-                            return {
-                              type: chunk.type,
-                              ...chunk.payload,
-                            };
-                          }),
-                        ),
-                      }
+                      'stream.response.toolCalls': JSON.stringify(
+                        baseFinishStep?.toolCalls?.map(chunk => {
+                          return {
+                            type: chunk.type,
+                            ...chunk.payload,
+                          };
+                        }),
+                      ),
+                    }
                     : {}),
                 });
 
@@ -457,6 +459,46 @@ export class MastraModelOutput extends MastraBase {
         this.#usageCount[key] = value;
       }
     }
+  }
+
+  async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
+    try {
+      await consumeStream({
+        stream: this.fullStream.pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              controller.enqueue(chunk);
+            },
+          }),
+        ) as any,
+        onError: options?.onError,
+      });
+    } catch (error) {
+      console.log('consumeStream error', error);
+      options?.onError?.(error);
+    }
+  }
+
+  async getFullOutput() {
+    await this.consumeStream();
+    return {
+      text: this.text,
+      usage: this.usage,
+      steps: this.steps,
+      finishReason: this.finishReason,
+      warnings: this.warnings,
+      providerMetadata: this.providerMetadata,
+      request: this.request,
+      reasoning: this.reasoning,
+      reasoningText: this.reasoningText,
+      toolCalls: this.toolCalls,
+      toolResults: this.toolResults,
+      sources: this.sources,
+      files: this.files,
+      response: this.response,
+      totalUsage: this.totalUsage,
+      // experimental_output: // TODO
+    };
   }
 
   get totalUsage() {

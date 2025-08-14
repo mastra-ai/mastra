@@ -6,7 +6,7 @@ import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflow/stream';
 
-export async function loop<Tools extends ToolSet = ToolSet>({
+export function loop<Tools extends ToolSet = ToolSet>({
   model,
   logger,
   runId,

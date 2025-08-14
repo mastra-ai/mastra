@@ -1,18 +1,13 @@
 import { TransformStream } from 'stream/web';
-import { getErrorMessage, type LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
+import { getErrorMessage } from '@ai-sdk/provider-v5';
+import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
-import {
-  getResponseUIMessageId,
-  consumeStream,
-  convertFullStreamChunkToUIMessageStream,
-  DelayedPromise,
-} from './compat';
+import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream, DelayedPromise } from './compat';
 import { getResponseFormat } from './object/schema';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './object/stream-object';
 import { transformResponse, transformSteps } from './output-helpers';
@@ -90,9 +85,9 @@ export class AISDKV5OutputStream {
     const responseMessageId =
       generateMessageId != null
         ? getResponseUIMessageId({
-            originalMessages,
-            responseMessageId: generateMessageId,
-          })
+          originalMessages,
+          responseMessageId: generateMessageId,
+        })
         : undefined;
 
     return createUIMessageStream({
