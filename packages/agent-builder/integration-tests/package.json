@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "test": "vitest run ./src/**/*.test.ts",
-    "test:merge": "vitest run ./src/merge-template.test.ts",
-    "test:integration": "vitest run ./src/template-workflow.test.ts",
+    "test:agent-template-behavior": "vitest run ./src/agent-template-behavior.test.ts",
+    "test:template-integration": "vitest run ./src/template-integration.test.ts",
     "dev": "mastra dev"
   },
   "dependencies": {
