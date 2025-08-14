@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { AgentBuilder } from '../../src/index';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 // Import openai dynamically to handle cases where it might not be available
 const openai = (() => {
@@ -36,6 +36,9 @@ describe('agent-builder merge template via agent prompt (real template)', () => 
   const fixtureProjectPath = resolve(__dirname, 'fixtures/minimal-mastra-project');
   const targetRepo = join(tempRoot, 'project-under-test');
   const realTemplateGit = 'https://github.com/mastra-ai/template-pdf-questions';
+
+  const runtimeContext = new RuntimeContext();
+  runtimeContext.set('targetPath', targetRepo);
 
   beforeAll(() => {
     // Copy the fixture mastra project into temp directory
@@ -77,6 +80,7 @@ Please do a dry-run first to show me what would be merged. Use the merge-templat
     // Call the agent with natural language
     const response = await agent.generate(prompt, {
       maxSteps: 5,
+      runtimeContext,
     });
 
     // Verify the agent used the merge-template tool
@@ -118,6 +122,7 @@ Set apply=true to actually perform the merge. Create the branch and merge the fi
     // Call the agent to apply the merge
     const response = await agent.generate(prompt, {
       maxSteps: 5,
+      runtimeContext,
     });
 
     // Verify the agent used the merge-template tool

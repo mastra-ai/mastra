@@ -1,5 +1,5 @@
-import { readFile, writeFile, mkdir, stat, readdir, rm } from 'fs/promises';
-import { join, dirname, relative, isAbsolute, resolve, extname, basename } from 'path';
+import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
+import { join, dirname, relative, isAbsolute, resolve } from 'path';
 import { createTool } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
 import { z } from 'zod';

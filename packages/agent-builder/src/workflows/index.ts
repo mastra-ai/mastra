@@ -136,9 +136,9 @@ const flatInstallStep = createStep({
     message: z.string(),
     details: z.string().optional(),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, runtimeContext }) => {
     console.log('Running flat install...');
-    const { targetPath } = inputData;
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
       // Run flat install using swpm (no specific packages)
@@ -185,10 +185,10 @@ const packageMergeStep = createStep({
     message: z.string(),
     error: z.string().optional(),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, runtimeContext }) => {
     console.log('Package merge step starting...');
     const { commitSha, slug, packageInfo } = inputData;
-    const targetPath = inputData.targetPath || process.cwd();
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
       const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath);
@@ -454,10 +454,10 @@ const intelligentMergeStep = createStep({
     error: z.string().optional(),
     branchName: z.string().optional(),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, runtimeContext }) => {
     console.log('Intelligent merge step starting...');
     const { conflicts, copiedFiles, commitSha, slug, templateDir } = inputData;
-    const targetPath = inputData.targetPath || process.cwd();
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
       // Create git branch for template integration
@@ -736,10 +736,10 @@ const programmaticFileCopyStep = createStep({
     message: z.string(),
     error: z.string().optional(),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, runtimeContext }) => {
     console.log('Programmatic file copy step starting...');
     const { orderedUnits, templateDir, commitSha, slug } = inputData;
-    const targetPath = inputData.targetPath || process.cwd();
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
       const copiedFiles: Array<{
@@ -989,10 +989,10 @@ const validationAndFixStep = createStep({
     }),
     error: z.string().optional(),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, runtimeContext }) => {
     console.log('Validation and fix step starting...');
     const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved } = inputData;
-    const targetPath = inputData.targetPath || process.cwd();
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
       const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath, 'template');
@@ -1227,8 +1227,7 @@ export const mergeTemplateWorkflow = createWorkflow({
     };
   })
   .then(validationAndFixStep)
-  .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData();
+  .map(async ({ getStepResult }) => {
     const validationResult = getStepResult(validationAndFixStep);
     const intelligentMergeResult = getStepResult(intelligentMergeStep);
     return {

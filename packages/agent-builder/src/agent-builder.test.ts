@@ -1,8 +1,9 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { describe, it, expect, vi } from 'vitest';
-import { ToolSummaryProcessor } from './processors/tool-summary'
-import { AgentBuilder, AgentBuilderDefaults } from './index';
+import { ToolSummaryProcessor } from './processors/tool-summary';
+import { AgentBuilder } from './index';
+import { AgentBuilderDefaults } from './defaults';
 
 // Mock the openai model for testing
 const mockModel = {
@@ -136,7 +137,7 @@ describe('AgentBuilder', () => {
       // Create a mock tool call
       const mockToolCall = {
         toolName: 'testTool',
-        args: { param1: 'value1', param2: 'value2' }
+        args: { param1: 'value1', param2: 'value2' },
       };
 
       // Test cache key generation
@@ -154,12 +155,12 @@ describe('AgentBuilder', () => {
 
       const toolCall1 = {
         toolName: 'myTool',
-        args: { a: 1, b: 2 }
+        args: { a: 1, b: 2 },
       };
 
       const toolCall2 = {
         toolName: 'myTool',
-        args: { b: 2, a: 1 } // Different order
+        args: { b: 2, a: 1 }, // Different order
       };
 
       const key1 = processor.createCacheKey(toolCall1);
@@ -191,12 +192,12 @@ describe('AgentBuilder', () => {
       // Mock exec to return "No process found"
       const mockExec = vi.fn().mockResolvedValue({ stdout: 'No process found' });
       const originalExec = require('child_process').exec;
-      
+
       try {
         require('child_process').exec = mockExec;
-        
+
         const result = await AgentBuilderDefaults.stopMastraServer({ port: 9999 });
-        
+
         expect(result.success).toBe(true);
         expect(result.status).toBe('stopped');
         expect(result.message).toContain('No Mastra server found running on port 9999');
@@ -204,8 +205,6 @@ describe('AgentBuilder', () => {
         require('child_process').exec = originalExec;
       }
     });
-
-
   });
 
   describe('Code Validation', () => {
@@ -218,13 +217,13 @@ describe('AgentBuilder', () => {
       // Since we're now passing through raw TypeScript output,
       // we just need to verify the validateCode method includes it
       expect(AgentBuilderDefaults.validateCode).toBeDefined();
-      
+
       // The actual validation testing would require a real TypeScript project,
       // but we can verify the method exists and handles errors properly
       const mockTsOutput = `src/test.ts(10,5): error TS2322: Type 'string' is not assignable to type 'number'.
 src/another.ts(20,15): warning TS2345: Argument of type 'null' is not assignable to parameter of type 'string'.
 Found 2 errors in 2 files.`;
-      
+
       // This output would now be included directly in the error message
       // for the agent to interpret, rather than being parsed into structured errors
       expect(mockTsOutput).toContain('error TS2322');
@@ -255,7 +254,7 @@ Found 2 errors in 2 files.`;
       ];
 
       const errors = AgentBuilderDefaults.parseESLintErrors(eslintResults);
-      
+
       expect(errors).toHaveLength(2);
       expect(errors[0]).toEqual({
         type: 'eslint',
@@ -279,12 +278,14 @@ Found 2 errors in 2 files.`;
 
     it('should include validation workflow in instructions', () => {
       const instructions = AgentBuilderDefaults.DEFAULT_INSTRUCTIONS('/test/path');
-      
+
       expect(instructions).toContain('VALIDATE CODE AFTER CHANGES');
       expect(instructions).toContain('validateCode');
       expect(instructions).toContain("['types', 'lint']");
       expect(instructions).toContain('Re-validate until clean');
-      expect(instructions).toContain('Documentation → Web Research → Clarification → Project Exploration → Implementation → Validation');
+      expect(instructions).toContain(
+        'Documentation → Web Research → Clarification → Project Exploration → Implementation → Validation',
+      );
     });
   });
 });
