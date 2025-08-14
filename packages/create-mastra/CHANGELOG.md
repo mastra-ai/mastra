@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.22-alpha.0
+
+### Patch Changes
+
+- 97c1d5e: Add new `scorers` subcommand for managing scorers.
+  Refactor cli to be more modular.
+
 ## 0.10.21
 
 ### Patch Changes

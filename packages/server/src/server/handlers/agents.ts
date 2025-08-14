@@ -19,6 +19,42 @@ type GetBody<
   messages: Parameters<Agent[T]>[0];
 } & Parameters<Agent[T]>[1];
 
+export async function getSerializedAgentTools(tools: Record<string, any>) {
+  return Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
+    const _tool = tool as any;
+
+    const toolId = _tool.id ?? `tool-${key}`;
+
+    let inputSchemaForReturn = undefined;
+
+    if (_tool.inputSchema) {
+      if (_tool.inputSchema?.jsonSchema) {
+        inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
+      } else {
+        inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema));
+      }
+    }
+
+    let outputSchemaForReturn = undefined;
+
+    if (_tool.outputSchema) {
+      if (_tool.outputSchema?.jsonSchema) {
+        outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
+      } else {
+        outputSchemaForReturn = stringify(zodToJsonSchema(_tool.outputSchema));
+      }
+    }
+
+    acc[key] = {
+      ..._tool,
+      id: toolId,
+      inputSchema: inputSchemaForReturn,
+      outputSchema: outputSchemaForReturn,
+    };
+    return acc;
+  }, {});
+}
+
 // Agent handlers
 export async function getAgentsHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
   try {
@@ -32,15 +68,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
         const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
 
-        const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-          const _tool = tool as any;
-          acc[key] = {
-            ..._tool,
-            inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-            outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
-          };
-          return acc;
-        }, {});
+        const serializedAgentTools = await getSerializedAgentTools(tools);
 
         let serializedAgentWorkflows = {};
 
@@ -103,15 +131,7 @@ export async function getAgentByIdHandler({
 
     const tools = await agent.getTools({ runtimeContext });
 
-    const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-      const _tool = tool as any;
-      acc[key] = {
-        ..._tool,
-        inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-        outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
-      };
-      return acc;
-    }, {});
+    const serializedAgentTools = await getSerializedAgentTools(tools);
 
     let serializedAgentWorkflows = {};
 

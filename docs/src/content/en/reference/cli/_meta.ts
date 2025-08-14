@@ -5,6 +5,7 @@ const meta = {
   build: "mastra build",
   start: "mastra start",
   lint: "mastra lint",
+  scorers: "mastra scorers",
   "mcp-docs-server": "mcp-docs-server",
 };
 

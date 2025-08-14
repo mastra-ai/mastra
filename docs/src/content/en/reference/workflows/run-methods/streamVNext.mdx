@@ -3,9 +3,15 @@ title: "Reference: Run.streamVNext() | Workflows | Mastra Docs"
 description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
 
+import { Callout } from "nextra/components";
+
 # Run.streamVNext()
 
-The `.streamVNext()` method enables real-time streaming of responses from a workflow.
+<Callout type="warning">
+  **Experimental Feature**: This is a new streaming implementation that will replace the existing `stream()` method once battle-tested. The API may change as we refine the feature based on feedback.
+</Callout>
+
+The `.streamVNext()` method enables real-time streaming of responses from a workflow. This enhanced streaming capability will eventually replace the current `stream()` method.
 
 ## Usage example
 

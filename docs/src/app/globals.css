@@ -421,10 +421,6 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
   }
 }
 
-.nextra-code {
-  white-space: nowrap;
-}
-
 .nextra-code > span {
   white-space-collapse: preserve;
 }
