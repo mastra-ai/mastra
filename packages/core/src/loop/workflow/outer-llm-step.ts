@@ -1,3 +1,4 @@
+import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { createStep, createWorkflow } from '../../workflows';
@@ -6,13 +7,13 @@ import { createLLMExecutionStep } from './llm-execution';
 import { llmIterationOutputSchema, toolCallOutputSchema } from './schema';
 import { createToolCallStep } from './tool-call-step';
 
-export function createOuterLLMWorkflow({
+export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
   model,
   telemetry_settings,
   _internal,
   modelStreamSpan,
   ...rest
-}: OuterLLMRun) {
+}: OuterLLMRun<Tools>) {
   const llmExecutionStep = createLLMExecutionStep({
     model,
     _internal,

@@ -155,9 +155,11 @@ export class AISDKV5OutputStream {
     return this.#modelOutput.files
       .map(file => {
         if (file.type === 'file') {
-          return convertMastraChunkToAISDKv5({
-            chunk: file,
-          });
+          return (
+            convertMastraChunkToAISDKv5({
+              chunk: file,
+            }) as any
+          )?.file;
         }
         return;
       })
@@ -189,11 +191,20 @@ export class AISDKV5OutputStream {
   }
 
   get response() {
-    return transformResponse({
+    const response = transformResponse({
       response: this.#modelOutput.response,
       isMessages: true,
       runId: this.#modelOutput.runId,
     });
+    const newResponse = {
+      ...response,
+      messages: response.messages?.map((message: any) => ({
+        role: message.role,
+        content: message.content?.parts,
+      })),
+    };
+
+    return newResponse;
   }
 
   get steps() {
@@ -201,13 +212,16 @@ export class AISDKV5OutputStream {
   }
 
   get content() {
-    return (
+    const content =
       transformResponse({
-        response: this.response,
-        isMessages: true,
+        response: this.#modelOutput.response,
+        isMessages: false,
         runId: this.#modelOutput.runId,
-      }).messages?.flatMap((message: any) => message.content) ?? []
-    );
+      }).messages?.flatMap((message: any) => {
+        return message.content?.parts;
+      }) ?? [];
+
+    return content;
   }
 
   get fullStream() {

@@ -139,7 +139,7 @@ export function transformResponse({
         if (isMessages) {
           return {
             type: 'file',
-            mediaType: part.mediaType,
+            mediaType: part.mimeType,
             data: part.data,
             providerOptions: part.providerOptions,
           };
@@ -151,12 +151,17 @@ export function transformResponse({
             from: 'AGENT',
             payload: {
               data: part.data,
-              mimeType: part.mediaType,
+              mimeType: part.mimeType,
             },
           },
         });
 
         return transformedFile;
+      } else if (part.type === 'source') {
+        return {
+          type: 'source',
+          ...part.source,
+        };
       }
 
       if (!isMessages) {
@@ -187,12 +192,26 @@ export function transformResponse({
 
 export function transformSteps({ steps, runId }: { steps: any[]; runId: string }) {
   return steps.map(step => {
+    const response = transformResponse({ response: step.response, isMessages: true, runId });
+    const newResponse = {
+      ...response,
+      messages: response.messages?.map((message: any) => ({
+        role: message.role,
+        content: message.content?.parts,
+      })),
+    };
+
+    const content =
+      transformResponse({ response: step.response, isMessages: false, runId }).messages?.flatMap((message: any) => {
+        return message.content?.parts;
+      }) ?? [];
+
     return new DefaultStepResult({
-      content: transformResponse(step.response).messages?.flatMap((message: any) => message.content) ?? [],
+      content,
       warnings: step.warnings ?? [],
       providerMetadata: step.providerMetadata,
       finishReason: step.finishReason as StepResult<ToolSet>['finishReason'],
-      response: transformResponse({ response: step.response, isMessages: true, runId }),
+      response: newResponse,
       request: step.request,
       usage: step.usage,
     });

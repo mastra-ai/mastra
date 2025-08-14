@@ -16,6 +16,7 @@ export async function loop<Tools extends ToolSet = ToolSet>({
   includeRawChunks,
   modelSettings,
   tools,
+  _internal,
   ...rest
 }: LoopOptions<Tools>) {
   let loggerToUse =
@@ -30,13 +31,13 @@ export async function loop<Tools extends ToolSet = ToolSet>({
     runIdToUse = idGenerator?.() || crypto.randomUUID();
   }
 
-  const _internal: StreamInternal = {
-    now: () => Date.now(),
-    generateId: () => generateId(),
-    currentDate: () => new Date(),
+  const internalToUse: StreamInternal = {
+    now: _internal?.now || (() => Date.now()),
+    generateId: _internal?.generateId || (() => generateId()),
+    currentDate: _internal?.currentDate || (() => new Date()),
   };
 
-  let startTimestamp = _internal.now?.();
+  let startTimestamp = internalToUse.now?.();
 
   const { rootSpan } = getRootSpan({
     operationId: `mastra.stream`,
@@ -56,14 +57,14 @@ export async function loop<Tools extends ToolSet = ToolSet>({
       : {}),
   });
 
-  const workflowLoopProps: LoopRun = {
+  const workflowLoopProps: LoopRun<Tools> = {
     model,
     runId: runIdToUse,
     logger: loggerToUse,
     startTimestamp: startTimestamp!,
     messageList,
-    includeRawChunks,
-    _internal,
+    includeRawChunks: !!includeRawChunks,
+    _internal: internalToUse,
     tools,
     modelStreamSpan: rootSpan,
     ...rest,
@@ -86,7 +87,7 @@ export async function loop<Tools extends ToolSet = ToolSet>({
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
-      includeRawChunks,
+      includeRawChunks: !!includeRawChunks,
     },
   });
 }

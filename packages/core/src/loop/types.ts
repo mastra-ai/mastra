@@ -39,9 +39,10 @@ export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   tools?: Tools;
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
+  _internal?: StreamInternal;
 };
 
-export type LoopRun = LoopOptions & {
+export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
   runId: string;
   startTimestamp: number;
   modelStreamSpan: Span;

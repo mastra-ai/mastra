@@ -1,4 +1,5 @@
 import { ReadableStream } from 'stream/web';
+import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import type { ChunkType } from '../../stream/types';
 import { createWorkflow } from '../../workflows';
@@ -7,7 +8,7 @@ import type { LoopRun } from '../types';
 import { createOuterLLMWorkflow } from './outer-llm-step';
 import { llmIterationOutputSchema } from './schema';
 
-export function workflowLoopStream({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
   telemetry_settings,
   model,
   toolChoice,
@@ -15,7 +16,7 @@ export function workflowLoopStream({
   _internal,
   modelStreamSpan,
   ...rest
-}: LoopRun) {
+}: LoopRun<Tools>) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
       const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -29,12 +30,12 @@ export function workflowLoopStream({
       rootSpan.setAttributes({
         ...(telemetry_settings?.recordInputs !== false
           ? {
-              'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
-            }
+            'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
+          }
           : {}),
       });
 
-      const outerLLMWorkflow = createOuterLLMWorkflow({
+      const outerLLMWorkflow = createOuterLLMWorkflow<Tools>({
         messageId: messageId!,
         model,
         telemetry_settings,
@@ -91,9 +92,9 @@ export function workflowLoopStream({
             'stream.usage.totalTokens': inputData.output.usage?.totalTokens,
             ...(telemetry_settings?.recordOutputs !== false
               ? {
-                  'stream.response.text': inputData.output.text,
-                  'stream.prompt.messages': JSON.stringify(rest.messageList.get.input.aiV5.model()),
-                }
+                'stream.response.text': inputData.output.text,
+                'stream.prompt.messages': JSON.stringify(rest.messageList.get.input.aiV5.model()),
+              }
               : {}),
           });
 
