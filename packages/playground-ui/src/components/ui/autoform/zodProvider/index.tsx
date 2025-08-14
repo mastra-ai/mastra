@@ -8,10 +8,7 @@ function extractNumberConstraints(schema: z.ZodTypeAny): { min?: number; max?: n
   const constraints: { min?: number; max?: number; step?: number } = {};
 
   // Get the base schema
-  let baseSchema = schema;
-  while (baseSchema._def && (baseSchema._def.effect || baseSchema._def.innerType)) {
-    baseSchema = baseSchema._def.effect?.schema || baseSchema._def.innerType || baseSchema;
-  }
+  let baseSchema = getBaseSchema(schema);
 
   // Extract min, max and step
   if (baseSchema._def && baseSchema._def.checks) {
