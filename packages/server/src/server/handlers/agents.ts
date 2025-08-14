@@ -1,4 +1,9 @@
-import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
+import { groq } from '@ai-sdk/groq';
+import { openai } from '@ai-sdk/openai';
+import { xai } from '@ai-sdk/xai';
+import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -288,12 +293,16 @@ export async function streamGenerateHandler({
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
+    console.log('create final runtime context');
+
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
       ...Array.from(runtimeContext.entries()),
       ...Array.from(Object.entries(agentRuntimeContext ?? {})),
     ]);
 
     validateBody({ messages });
+
+    console.log('validated body, start streaming');
 
     const streamResult = await agent.stream(messages, {
       ...rest,
@@ -322,6 +331,7 @@ export async function streamGenerateHandler({
 
     return streamResponse;
   } catch (error) {
+    console.log('error streaming agent response===', error);
     return handleError(error, 'error streaming agent response');
   }
 }
@@ -374,7 +384,8 @@ export function updateAgentModelHandler({
 }: Context & {
   agentId: string;
   body: {
-    model: MastraLanguageModel;
+    modelId: string;
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
   };
 }): { message: string } {
   try {
@@ -384,7 +395,19 @@ export function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { model } = body;
+    const { modelId, provider } = body;
+
+    let model = openai(modelId);
+
+    if (provider === 'anthropic') {
+      model = anthropic(modelId);
+    } else if (provider === 'groq') {
+      model = groq(modelId);
+    } else if (provider === 'xai') {
+      model = xai(modelId);
+    } else if (provider === 'google') {
+      model = google(modelId);
+    }
 
     agent.__updateModel({ model });
 

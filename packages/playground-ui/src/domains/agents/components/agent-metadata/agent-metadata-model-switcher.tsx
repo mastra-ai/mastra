@@ -7,16 +7,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { CircleCheck } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
 import { Select, SelectItem, SelectContent, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-interface UpdateModelPayload {
-  provider: string;
-  modelId: string;
-}
+import { UpdateModelParams } from '@mastra/client-js';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
   defaultModel: string;
-  updateModel: (newModel: UpdateModelPayload) => Promise<{ message: string }>;
+  updateModel: (newModel: UpdateModelParams) => Promise<{ message: string }>;
   closeEditor: () => void;
   modelProviders: string[];
 }
@@ -77,7 +73,7 @@ export const AgentMetadataModelSwitcher = ({
   const handleSave = async () => {
     setLoading(true);
     const providerToUse = model?.provider ?? selectedProvider;
-    await updateModel({ provider: providerToUse, modelId: selectedModel });
+    await updateModel({ provider: providerToUse as UpdateModelParams['provider'], modelId: selectedModel });
     setLoading(false);
     closeEditor();
   };
