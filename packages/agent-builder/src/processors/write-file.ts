@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { writeFile } from 'fs/promises';
 import { MemoryProcessor } from '@mastra/core';
 import type { CoreMessage } from '@mastra/core';
 
@@ -11,7 +11,7 @@ export class WriteToDiskProcessor extends MemoryProcessor {
   }
 
   async process(messages: CoreMessage[]): Promise<CoreMessage[]> {
-    fs.writeFileSync(`${this.prefix}-${Date.now()}.json`, JSON.stringify(messages, null, 2));
+    await writeFile(`${this.prefix}-${Date.now()}.json`, JSON.stringify(messages, null, 2));
     return messages;
   }
 }
