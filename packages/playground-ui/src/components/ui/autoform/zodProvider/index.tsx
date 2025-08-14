@@ -3,11 +3,50 @@ import { getDefaultValueInZodStack, getFieldConfigInZodStack, ZodObjectOrWrapped
 import { z } from 'zod';
 import { inferFieldType } from './field-type-inference';
 
+// Extract number constraints from Zod schema
+function extractNumberConstraints(schema: z.ZodTypeAny): { min?: number; max?: number; step?: number } {
+  const constraints: { min?: number; max?: number; step?: number } = {};
+
+  // Get the base schema
+  let baseSchema = schema;
+  while (baseSchema._def && (baseSchema._def.effect || baseSchema._def.innerType)) {
+    baseSchema = baseSchema._def.effect?.schema || baseSchema._def.innerType || baseSchema;
+  }
+
+  // Extract min, max and step
+  if (baseSchema._def && baseSchema._def.checks) {
+    for (const check of baseSchema._def.checks) {
+      if (check.kind === 'min' && check.inclusive) {
+        constraints.min = check.value;
+      } else if (check.kind === 'max' && check.inclusive) {
+        constraints.max = check.value;
+      } else if (check.kind === 'multipleOf') {
+        constraints.step = check.value;
+      }
+    }
+  }
+
+  return constraints;
+}
+
 function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   const baseSchema = getBaseSchema(schema);
-  const fieldConfig = getFieldConfigInZodStack(schema);
+  let fieldConfig = getFieldConfigInZodStack(schema);
   const type = inferFieldType(baseSchema, fieldConfig);
   const defaultValue = getDefaultValueInZodStack(schema);
+
+  // Extract number constraints for number fields
+  if (type === 'number' && baseSchema instanceof z.ZodNumber) {
+    const constraints = extractNumberConstraints(schema);
+    if (Object.keys(constraints).length > 0) {
+      if (!fieldConfig) {
+        fieldConfig = {};
+      }
+      if (typeof fieldConfig === 'object') {
+        fieldConfig.inputProps = { ...fieldConfig?.inputProps, ...constraints };
+      }
+    }
+  }
 
   // Enums
   const options = baseSchema._def?.values;
