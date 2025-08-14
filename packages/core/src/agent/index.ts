@@ -1833,17 +1833,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           overrideScorers,
         });
 
-        const messageWindow = {
-          inputMessages: messageList.getPersisted.input.ui(),
-          rememberedMessages: messageList.getPersisted.remembered.ui(),
-          systemMessages: messageList.getSystemMessages(),
-          taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
+        const scoringData: {
+          input: Omit<ScorerRunInputForAgent, 'runId'>;
+          output: ScorerRunOutputForAgent;
+        } = {
+          input: {
+            inputMessages: messageList.getPersisted.input.ui(),
+            rememberedMessages: messageList.getPersisted.remembered.ui(),
+            systemMessages: messageList.getSystemMessages(),
+            taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
+          },
+          output: messageList.getPersisted.response.ui(),
         };
 
         return {
-          messageList,
-          messageWindow,
-          assistantResponse: messageList.getPersisted.response.ui(),
+          scoringData,
         };
       },
     };
@@ -1943,14 +1947,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       structuredOutput?: boolean;
       overrideScorers?: MastraScorers;
     }) => Promise<{
-      messageList?: MessageList;
-      messageWindow: {
-        inputMessages: UIMessageWithMetadata[];
-        rememberedMessages: UIMessageWithMetadata[];
-        systemMessages: CoreMessage[];
-        taggedSystemMessages: Record<string, any>;
+      scoringData: {
+        input: Omit<ScorerRunInputForAgent, 'runId'>;
+        output: ScorerRunOutputForAgent;
       };
-      assistantResponse: UIMessageWithMetadata[];
     }>;
     llm: MastraLLMBase;
   }>;
@@ -1979,14 +1979,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       structuredOutput?: boolean;
       overrideScorers?: MastraScorers;
     }) => Promise<{
-      messageList?: MessageList;
-      messageWindow: {
-        inputMessages: UIMessageWithMetadata[];
-        rememberedMessages: UIMessageWithMetadata[];
-        systemMessages: CoreMessage[];
-        taggedSystemMessages: Record<string, any>;
+      scoringData: {
+        input: Omit<ScorerRunInputForAgent, 'runId'>;
+        output: ScorerRunOutputForAgent;
       };
-      assistantResponse: UIMessageWithMetadata[];
     }>;
     llm: MastraLLMBase;
   }>;
@@ -2030,14 +2026,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput?: boolean;
           overrideScorers?: MastraScorers;
         }) => Promise<{
-          messageList?: MessageList;
-          messageWindow: {
-            inputMessages: UIMessageWithMetadata[];
-            rememberedMessages: UIMessageWithMetadata[];
-            systemMessages: CoreMessage[];
-            taggedSystemMessages: Record<string, any>;
+          scoringData: {
+            input: Omit<ScorerRunInputForAgent, 'runId'>;
+            output: ScorerRunOutputForAgent;
           };
-          assistantResponse: UIMessageWithMetadata[];
         }>)
       | ((args: {
           result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
@@ -2045,14 +2037,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput?: boolean;
           overrideScorers?: MastraScorers;
         }) => Promise<{
-          messageList?: MessageList;
-          messageWindow: {
-            inputMessages: UIMessageWithMetadata[];
-            rememberedMessages: UIMessageWithMetadata[];
-            systemMessages: CoreMessage[];
-            taggedSystemMessages: Record<string, any>;
+          scoringData: {
+            input: Omit<ScorerRunInputForAgent, 'runId'>;
+            output: ScorerRunOutputForAgent;
           };
-          assistantResponse: UIMessageWithMetadata[];
         }>);
     llm: MastraLLMBase;
   }> {
@@ -2302,8 +2290,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
       });
 
-      (result as any).messageWindow = afterResult.messageWindow;
-      (result as any).assistantResponse = afterResult.assistantResponse;
+      if (generateOptions.returnScorerInputs) {
+        result.scoringData = afterResult.scoringData;
+      }
+
       return result as unknown as OUTPUT extends undefined
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
         : GenerateObjectResult<OUTPUT>;
@@ -2316,7 +2306,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const outputText = JSON.stringify(result.object);
 
-    await after({
+    const afterResult = await after({
       result: result as unknown as OUTPUT extends undefined
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
         : GenerateObjectResult<OUTPUT>,
@@ -2324,6 +2314,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
       structuredOutput: true,
     });
+
+    if (generateOptions.returnScorerInputs) {
+      result.scoringData = afterResult.scoringData;
+    }
 
     return result as unknown as OUTPUT extends undefined
       ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>

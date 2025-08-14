@@ -22,6 +22,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
 import type { RuntimeContext } from '../../runtime-context';
 import type { MessageList } from '../../agent/types';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores/types';
 
 export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
   ? z.infer<Output>
@@ -67,6 +68,12 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
+// #region scoringData
+export type ScoringData = {
+  input: Omit<ScorerRunInputForAgent, 'runId'>;
+  output: ScorerRunOutputForAgent;
+};
+
 // #region generateText
 export type OriginalGenerateTextOptions<
   TOOLS extends ToolSet,
@@ -95,7 +102,9 @@ export type GenerateTextResult<
 > = Omit<OriginalGenerateTextResult<Tools, inferOutput<Output>>, 'experimental_output'> & {
   object?: Output extends undefined ? never : inferOutput<Output>;
   messageList?: MessageList;
-} & TripwireProperties;
+} & TripwireProperties & {
+    scoringData?: ScoringData;
+  };
 
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   | Parameters<typeof generateObject<inferOutput<Output>>>[0]
@@ -118,7 +127,9 @@ export type GenerateObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema
 export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   OriginalGenerateObjectResult<inferOutput<Output>> & {
     readonly reasoning?: never;
-  } & TripwireProperties;
+  } & TripwireProperties & {
+      scoringData?: ScoringData;
+    };
 
 export type GenerateReturn<
   Tools extends ToolSet,
