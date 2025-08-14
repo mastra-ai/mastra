@@ -87,7 +87,6 @@ export const FeedbackForm = ({
         throw new Error(errorData.error || `Server error: ${response.status}`);
       }
 
-      const result = await response.json();
       setSubmitStatus("success");
       form.reset();
 
