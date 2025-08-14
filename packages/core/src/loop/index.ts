@@ -63,6 +63,7 @@ export async function loop({
     includeRawChunks,
     _internal,
     tools,
+    modelStreamSpan: rootSpan,
     ...rest,
   };
 

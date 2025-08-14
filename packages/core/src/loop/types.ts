@@ -1,6 +1,6 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import type { CallSettings, IdGenerator, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
 import type { ChunkType } from '../stream/types';
@@ -38,16 +38,17 @@ export type LoopOptions = {
   providerOptions?: SharedV2ProviderOptions;
   tools: ToolSet;
   experimental_generateMessageId?: () => string;
+  stopWhen?: StopCondition<NoInfer<ToolSet>> | Array<StopCondition<NoInfer<ToolSet>>>;
 };
 
 export type LoopRun = LoopOptions & {
   runId: string;
   startTimestamp: number;
+  modelStreamSpan: Span;
   _internal: StreamInternal;
 };
 
 export type OuterLLMRun = {
   messageId: string;
-  modelStreamSpan: Span;
   controller: ReadableStreamDefaultController<ChunkType>;
 } & LoopRun;
