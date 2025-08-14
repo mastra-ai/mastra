@@ -15,12 +15,11 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
+import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
-
-type NonEmpty<T extends string> = T extends '' ? never : T;
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
@@ -43,7 +42,7 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
-  idGenerator?: () => NonEmpty<string>;
+  idGenerator?: MastraIdGenerator;
   deployer?: MastraDeployer;
   server?: ServerConfig;
   mcpServers?: TMCPServers;
@@ -97,7 +96,7 @@ export class Mastra<
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
-  #idGenerator?: () => NonEmpty<string>;
+  #idGenerator?: MastraIdGenerator;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -146,7 +145,7 @@ export class Mastra<
     return crypto.randomUUID();
   }
 
-  public setIdGenerator(idGenerator: () => NonEmpty<string>) {
+  public setIdGenerator(idGenerator: MastraIdGenerator) {
     this.#idGenerator = idGenerator;
   }
 

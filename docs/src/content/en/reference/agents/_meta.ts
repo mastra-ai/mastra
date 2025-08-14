@@ -3,7 +3,7 @@ const meta = {
   getAgent: ".getAgent()",
   generate: ".generate()",
   stream: ".stream()",
-  streamVNext: ".streamVNext()",
+  streamVNext: ".streamVNext() (Experimental)",
   getWorkflows: ".getWorkflows()",
   getTools: ".getTools()",
   getScorers: ".getScorers()",

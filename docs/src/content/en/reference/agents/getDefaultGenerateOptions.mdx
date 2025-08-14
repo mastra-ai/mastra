@@ -5,7 +5,7 @@ description: "Documentation for the `Agent.getDefaultGenerateOptions()` method i
 
 # Agent.getDefaultGenerateOptions()
 
-The `.getDefaultGenerateOptions()` method retrieves the default generation options configured for an agent, resolving them if they're a function. These options are used as the base configuration for all `generate()` calls unless overridden.
+Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptions()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generate()`calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
