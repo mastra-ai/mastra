@@ -22,7 +22,7 @@ export type LoopConfig = {
   abortSignal?: AbortSignal;
 };
 
-export type LoopOptions = {
+export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   model: LanguageModelV2;
   logger?: IMastraLogger;
   runId?: string;
@@ -36,9 +36,9 @@ export type LoopOptions = {
   toolChoice?: ToolChoice<any>;
   options?: LoopConfig;
   providerOptions?: SharedV2ProviderOptions;
-  tools?: ToolSet;
+  tools?: Tools;
   experimental_generateMessageId?: () => string;
-  stopWhen?: StopCondition<NoInfer<ToolSet>> | Array<StopCondition<NoInfer<ToolSet>>>;
+  stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
 };
 
 export type LoopRun = LoopOptions & {

@@ -1,11 +1,12 @@
 import { generateId } from 'ai-v5';
+import type { ToolSet } from 'ai-v5';
 import { ConsoleLogger } from '../logger';
 import { MastraModelOutput } from '../stream/base/output';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflow/stream';
 
-export async function loop({
+export async function loop<Tools extends ToolSet = ToolSet>({
   model,
   logger,
   runId,
@@ -16,7 +17,7 @@ export async function loop({
   modelSettings,
   tools,
   ...rest
-}: LoopOptions) {
+}: LoopOptions<Tools>) {
   let loggerToUse =
     logger ||
     new ConsoleLogger({
@@ -50,8 +51,8 @@ export async function loop({
   rootSpan.setAttributes({
     ...(telemetry_settings?.recordOutputs !== false
       ? {
-          'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
-        }
+        'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
+      }
       : {}),
   });
 

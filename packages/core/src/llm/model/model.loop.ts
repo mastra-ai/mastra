@@ -8,7 +8,7 @@ import {
     OpenAIReasoningSchemaCompatLayer,
     OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import { generateObject, streamObject, jsonSchema } from 'ai';
+import { jsonSchema } from 'ai';
 import { stepCountIs, Output } from 'ai-v5';
 import type { Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
@@ -39,6 +39,8 @@ import type {
     StreamTextResult,
 } from './model.loop.types';
 import type { inferOutput } from './shared.types';
+import { MessageList } from '../../agent';
+import type { LoopOptions } from '../../loop/types';
 
 export class MastraLLMVNext extends MastraBase {
     #model: LanguageModelV2;
@@ -145,6 +147,8 @@ export class MastraLLMVNext extends MastraBase {
         threadId,
         resourceId,
         runtimeContext,
+        topP,
+        topK,
         ...rest
     }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
         const model = this.#model;
@@ -173,78 +177,87 @@ export class MastraLLMVNext extends MastraBase {
             }
         }
 
-        const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
-            ...rest,
-            messages,
-            model,
-            temperature,
-            tools: {
-                ...(tools as Tools),
-            },
-            toolChoice,
-            stopWhen,
-            onStepFinish: async props => {
-                try {
-                    await onStepFinish?.({ ...props, runId: runId! });
-                } catch (e: unknown) {
-                    const mastraError = new MastraError(
-                        {
-                            id: 'LLM_TEXT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
-                            domain: ErrorDomain.LLM,
-                            category: ErrorCategory.USER,
-                            details: {
-                                modelId: model.modelId,
-                                modelProvider: model.provider,
-                                runId: runId ?? 'unknown',
-                                threadId: threadId ?? 'unknown',
-                                resourceId: resourceId ?? 'unknown',
-                                finishReason: props?.finishReason,
-                                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
-                                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
-                                usage: props?.usage ? JSON.stringify(props.usage) : '',
-                            },
-                        },
-                        e,
-                    );
-                    throw mastraError;
-                }
-
-                this.logger.debug('[LLM] - Step Change:', {
-                    text: props?.text,
-                    toolCalls: props?.toolCalls,
-                    toolResults: props?.toolResults,
-                    finishReason: props?.finishReason,
-                    usage: props?.usage,
-                    runId,
-                });
-
-                if (
-                    props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-                    parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-                ) {
-                    this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
-                    await delay(10 * 1000);
-                }
-            },
-            experimental_telemetry: {
-                ...this.experimental_telemetry,
-                ...telemetry,
-            },
-            experimental_output: schema
-                ? Output.object({
-                    schema,
-                })
-                : undefined,
-        };
-
         try {
-            const result: GenerateTextResult<Tools, Z> = await loop(argsForExecute);
+            const messageList = new MessageList()
+            messageList.add(messages, 'input')
 
-            if (schema && result.finishReason === 'stop') {
-                result.object = (result as any).experimental_output;
+            const loopOptions: LoopOptions<Tools> = {
+                messageList,
+                model: this.#model,
+                tools: tools as Tools,
+                modelSettings: {
+                    temperature,
+                    topP,
+                    topK,
+                },
+                toolChoice,
+                stopWhen,
+                telemetry_settings: {
+                    ...this.experimental_telemetry,
+                    ...telemetry,
+                },
+                options: {
+                    onStepFinish: async props => {
+                        try {
+                            await onStepFinish?.({ ...props, runId: runId! });
+                        } catch (e: unknown) {
+                            const mastraError = new MastraError(
+                                {
+                                    id: 'LLM_TEXT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+                                    domain: ErrorDomain.LLM,
+                                    category: ErrorCategory.USER,
+                                    details: {
+                                        modelId: model.modelId,
+                                        modelProvider: model.provider,
+                                        runId: runId ?? 'unknown',
+                                        threadId: threadId ?? 'unknown',
+                                        resourceId: resourceId ?? 'unknown',
+                                        finishReason: props?.finishReason,
+                                        toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                                        toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                                        usage: props?.usage ? JSON.stringify(props.usage) : '',
+                                    },
+                                },
+                                e,
+                            );
+                            throw mastraError;
+                        }
+
+                        this.logger.debug('[LLM] - Step Change:', {
+                            text: props?.text,
+                            toolCalls: props?.toolCalls,
+                            toolResults: props?.toolResults,
+                            finishReason: props?.finishReason,
+                            usage: props?.usage,
+                            runId,
+                        });
+
+                        if (
+                            props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
+                            parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
+                        ) {
+                            this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
+                            await delay(10 * 1000);
+                        }
+                    },
+                }
+                // @TODO
+                // experimental_output: schema
+                //     ? Output.object({
+                //         schema,
+                //     })
+                //     : undefined,
             }
 
-            return result;
+            const result = await loop(loopOptions);
+
+            let output: GenerateTextResult<Tools, Z> = await result.aisdk.v5.getFullOutput() as unknown as GenerateTextResult<Tools, Z>;
+
+            if (schema && result.finishReason === 'stop') {
+                output.object = (result as any).experimental_output;
+            }
+
+            return output;
         } catch (e: unknown) {
             const mastraError = new MastraError(
                 {
@@ -303,7 +316,7 @@ export class MastraLLMVNext extends MastraBase {
 
             try {
                 // @ts-expect-error - output in our implementation can only be object or array
-                return await generateObject(argsForExecute);
+                return await loop(argsForExecute);
             } catch (e: unknown) {
                 const mastraError = new MastraError(
                     {
@@ -586,7 +599,7 @@ export class MastraLLMVNext extends MastraBase {
             };
 
             try {
-                return streamObject(argsForExecute as any);
+                return loop(argsForExecute as any);
             } catch (e: unknown) {
                 const mastraError = new MastraError(
                     {
