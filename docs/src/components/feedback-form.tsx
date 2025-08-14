@@ -85,8 +85,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         setSubmitStatus("success");
         form.reset();
         setSelectedRating(null);
-        console.log("✅ Feedback submitted successfully:", result.id);
-        // Auto close after success
+
         setTimeout(() => {
           onClose();
           setSubmitStatus("idle");
@@ -98,7 +97,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         throw new Error(errorData.error || `Server error: ${response.status}`);
       }
     } catch (error) {
-      console.error("Feedback submission error:", error);
       setSubmitStatus("error");
       setErrorMessage(
         error instanceof Error ? error.message : "An unexpected error occurred",
@@ -116,10 +114,10 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="mt-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
+    <div className="mt-4 p-4 border border-gray-200 dark:border-borders-1 rounded-lg bg-white dark:bg-[var(--primary-bg)]">
       {submitStatus === "success" ? (
         <div className="text-center py-4">
-          <p className="text-sm text-green-600 dark:text-green-400">
+          <p className="text-sm text-black dark:text-white">
             <T id="feedback.success.message">
               Thank you! Your feedback has been submitted.
             </T>
@@ -144,9 +142,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
               </Button>
             </div>
 
-            {/* Inline form */}
             <div className="flex gap-3 flex-col items-start">
-              {/* Emoji Rating Buttons */}
               <div className="flex gap-1 flex-shrink-0">
                 {[
                   { rating: 5, emoji: "😊", label: "Very helpful" },
@@ -161,8 +157,8 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                     className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-lg transition-all hover:scale-110",
                       selectedRating === rating
-                        ? "bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500"
-                        : "hover:bg-gray-100 dark:hover:bg-gray-800",
+                        ? " dark:bg-blue-900/30 ring-2 ring-accent-green"
+                        : "",
                     )}
                     title={label}
                   >
@@ -171,7 +167,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                 ))}
               </div>
 
-              {/* Feedback Text Area */}
               <FormField
                 control={form.control}
                 name="feedback"
@@ -180,7 +175,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                     <FormControl>
                       <Textarea
                         placeholder="Your feedback..."
-                        className="min-h-[60px] resize-none text-sm"
+                        className="min-h-[60px] text-black dark:text-white resize-none text-sm"
                         {...field}
                       />
                     </FormControl>
@@ -189,7 +184,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                 )}
               />
 
-              {/* Send Button */}
               <button
                 type="submit"
                 disabled={isSubmitting || !form.watch("feedback")?.trim()}
@@ -203,8 +197,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
               </button>
             </div>
 
-            {/* Error message */}
-            {"error" === "error" && (
+            {errorMessage && (
               <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-900/20">
                 <p className="text-xs text-red-600 dark:text-red-400">
                   <T id="feedback.error">

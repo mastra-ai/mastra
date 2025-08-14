@@ -45,11 +45,7 @@ export async function POST(request: NextRequest) {
       source: "docs",
     };
 
-    try {
-      await sendToAirtable(feedbackEntry);
-    } catch (airtableError) {
-      await logFeedback(feedbackEntry);
-    }
+    await sendToAirtable(feedbackEntry);
 
     return NextResponse.json(
       {
@@ -60,7 +56,6 @@ export async function POST(request: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
-    console.error("Feedback submission error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -68,30 +63,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Simple logging function that can be replaced with actual storage
-async function logFeedback(feedback: any) {
-  // In a real implementation, this would save to your chosen storage
-  // For development purposes, we'll just log detailed info
-
-  const logEntry = {
-    ...feedback,
-    processed: new Date().toISOString(),
-  };
-
-  // This could be:
-  // - Written to a file
-  // - Sent to a logging service
-  // - Stored in a database
-  // - Sent to Airtable/Notion/etc.
-
-  console.log("💾 Feedback logged:", JSON.stringify(logEntry, null, 2));
-
-  // You could also write to a local file for development:
-  // const fs = require('fs').promises;
-  // await fs.appendFile('feedback.log', JSON.stringify(logEntry) + '\n');
-}
-
-// Airtable integration
 async function sendToAirtable(feedback: any) {
   const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
   const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
@@ -125,9 +96,6 @@ async function sendToAirtable(feedback: any) {
     ],
   };
 
-  console.log("🚀 Sending to Airtable:", airtableUrl);
-  console.log("📋 Payload:", JSON.stringify(payload, null, 2));
-
   const response = await fetch(airtableUrl, {
     method: "POST",
     headers: {
@@ -139,17 +107,11 @@ async function sendToAirtable(feedback: any) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Airtable API Error Response:", {
-      status: response.status,
-      statusText: response.statusText,
-      body: errorText,
-    });
     throw new Error(
       `Airtable API error: ${response.status} ${response.statusText} - ${errorText}`,
     );
   }
 
   const result = await response.json();
-  console.log("✅ Airtable response:", result);
   return result;
 }
