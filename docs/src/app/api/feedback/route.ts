@@ -116,7 +116,7 @@ async function sendToAirtable(feedback: any) {
           "Page URL": feedback.page,
           "User Agent": feedback.userAgent,
           "Client IP": feedback.clientIP,
-          Timestamp: feedback.timestamp,
+          Timestamp: feedback.timestamp.split("T")[0], // Convert to YYYY-MM-DD format
           Source: feedback.source,
           Status: "New",
           "Created Date": new Date().toISOString().split("T")[0], // YYYY-MM-DD format
