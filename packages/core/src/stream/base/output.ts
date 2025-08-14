@@ -7,6 +7,7 @@ import { MastraBase } from '../../base';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformResponse, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import type { ObjectOptions } from '../../loop/types';
 
 export class MastraModelOutput extends MastraBase {
   #aisdkv5: AISDKV5OutputStream;
@@ -68,6 +69,7 @@ export class MastraModelOutput extends MastraBase {
       onFinish?: (event: any) => Promise<void> | void;
       onStepFinish?: (event: any) => Promise<void> | void;
       includeRawChunks?: boolean;
+      objectOptions?: ObjectOptions;
     };
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
@@ -336,6 +338,7 @@ export class MastraModelOutput extends MastraBase {
       messageList,
       options: {
         toolCallStreaming: options?.toolCallStreaming,
+        objectOptions: options?.objectOptions,
       },
     });
   }

@@ -1,20 +1,28 @@
 import { TransformStream } from 'stream/web';
-import { getErrorMessage } from '@ai-sdk/provider-v5';
+import { getErrorMessage, type LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
-
 import type { MessageList } from '../../../agent/message-list';
+import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
-import { getResponseUIMessageId, consumeStream, convertFullStreamChunkToUIMessageStream } from './compat';
+import {
+  getResponseUIMessageId,
+  consumeStream,
+  convertFullStreamChunkToUIMessageStream,
+  DelayedPromise,
+} from './compat';
+import { getResponseFormat } from './object/schema';
+import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './object/stream-object';
 import { transformResponse, transformSteps } from './output-helpers';
 import { convertMastraChunkToAISDKv5 } from './transform';
 
 export class AISDKV5OutputStream {
   #modelOutput: MastraModelOutput;
-  #options: { toolCallStreaming?: boolean; includeRawChunks?: boolean };
+  #options: { toolCallStreaming?: boolean; includeRawChunks?: boolean; objectOptions?: ObjectOptions };
   #messageList: MessageList;
+  #objectPromise = new DelayedPromise<any>();
 
   constructor({
     modelOutput,
@@ -284,5 +292,90 @@ export class AISDKV5OutputStream {
       totalUsage: this.#modelOutput.totalUsage,
       // experimental_output: // TODO
     };
+  }
+
+  get objectStream() {
+    const self = this;
+    if (!self.#options.objectOptions) {
+      throw new Error('objectStream requires objectOptions');
+    }
+
+    return this.#modelOutput.fullStream
+      .pipeThrough(
+        createObjectStreamTransformer({
+          objectOptions: self.#options.objectOptions,
+          onFinish: data => self.#objectPromise.resolve(data),
+          onError: error => self.#objectPromise.reject(error),
+        }),
+      )
+      .pipeThrough(
+        new TransformStream<ChunkType | any, LanguageModelV2StreamPart>({
+          transform(chunk, controller) {
+            if (chunk.type === 'object') {
+              controller.enqueue(chunk.object);
+            }
+          },
+        }),
+      );
+  }
+
+  get elementStream() {
+    let publishedElements = 0;
+    const self = this;
+    if (!self.#options.objectOptions) {
+      throw new Error('elementStream requires objectOptions');
+    }
+
+    return this.#modelOutput.fullStream
+      .pipeThrough(
+        createObjectStreamTransformer({
+          objectOptions: self.#options.objectOptions,
+          onFinish: data => self.#objectPromise.resolve(data),
+          onError: error => self.#objectPromise.reject(error),
+        }),
+      )
+      .pipeThrough(
+        new TransformStream({
+          transform(chunk, controller) {
+            switch (chunk.type) {
+              case 'object': {
+                const array = chunk.object;
+                // Only process arrays - stream individual elements as they become available
+                if (Array.isArray(array)) {
+                  // Publish new elements one by one
+                  for (; publishedElements < array.length; publishedElements++) {
+                    controller.enqueue(array[publishedElements]);
+                  }
+                }
+                break;
+              }
+            }
+          },
+        }),
+      );
+  }
+
+  get textStream() {
+    const self = this;
+    if (!self.#options.objectOptions) {
+      return this.#modelOutput.textStream;
+    }
+    const responseFormat = getResponseFormat(self.#options.objectOptions);
+    if (responseFormat?.type === 'json') {
+      return this.#modelOutput.fullStream
+        .pipeThrough(
+          createObjectStreamTransformer({
+            objectOptions: self.#options.objectOptions,
+            onFinish: data => self.#objectPromise.resolve(data),
+            onError: error => self.#objectPromise.reject(error),
+          }),
+        )
+        .pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
+    }
+
+    return this.#modelOutput.textStream;
+  }
+  get object() {
+    return this.#objectPromise.promise;
   }
 }

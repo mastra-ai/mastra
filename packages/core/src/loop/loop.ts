@@ -52,8 +52,8 @@ export async function loop<Tools extends ToolSet = ToolSet>({
   rootSpan.setAttributes({
     ...(telemetry_settings?.recordOutputs !== false
       ? {
-        'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
-      }
+          'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
+        }
       : {}),
   });
 
@@ -88,6 +88,7 @@ export async function loop<Tools extends ToolSet = ToolSet>({
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
+      objectOptions: rest.objectOptions,
     },
   });
 }

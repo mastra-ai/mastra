@@ -1,6 +1,6 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import type { CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { asSchema, CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
 import type { ChunkType } from '../stream/types';
@@ -40,7 +40,25 @@ export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   _internal?: StreamInternal;
+  objectOptions?: ObjectOptions;
 };
+
+export type ObjectOptions =
+  | {
+      /**
+       * Defaults to 'object' output if 'schema' is provided without 'output'
+       */
+      output?: 'object' | 'array';
+      schema: Parameters<typeof asSchema>[0];
+      schemaName?: string;
+      schemaDescription?: string;
+    }
+  | {
+      output: 'no-schema';
+      schema?: never;
+      schemaName?: never;
+      schemaDescription?: never;
+    };
 
 export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
   runId: string;
