@@ -21,6 +21,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
 import type { RuntimeContext } from '../../runtime-context';
+import type { MessageList } from '../../agent/types';
 
 export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
   ? z.infer<Output>
@@ -93,6 +94,7 @@ export type GenerateTextResult<
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = Omit<OriginalGenerateTextResult<Tools, inferOutput<Output>>, 'experimental_output'> & {
   object?: Output extends undefined ? never : inferOutput<Output>;
+  messageList?: MessageList;
 } & TripwireProperties;
 
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =

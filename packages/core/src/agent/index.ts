@@ -1656,6 +1656,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         messageList,
         threadExists,
         structuredOutput = false,
+        overrideScorers,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1666,6 +1667,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         messageList: MessageList;
         threadExists: boolean;
         structuredOutput?: boolean;
+        overrideScorers?: MastraScorers;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1828,7 +1830,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           instructions,
           runtimeContext,
           structuredOutput,
+          overrideScorers,
         });
+
+        const messageWindow = {
+          inputMessages: messageList.getPersisted.input.ui(),
+          rememberedMessages: messageList.getPersisted.remembered.ui(),
+          systemMessages: messageList.getSystemMessages(),
+          taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
+        };
+
+        return {
+          messageList,
+          messageWindow,
+          assistantResponse: messageList.getPersisted.response.ui(),
+        };
       },
     };
   }
@@ -1840,6 +1856,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     instructions,
     runtimeContext,
     structuredOutput,
+    overrideScorers,
   }: {
     messageList: MessageList;
     runId: string;
@@ -1847,6 +1864,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     instructions: string;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
+    overrideScorers?: MastraScorers;
   }) {
     const agentName = this.name;
     const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
@@ -1923,7 +1941,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       result: GenerateReturn<any, Output, ExperimentalOutput>;
       outputText: string;
       structuredOutput?: boolean;
-    }) => Promise<void>;
+      overrideScorers?: MastraScorers;
+    }) => Promise<{
+      messageList?: MessageList;
+      messageWindow: {
+        inputMessages: UIMessageWithMetadata[];
+        rememberedMessages: UIMessageWithMetadata[];
+        systemMessages: CoreMessage[];
+        taggedSystemMessages: Record<string, any>;
+      };
+      assistantResponse: UIMessageWithMetadata[];
+    }>;
     llm: MastraLLMBase;
   }>;
   private prepareLLMOptions<
@@ -1949,7 +1977,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
       outputText: string;
       structuredOutput?: boolean;
-    }) => Promise<void>;
+      overrideScorers?: MastraScorers;
+    }) => Promise<{
+      messageList?: MessageList;
+      messageWindow: {
+        inputMessages: UIMessageWithMetadata[];
+        rememberedMessages: UIMessageWithMetadata[];
+        systemMessages: CoreMessage[];
+        taggedSystemMessages: Record<string, any>;
+      };
+      assistantResponse: UIMessageWithMetadata[];
+    }>;
     llm: MastraLLMBase;
   }>;
   private async prepareLLMOptions<
@@ -1986,11 +2024,36 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           > & { runId: string } & TripwireProperties
         >);
     after:
-      | ((args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>)
+      | ((args: {
+          result: GenerateReturn<any, Output, ExperimentalOutput>;
+          outputText: string;
+          structuredOutput?: boolean;
+          overrideScorers?: MastraScorers;
+        }) => Promise<{
+          messageList?: MessageList;
+          messageWindow: {
+            inputMessages: UIMessageWithMetadata[];
+            rememberedMessages: UIMessageWithMetadata[];
+            systemMessages: CoreMessage[];
+            taggedSystemMessages: Record<string, any>;
+          };
+          assistantResponse: UIMessageWithMetadata[];
+        }>)
       | ((args: {
           result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
           outputText: string;
-        }) => Promise<void>);
+          structuredOutput?: boolean;
+          overrideScorers?: MastraScorers;
+        }) => Promise<{
+          messageList?: MessageList;
+          messageWindow: {
+            inputMessages: UIMessageWithMetadata[];
+            rememberedMessages: UIMessageWithMetadata[];
+            systemMessages: CoreMessage[];
+            taggedSystemMessages: Record<string, any>;
+          };
+          assistantResponse: UIMessageWithMetadata[];
+        }>);
     llm: MastraLLMBase;
   }> {
     const {
@@ -2142,7 +2205,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             outputText: string;
             structuredOutput?: boolean;
           }) => {
-        await after({
+        const afterResult = await after({
           result,
           outputText,
           threadId: thread?.id,
@@ -2153,6 +2216,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput,
           threadExists,
         });
+        return afterResult;
       },
     };
   }
@@ -2230,13 +2294,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         experimental_output,
       });
 
-      await after({
+      const afterResult = await after({
         result: result as unknown as OUTPUT extends undefined
           ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
           : GenerateObjectResult<OUTPUT>,
         outputText: result.text,
+        ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
       });
 
+      (result as any).messageWindow = afterResult.messageWindow;
+      (result as any).assistantResponse = afterResult.assistantResponse;
       return result as unknown as OUTPUT extends undefined
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
         : GenerateObjectResult<OUTPUT>;
@@ -2254,6 +2321,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
         : GenerateObjectResult<OUTPUT>,
       outputText,
+      ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
       structuredOutput: true,
     });
 

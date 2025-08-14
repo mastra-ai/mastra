@@ -103,6 +103,8 @@ export type AgentGenerateOptions<
   telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
+  /** Scorers to use for this generation */
+  scorers?: MastraScorers;
   /**
    * Whether to save messages incrementally on step finish
    * @default false

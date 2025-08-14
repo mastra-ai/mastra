@@ -31,6 +31,7 @@ interface ScorerRun<TInput = any, TOutput = any> {
   runId?: string;
   input?: TInput;
   output: TOutput;
+  groundTruth?: any;
   runtimeContext?: Record<string, any>;
 }
 
@@ -318,7 +319,10 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
       runId = randomUUID();
     }
 
+    console.log('input', JSON.stringify(input, null, 2));
+
     const run = { ...input, runId };
+    console.log('run', JSON.stringify(run, null, 2));
 
     const workflow = this.toMastraWorkflow();
     const workflowRun = await workflow.createRunAsync();
