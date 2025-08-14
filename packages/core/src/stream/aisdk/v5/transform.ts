@@ -327,6 +327,57 @@ export function convertMastraChunkToAISDKv5({
       }
       return;
 
+    case 'finish': {
+      return {
+        type: 'finish',
+        finishReason: chunk.payload.stepResult.reason,
+        totalUsage: chunk.payload.output.usage,
+      };
+    }
+    case 'reasoning-start':
+      return {
+        type: 'reasoning-start',
+        id: chunk.payload.id,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'reasoning-delta':
+      return {
+        type: 'reasoning-delta',
+        id: chunk.payload.id,
+        text: chunk.payload.text,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'reasoning-signature':
+      throw new Error('AISDKv5 chunk type "reasoning-signature" not supported');
+    // return {
+    //   type: 'reasoning-signature' as const,
+    //   id: chunk.payload.id,
+    //   signature: chunk.payload.signature,
+    // };
+    case 'redacted-reasoning':
+      throw new Error('AISDKv5 chunk type "redacted-reasoning" not supported');
+    // return {
+    //   type: 'redacted-reasoning',
+    //   id: chunk.payload.id,
+    //   data: chunk.payload.data,
+    // };
+    case 'reasoning-end':
+      return {
+        type: 'reasoning-end',
+        id: chunk.payload.id,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'source':
+      return {
+        type: 'source',
+        id: chunk.payload.id,
+        mediaType: chunk.payload.mediaType,
+        sourceType: chunk.payload.sourceType,
+        title: chunk.payload.title,
+        url: chunk.payload.url,
+        filename: chunk.payload.filename,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
     case 'file':
       return {
         type: 'file',
@@ -335,6 +386,84 @@ export function convertMastraChunkToAISDKv5({
           uint8Array: chunk.payload.uint8Array,
           mediaType: chunk.payload.mediaType,
         },
+      };
+    case 'tool-call':
+      return {
+        type: 'tool-call',
+        toolCallId: chunk.payload.toolCallId,
+        providerMetadata: chunk.payload.providerMetadata,
+        providerExecuted: chunk.payload.providerExecuted,
+        toolName: chunk.payload.toolName,
+        input: chunk.payload.args,
+      };
+    case 'tool-call-input-streaming-start':
+      return {
+        type: 'tool-input-start',
+        id: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        dynamic: chunk.payload.dynamic,
+        providerMetadata: chunk.payload.providerMetadata,
+        providerExecuted: chunk.payload.providerExecuted,
+      };
+    case 'tool-call-input-streaming-end':
+      return {
+        type: 'tool-input-end',
+        id: chunk.payload.toolCallId,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'tool-call-delta':
+      return {
+        type: 'tool-input-delta',
+        id: chunk.payload.toolCallId,
+        delta: chunk.payload.argsTextDelta,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'step-finish':
+      return {
+        type: 'finish-step',
+        response: chunk.payload.response,
+        usage: chunk.payload.output.usage, // ?
+        finishReason: chunk.payload.stepResult.reason,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'text-delta':
+      return {
+        type: 'text-delta',
+        id: chunk.payload.id,
+        text: chunk.payload.text,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'text-end':
+      return {
+        type: 'text-end',
+        id: chunk.payload.id,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'text-start':
+      return {
+        type: 'text-start',
+        id: chunk.payload.id,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+    case 'tool-result':
+      return {
+        type: 'tool-result',
+        input: chunk.payload.args,
+        toolCallId: chunk.payload.toolCallId,
+        providerExecuted: chunk.payload.providerExecuted,
+        toolName: chunk.payload.toolName,
+        output: chunk.payload.result,
+        // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
+      };
+    case 'tool-error':
+      return {
+        type: 'tool-error',
+        error: chunk.payload.error,
+        input: chunk.payload.args,
+        toolCallId: chunk.payload.toolCallId,
+        providerExecuted: chunk.payload.providerExecuted,
+        toolName: chunk.payload.toolName,
+        // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
       };
 
     case 'abort':
