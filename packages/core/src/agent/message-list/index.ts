@@ -23,8 +23,7 @@ type MastraMessageShared = {
 
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
-  parts: (AIV4Type.UIMessage['parts'][number] & // add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
-  { providerMetadata?: AIV5Type.ProviderMetadata })[];
+  parts: (AIV4Type.UIMessage['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata })[]; // add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
   experimental_attachments?: AIV4Type.UIMessage['experimental_attachments'];
   content?: AIV4Type.UIMessage['content'];
   toolInvocations?: AIV4Type.UIMessage['toolInvocations'];
