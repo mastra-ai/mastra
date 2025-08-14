@@ -1,4 +1,5 @@
 import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
+import { isToolUIPart } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
 import { hasAIV5CoreMessageCharacteristics } from './utils/ai-v4-v5/core-model-message';
@@ -933,6 +934,263 @@ describe('MessageList V5 Support', () => {
       expect(v5Model[1].role).toBe('assistant');
       expect(v5Model[2].role).toBe('user');
       expect(v5Model[3].role).toBe('assistant');
+    });
+
+    describe('Provider metadata preservation', () => {
+      it('should preserve providerMetadata on file parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        const providerMetadata = {
+          custom: {
+            value: 'metadata',
+          },
+          someValue: {
+            value: 123,
+          },
+        };
+        const v5UIMessage: AIV5UIMessage = {
+          id: 'msg-1',
+          role: 'user',
+          parts: [
+            {
+              type: 'file',
+              url: 'https://example.com/image.png',
+              mediaType: 'image/png',
+              providerMetadata,
+            },
+          ],
+        };
+
+        list.add(v5UIMessage, 'input');
+
+        // Get V2 messages and check providerMetadata was preserved
+        const v2Messages = list.get.all.v2();
+        expect(v2Messages).toHaveLength(1);
+        const filePart = v2Messages[0].content.parts.find(p => p.type === 'file');
+        expect(filePart).toBeDefined();
+        expect(filePart?.providerMetadata).toEqual(providerMetadata);
+
+        // Convert back to V5 UI and check providerMetadata is still there
+        const v5UIBack = list.get.all.aiV5.ui();
+        expect(v5UIBack).toHaveLength(1);
+        const v5FilePart = v5UIBack[0].parts.find(p => p.type === 'file');
+        expect(v5FilePart).toBeDefined();
+        expect(v5FilePart?.providerMetadata).toEqual(providerMetadata);
+      });
+
+      it('should preserve providerMetadata on text parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const providerMetadata = {
+          modelUsed: { value: 'gpt-4' },
+          temperature: { value: 0.7 },
+        };
+
+        const v5UIMessage: AIV5UIMessage = {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Hello world',
+              providerMetadata,
+            },
+          ],
+        };
+
+        list.add(v5UIMessage, 'response');
+
+        // Get V2 messages and check providerMetadata was preserved
+        const v2Messages = list.get.all.v2();
+        expect(v2Messages).toHaveLength(1);
+        const textPart = v2Messages[0].content.parts.find(p => p.type === 'text');
+        expect(textPart).toBeDefined();
+        expect(textPart?.providerMetadata).toEqual(providerMetadata);
+
+        // Convert back to V5 UI and check providerMetadata is still there
+        const v5UIBack = list.get.all.aiV5.ui();
+        expect(v5UIBack).toHaveLength(1);
+        const v5TextPart = v5UIBack[0].parts.find(p => p.type === 'text');
+        expect(v5TextPart).toBeDefined();
+        expect(v5TextPart?.providerMetadata).toEqual(providerMetadata);
+      });
+
+      it('should preserve providerMetadata on reasoning parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        const providerMetadata = {
+          thinkingModel: { value: 'o1-preview' },
+          thinkingTime: { value: 2500 },
+        };
+
+        const v5UIMessage: AIV5UIMessage = {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              text: 'Let me think about this...',
+              providerMetadata,
+            },
+          ],
+        };
+
+        list.add(v5UIMessage, 'response');
+
+        // Get V2 messages and check providerMetadata was preserved
+        const v2Messages = list.get.all.v2();
+        expect(v2Messages).toHaveLength(1);
+        const reasoningPart = v2Messages[0].content.parts.find(p => p.type === 'reasoning');
+        expect(reasoningPart).toBeDefined();
+        expect(reasoningPart?.providerMetadata).toEqual(providerMetadata);
+
+        // Convert back to V5 UI and check providerMetadata is still there
+        const v5UIBack = list.get.all.aiV5.ui();
+        expect(v5UIBack).toHaveLength(1);
+        const v5ReasoningPart = v5UIBack[0].parts.find(p => p.type === 'reasoning');
+        expect(v5ReasoningPart).toBeDefined();
+        expect(v5ReasoningPart?.providerMetadata).toEqual(providerMetadata);
+      });
+
+      it('should preserve callProviderMetadata on tool invocations during V5 UI -> V2 -> V5 UI roundtrip', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        const callProviderMetadata = {
+          toolVersion: { value: '1.0' },
+          executionTime: { value: 100 },
+        };
+
+        const v5UIMessage: AIV5UIMessage = {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'tool-test_tool',
+              toolCallId: 'call-1',
+              state: 'output-available',
+              input: { param: 'value' },
+              output: { result: 'success' },
+              callProviderMetadata,
+            },
+          ],
+        };
+
+        list.add(v5UIMessage, 'response');
+
+        // Get V2 messages and check callProviderMetadata was preserved on tool-invocation
+        const v2Messages = list.get.all.v2();
+        expect(v2Messages).toHaveLength(1);
+        const toolPart = v2Messages[0].content.parts.find(p => p.type === 'tool-invocation');
+        expect(toolPart).toBeDefined();
+        expect(toolPart?.providerMetadata).toEqual(callProviderMetadata);
+
+        // Convert back to V5 UI and check callProviderMetadata is still there
+        const v5UIBack = list.get.all.aiV5.ui();
+        expect(v5UIBack).toHaveLength(1);
+        const v5ToolPart = v5UIBack[0].parts.find(p => p.type === 'tool-test_tool');
+        expect(v5ToolPart).toBeDefined();
+        if (!isToolUIPart(v5ToolPart!) || !(`callProviderMetadata` in v5ToolPart)) {
+          throw new Error(`should be a tool part with callProviderMetadata`);
+        }
+        expect(v5ToolPart?.callProviderMetadata).toEqual(callProviderMetadata);
+      });
+
+      it('should preserve providerMetadata on source-url parts during V5 UI -> V2 -> V5 UI roundtrip', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        const fetchTime = Date.now();
+        const providerMetadata = {
+          fetchTime: { value: fetchTime },
+          contentType: { value: 'text/html' },
+        };
+
+        const v5UIMessage: AIV5UIMessage = {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'source-url',
+              url: 'https://example.com/doc',
+              sourceId: 'doc-1',
+              providerMetadata,
+            },
+          ],
+        };
+
+        list.add(v5UIMessage, 'response');
+
+        // Get V2 messages and check providerMetadata was preserved
+        const v2Messages = list.get.all.v2();
+        expect(v2Messages).toHaveLength(1);
+        const sourcePart = v2Messages[0].content.parts.find(p => p.type === 'source');
+        expect(sourcePart).toBeDefined();
+        expect(sourcePart?.providerMetadata).toEqual(providerMetadata);
+
+        // Convert back to V5 UI and check providerMetadata is still there
+        const v5UIBack = list.get.all.aiV5.ui();
+        expect(v5UIBack).toHaveLength(1);
+        const v5SourcePart = v5UIBack[0].parts.find(p => p.type === 'source-url');
+        expect(v5SourcePart).toBeDefined();
+        expect(v5SourcePart?.providerMetadata).toEqual(providerMetadata);
+      });
+
+      it('should preserve providerMetadata when mixing multiple part types', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        const textProviderMetadata = { textMeta: { value: true } };
+        const fileProviderMetadata = { fileMeta: { value: true } };
+        const reasoningProviderMetadata = { reasoningMeta: { value: true } };
+
+        const v5UIMessage: AIV5UIMessage = {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Here is the result:',
+              providerMetadata: textProviderMetadata,
+            },
+            {
+              type: 'file',
+              url: 'data:image/png;base64,abc123',
+              mediaType: 'image/png',
+              providerMetadata: fileProviderMetadata,
+            },
+            {
+              type: 'reasoning',
+              text: 'Thinking...',
+              providerMetadata: reasoningProviderMetadata,
+            },
+          ],
+        };
+
+        list.add(v5UIMessage, 'response');
+
+        // Get V2 messages and verify all providerMetadata preserved
+        const v2Messages = list.get.all.v2();
+        const parts = v2Messages[0].content.parts;
+
+        const textPart = parts.find(p => p.type === 'text');
+        expect(textPart?.providerMetadata).toEqual(textProviderMetadata);
+
+        const filePart = parts.find(p => p.type === 'file');
+        expect(filePart?.providerMetadata).toEqual(fileProviderMetadata);
+
+        const reasoningPart = parts.find(p => p.type === 'reasoning');
+        expect(reasoningPart?.providerMetadata).toEqual(reasoningProviderMetadata);
+
+        // Convert back to V5 UI and verify all metadata still there
+        const v5UIBack = list.get.all.aiV5.ui();
+        const v5Parts = v5UIBack[0].parts;
+
+        const v5TextPart = v5Parts.find(p => p.type === 'text');
+        expect(v5TextPart?.providerMetadata).toEqual(textProviderMetadata);
+
+        const v5FilePart = v5Parts.find(p => p.type === 'file');
+        expect(v5FilePart?.providerMetadata).toEqual(fileProviderMetadata);
+
+        const v5ReasoningPart = v5Parts.find(p => p.type === 'reasoning');
+        expect(v5ReasoningPart?.providerMetadata).toEqual(reasoningProviderMetadata);
+      });
     });
   });
 });
