@@ -41,7 +41,7 @@ export function TelemetryEventDialog({ event, isOpen, onClose, onNext, onPreviou
         <SideDialogContent>
           <>
             <SideDialogHeader>
-              <h2>Dataset Item Details</h2>
+              <h2>AI Telemetry Event</h2>
             </SideDialogHeader>
 
             <SideDialogSection>
