@@ -19,22 +19,12 @@ import type {
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z } from 'zod';
+import type { ZodSchema } from 'zod';
 import type { RuntimeContext } from '../../runtime-context';
-
-export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
-  ? z.infer<Output>
-  : Output extends JSONSchema7
-    ? unknown
-    : undefined;
+import type { inferOutput, TripwireProperties } from './shared.types';
 
 export type { ToolSet } from 'ai';
 
-// Tripwire result extensions
-export type TripwireProperties = {
-  tripwire?: boolean;
-  tripwireReason?: string;
-};
 
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;
