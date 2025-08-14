@@ -1,8 +1,8 @@
 import { exec as execNodejs } from 'child_process';
 import { promisify } from 'util';
-import { mkdtemp, readFile, writeFile, mkdir, stat, readdir, rm } from 'fs/promises';
+import { mkdtemp, copyFile, readFile, writeFile, mkdir, stat, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join, dirname, relative } from 'path';
+import { join, dirname, relative, isAbsolute, resolve, extname, basename } from 'path';
 import semver from 'semver';
 import { openai } from '@ai-sdk/openai';
 import type { CoreMessage } from '@mastra/core';
@@ -1339,8 +1339,7 @@ export const tools = await mcpClient.getTools();
         env: serverEnv,
       };
 
-      const { spawn } = await import('child_process');
-      const serverProcess = spawn('pnpm', ['run', 'dev'], {
+      const serverProcess = nodeSpawn('pnpm', ['run', 'dev'], {
         ...execOptions,
         detached: true,
         stdio: 'pipe',
@@ -2141,7 +2140,6 @@ export const tools = await mcpClient.getTools();
     }> = [];
 
     try {
-      const { resolve, isAbsolute } = await import('path');
       const { projectPath } = context;
 
       for (const operation of context.operations) {
@@ -2159,7 +2157,6 @@ export const tools = await mcpClient.getTools();
 
         try {
           // Read file content
-          const { readFile, writeFile } = await import('fs/promises');
           const originalContent = await readFile(resolvedPath, 'utf-8');
 
           // Create backup if requested
@@ -2438,9 +2435,6 @@ export const tools = await mcpClient.getTools();
     projectPath?: string;
   }) {
     try {
-      const { readFile } = await import('fs/promises');
-      const { stat } = await import('fs/promises');
-      const { resolve, isAbsolute } = await import('path');
       const { filePath, startLine, endLine, encoding = 'utf-8', projectPath } = context;
 
       // Resolve path relative to project directory if it's not absolute
@@ -2490,8 +2484,6 @@ export const tools = await mcpClient.getTools();
     projectPath?: string;
   }) {
     try {
-      const { writeFile, mkdir } = await import('fs/promises');
-      const { dirname, resolve, isAbsolute } = await import('path');
       const { filePath, content, createDirs = true, encoding = 'utf-8', projectPath } = context;
 
       // Resolve path relative to project directory if it's not absolute
@@ -2535,9 +2527,6 @@ export const tools = await mcpClient.getTools();
     projectPath?: string;
   }) {
     try {
-      const { readdir, stat } = await import('fs/promises');
-      const { join, relative, resolve, isAbsolute } = await import('path');
-
       const {
         path,
         recursive = false,
@@ -3469,8 +3458,6 @@ const intelligentMergeStep = createStep({
         }),
         execute: async ({ context }) => {
           try {
-            const { copyFile, mkdir } = await import('fs/promises');
-            const { resolve, dirname } = await import('path');
             const { sourcePath, destinationPath } = context;
 
             // Use templateDir directly from input
@@ -3732,9 +3719,6 @@ const programmaticFileCopyStep = createStep({
     const targetPath = inputData.targetPath || process.cwd();
 
     try {
-      const { copyFile, mkdir } = await import('fs/promises');
-      const { resolve, dirname, basename, extname } = await import('path');
-
       const copiedFiles: Array<{
         source: string;
         destination: string;
