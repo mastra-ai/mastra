@@ -42,3 +42,6 @@ CLAUDE.local.md
 
 # User json files
 mastra-cli.json
+
+*storybook.log
+storybook-static
