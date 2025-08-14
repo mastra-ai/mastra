@@ -85,11 +85,11 @@ describe('Template Workflow Integration Tests', () => {
     }
 
     // Cleanup temp directory
-    // try {
-    //   rmSync(tempRoot, { recursive: true, force: true });
-    // } catch {
-    //   // Ignore cleanup errors
-    // }
+    try {
+      rmSync(tempRoot, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   it('should merge csv-to-questions template and validate functionality', async () => {
@@ -309,11 +309,16 @@ describe('Template Workflow Integration Tests', () => {
     });
 
     // The workflow should still succeed but handle the existing files intelligently
-    expect(result.success).toBe(true);
-    expect(result.applied).toBe(true);
+    expect(result.status).toBe('success');
 
-    // Should create a new branch with a different name or handle existing branch
-    expect(result.branchName).toMatch(/feat\/install-template-csv-to-questions/);
+    console.log(JSON.stringify(result, null, 2));
+
+    if (result.status === 'success') {
+      expect(result.result.success).toBe(true);
+      expect(result.result.applied).toBe(true);
+      // Should create a new branch with a different name or handle existing branch
+      expect(result.result.branchName).toMatch(/feat\/install-template-csv-to-questions/);
+    }
 
     console.log('Duplicate merge test completed');
   }, 600000);

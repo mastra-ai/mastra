@@ -459,11 +459,34 @@ const intelligentMergeStep = createStep({
     const { conflicts, copiedFiles, commitSha, slug, templateDir } = inputData;
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
+    const baseBranchName = `feat/install-template-${slug}`;
     try {
-      // Create git branch for template integration
-      const branchName = `feat/install-template-${slug}`;
-      await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
-      console.log(`Created branch: ${branchName}`);
+      // Create or switch to git branch for template integration
+      let branchName = baseBranchName;
+
+      try {
+        // Try to create new branch
+        await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
+        console.log(`Created new branch: ${branchName}`);
+      } catch (error) {
+        // If branch exists, check if we can switch to it or create a unique name
+        const errorStr = error instanceof Error ? error.message : String(error);
+        if (errorStr.includes('already exists')) {
+          try {
+            // Try to switch to existing branch
+            await exec(`git checkout "${branchName}"`, { cwd: targetPath });
+            console.log(`Switched to existing branch: ${branchName}`);
+          } catch (switchError) {
+            // If can't switch, create a unique branch name
+            const timestamp = Date.now().toString().slice(-6);
+            branchName = `${baseBranchName}-${timestamp}`;
+            await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
+            console.log(`Created unique branch: ${branchName}`);
+          }
+        } else {
+          throw error; // Re-throw if it's a different error
+        }
+      }
 
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
@@ -685,6 +708,7 @@ Start by listing your tasks and work through them systematically!
       return {
         success: false,
         applied: false,
+        branchName: baseBranchName,
         message: `Failed to resolve conflicts: ${error instanceof Error ? error.message : String(error)}`,
         conflictsResolved: [],
         error: error instanceof Error ? error.message : String(error),
@@ -1269,16 +1293,23 @@ export const mergeTemplateWorkflow = createWorkflow({
     };
   })
   .then(validationAndFixStep)
-  .map(async ({ getStepResult }) => {
+  .map(async ({ getStepResult, getInitData }) => {
     const validationResult = getStepResult(validationAndFixStep);
     const intelligentMergeResult = getStepResult(intelligentMergeStep);
+    const cloneResult = getStepResult(cloneTemplateStep);
+    const initData = getInitData();
+
+    // Ensure branchName is always present, with fallback logic
+    const branchName =
+      intelligentMergeResult.branchName || `feat/install-template-${cloneResult.slug || initData.slug}`;
+
     return {
       success: validationResult.success,
       applied: validationResult.applied,
       message: validationResult.message,
       validationResults: validationResult.validationResults,
       error: validationResult.error,
-      branchName: intelligentMergeResult.branchName,
+      branchName,
     };
   })
   .commit();
