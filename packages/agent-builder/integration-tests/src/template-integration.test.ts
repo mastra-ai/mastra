@@ -44,7 +44,7 @@ describe('Template Workflow Integration Tests', () => {
   const fixtureProjectPath = resolve(__dirname, 'fixtures/minimal-mastra-project');
   const targetRepo = join(tempRoot, 'test-project');
   let mastraServer: ChildProcess;
-  let port: number;
+  let port = 4199;
   let mastraInstance: Mastra;
 
   beforeAll(async () => {
@@ -70,9 +70,6 @@ describe('Template Workflow Integration Tests', () => {
     // Install dependencies in the test project
     console.log('Installing dependencies in test project...');
     exec('pnpm install', targetRepo);
-
-    // Get available port for Mastra server
-    port = await getAvailablePort();
   });
 
   afterAll(async () => {
@@ -170,7 +167,7 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Starting Mastra server...');
 
     // Start the Mastra server
-    mastraServer = spawn('pnpm', ['dev', '--port', port.toString()], {
+    mastraServer = spawn('pnpm', ['dev'], {
       stdio: 'pipe',
       cwd: targetRepo,
       detached: true,
@@ -214,7 +211,7 @@ describe('Template Workflow Integration Tests', () => {
 
     // Test the original weather agent (from fixture)
     console.log('Testing original weather agent...');
-    const weatherResponse = await fetch(`http://localhost:${port}/api/agents/weather/generate`, {
+    const weatherResponse = await fetch(`http://localhost:${port}/api/agents/weatherAgent/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -258,9 +255,10 @@ describe('Template Workflow Integration Tests', () => {
     const workflows = await workflowsResponse.json();
     expect(workflows).toBeDefined();
 
-    // Check if the CSV workflow is registered
+    // Check if the CSV workflow is registered (workflows is an object, not array)
     const hasCSVWorkflow =
-      Array.isArray(workflows) && workflows.some(w => w.id === 'csvToQuestionsWorkflow' || w.name?.includes('csv'));
+      workflows &&
+      ('csvToQuestionsWorkflow' in workflows || Object.values(workflows).some((w: any) => w.name?.includes('csv')));
     expect(hasCSVWorkflow).toBe(true);
 
     console.log('All agent and workflow tests passed!');
@@ -269,10 +267,9 @@ describe('Template Workflow Integration Tests', () => {
   it('should validate git history shows proper template integration', async () => {
     // Check git log for template commits
     const gitLog = exec('git log --oneline', targetRepo);
-    expect(gitLog).toContain('feat(template): add agent csvQuestionAgent (csv-to-questions@');
-    expect(gitLog).toContain('feat(template): add tool csvTool (csv-to-questions@');
-    expect(gitLog).toContain('feat(template): add workflow csvToQuestionsWorkflow (csv-to-questions@');
-    expect(gitLog).toContain('feat(template): update package.json for csv-to-questions');
+    expect(gitLog).toContain('feat(template): register components from csv-to-questions@');
+    expect(gitLog).toContain('feat(template): copy 6 files from csv-to-questions@');
+    expect(gitLog).toContain('fix(template): resolve validation errors for csv-to-questions@');
 
     // Verify we're on the template branch
     const currentBranch = exec('git branch --show-current', targetRepo);

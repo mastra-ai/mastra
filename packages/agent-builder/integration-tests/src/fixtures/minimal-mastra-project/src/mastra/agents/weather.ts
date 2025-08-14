@@ -9,7 +9,7 @@ const client = new MCPClient({
   id: 'weather-server',
   servers: {
     weather: {
-      url: new URL(`http://localhost:4114/api/mcp/myMcpServer/mcp`),
+      url: new URL(`http://localhost:4199/api/mcp/myMcpServer/mcp`),
     },
   },
 });

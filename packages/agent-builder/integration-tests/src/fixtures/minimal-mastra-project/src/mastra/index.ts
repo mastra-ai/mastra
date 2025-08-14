@@ -4,12 +4,12 @@ import { myMcpServer } from './mcp';
 
 export const mastra = new Mastra({
   agents: {
-    test: weatherAgent,
+    weatherAgent,
   },
   mcpServers: {
     myMcpServer,
   },
   server: {
-    port: 4114,
+    port: 4199,
   },
 });
