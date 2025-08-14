@@ -2,9 +2,8 @@ import { exec as execNodejs } from 'child_process';
 import { promisify } from 'util';
 import { spawn as nodeSpawn } from 'child_process';
 import { createRequire } from 'module';
-import semver from 'semver';
-import { readFile, writeFile, mkdir, stat, readdir, copyFile } from 'fs/promises';
-import { join, dirname, relative, basename, extname, resolve } from 'path';
+import { copyFile } from 'fs/promises';
+import { dirname, basename, extname, resolve } from 'path';
 import { UNIT_KINDS, type UnitKind } from './types';
 import { existsSync } from 'fs';
 

@@ -10,18 +10,6 @@ import { mergeTemplateWorkflow } from '../../src/workflows';
 import { fetchMastraTemplates } from '../../src/utils';
 import { Mastra } from '@mastra/core';
 
-// Helper to find an available port
-async function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, () => {
-      const { port } = server.address() as { port: number };
-      server.close(() => resolve(port));
-    });
-    server.on('error', reject);
-  });
-}
-
 function exec(cmd: string, cwd?: string): string {
   return execSync(cmd, { stdio: 'pipe', cwd, encoding: 'utf-8' });
 }

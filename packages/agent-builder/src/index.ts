@@ -169,7 +169,7 @@ ${options?.outputFormat === 'explanation' ? 'Focus on explaining the approach an
 ${options?.outputFormat === 'code' ? 'Focus on providing complete, working code.' : ''}
 ${!options?.outputFormat || options.outputFormat === 'both' ? 'Provide both explanation and complete code.' : ''}`;
 
-    return super.generate(prompt, {
+    return this.generate(prompt, {
       runtimeContext: options?.runtimeContext,
     });
   }

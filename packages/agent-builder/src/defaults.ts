@@ -1136,14 +1136,14 @@ export const tools = await mcpClient.getTools();
    */
   static async createMastraProject({ features, projectName }: { features?: string[]; projectName?: string }) {
     try {
-      let command = `pnpx create mastra@latest ${projectName} -l openai -k skip`;
+      const args = ['pnpx', 'create', 'mastra@latest', projectName ?? '', '-l', 'openai', '-k', 'skip'];
 
       if (features && features.length > 0) {
-        command += ` --components ${features.join(',')}`;
+        args.push('--components', features.join(','));
       }
-      command += ' --example';
+      args.push('--example');
 
-      const { stdout, stderr } = await exec(command);
+      const { stdout, stderr } = await exec(args.join(' '));
 
       return {
         success: true,

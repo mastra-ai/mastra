@@ -1079,8 +1079,9 @@ const programmaticFileCopyStep = createStep({
       // Commit the copied files
       if (copiedFiles.length > 0) {
         try {
-          const fileList = copiedFiles.map(f => f.destination).join(' ');
-          await exec(`git add ${fileList}`, { cwd: targetPath });
+          const fileList = copiedFiles.map(f => f.destination);
+          const gitCommand = ['git', 'add', ...fileList];
+          await exec(gitCommand.join(' '), { cwd: targetPath });
           await exec(
             `git commit -m "feat(template): copy ${copiedFiles.length} files from ${slug}@${commitSha.substring(0, 7)}"`,
             { cwd: targetPath },
