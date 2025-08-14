@@ -1888,7 +1888,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       }
     }
 
-    const scorers = await this.getScorers({ runtimeContext });
+    const scorers = overrideScorers ?? (await this.getScorers({ runtimeContext }));
 
     const scorerInput: ScorerRunInputForAgent = {
       inputMessages: messageList.getPersisted.input.ui(),

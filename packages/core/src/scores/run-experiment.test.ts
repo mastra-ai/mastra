@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runExperiment } from './run-experiment';
-import { createScorer, type MastraScorer } from './base';
-import { Agent } from '../agent';
 import { MockLanguageModelV1 } from 'ai/test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Agent } from '../agent';
+import { createScorer } from './base';
+import type { MastraScorer } from './base';
 import { RuntimeContext } from '../runtime-context';
+import { runExperiment } from './run-experiment';
 
 const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
   const scorer = createScorer({

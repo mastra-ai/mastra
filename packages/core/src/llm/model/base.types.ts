@@ -20,8 +20,8 @@ import type {
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-import type { RuntimeContext } from '../../runtime-context';
 import type { MessageList } from '../../agent/types';
+import type { RuntimeContext } from '../../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores/types';
 import type { inferOutput, TripwireProperties } from './shared.types';
 

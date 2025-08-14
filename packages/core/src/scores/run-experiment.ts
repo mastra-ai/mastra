@@ -1,8 +1,8 @@
-import pMap from 'p-map';
-import type { MastraScorer } from './base';
-import type { Agent, AiMessageType, UIMessageWithMetadata } from '../agent';
 import type { CoreMessage } from 'ai';
+import pMap from 'p-map';
+import type { Agent, AiMessageType, UIMessageWithMetadata } from '../agent';
 import type { RuntimeContext } from '../runtime-context';
+import type { MastraScorer } from './base';
 
 type RunExperimentDataItem = {
   input: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
@@ -20,9 +20,7 @@ type RunExperimentResult<TScorerName extends string = string> = {
 
 // Extract the return type of a scorer's run method
 type ScorerRunResult<T extends MastraScorer<any, any, any, any>> =
-  T extends MastraScorer<any, infer TInput, infer TRunOutput, infer TAccumulatedResults>
-    ? Awaited<ReturnType<T['run']>>
-    : never;
+  T extends MastraScorer<any> ? Awaited<ReturnType<T['run']>> : never;
 
 // Create a mapped type for scorer results
 type ScorerResults<TScorers extends readonly MastraScorer<any, any, any, any>[]> = {
