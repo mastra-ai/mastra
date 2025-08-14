@@ -90,7 +90,7 @@ const config: StorybookConfig = {
     config.css = {
       ...config.css,
       postcss: {
-        plugins: [tailwindcss, autoprefixer],
+        plugins: [tailwindcss(resolve(__dirname, './tailwind.config.ts')), autoprefixer()],
       },
     };
 
