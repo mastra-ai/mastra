@@ -1,75 +1,70 @@
-// export const runExperiment = async ({
-//   data,
-//   scorers,
-//   agent,
-// }: {
-//   dataset: Record<string, any>[];
-//   scorers: MastraScorers;
-//   agent: Agent;
-// }) => {
-//   for (const item of data) {
-
+import pMap from 'p-map';
 import type { MastraScorer } from './base';
+import type { Agent, AiMessageType, UIMessageWithMetadata } from '../agent';
+import type { CoreMessage } from 'ai';
+import type { RuntimeContext } from '../runtime-context';
 
-//     const result = await agent.generate(item.input, item.input.options);
+type RunExperimentDataItem = {
+  input: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  groundTruth: any;
+  runtimeContext?: RuntimeContext;
+};
 
-//     for (const scorer of scorers) {
-//       const result = await scorer.score(result);
-//       console.log(result);
-//     }
-//   }
+type RunExperimentResult<TScorerName extends string = string> = {
+  scores: Record<TScorerName, number>;
+  summary: {
+    totalItems: number;
+    duration: number;
+  };
+};
 
-//   return {
-//     result,
-//     scorers,
-//     agent,
-//   }
-// };
-
-// /**
-//  * pass scorers to generate
-//  * return message list details from generate for scorers
-//  */
-
-export const runExperiment = async ({
+export const runExperiment = async <const TScorer extends readonly MastraScorer[]>({
   data,
   scorers,
   target,
   onItemComplete,
+  concurrency = 1,
 }: {
-  data: Record<string, any>[] | Record<string, any>;
-  scorers: MastraScorer[];
-  target: any;
+  data: RunExperimentDataItem[];
+  scorers: TScorer;
+  target: Agent;
+  concurrency?: number;
   onItemComplete?: ({
     item,
     targetResult,
-    scoreResults,
+    scorerResults,
   }: {
     item: Record<string, any>;
     targetResult: any;
-    scoreResults: Record<string, any>;
+    scorerResults: Record<string, any>;
   }) => void;
-}) => {
+}): Promise<RunExperimentResult<TScorer[number]['name']>> => {
   const startTime = Date.now();
   let totalItems = 0;
   const scoreAccumulators: Record<string, number[]> = {};
 
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      const targetResult = await target.generate(item.input, { scorers: {}, ...item.input.options });
+  await pMap(
+    data,
+    async item => {
+      const targetResult = await target.generate(item.input, {
+        scorers: {},
+        returnScorerInputs: true,
+        runtimeContext: item.runtimeContext,
+      });
 
-      const scoreResults: Record<string, any> = {};
+      const scorerResults: Record<string, any> = {};
       for (const scorer of scorers) {
         const score = await scorer.run({
-          input: targetResult.messageWindow,
-          output: targetResult.assistantResponse,
+          input: targetResult.scoringData?.input,
+          output: targetResult.scoringData?.output,
           groundTruth: item.groundTruth,
+          runtimeContext: item.runtimeContext,
         });
 
-        scoreResults[scorer.name] = score;
+        scorerResults[scorer.name] = score;
       }
-      totalItems++;
-      for (const [scorerName, result] of Object.entries(scoreResults)) {
+
+      for (const [scorerName, result] of Object.entries(scorerResults)) {
         if (!scoreAccumulators[scorerName]) {
           scoreAccumulators[scorerName] = [];
         }
@@ -77,34 +72,13 @@ export const runExperiment = async ({
       }
 
       if (onItemComplete) {
-        onItemComplete({ item, targetResult, scoreResults });
+        onItemComplete({ item, targetResult, scorerResults });
       }
-    }
-  } else {
-    const targetResult = await target.generate(data.input, { scorers: {}, ...data.input.options });
 
-    const scoreResults: Record<string, any> = {};
-    for (const scorer of scorers) {
-      const score = await scorer.run({
-        input: targetResult.messageWindow,
-        output: targetResult.assistantResponse,
-        groundTruth: data.groundTruth,
-      });
-
-      scoreResults[scorer.name] = score;
-    }
-    totalItems++;
-    for (const [scorerName, result] of Object.entries(scoreResults)) {
-      if (!scoreAccumulators[scorerName]) {
-        scoreAccumulators[scorerName] = [];
-      }
-      scoreAccumulators[scorerName].push(result.score);
-    }
-
-    if (onItemComplete) {
-      onItemComplete({ item: data, targetResult, scoreResults });
-    }
-  }
+      totalItems++;
+    },
+    { concurrency },
+  );
 
   const averageScores: Record<string, number> = {};
   for (const [scorerName, scores] of Object.entries(scoreAccumulators)) {
@@ -112,8 +86,10 @@ export const runExperiment = async ({
   }
 
   return {
-    totalItems,
-    averageScores,
-    duration: Date.now() - startTime,
+    scores: averageScores,
+    summary: {
+      totalItems,
+      duration: Date.now() - startTime,
+    },
   };
 };
