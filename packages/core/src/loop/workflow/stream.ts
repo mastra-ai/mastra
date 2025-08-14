@@ -1,3 +1,5 @@
+import { ReadableStream } from 'stream/web';
+import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import type { ChunkType } from '../../stream/types';
 import { createWorkflow } from '../../workflows';
@@ -6,7 +8,7 @@ import type { LoopRun } from '../types';
 import { createOuterLLMWorkflow } from './outer-llm-step';
 import { llmIterationOutputSchema } from './schema';
 
-export function workflowLoopStream({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
   telemetry_settings,
   model,
   toolChoice,
@@ -14,7 +16,7 @@ export function workflowLoopStream({
   _internal,
   modelStreamSpan,
   ...rest
-}: LoopRun) {
+}: LoopRun<Tools>) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
       const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -33,7 +35,7 @@ export function workflowLoopStream({
           : {}),
       });
 
-      const outerLLMWorkflow = createOuterLLMWorkflow({
+      const outerLLMWorkflow = createOuterLLMWorkflow<Tools>({
         messageId: messageId!,
         model,
         telemetry_settings,
@@ -54,7 +56,7 @@ export function workflowLoopStream({
           let hasFinishedSteps = false;
 
           if (rest.stopWhen) {
-            console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
+            // console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
             const conditions = await Promise.all(
               (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
                 return condition({
