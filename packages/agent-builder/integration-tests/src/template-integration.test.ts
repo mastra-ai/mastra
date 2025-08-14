@@ -299,7 +299,8 @@ describe('Template Workflow Integration Tests', () => {
 
     console.log('Testing duplicate template merge...');
 
-    const workflowRun = await mergeTemplateWorkflow.createRunAsync();
+    const templateWorkflow = mastraInstance.getWorkflow(`mergeTemplateWorkflow`);
+    const workflowRun = await templateWorkflow.createRunAsync();
     const result = await workflowRun.start({
       inputData: {
         repo: csvTemplate!.githubUrl,

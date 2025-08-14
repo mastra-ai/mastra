@@ -45,11 +45,11 @@ pnpm test
 # Run only the mocked unit tests (no API key required)
 pnpm test:mock
 
-# Run the full integration test (requires OPENAI_API_KEY)
-pnpm test:integration
+# Run the full integration template test (requires OPENAI_API_KEY)
+pnpm test:template
 
 # Run the agent builder prompt tests
-pnpm test:merge
+pnpm test:agent
 
 # Run a specific test file
 pnpm vitest run ./src/template-workflow.test.ts

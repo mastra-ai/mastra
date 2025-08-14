@@ -7,7 +7,7 @@ import { z } from 'zod';
 export interface AgentBuilderConfig {
   /** The language model to use for agent generation */
   model: MastraLanguageModel;
-  /** Storage provider for memory (required) */
+  /** Storage provider for memory (optional) */
   storage?: any;
   /** Vector provider for memory (optional) */
   vectorProvider?: any;

@@ -4,8 +4,9 @@ import { spawn as nodeSpawn } from 'child_process';
 import { createRequire } from 'module';
 import semver from 'semver';
 import { readFile, writeFile, mkdir, stat, readdir, copyFile } from 'fs/promises';
-import { join, dirname, relative, basename } from 'path';
+import { join, dirname, relative, basename, extname, resolve } from 'path';
 import { UNIT_KINDS, type UnitKind } from './types';
+import { existsSync } from 'fs';
 
 export const exec = promisify(execNodejs);
 
@@ -42,77 +43,6 @@ export async function spawnSWPM(cwd: string, command: string, packageNames: stri
 export function kindWeight(kind: UnitKind): number {
   const idx = UNIT_KINDS.indexOf(kind as any);
   return idx === -1 ? UNIT_KINDS.length : idx;
-}
-
-function resolveVersionRange(
-  projectRange: string | undefined,
-  templateRange: string,
-): string | { conflict: string; project: string; template: string } {
-  if (!projectRange) return templateRange;
-
-  try {
-    const intersection = semver.intersects(projectRange, templateRange, { includePrerelease: true });
-    if (intersection) {
-      // Find the highest version that satisfies both ranges
-      const maxProject = semver.maxSatisfying(['1.0.0'], projectRange); // This is simplified
-      const maxTemplate = semver.maxSatisfying(['1.0.0'], templateRange);
-      return templateRange; // Prefer template range for now
-    }
-    return { conflict: 'version mismatch', project: projectRange, template: templateRange };
-  } catch {
-    return templateRange; // Fallback to template range
-  }
-}
-
-async function safeReadJson(filePath: string): Promise<Record<string, any> | null> {
-  try {
-    const content = await readFile(filePath, 'utf-8');
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
-}
-
-async function writeJson(filePath: string, value: Record<string, any>): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(value, null, 2) + '\n', 'utf-8');
-}
-
-async function expandGlobPattern(baseDir: string, pattern: string): Promise<string[]> {
-  const fullPath = join(baseDir, pattern);
-
-  // Simple glob expansion - in practice, you'd use a proper glob library
-  if (pattern.includes('**')) {
-    const prefix = pattern.split('**')[0] || '';
-    const prefixPath = join(baseDir, prefix);
-    try {
-      const results: string[] = [];
-      const walkDir = async (dir: string): Promise<void> => {
-        const entries = await readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = join(dir, entry.name);
-          const relativePath = relative(baseDir, fullPath);
-          if (entry.isDirectory()) {
-            await walkDir(fullPath);
-          } else if (relativePath.startsWith(prefix)) {
-            results.push(relativePath);
-          }
-        }
-      };
-      await walkDir(prefixPath);
-      return results;
-    } catch {
-      return [];
-    }
-  } else {
-    // Exact file match
-    try {
-      await stat(fullPath);
-      return [pattern];
-    } catch {
-      return [];
-    }
-  }
 }
 
 // Utility functions to work with Mastra templates
@@ -185,10 +115,6 @@ export async function backupAndReplaceFile(sourceFile: string, targetFile: strin
 }
 
 export async function renameAndCopyFile(sourceFile: string, targetFile: string): Promise<string> {
-  const { copyFile } = await import('fs/promises');
-  const { existsSync } = await import('fs');
-  const { basename, extname, dirname, resolve } = await import('path');
-
   // Find unique filename
   let counter = 1;
   let uniqueTargetFile = targetFile;

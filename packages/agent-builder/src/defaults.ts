@@ -23,7 +23,7 @@ Follow this sequence for every coding task:
 
 IF NO PROJECT EXISTS, USE THE MANAGEPROJECT TOOL TO CREATE A NEW PROJECT
 
-DO NOT INCUDE TODOS IN THE CODE, UNLESS SPECIFICALLY ASKED TO DO SO, CREATE REAL WORLD CODE
+DO NOT INCLUDE TODOS IN THE CODE, UNLESS SPECIFICALLY ASKED TO DO SO, CREATE REAL WORLD CODE
 
 ### 1. 🔍 **UNDERSTAND** (Information Gathering)
 - **Explore Mastra Docs**: Use docs tools to understand relevant Mastra patterns and APIs
@@ -2589,10 +2589,10 @@ export const tools = await mcpClient.getTools();
     shell?: string;
     env?: Record<string, string>;
   }) {
+    const startTime = Date.now();
     try {
       const { command, workingDirectory, timeout = 30000, captureOutput = true, shell, env } = context;
 
-      const startTime = Date.now();
       const execOptions: any = {
         timeout,
         env: { ...process.env, ...env },
@@ -2619,7 +2619,7 @@ export const tools = await mcpClient.getTools();
         executionTime,
       };
     } catch (error: any) {
-      const executionTime = Date.now() - Date.now();
+      const executionTime = Date.now() - startTime;
 
       return {
         success: false,
