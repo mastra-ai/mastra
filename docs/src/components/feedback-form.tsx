@@ -17,15 +17,9 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
-// Form validation schema
 const feedbackSchema = z.object({
-  feedback: z.string().min(10, "Please enter your feedback"),
+  feedback: z.string().min(5, "Please enter your feedback"),
   rating: z.number().min(1).max(5).optional(),
-  email: z
-    .string()
-    .email("Please enter a valid email")
-    .optional()
-    .or(z.literal("")),
   page: z.string(),
   userAgent: z.string().optional(),
 });
@@ -38,24 +32,30 @@ interface FeedbackFormProps {
   currentPage: string;
 }
 
-export const FeedbackForm: React.FC<FeedbackFormProps> = ({
+const ratings = [
+  { rating: 5, emoji: "😊", label: "Very helpful" },
+  { rating: 4, emoji: "🙂", label: "Helpful" },
+  { rating: 3, emoji: "😐", label: "Okay" },
+  { rating: 2, emoji: "😕", label: "Not very helpful" },
+  { rating: 1, emoji: "😒", label: "Not helpful" },
+];
+
+export const FeedbackForm = ({
   isOpen,
   onClose,
   currentPage,
-}) => {
+}: FeedbackFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [selectedRating, setSelectedRating] = useState<number | null>(null);
 
   const form = useForm<FeedbackFormData>({
     resolver: zodResolver(feedbackSchema),
     defaultValues: {
       feedback: "",
       rating: 5,
-      email: "",
       page: currentPage,
       userAgent:
         typeof window !== "undefined" ? window.navigator.userAgent : "",
@@ -76,27 +76,25 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         },
         body: JSON.stringify({
           ...data,
-          rating: selectedRating,
           timestamp: new Date().toISOString(),
         }),
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        setSubmitStatus("success");
-        form.reset();
-        setSelectedRating(null);
-
-        setTimeout(() => {
-          onClose();
-          setSubmitStatus("idle");
-        }, 2000);
-      } else {
+      if (!response.ok) {
         const errorData = await response
           .json()
           .catch(() => ({ error: "Unknown error" }));
         throw new Error(errorData.error || `Server error: ${response.status}`);
       }
+
+      const result = await response.json();
+      setSubmitStatus("success");
+      form.reset();
+
+      setTimeout(() => {
+        onClose();
+        setSubmitStatus("idle");
+      }, 2000);
     } catch (error) {
       setSubmitStatus("error");
       setErrorMessage(
@@ -107,10 +105,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
     }
   };
 
-  const handleRatingClick = (rating: number) => {
-    setSelectedRating(rating);
-    form.setValue("rating", rating);
-  };
+  const currentRating = form.watch("rating");
 
   if (!isOpen) return null;
 
@@ -127,7 +122,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            {/* Header with close button */}
             <div className="flex items-center justify-between mb-4">
               <label className="text-sm font-medium text-gray-900 dark:text-white">
                 <T id="feedback.rating_label">Was this helpful?</T>
@@ -145,21 +139,15 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
             <div className="flex gap-3 flex-col items-start">
               <div className="flex gap-1 flex-shrink-0">
-                {[
-                  { rating: 5, emoji: "😊", label: "Very helpful" },
-                  { rating: 4, emoji: "🙂", label: "Helpful" },
-                  { rating: 3, emoji: "😐", label: "Okay" },
-                  { rating: 2, emoji: "😕", label: "Not very helpful" },
-                  { rating: 1, emoji: "😒", label: "Not helpful" },
-                ].map(({ rating, emoji, label }) => (
+                {ratings.map(({ rating, emoji, label }) => (
                   <button
                     key={rating}
                     type="button"
-                    onClick={() => handleRatingClick(rating)}
+                    onClick={() => form.setValue("rating", rating)}
                     className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-lg transition-all hover:scale-110",
-                      selectedRating === rating
-                        ? " dark:bg-blue-900/30 ring-2 ring-accent-green"
+                      currentRating === rating
+                        ? " ring-2 ring-accent-green"
                         : "",
                     )}
                     title={label}

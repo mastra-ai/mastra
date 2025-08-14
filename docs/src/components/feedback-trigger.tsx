@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
-import { usePathname } from "next/navigation";
-import { MessageCircle } from "lucide-react";
-import { T } from "gt-next/client";
-import { Button } from "@/components/ui/button";
 import { FeedbackForm } from "@/components/feedback-form";
+import { Button } from "@/components/ui/button";
+import { T } from "gt-next/client";
+import { usePathname } from "next/navigation";
+import React, { useState } from "react";
 
 export const FeedbackTrigger: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
