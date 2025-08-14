@@ -9,8 +9,9 @@ import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
 import type { ChunkType } from './stream/types';
-import type { CoreTool, ToolAction, VercelTool } from './tools';
+import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
+import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -227,8 +228,6 @@ export interface ToolOptions {
   writableStream?: WritableStream<ChunkType>;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any>;
-
 /**
  * Checks if a value is a Zod type
  * @param value - The value to check
@@ -312,6 +311,14 @@ export function makeCoreTool(
   logType?: 'tool' | 'toolset' | 'client-tool',
 ): CoreTool {
   return new CoreToolBuilder({ originalTool, options, logType }).build();
+}
+
+export function makeCoreToolV5(
+  originalTool: ToolToConvert,
+  options: ToolOptions,
+  logType?: 'tool' | 'toolset' | 'client-tool',
+): VercelToolV5 {
+  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
 }
 
 /**

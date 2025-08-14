@@ -1,4 +1,4 @@
-import type { Agent } from '@mastra/core/agent';
+import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -14,6 +14,42 @@ type GetBody<
   messages: Parameters<Agent[T]>[0];
 } & Parameters<Agent[T]>[1];
 
+export async function getSerializedAgentTools(tools: Record<string, any>) {
+  return Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
+    const _tool = tool as any;
+
+    const toolId = _tool.id ?? `tool-${key}`;
+
+    let inputSchemaForReturn = undefined;
+
+    if (_tool.inputSchema) {
+      if (_tool.inputSchema?.jsonSchema) {
+        inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
+      } else {
+        inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema));
+      }
+    }
+
+    let outputSchemaForReturn = undefined;
+
+    if (_tool.outputSchema) {
+      if (_tool.outputSchema?.jsonSchema) {
+        outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
+      } else {
+        outputSchemaForReturn = stringify(zodToJsonSchema(_tool.outputSchema));
+      }
+    }
+
+    acc[key] = {
+      ..._tool,
+      id: toolId,
+      inputSchema: inputSchemaForReturn,
+      outputSchema: outputSchemaForReturn,
+    };
+    return acc;
+  }, {});
+}
+
 // Agent handlers
 export async function getAgentsHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
   try {
@@ -27,15 +63,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
         const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
 
-        const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-          const _tool = tool as any;
-          acc[key] = {
-            ..._tool,
-            inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-            outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
-          };
-          return acc;
-        }, {});
+        const serializedAgentTools = await getSerializedAgentTools(tools);
 
         let serializedAgentWorkflows = {};
 
@@ -98,15 +126,7 @@ export async function getAgentByIdHandler({
 
     const tools = await agent.getTools({ runtimeContext });
 
-    const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-      const _tool = tool as any;
-      acc[key] = {
-        ..._tool,
-        inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-        outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
-      };
-      return acc;
-    }, {});
+    const serializedAgentTools = await getSerializedAgentTools(tools);
 
     let serializedAgentWorkflows = {};
 
@@ -364,5 +384,32 @@ export function streamVNextGenerateHandler({
     return streamResult;
   } catch (error) {
     return handleError(error, 'error streaming agent response');
+  }
+}
+
+export function updateAgentModelHandler({
+  mastra,
+  agentId,
+  body,
+}: Context & {
+  agentId: string;
+  body: {
+    model: MastraLanguageModel;
+  };
+}): { message: string } {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { model } = body;
+
+    agent.__updateModel({ model });
+
+    return { message: 'Agent model updated' };
+  } catch (error) {
+    return handleError(error, 'error updating agent model');
   }
 }

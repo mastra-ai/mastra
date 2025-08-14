@@ -1,9 +1,11 @@
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as babel from '@babel/core';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { rollup, type OutputAsset, type OutputChunk, type Plugin } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
@@ -17,6 +19,7 @@ import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
 import resolveFrom from 'resolve-from';
 import { packageDirectory } from 'package-directory';
+import { checkConfigExport } from './babel/check-config-export';
 
 // TODO: Make thie extendable or find a rollup plugin that can do this
 const globalExternals = [
@@ -443,6 +446,25 @@ export async function analyzeBundle(
   logger: IMastraLogger,
   sourcemapEnabled: boolean = false,
 ) {
+  const mastraConfig = await readFile(mastraEntry, 'utf-8');
+  const mastraConfigResult = {
+    hasValidConfig: false,
+  } as const;
+
+  await babel.transformAsync(mastraConfig, {
+    filename: mastraEntry,
+    plugins: [checkConfigExport(mastraConfigResult)],
+  });
+
+  if (!mastraConfigResult.hasValidConfig) {
+    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
+export const mastra = new Mastra({
+  // your options
+})
+  
+If you think your configuration is valid, please open an issue.`);
+  }
+
   const depsToOptimize = new Map<string, string[]>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);

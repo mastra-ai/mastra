@@ -2,10 +2,15 @@
 title: "Upstash Storage | Storage System | Mastra Core"
 description: Documentation for the Upstash storage implementation in Mastra.
 ---
+import { Callout } from 'nextra/components'
 
 # Upstash Storage
 
 The Upstash storage implementation provides a serverless-friendly storage solution using Upstash's Redis-compatible key-value store.
+
+<Callout type="warning">
+  **Important:** When using Mastra with Upstash, the pay-as-you-go model can result in unexpectedly high costs due to the high volume of Redis commands generated during agent conversations. We strongly recommend using a **fixed pricing plan** for predictable costs. See [Upstash pricing](https://upstash.com/pricing/redis) for details and [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) for context.
+</Callout>
 
 ## Installation
 
