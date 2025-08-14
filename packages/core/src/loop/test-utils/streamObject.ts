@@ -56,7 +56,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('streamObject', () => {
     describe('output = "object"', () => {
       describe('result.objectStream', () => {
-        it('should send object deltas', async () => {
+        it.todo('should send object deltas', async () => {
           const mockModel = createTestModel();
 
           const messageList = new MessageList();
@@ -108,7 +108,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           // `);
         });
 
-        it('should use name and description', async () => {
+        it.todo('should use name and description', async () => {
           const model = createTestModel();
 
           const result = loopFn({

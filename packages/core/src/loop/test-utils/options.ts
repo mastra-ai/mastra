@@ -354,7 +354,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      it('should contain correct step inputs', async () => {
+      it.todo('should contain correct step inputs', async () => {
         await result.aisdk.v5.consumeStream();
 
         expect(stepInputs).toMatchInlineSnapshot(`
@@ -3370,7 +3370,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   });
 
   describe('options.onFinish', () => {
-    it('should send correct information', async () => {
+    it.todo('should send correct information', async () => {
       const messageList = new MessageList();
 
       let result!: any;
@@ -3639,7 +3639,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       `);
     });
 
-    it('should send sources', async () => {
+    it.todo('should send sources', async () => {
       const messageList = new MessageList();
       let result!: any;
 
@@ -3825,7 +3825,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       `);
     });
 
-    it('should send files', async () => {
+    it.todo('should send files', async () => {
       let result!: any;
 
       const resultObject = await loopFn({

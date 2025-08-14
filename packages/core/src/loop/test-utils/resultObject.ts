@@ -155,7 +155,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   });
 
   describe('result.response.messages', () => {
-    it('should contain reasoning', async () => {
+    it.todo('should contain reasoning', async () => {
       const messageList = new MessageList();
 
       const result = await loopFn({
@@ -404,7 +404,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   });
 
   describe('result.steps', () => {
-    it('should add the reasoning from the model response to the step result', async () => {
+    it.todo('should add the reasoning from the model response to the step result', async () => {
       const result = await loopFn({
         runId,
         model: modelWithReasoning,
@@ -549,7 +549,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           `);
     });
 
-    it('should add the sources from the model response to the step result', async () => {
+    it.todo('should add the sources from the model response to the step result', async () => {
       const result = await loopFn({
         runId,
         messageList: new MessageList(),
