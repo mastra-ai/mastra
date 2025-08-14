@@ -148,7 +148,8 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                 {[
                   { rating: 5, emoji: "😊", label: "Very helpful" },
                   { rating: 4, emoji: "🙂", label: "Helpful" },
-                  { rating: 2, emoji: "😐", label: "Okay" },
+                  { rating: 3, emoji: "😐", label: "Okay" },
+                  { rating: 2, emoji: "😕", label: "Not very helpful" },
                   { rating: 1, emoji: "😒", label: "Not helpful" },
                 ].map(({ rating, emoji, label }) => (
                   <button
