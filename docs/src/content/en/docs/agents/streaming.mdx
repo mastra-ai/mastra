@@ -3,13 +3,15 @@ title: "Using Agent Streaming | Agents | Mastra Docs"
 description: Documentation on how to stream agents
 ---
 
+import { Callout } from "nextra/components";
+
 # Agent Streaming
 
 Agents in Mastra support streaming responses for real-time interaction with clients. This enables progressive rendering of responses and better user experience.
 
-<Note type="info">
+<Callout type="info">
   **Experimental API**: The `streamVNext` method shown in this guide is an experimental feature that will replace the current `stream()` method after additional testing and refinement. For production use, consider using the stable [`stream()` method](/docs/agents/overview#2-generating-and-streaming-text) until `streamVNext` is finalized.
-</Note>
+</Callout>
 
 ## Usage
 
