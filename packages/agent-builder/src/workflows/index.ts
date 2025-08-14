@@ -690,6 +690,15 @@ For each task:
 Start by listing your tasks and work through them systematically!
 `);
 
+      // Extract actual conflict resolution details from agent execution
+      const actualResolutions: Array<{
+        taskId: string;
+        action: string;
+        status: string;
+        content: string;
+        notes?: string;
+      }> = [];
+
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
           console.log({
@@ -698,19 +707,55 @@ Start by listing your tasks and work through them systematically!
           });
         } else {
           console.log(JSON.stringify(chunk, null, 2));
+
+          // Extract task management tool results
+          if (chunk.type === 'tool-result' && chunk.toolName === 'manageTaskList') {
+            try {
+              const toolResult = chunk.result;
+              if (toolResult.action === 'update' && toolResult.status === 'completed') {
+                actualResolutions.push({
+                  taskId: toolResult.taskId || '',
+                  action: toolResult.action,
+                  status: toolResult.status,
+                  content: toolResult.content || '',
+                  notes: toolResult.notes,
+                });
+                console.log(`📋 Task completed: ${toolResult.taskId} - ${toolResult.content}`);
+              }
+            } catch (parseError) {
+              console.warn('Failed to parse task management result:', parseError);
+            }
+          }
         }
       }
 
       // Log git state after merge operations
       await logGitState(targetPath, 'after intelligent merge');
 
-      // TODO: Extract actual conflict resolution details from agent execution
-      // For now, create placeholder resolution data based on input conflicts
-      const conflictResolutions = conflicts.map(conflict => ({
-        unit: conflict.unit,
-        issue: conflict.issue,
-        resolution: `Resolved conflict for ${conflict.unit.kind} ${conflict.unit.id}`,
-      }));
+      // Map actual resolutions back to conflicts
+      const conflictResolutions = conflicts.map(conflict => {
+        const taskId = `conflict-${conflict.unit.kind}-${conflict.unit.id}`;
+        const actualResolution = actualResolutions.find(r => r.taskId === taskId);
+
+        if (actualResolution) {
+          return {
+            unit: conflict.unit,
+            issue: conflict.issue,
+            resolution:
+              actualResolution.notes ||
+              actualResolution.content ||
+              `Completed: ${conflict.unit.kind} ${conflict.unit.id}`,
+            actualWork: true,
+          };
+        } else {
+          return {
+            unit: conflict.unit,
+            issue: conflict.issue,
+            resolution: `No specific resolution found for ${conflict.unit.kind} ${conflict.unit.id}`,
+            actualWork: false,
+          };
+        }
+      });
 
       return {
         success: true,
@@ -1408,6 +1453,7 @@ export const mergeTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const validationResult = getStepResult(validationAndFixStep);
     const intelligentMergeResult = getStepResult(intelligentMergeStep);
+    const copyResult = getStepResult(programmaticFileCopyStep);
     const cloneResult = getStepResult(cloneTemplateStep);
     const initData = getInitData();
 
@@ -1415,13 +1461,50 @@ export const mergeTemplateWorkflow = createWorkflow({
     const branchName =
       intelligentMergeResult.branchName || `feat/install-template-${cloneResult.slug || initData.slug}`;
 
+    // Aggregate errors from all steps
+    const allErrors = [copyResult.error, intelligentMergeResult.error, validationResult.error].filter(Boolean);
+
+    // Determine overall success based on all step results
+    const overallSuccess =
+      copyResult.success !== false && intelligentMergeResult.success !== false && validationResult.success;
+
+    // Create comprehensive message
+    const messages = [];
+    if (copyResult.copiedFiles?.length > 0) {
+      messages.push(`${copyResult.copiedFiles.length} files copied`);
+    }
+    if (copyResult.conflicts?.length > 0) {
+      messages.push(`${copyResult.conflicts.length} conflicts skipped`);
+    }
+    if (intelligentMergeResult.conflictsResolved?.length > 0) {
+      messages.push(`${intelligentMergeResult.conflictsResolved.length} conflicts resolved`);
+    }
+    if (validationResult.validationResults?.errorsFixed > 0) {
+      messages.push(`${validationResult.validationResults.errorsFixed} validation errors fixed`);
+    }
+
+    const comprehensiveMessage =
+      messages.length > 0
+        ? `Template merge completed: ${messages.join(', ')}`
+        : validationResult.message || 'Template merge completed';
+
     return {
-      success: validationResult.success,
-      applied: validationResult.applied,
-      message: validationResult.message,
+      success: overallSuccess,
+      applied: validationResult.applied || copyResult.copiedFiles?.length > 0 || false,
+      message: comprehensiveMessage,
       validationResults: validationResult.validationResults,
-      error: validationResult.error,
+      error: allErrors.length > 0 ? allErrors.join('; ') : undefined,
+      errors: allErrors.length > 0 ? allErrors : undefined,
       branchName,
+      // Additional debugging info
+      stepResults: {
+        copySuccess: copyResult.success,
+        mergeSuccess: intelligentMergeResult.success,
+        validationSuccess: validationResult.success,
+        filesCopied: copyResult.copiedFiles?.length || 0,
+        conflictsSkipped: copyResult.conflicts?.length || 0,
+        conflictsResolved: intelligentMergeResult.conflictsResolved?.length || 0,
+      },
     };
   })
   .commit();
