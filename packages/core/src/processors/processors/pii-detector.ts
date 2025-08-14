@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
@@ -504,6 +505,148 @@ Detect and analyze the following PII types:
 ${this.detectionTypes.map(type => `- ${type}`).join('\n')}
 
 IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHING ELSE. Do not include any zeros in your response, if the response should be 0, omit it, they will be counted as false.`;
+  }
+
+  /**
+   * Process streaming output chunks for PII detection and redaction
+   */
+  async processOutputStream(args: {
+    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
+    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    state: Record<string, any>;
+    abort: (reason?: string) => never;
+  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+    const { chunk, abort } = args;
+    try {
+      // Only process text-delta chunks
+      if (chunk.type !== 'text-delta') {
+        return chunk;
+      }
+
+      const textContent = chunk.textDelta;
+      if (!textContent.trim()) {
+        return chunk;
+      }
+
+      const detectionResult = await this.detectPII(textContent);
+
+      if (this.isPIIFlagged(detectionResult)) {
+        switch (this.strategy) {
+          case 'block':
+            abort(`PII detected in streaming content. Types: ${this.getDetectedTypes(detectionResult).join(', ')}`);
+
+          case 'warn':
+            console.warn(
+              `[PIIDetector] PII detected in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
+            );
+            return chunk; // Allow content through with warning
+
+          case 'filter':
+            console.info(
+              `[PIIDetector] Filtered streaming chunk with PII: ${this.getDetectedTypes(detectionResult).join(', ')}`,
+            );
+            return null; // Don't emit this chunk
+
+          case 'redact':
+            if (detectionResult.redacted_content) {
+              console.info(
+                `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
+              );
+              return {
+                ...chunk,
+                textDelta: detectionResult.redacted_content,
+              };
+            } else {
+              console.warn(`[PIIDetector] No redaction available for streaming chunk, filtering`);
+              return null; // Fallback to filtering if no redaction available
+            }
+
+          default:
+            return chunk;
+        }
+      }
+
+      return chunk;
+    } catch (error) {
+      if (error instanceof TripWire) {
+        throw error; // Re-throw tripwire errors
+      }
+      console.warn('[PIIDetector] Streaming detection failed, allowing content:', error);
+      return chunk; // Fail open - allow content if detection fails
+    }
+  }
+
+  /**
+   * Process final output result for PII detection and redaction
+   */
+  async processOutputResult({
+    messages,
+    abort,
+  }: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
+  }): Promise<MastraMessageV2[]> {
+    try {
+      if (messages.length === 0) {
+        return messages;
+      }
+
+      const processedMessages: MastraMessageV2[] = [];
+
+      // Evaluate each message
+      for (const message of messages) {
+        const textContent = this.extractTextContent(message);
+        if (!textContent.trim()) {
+          // No text content to analyze
+          processedMessages.push(message);
+          continue;
+        }
+
+        const detectionResult = await this.detectPII(textContent);
+
+        if (this.isPIIFlagged(detectionResult)) {
+          const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
+
+          // If we reach here, strategy is 'warn', 'filter', or 'redact'
+          if (this.strategy === 'filter') {
+            continue; // Skip this message
+          } else if (this.strategy === 'redact') {
+            if (processedMessage) {
+              processedMessages.push(processedMessage);
+            } else {
+              processedMessages.push(message); // Fallback to original if redaction failed
+            }
+            continue;
+          }
+        }
+
+        processedMessages.push(message);
+      }
+
+      return processedMessages;
+    } catch (error) {
+      if (error instanceof TripWire) {
+        throw error; // Re-throw tripwire errors
+      }
+      throw new Error(`PII detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get detected PII types from detection result
+   */
+  private getDetectedTypes(result: PIIDetectionResult): string[] {
+    if (result.detections && result.detections.length > 0) {
+      return [...new Set(result.detections.map(d => d.type))];
+    }
+
+    if (result.categories) {
+      return Object.entries(result.categories)
+        .filter(([_, score]) => typeof score === 'number' && score >= this.threshold)
+        .map(([type]) => type);
+    }
+
+    return [];
   }
 
   /**

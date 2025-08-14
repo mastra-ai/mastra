@@ -1,6 +1,6 @@
 import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { z, ZodSchema, ZodTypeAny } from 'zod';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -35,6 +35,30 @@ export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
 export type ToolsetsInput = Record<string, ToolsInput>;
 
 export type MastraLanguageModel = LanguageModelV1;
+
+type FallbackFields<S extends ZodTypeAny> =
+  | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
+  | { errorStrategy: 'fallback'; fallbackValue: z.infer<S> };
+
+export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
+  /** Zod schema to validate the output against */
+  schema: S;
+
+  /** Model to use for the internal structuring agent */
+  model: MastraLanguageModel;
+
+  /**
+   * Custom instructions for the structuring agent.
+   * If not provided, will generate instructions based on the schema.
+   */
+  instructions?: string;
+
+  /**
+   * Use a custom processor to process the output, defaults to the built in StructuredOutputProcessor
+   * This is useful when you want to use a custom processor to process the output
+   */
+  useProcessor?: z.infer<S>;
+} & FallbackFields<S>;
 
 export interface AgentConfig<
   TAgentId extends string = string,
@@ -98,7 +122,13 @@ export type AgentGenerateOptions<
   output?: OutputType | OUTPUT;
   /** Schema for structured output generation alongside tool calls. */
   experimental_output?: EXPERIMENTAL_OUTPUT;
-  /** Controls how tools are selected during generation */
+  /**
+   * Structured output configuration using StructuredOutputProcessor.
+   * This provides better DX than manually creating the processor.
+   */
+  structuredOutput?: EXPERIMENTAL_OUTPUT extends z.ZodTypeAny
+    ? StructuredOutputOptions<EXPERIMENTAL_OUTPUT>
+    : never /** Controls how tools are selected during generation */;
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
@@ -109,6 +139,10 @@ export type AgentGenerateOptions<
    * @default false
    */
   savePerStep?: boolean;
+  /** Input processors to use for this generation call (overrides agent's default) */
+  inputProcessors?: InputProcessor[];
+  /** Output processors to use for this generation call (overrides agent's default) */
+  outputProcessors?: OutputProcessor[];
 } & (
   | {
       /**
@@ -180,6 +214,8 @@ export type AgentStreamOptions<
    * @default false
    */
   savePerStep?: boolean;
+  /** Input processors to use for this generation call (overrides agent's default) */
+  inputProcessors?: InputProcessor[];
 } & (
   | {
       /**

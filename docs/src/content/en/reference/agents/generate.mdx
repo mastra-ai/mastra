@@ -49,11 +49,79 @@ await agent.generate("message for agent");
       description: "Additional context messages to provide to the agent.",
     },
     {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
+      isOptional: true,
+      description: "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
+      properties: [
+        {
+          parameters: [{
+            name: "schema",
+            type: "z.ZodSchema<S>",
+            isOptional: false,
+            description: "Zod schema to validate the output against."
+          }]
+        },
+        {
+          parameters: [{
+            name: "model",
+            type: "MastraLanguageModel",
+            isOptional: false,
+            description: "Model to use for the internal structuring agent."
+          }]
+        },
+        {
+          parameters: [{
+            name: "errorStrategy",
+            type: "'strict' | 'warn' | 'fallback'",
+            isOptional: true,
+            description: "Strategy when parsing or validation fails. Defaults to 'strict'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "fallbackValue",
+            type: "<S extends ZodTypeAny>",
+            isOptional: true,
+            description: "Fallback value when errorStrategy is 'fallback'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "instructions",
+            type: "string",
+            isOptional: true,
+            description: "Custom instructions for the structuring agent."
+          }]
+        },
+        {
+          parameters: [{
+            name: "useProcessor",
+            type: "Processor",
+            isOptional: true,
+            description: "Use a custom processor to process the output, defaults to the built-in StructuredOutputProcessor."
+          }]
+        }
+      ]
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+    },
+    {
+      name: "inputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+    },
+    {
       name: "experimental_output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
       description:
-        "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+        "Note, the preferred route is to use the `structuredOutput` property. Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
     },
     {
       name: "instructions",
@@ -376,6 +444,9 @@ await agent.generate("message for agent");
 ## Extended usage example
 
 ```typescript showLineNumbers copy
+import { z } from "zod";
+import { ModerationProcessor, TokenLimiterProcessor } from "@mastra/core/processors";
+
 await agent.generate(
   [
     { role: "user", content: "message for agent" },
@@ -406,7 +477,21 @@ await agent.generate(
       openai: {
         reasoningEffort: "high"
       }
-    }
+    },
+    // Structured output with better DX
+    structuredOutput: {
+      schema: z.object({
+        sentiment: z.enum(['positive', 'negative', 'neutral']),
+        confidence: z.number(),
+      }),
+      model: openai("gpt-4o-mini"),
+      errorStrategy: 'warn',
+    },
+    // Output processors for response validation
+    outputProcessors: [
+      new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
+      new TokenLimiterProcessor({ maxTokens: 1000 }),
+    ],
   }
 );
 ```

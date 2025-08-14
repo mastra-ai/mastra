@@ -10,6 +10,12 @@ import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProce
 import { MCPClient } from '@mastra/mcp';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
+import { createCerebras } from '@ai-sdk/cerebras';
+
+const cerebras = createCerebras({
+  apiKey: `csk-j8f4pfx63kt2w4rre5rw268h6d35fr6hrrpyrkm2n2fdxkw6`,
+});
+
 const memory = new Memory();
 
 // Define schema directly compatible with OpenAI's requirements
@@ -105,7 +111,8 @@ const vegetarianProcessor: InputProcessor = {
 };
 
 const piiDetector = new PIIDetector({
-  model: google('gemini-2.0-flash-001'),
+  // model: google('gemini-2.0-flash-001'),
+  model: cerebras('qwen-3-coder-480b'),
   redactionMethod: 'mask',
   preserveFormat: true,
   includeDetections: true,
@@ -136,6 +143,7 @@ export const chefAgentResponses = new Agent({
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
   model: openai.responses('gpt-4o'),
+  // model: cerebras('qwen-3-coder-480b'),
   tools: async () => {
     return {
       web_search_preview: openai.tools.webSearchPreview(),
@@ -145,9 +153,9 @@ export const chefAgentResponses = new Agent({
     myWorkflow,
   },
   inputProcessors: [
-    // piiDetector,
+    piiDetector,
     // vegetarianProcessor,
-    languageDetector,
+    // languageDetector,
     // promptInjectionDetector,
     // moderationDetector,
     {

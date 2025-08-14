@@ -15,19 +15,17 @@ export interface Processor {
   /**
    * Process output stream chunks with built-in state management
    * This allows processors to accumulate chunks and make decisions based on larger context
+   * Return null, or undefined to skip emitting the chunk
    */
   processOutputStream?(args: {
     chunk: TextStreamPart<any> | ObjectStreamPart<any>;
     allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<{
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    shouldEmit: boolean;
-  }>;
+  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null | undefined>;
 
   /**
-   * Process the complete output result after streaming is finished
+   * Process the complete output result after streaming/generate is finished
    */
   processOutputResult?(args: {
     messages: MastraMessageV2[];
@@ -35,42 +33,14 @@ export interface Processor {
   }): Promise<MastraMessageV2[]> | MastraMessageV2[];
 }
 
+type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
+
 // Your stricter union types can wrap this for Agent typing:
-export type InputProcessor = Required<Pick<Processor, 'name' | 'processInput'>> & Processor;
+export type InputProcessor = WithRequired<Processor, 'name' | 'processInput'> & Processor;
 export type OutputProcessor =
-  | (Required<Pick<Processor, 'name' | 'processOutputStream'>> & Processor)
-  | (Required<Pick<Processor, 'name' | 'processOutputResult'>> & Processor);
+  | (WithRequired<Processor, 'name' | 'processOutputStream'> & Processor)
+  | (WithRequired<Processor, 'name' | 'processOutputResult'> & Processor);
 
 export type ProcessorTypes = InputProcessor | OutputProcessor;
-
-/**
- * State management utility for stream processors
- */
-export interface StreamProcessorState {
-  /**
-   * Get the accumulated text from all chunks processed so far
-   */
-  getAccumulatedText(): string;
-
-  /**
-   * Get a custom value from the processor's state
-   */
-  get<T>(key: string): T | undefined;
-
-  /**
-   * Set a custom value in the processor's state
-   */
-  set<T>(key: string, value: T): void;
-
-  /**
-   * Check if the stream has ended
-   */
-  isStreamEnded(): boolean;
-
-  /**
-   * Get the current chunk being processed
-   */
-  getCurrentChunk(): string;
-}
 
 export * from './processors';

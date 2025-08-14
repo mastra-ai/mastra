@@ -123,7 +123,7 @@ describe('LanguageDetector', () => {
 
       const messages = [createTestMessage('Hello, how are you today?', 'user')];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect((result[0].content.metadata as any)?.language_detection).toEqual({
@@ -153,7 +153,7 @@ describe('LanguageDetector', () => {
 
       const messages = [createTestMessage('Hola, ¿cómo estás?', 'user')];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect((result[0].content.metadata as any)?.language_detection).toEqual({
@@ -189,7 +189,7 @@ describe('LanguageDetector', () => {
         createTestMessage('こんにちは、元気ですか？', 'user', 'msg3'),
       ];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(3);
       expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('English');
@@ -210,7 +210,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Guten Tag, wie geht es Ihnen?', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -234,7 +234,7 @@ describe('LanguageDetector', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('Ciao, come stai?', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -263,7 +263,7 @@ describe('LanguageDetector', () => {
       const messages = [createTestMessage('Olá, como você está?', 'user')];
 
       await expect(async () => {
-        await detector.process({ messages, abort: mockAbort as any });
+        await detector.processInput({ messages, abort: mockAbort as any });
       }).rejects.toThrow('Language blocked');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Non-target language detected'));
@@ -280,7 +280,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Hello, this is in English', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect(mockAbort).not.toHaveBeenCalled();
@@ -309,7 +309,7 @@ describe('LanguageDetector', () => {
 
       const messages = [createTestMessage('Bonjour le monde', 'user', 'msg1')];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -339,7 +339,7 @@ describe('LanguageDetector', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('Привет, как дела?', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -380,7 +380,7 @@ describe('LanguageDetector', () => {
         createTestMessage('你好', 'user', 'msg3'),
       ];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(3);
       expect((result[0].content.parts?.[0] as any)?.text).toBe('Hello there'); // Original English
@@ -401,7 +401,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Mixed lang text 123', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content).toEqual(messages[0].content); // Content should be unchanged
@@ -419,7 +419,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Hej, hur mår du?', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('Swedish');
@@ -438,7 +438,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
       const messages = [createTestMessage('Hi', 'user')]; // Only 2 characters
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       // Model should not have been called due to text length
@@ -457,7 +457,7 @@ describe('LanguageDetector', () => {
 
       const messages = [createTestMessage('Hello there friend', 'user')]; // 18 characters
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('English');
@@ -484,7 +484,7 @@ describe('LanguageDetector', () => {
         createdAt: new Date(),
       };
 
-      await detector.process({ messages: [message], abort: mockAbort as any });
+      await detector.processInput({ messages: [message], abort: mockAbort as any });
 
       expect(mockAbort).not.toHaveBeenCalled();
     });
@@ -509,7 +509,7 @@ describe('LanguageDetector', () => {
         createdAt: new Date(),
       };
 
-      await detector.process({ messages: [message], abort: mockAbort as any });
+      await detector.processInput({ messages: [message], abort: mockAbort as any });
 
       expect(mockAbort).not.toHaveBeenCalled();
     });
@@ -535,7 +535,7 @@ describe('LanguageDetector', () => {
       const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       const messages = [createTestMessage('Some text content', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('Spanish'); // Should assume target
@@ -560,7 +560,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const result = await detector.process({ messages: [], abort: mockAbort as any });
+      const result = await detector.processInput({ messages: [], abort: mockAbort as any });
 
       expect(result).toEqual([]);
     });
@@ -580,7 +580,7 @@ describe('LanguageDetector', () => {
       const invalidMessage = null as any;
 
       await expect(async () => {
-        await detector.process({ messages: [invalidMessage], abort: mockAbort as any });
+        await detector.processInput({ messages: [invalidMessage], abort: mockAbort as any });
       }).rejects.toThrow();
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Language detection failed'));
@@ -607,7 +607,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Hola mundo', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect((result[0].content.metadata as any)?.language_detection?.original_content).toBeUndefined();
     });
@@ -622,7 +622,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Bonjour mes amis', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect((result[0].content.metadata as any)?.language_detection?.target_languages).toEqual(['French', 'German']);
       expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
@@ -655,7 +655,7 @@ describe('LanguageDetector', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Bonjour le monde', 'user')];
-      await detector.process({ messages, abort: mockAbort as any });
+      await detector.processInput({ messages, abort: mockAbort as any });
 
       // The model should have been called with quality settings
       // We can't easily verify the exact call without exposing internals,
@@ -687,7 +687,7 @@ describe('LanguageDetector', () => {
       const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       const messages = [createTestMessage('Some text content here', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       // Should fail open and assume target language
       expect(result).toHaveLength(1);
@@ -714,7 +714,7 @@ describe('LanguageDetector', () => {
       const longText = 'This is a very long text in English. '.repeat(50);
       const messages = [createTestMessage(longText, 'user')];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
     });
@@ -730,7 +730,7 @@ describe('LanguageDetector', () => {
 
       const messages = [createTestMessage('Hello world. Hola mundo. English and Spanish text.', 'user')];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('English');

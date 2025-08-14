@@ -185,26 +185,21 @@ export class ModerationProcessor implements Processor {
     allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<{
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    shouldEmit: boolean;
-  }> {
+  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null | undefined> {
     try {
       const { chunk, allChunks, abort } = args;
 
       // Only process text-delta chunks for moderation
       if (chunk.type !== 'text-delta') {
-        return { chunk, shouldEmit: true };
+        return chunk;
       }
 
       // Build context from previous chunks based on chunkWindow
       const contentToModerate = this.buildContextFromChunks(allChunks);
 
-      console.log('contentToModerate', contentToModerate);
-
       // Skip moderation if no content to moderate
       if (!contentToModerate.trim()) {
-        return { chunk, shouldEmit: true };
+        return chunk;
       }
 
       const moderationResult = await this.moderateContent(contentToModerate, true);
@@ -214,18 +209,18 @@ export class ModerationProcessor implements Processor {
 
         // If we reach here, strategy is 'warn' or 'filter'
         if (this.strategy === 'filter') {
-          return { chunk: { type: 'text-delta', textDelta: '' }, shouldEmit: false };
+          return null; // Don't emit this chunk
         }
       }
 
-      return { chunk, shouldEmit: true };
+      return chunk;
     } catch (error) {
       if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
       // Log error but don't block the stream
       console.warn('[ModerationProcessor] Stream moderation failed:', error);
-      return { chunk: args.chunk, shouldEmit: true };
+      return args.chunk;
     }
   }
 

@@ -26,3 +26,12 @@ export {
   type LanguageDetection,
   type TranslationResult,
 } from './language-detector';
+export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
+export { BatchPartsProcessor, type BatchPartsOptions } from './batch-parts';
+export { TokenLimiterProcessor, type TokenLimiterOptions } from './token-limiter';
+export {
+  SystemPromptScrubber,
+  type SystemPromptScrubberOptions,
+  type SystemPromptDetectionResult,
+  type SystemPromptDetection,
+} from './system-prompt-scrubber';

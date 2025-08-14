@@ -10,7 +10,7 @@ import type { Processor } from './index';
  */
 class ProcessorState {
   private accumulatedText = '';
-  private customState = new Map<string, any>();
+  public customState: Record<string, any> = {};
   public allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [];
 
   constructor(private readonly processorName: string) {}
@@ -22,22 +22,6 @@ class ProcessorState {
       this.accumulatedText += chunk.textDelta;
     }
     this.allChunks.push(chunk);
-  }
-
-  // Public interface for processors
-  getState(): Record<string, any> {
-    return {
-      ...Object.fromEntries(this.customState),
-    };
-  }
-
-  // Helper methods for backward compatibility
-  get<T>(key: string): T | undefined {
-    return this.customState.get(key);
-  }
-
-  set<T>(key: string, value: T): void {
-    this.customState.set(key, value);
   }
 }
 
@@ -119,28 +103,26 @@ export class ProcessorRunner {
   }
 
   /**
-   * Process a text chunk through all output processors with state management
+   * Process a stream part through all output processors with state management
    */
-  async processChunk(
+  async processPart(
     chunk: TextStreamPart<any> | ObjectStreamPart<any>,
     processorStates: Map<string, ProcessorState>,
   ): Promise<{
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
+    chunk: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined;
     blocked: boolean;
     reason?: string;
-    shouldEmit: boolean;
   }> {
     if (!this.outputProcessors.length) {
-      return { chunk, blocked: false, shouldEmit: true };
+      return { chunk, blocked: false };
     }
 
     try {
-      let processedChunk = chunk;
-      let shouldEmit = true;
+      let processedChunk: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined = chunk;
 
       for (const processor of this.outputProcessors) {
         try {
-          if (processor.processOutputStream) {
+          if (processor.processOutputStream && processedChunk) {
             // Get or create state for this processor
             let state = processorStates.get(processor.name);
             if (!state) {
@@ -154,28 +136,28 @@ export class ProcessorRunner {
             const result = await processor.processOutputStream({
               chunk: processedChunk,
               allChunks: state.allChunks,
-              state: state.getState(),
+              state: state.customState,
               abort: (reason?: string) => {
                 throw new TripWire(reason || `Chunk blocked by ${processor.name}`);
               },
             });
 
-            processedChunk = result.chunk;
-            shouldEmit = shouldEmit && result.shouldEmit;
+            // If result is null, or undefined, don't emit
+            processedChunk = result;
           }
         } catch (error) {
           if (error instanceof TripWire) {
-            return { chunk: processedChunk, blocked: true, reason: error.message, shouldEmit: false };
+            return { chunk: null, blocked: true, reason: error.message };
           }
           // Log error but continue with original chunk
           this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.name} failed:`, error);
         }
       }
 
-      return { chunk: processedChunk, blocked: false, shouldEmit };
+      return { chunk: processedChunk, blocked: false };
     } catch (error) {
       this.logger.error(`[Agent:${this.agentName}] - Chunk processing failed:`, error);
-      return { chunk, blocked: false, shouldEmit: true };
+      return { chunk, blocked: false };
     }
   }
 
@@ -183,26 +165,21 @@ export class ProcessorRunner {
     streamResult: StreamObjectResult<any, any, any> | StreamTextResult<any, any>,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
-      start: controller => {
+      start: async controller => {
         const reader = streamResult.fullStream.getReader();
         const processorStates = new Map<string, ProcessorState>();
 
-        const processChunk = async () => {
-          try {
+        try {
+          while (true) {
             const { done, value } = await reader.read();
 
             if (done) {
               controller.close();
-              return;
+              break;
             }
 
             // Process all chunks through output processors
-            const {
-              chunk: processedChunk,
-              blocked,
-              reason,
-              shouldEmit,
-            } = await this.processChunk(value, processorStates);
+            const { chunk: processedChunk, blocked, reason } = await this.processPart(value, processorStates);
 
             if (blocked) {
               // Log that chunk was blocked
@@ -217,20 +194,16 @@ export class ProcessorRunner {
                 tripwireReason: reason || 'Output processor blocked content',
               });
               controller.close();
-            } else if (shouldEmit) {
-              // Send processed chunk only if shouldEmit is true
+              break;
+            } else if (processedChunk !== null) {
+              // Send processed chunk only if it's not null (which indicates don't emit)
               controller.enqueue(processedChunk);
             }
-            // If shouldEmit is false, don't emit anything for this chunk
-
-            // Continue processing next chunk
-            void processChunk();
-          } catch (error) {
-            controller.error(error);
+            // If processedChunk is null, don't emit anything for this chunk
           }
-        };
-
-        void processChunk();
+        } catch (error) {
+          controller.error(error);
+        }
       },
     });
   }

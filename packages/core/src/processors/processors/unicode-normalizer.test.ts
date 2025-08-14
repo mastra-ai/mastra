@@ -54,7 +54,7 @@ describe('UnicodeNormalizer', () => {
 
       // Test with ligature fi (ﬁ) which should be normalized to separate f and i
       const input = createTestMessage('ﬁle'); // Contains ligature
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       // The ligature should be normalized to separate characters
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'file' });
@@ -68,7 +68,7 @@ describe('UnicodeNormalizer', () => {
 
       // Test with fullwidth characters
       const input = createTestMessage('Ｈｅｌｌｏ'); // Fullwidth Hello
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'Hello' });
     });
@@ -81,7 +81,7 @@ describe('UnicodeNormalizer', () => {
 
       // Test with decomposed character (e + combining acute accent)
       const input = createTestMessage('e\u0301'); // e + combining acute
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       // Should be normalized to composed form
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'é' });
@@ -96,7 +96,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('hello    world     test');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'hello world test' });
     });
@@ -108,7 +108,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('line1\n\n\n\nline2');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'line1\nline2' });
     });
@@ -120,7 +120,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('line1\r\nline2\rline3\nline4');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'line1\nline2\nline3\nline4' });
     });
@@ -132,7 +132,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('   hello world   \n\t');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'hello world' });
     });
@@ -144,7 +144,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('hello    world');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'hello    world' });
     });
@@ -156,7 +156,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('  hello world  ');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: ' hello world ' });
     });
@@ -170,7 +170,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('hello\x00\x01world\x7F');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       const resultText = (result[0].content.parts?.[0] as any)?.text;
       // Control characters should be preserved by default
@@ -189,7 +189,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('hello\x00\x01world\x7F\x9F');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'helloworld' });
     });
@@ -204,7 +204,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('hello\tworld\ntest\rline\x00bad');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       const resultText = (result[0].content.parts?.[0] as any)?.text;
       expect(resultText).toContain('\t');
@@ -222,7 +222,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('Hello 👋 World 🌍 Test 🚀');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'Hello 👋 World 🌍 Test 🚀' });
     });
@@ -237,7 +237,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('Hello\x00👋\x01World🌍\x7F');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'Hello👋World🌍' });
     });
@@ -249,7 +249,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('👨‍👩‍👧‍👦 👋🏽 🏳️‍🌈');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       const resultText = (result[0].content.parts?.[0] as any)?.text;
       expect(resultText).toContain('👨‍👩‍👧‍👦');
@@ -266,7 +266,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const message = createTestMessageWithContent('  part text  ', '  content text  ');
-      const result = normalizer.process({ messages: [message], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [message], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: 'part text' });
       expect(result[0].content.content).toBe('content text');
@@ -292,7 +292,7 @@ describe('UnicodeNormalizer', () => {
         type: 'user-input',
       };
 
-      const result = normalizer.process({ messages: [message], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [message], abort: mockAbort });
 
       expect(result[0]).toEqual({
         id: 'test-id',
@@ -323,7 +323,7 @@ describe('UnicodeNormalizer', () => {
 
       // Should not throw, but handle gracefully
       expect(() => {
-        normalizer.process({ messages: [message], abort: mockAbort });
+        normalizer.processInput({ messages: [message], abort: mockAbort });
       }).not.toThrow();
     });
   });
@@ -336,7 +336,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: '' });
     });
@@ -348,7 +348,7 @@ describe('UnicodeNormalizer', () => {
       };
 
       const input = createTestMessage('   \t\n\r   ');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect(result[0].content.parts?.[0]).toEqual({ type: 'text', text: '' });
     });
@@ -361,7 +361,7 @@ describe('UnicodeNormalizer', () => {
 
       const longText = 'a'.repeat(10000) + '   ' + 'b'.repeat(10000);
       const input = createTestMessage(longText);
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       expect((result[0].content.parts?.[0] as any)?.text).toBe('a'.repeat(10000) + ' ' + 'b'.repeat(10000));
     });
@@ -374,7 +374,7 @@ describe('UnicodeNormalizer', () => {
 
       // Mix of different unicode categories
       const input = createTestMessage('English 中文 العربية ελληνικά 🌍');
-      const result = normalizer.process({ messages: [input], abort: mockAbort });
+      const result = normalizer.processInput({ messages: [input], abort: mockAbort });
 
       const resultText = (result[0].content.parts?.[0] as any)?.text;
       // Should preserve all valid unicode while normalizing

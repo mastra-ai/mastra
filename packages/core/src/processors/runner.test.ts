@@ -352,12 +352,14 @@ describe('ProcessorRunner', () => {
       const result = await runner.runOutputProcessors(messageList);
 
       const messages = await result.get.all.prompt();
-      expect(messages).toHaveLength(1);
-      expect(messages[0].role).toBe('assistant');
-      expect(messages[0].content).toHaveLength(3);
-      expect((messages[0].content[0] as TextPart).text).toBe('initial response');
-      expect((messages[0].content[1] as TextPart).text).toBe('extra message A');
-      expect((messages[0].content[2] as TextPart).text).toBe('extra message B');
+      expect(messages).toHaveLength(2);
+
+      const assistantMessage = messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeDefined();
+      expect(assistantMessage!.content).toHaveLength(3);
+      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
+      expect((assistantMessage!.content[1] as TextPart).text).toBe('extra message A');
+      expect((assistantMessage!.content[2] as TextPart).text).toBe('extra message B');
     });
 
     it('should abort if tripwire is triggered in output processor', async () => {
@@ -420,12 +422,14 @@ describe('ProcessorRunner', () => {
       const result = await runner.runOutputProcessors(messageList);
       const messages = await result.get.all.prompt();
 
-      expect(messages).toHaveLength(1);
-      expect(messages[0].role).toBe('assistant');
-      expect(messages[0].content).toHaveLength(3);
-      expect((messages[0].content[0] as TextPart).text).toBe('initial response');
-      expect((messages[0].content[1] as TextPart).text).toBe('message from processor 1');
-      expect((messages[0].content[2] as TextPart).text).toBe('message from processor 3');
+      expect(messages).toHaveLength(2);
+
+      const assistantMessage = messages.find(m => m.role === 'assistant');
+      expect(assistantMessage).toBeDefined();
+      expect(assistantMessage!.content).toHaveLength(3);
+      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
+      expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
+      expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
     });
 
     describe('telemetry integration', () => {
@@ -476,15 +480,9 @@ describe('ProcessorRunner', () => {
           processOutputStream: async ({ chunk }) => {
             // Only process text-delta chunks
             if (chunk.type === 'text-delta') {
-              return {
-                chunk: { type: 'text-delta', textDelta: (chunk as any).textDelta.toUpperCase() },
-                shouldEmit: true,
-              };
+              return { type: 'text-delta', textDelta: (chunk as any).textDelta.toUpperCase() };
             }
-            return {
-              chunk,
-              shouldEmit: true,
-            };
+            return chunk;
           },
         },
       ];
@@ -497,10 +495,9 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processChunk({ type: 'text-delta', textDelta: 'hello world' }, processorStates);
+      const result = await runner.processPart({ type: 'text-delta', textDelta: 'hello world' }, processorStates);
       expect((result.chunk as any).textDelta).toBe('HELLO WORLD');
       expect(result.blocked).toBe(false);
-      expect(result.shouldEmit).toBe(true);
     });
 
     it('should abort stream when processor calls abort', async () => {
@@ -511,10 +508,7 @@ describe('ProcessorRunner', () => {
             if ((chunk as any).textDelta?.includes('blocked')) {
               abort('Content blocked');
             }
-            return {
-              chunk: chunk,
-              shouldEmit: true,
-            };
+            return chunk;
           },
         },
       ];
@@ -527,11 +521,10 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processChunk({ type: 'text-delta', textDelta: 'blocked content' }, processorStates);
-      expect((result.chunk as any).textDelta).toBe('blocked content'); // When aborted, chunk is still the original
+      const result = await runner.processPart({ type: 'text-delta', textDelta: 'blocked content' }, processorStates);
+      expect(result.chunk).toBe(null); // When aborted, chunk is null
       expect(result.blocked).toBe(true);
       expect(result.reason).toBe('Content blocked');
-      expect(result.shouldEmit).toBe(false);
     });
 
     it('should handle processor errors gracefully', async () => {
@@ -552,10 +545,9 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processChunk({ type: 'text-delta', textDelta: 'test content' }, processorStates);
+      const result = await runner.processPart({ type: 'text-delta', textDelta: 'test content' }, processorStates);
       expect((result.chunk as any).textDelta).toBe('test content'); // Should return original text on error
       expect(result.blocked).toBe(false);
-      expect(result.shouldEmit).toBe(true);
     });
 
     it('should skip processors that do not implement processOutputStream', async () => {
@@ -565,15 +557,9 @@ describe('ProcessorRunner', () => {
           processOutputStream: async ({ chunk }) => {
             // Only process text-delta chunks
             if (chunk.type === 'text-delta') {
-              return {
-                chunk: { type: 'text-delta', textDelta: (chunk as any).textDelta.toUpperCase() },
-                shouldEmit: true,
-              };
+              return { type: 'text-delta', textDelta: (chunk as any).textDelta.toUpperCase() };
             }
-            return {
-              chunk,
-              shouldEmit: true,
-            };
+            return chunk;
           },
         },
         {
@@ -585,15 +571,9 @@ describe('ProcessorRunner', () => {
           processOutputStream: async ({ chunk }) => {
             // Only process text-delta chunks
             if (chunk.type === 'text-delta') {
-              return {
-                chunk: { type: 'text-delta', textDelta: (chunk as any).textDelta + '!' },
-                shouldEmit: true,
-              };
+              return { type: 'text-delta', textDelta: (chunk as any).textDelta + '!' };
             }
-            return {
-              chunk,
-              shouldEmit: true,
-            };
+            return chunk;
           },
         },
       ];
@@ -606,10 +586,9 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processChunk({ type: 'text-delta', textDelta: 'hello' }, processorStates);
+      const result = await runner.processPart({ type: 'text-delta', textDelta: 'hello' }, processorStates);
       expect((result.chunk as any).textDelta).toBe('HELLO!');
       expect(result.blocked).toBe(false);
-      expect(result.shouldEmit).toBe(true);
     });
 
     it('should return original text when no output processors are configured', async () => {
@@ -621,10 +600,9 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processChunk({ type: 'text-delta', textDelta: 'original text' }, processorStates);
+      const result = await runner.processPart({ type: 'text-delta', textDelta: 'original text' }, processorStates);
       expect((result.chunk as any).textDelta).toBe('original text');
       expect(result.blocked).toBe(false);
-      expect(result.shouldEmit).toBe(true);
     });
   });
 
@@ -636,12 +614,11 @@ describe('ProcessorRunner', () => {
           processOutputStream: async ({ chunk, allChunks }) => {
             // Only emit when we have a complete sentence (ends with period)
             const shouldEmit = (chunk as any).textDelta?.includes('.');
-            const textToEmit = shouldEmit ? allChunks.map(c => (c as any).textDelta).join('') : '';
-
-            return {
-              chunk: { type: 'text-delta', textDelta: textToEmit },
-              shouldEmit,
-            };
+            if (shouldEmit) {
+              const textToEmit = allChunks.map(c => (c as any).textDelta).join('');
+              return { type: 'text-delta', textDelta: textToEmit };
+            }
+            return null;
           },
         },
       ];
@@ -656,13 +633,11 @@ describe('ProcessorRunner', () => {
       const processorStates = new Map();
 
       // Process chunks
-      const result1 = await runner.processChunk({ type: 'text-delta', textDelta: 'Hello world' }, processorStates);
-      expect((result1.chunk as any).textDelta).toBe(''); // No period, so no emission
-      expect(result1.shouldEmit).toBe(false);
+      const result1 = await runner.processPart({ type: 'text-delta', textDelta: 'Hello world' }, processorStates);
+      expect(result1.chunk).toBe(null); // No period, so no emission
 
-      const result2 = await runner.processChunk({ type: 'text-delta', textDelta: '.' }, processorStates);
+      const result2 = await runner.processPart({ type: 'text-delta', textDelta: '.' }, processorStates);
       expect((result2.chunk as any).textDelta).toBe('Hello world.'); // Complete sentence, should emit
-      expect(result2.shouldEmit).toBe(true);
     });
 
     it('should accumulate chunks for moderation decisions', async () => {
@@ -677,10 +652,7 @@ describe('ProcessorRunner', () => {
               abort('Violent content detected');
             }
 
-            return {
-              chunk: chunk, // Emit the chunk as-is
-              shouldEmit: true,
-            };
+            return chunk; // Emit the chunk as-is
           },
         },
       ];
@@ -695,20 +667,17 @@ describe('ProcessorRunner', () => {
       const processorStates = new Map();
 
       // Process harmless chunks
-      const result1 = await runner.processChunk({ type: 'text-delta', textDelta: 'i want to ' }, processorStates);
+      const result1 = await runner.processPart({ type: 'text-delta', textDelta: 'i want to ' }, processorStates);
       expect((result1.chunk as any).textDelta).toBe('i want to ');
-      expect(result1.shouldEmit).toBe(true);
 
-      const result2 = await runner.processChunk({ type: 'text-delta', textDelta: 'punch' }, processorStates);
+      const result2 = await runner.processPart({ type: 'text-delta', textDelta: 'punch' }, processorStates);
       expect((result2.chunk as any).textDelta).toBe('punch');
-      expect(result2.shouldEmit).toBe(true);
 
       // This chunk should trigger the violence detection
-      const result3 = await runner.processChunk({ type: 'text-delta', textDelta: ' you in the face' }, processorStates);
-      expect((result3.chunk as any).textDelta).toBe(' you in the face'); // When aborted, chunk is still the original
+      const result3 = await runner.processPart({ type: 'text-delta', textDelta: ' you in the face' }, processorStates);
+      expect(result3.chunk).toBe(null); // When aborted, chunk is null
       expect(result3.blocked).toBe(true);
       expect(result3.reason).toBe('Violent content detected');
-      expect(result3.shouldEmit).toBe(false);
     });
 
     it('should handle custom state management', async () => {
@@ -723,11 +692,10 @@ describe('ProcessorRunner', () => {
 
             // Only emit every 3 words
             const shouldEmit = newWordCount % 3 === 0;
-
-            return {
-              chunk: { type: 'text-delta', textDelta: (chunk as any).textDelta.toUpperCase() },
-              shouldEmit,
-            };
+            if (shouldEmit) {
+              return { type: 'text-delta', textDelta: (chunk as any).textDelta.toUpperCase() };
+            }
+            return null;
           },
         },
       ];
@@ -741,13 +709,11 @@ describe('ProcessorRunner', () => {
 
       const processorStates = new Map();
 
-      const result1 = await runner.processChunk({ type: 'text-delta', textDelta: 'hello world' }, processorStates);
-      expect((result1.chunk as any).textDelta).toBe('HELLO WORLD');
-      expect(result1.shouldEmit).toBe(false); // 2 words
+      const result1 = await runner.processPart({ type: 'text-delta', textDelta: 'hello world' }, processorStates);
+      expect(result1.chunk).toBe(null);
 
-      const result2 = await runner.processChunk({ type: 'text-delta', textDelta: ' goodbye' }, processorStates);
+      const result2 = await runner.processPart({ type: 'text-delta', textDelta: ' goodbye' }, processorStates);
       expect((result2.chunk as any).textDelta).toBe(' GOODBYE');
-      expect(result2.shouldEmit).toBe(false); // 3 words total, but we need to check the actual count
     });
 
     it('should handle stream end detection', async () => {
@@ -758,21 +724,15 @@ describe('ProcessorRunner', () => {
             if ((chunk as any).textDelta === '') {
               // Emit accumulated text at stream end
               return {
-                chunk: {
-                  type: 'text-delta',
-                  textDelta: allChunks
-                    .map(c => (c as any).textDelta)
-                    .join('')
-                    .toUpperCase(),
-                },
-                shouldEmit: true,
+                type: 'text-delta',
+                textDelta: allChunks
+                  .map(c => (c as any).textDelta)
+                  .join('')
+                  .toUpperCase(),
               };
             }
 
-            return {
-              chunk: { type: 'text-delta', textDelta: '' }, // Don't emit during processing
-              shouldEmit: false,
-            };
+            return null;
           },
         },
       ];
@@ -787,14 +747,13 @@ describe('ProcessorRunner', () => {
       const processorStates = new Map();
 
       // Process chunks without emitting
-      await runner.processChunk({ type: 'text-delta', textDelta: 'hello' }, processorStates);
-      await runner.processChunk({ type: 'text-delta', textDelta: ' world' }, processorStates);
+      await runner.processPart({ type: 'text-delta', textDelta: 'hello' }, processorStates);
+      await runner.processPart({ type: 'text-delta', textDelta: ' world' }, processorStates);
 
       // Simulate stream end by processing an empty chunk
 
-      const result = await runner.processChunk({ type: 'text-delta', textDelta: '' }, processorStates);
+      const result = await runner.processPart({ type: 'text-delta', textDelta: '' }, processorStates);
       expect((result.chunk as any).textDelta).toBe('HELLO WORLD');
-      expect(result.shouldEmit).toBe(true);
     });
   });
 
@@ -806,15 +765,9 @@ describe('ProcessorRunner', () => {
           processOutputStream: async ({ chunk }) => {
             // Only process text-delta chunks
             if (chunk.type === 'text-delta' && (chunk as any).textDelta?.includes('blocked')) {
-              return {
-                chunk: { type: 'text-delta', textDelta: '' }, // Filter out blocked content
-                shouldEmit: false,
-              };
+              return null;
             }
-            return {
-              chunk: chunk,
-              shouldEmit: true,
-            };
+            return chunk;
           },
         },
       ];
@@ -865,10 +818,7 @@ describe('ProcessorRunner', () => {
             if (chunk.type === 'text-delta' && (chunk as any).textDelta?.includes('abort')) {
               abort('Stream aborted');
             }
-            return {
-              chunk,
-              shouldEmit: true,
-            };
+            return chunk;
           },
         },
       ];
@@ -912,15 +862,9 @@ describe('ProcessorRunner', () => {
           processOutputStream: async ({ chunk }) => {
             // Only process text-delta chunks
             if (chunk.type === 'text-delta') {
-              return {
-                chunk: { type: 'text-delta', textDelta: chunk.textDelta.toUpperCase() },
-                shouldEmit: true,
-              };
+              return { type: 'text-delta', textDelta: chunk.textDelta.toUpperCase() };
             }
-            return {
-              chunk,
-              shouldEmit: true,
-            };
+            return chunk;
           },
         },
       ];

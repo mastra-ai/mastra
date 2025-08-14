@@ -1,0 +1,28 @@
+import {
+  PIIDetector,
+  type PIIDetectorOptions,
+  type PIIDetectionResult,
+  type PIICategories,
+  type PIICategoryScores,
+  type PIIDetection,
+} from '../../../processors/processors/pii-detector';
+import type { InputProcessor } from '../index';
+import type { MastraMessageV2 } from '../../message-list';
+
+/**
+ * Backward-compatible wrapper for PIIDetector that implements the old InputProcessor interface
+ */
+export class PIIDetectorInputProcessor implements InputProcessor {
+  readonly name = 'pii-detector';
+  private processor: PIIDetector;
+
+  constructor(options: PIIDetectorOptions) {
+    this.processor = new PIIDetector(options);
+  }
+
+  async process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): Promise<MastraMessageV2[]> {
+    return this.processor.processInput(args);
+  }
+}
+
+export type { PIIDetectorOptions, PIIDetectionResult, PIICategories, PIICategoryScores, PIIDetection };
