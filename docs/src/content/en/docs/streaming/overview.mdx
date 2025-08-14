@@ -1,0 +1,57 @@
+---
+title: "Streaming Overview | Streaming | Mastra"
+description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
+---
+
+# Streaming overview
+
+Mastra supports real-time, incremental responses from agents and workflows, so users see output as it’s generated instead of waiting for completion. This is useful for chat, long-form content, multi-step workflows, or any scenario where immediate feedback matters.
+
+## Getting started
+
+Mastra currently supports two streaming methods:
+
+1. **`.stream()`**: Current stable API.
+2. **`.streamVNext()`**: Experimental API.
+
+## Streaming with agents
+
+Use `.stream()` for real-time responses. Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
+
+A `textStream` breaks the response into chunks as it’s generated, allowing output to stream progressively instead of arriving all at once.
+
+### Using `Agent.stream()`
+
+The `.stream()` method is the current stable streaming implementation for agents.
+
+```typescript {3,7} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+> See [Agent.stream()](../../reference/agents/stream.mdx) for more information.
+
+### Using `Agent.streamVNext()`
+
+The `.streamVNext()` method is the experimental streaming API that provides enhanced capabilities and improved performance.
+
+```typescript {3,7} showLineNumbers copy
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.streamVNext([
+  { role: "user", content: "Help me organize my day" },
+]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+> See [Agent.streamVNext()](../../reference/agents/streamVNext.mdx) for more information.
