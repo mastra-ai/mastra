@@ -3,6 +3,7 @@ import pMap from 'p-map';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../agent';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer } from './base';
+import { MastraError } from '../error';
 
 type RunExperimentDataItem = {
   input: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
@@ -54,26 +55,85 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
   let totalItems = 0;
   const scoreAccumulators: Record<string, number[]> = {};
 
+  if (data.length === 0) {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'RUN_EXPERIMENT_FAILED_NO_DATA_PROVIDED',
+      category: 'USER',
+      text: 'Failed to run experiment: Data array is empty',
+    });
+  }
+
+  if (scorers.length === 0) {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'RUN_EXPERIMENT_FAILED_NO_SCORERS_PROVIDED',
+      category: 'USER',
+      text: 'Failed to run experiment: No scorers provided',
+    });
+  }
+
+  if (!target) {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'RUN_EXPERIMENT_FAILED_NO_TARGET_PROVIDED',
+      category: 'USER',
+      text: 'Failed to run experiment: No target provided',
+    });
+  }
+
   await pMap(
     data,
     async item => {
-      const targetResult = await target.generate(item.input, {
-        scorers: {},
-        returnScorerInputs: true,
-        runtimeContext: item.runtimeContext,
-      });
+      let targetResult: any;
+      try {
+        targetResult = await target.generate(item.input, {
+          scorers: {},
+          returnScorerInputs: true,
+          runtimeContext: item.runtimeContext,
+        });
+      } catch (error) {
+        throw new MastraError(
+          {
+            domain: 'SCORER',
+            id: 'RUN_EXPERIMENT_TARGET_FAILED_TO_GENERATE_RESULT',
+            category: 'USER',
+            text: 'Failed to run experiment: Error generating result from target',
+            details: {
+              item: JSON.stringify(item),
+            },
+          },
+          error,
+        );
+      }
 
       const scorerResults: ScorerResults<TScorer> = {} as ScorerResults<TScorer>;
       for (const scorer of scorers) {
-        const score = await scorer.run({
-          input: targetResult.scoringData?.input,
-          output: targetResult.scoringData?.output,
-          groundTruth: item.groundTruth,
-          runtimeContext: item.runtimeContext,
-        });
+        try {
+          const score = await scorer.run({
+            input: targetResult.scoringData?.input,
+            output: targetResult.scoringData?.output,
+            groundTruth: item.groundTruth,
+            runtimeContext: item.runtimeContext,
+          });
 
-        scorerResults[scorer.name as keyof ScorerResults<TScorer>] =
-          score as ScorerResults<TScorer>[typeof scorer.name];
+          scorerResults[scorer.name as keyof ScorerResults<TScorer>] =
+            score as ScorerResults<TScorer>[typeof scorer.name];
+        } catch (error) {
+          throw new MastraError(
+            {
+              domain: 'SCORER',
+              id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_RESULT',
+              category: 'USER',
+              text: `Failed to run experiment: Error running scorer ${scorer.name}`,
+              details: {
+                scorerName: scorer.name,
+                item: JSON.stringify(item),
+              },
+            },
+            error,
+          );
+        }
       }
 
       for (const [scorerName, result] of Object.entries(scorerResults)) {

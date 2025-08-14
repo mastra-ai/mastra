@@ -202,49 +202,49 @@ describe('runExperiment', () => {
       });
     });
   });
-  // describe('Error handling', () => {
-  //   it('should handle agent generate errors', async () => {
-  //     mockAgent.generate = vi.fn().mockRejectedValue(new Error('Agent error'));
+  describe('Error handling', () => {
+    it('should handle agent generate errors', async () => {
+      mockAgent.generate = vi.fn().mockRejectedValue(new Error('Agent error'));
 
-  //     await expect(runExperiment({
-  //       data: testData,
-  //       scorers: mockScorers,
-  //       target: mockAgent,
-  //     })).rejects.toThrow('Agent error');
-  //   });
+      await expect(
+        runExperiment({
+          data: testData,
+          scorers: mockScorers,
+          target: mockAgent,
+        }),
+      ).rejects.toThrow();
+    });
 
-  //   it('should handle scorer errors', async () => {
-  //     mockScorers[0].run = vi.fn().mockRejectedValue(new Error('Scorer error'));
+    it('should handle scorer errors', async () => {
+      mockScorers[0].run = vi.fn().mockRejectedValue(new Error('Scorer error'));
 
-  //     await expect(runExperiment({
-  //       data: testData,
-  //       scorers: mockScorers,
-  //       target: mockAgent,
-  //     })).rejects.toThrow('Scorer error');
-  //   });
+      await expect(
+        runExperiment({
+          data: testData,
+          scorers: mockScorers,
+          target: mockAgent,
+        }),
+      ).rejects.toThrow();
+    });
 
-  //   it('should handle empty data array', async () => {
-  //     const result = await runExperiment({
-  //       data: [],
-  //       scorers: mockScorers,
-  //       target: mockAgent,
-  //     });
+    it('should handle empty data array', async () => {
+      await expect(
+        runExperiment({
+          data: [],
+          scorers: mockScorers,
+          target: mockAgent,
+        }),
+      ).rejects.toThrow();
+    });
 
-  //     expect(result.summary.totalItems).toBe(0);
-  //     expect(result.scores).toEqual({});
-  //     expect(mockAgent.generate).not.toHaveBeenCalled();
-  //   });
-
-  //   it('should handle empty scorers array', async () => {
-  //     const result = await runExperiment({
-  //       data: testData,
-  //       scorers: [],
-  //       target: mockAgent,
-  //     });
-
-  //     expect(result.summary.totalItems).toBe(2);
-  //     expect(result.scores).toEqual({});
-  //     expect(mockAgent.generate).toHaveBeenCalledTimes(2);
-  //   });
-  // });
+    it('should handle empty scorers array', async () => {
+      await expect(
+        runExperiment({
+          data: testData,
+          scorers: [],
+          target: mockAgent,
+        }),
+      ).rejects.toThrow();
+    });
+  });
 });
