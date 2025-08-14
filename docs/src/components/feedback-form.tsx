@@ -19,7 +19,7 @@ import { z } from "zod";
 
 // Form validation schema
 const feedbackSchema = z.object({
-  feedback: z.string().min(10, "Feedback must be at least 10 characters"),
+  feedback: z.string().min(10, "Please enter your feedback"),
   rating: z.number().min(1).max(5).optional(),
   email: z
     .string()
@@ -54,12 +54,13 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
     resolver: zodResolver(feedbackSchema),
     defaultValues: {
       feedback: "",
-      rating: undefined,
+      rating: 5,
       email: "",
       page: currentPage,
       userAgent:
         typeof window !== "undefined" ? window.navigator.userAgent : "",
     },
+    reValidateMode: "onSubmit",
   });
 
   const onSubmit = async (data: FeedbackFormData) => {
@@ -175,18 +176,18 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                     <FormControl>
                       <Textarea
                         placeholder="Your feedback..."
-                        className="min-h-[60px] text-black dark:text-white resize-none text-sm"
+                        className="min-h-[60px] text-black focus:outline focus:outline-accent-green dark:text-white resize-none text-sm"
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-500" />
                   </FormItem>
                 )}
               />
 
               <button
                 type="submit"
-                disabled={isSubmitting || !form.watch("feedback")?.trim()}
+                disabled={isSubmitting}
                 className="dark:bg-[#121212] bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
               >
                 {isSubmitting ? (
@@ -199,7 +200,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
             {errorMessage && (
               <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-900/20">
-                <p className="text-xs text-red-600 dark:text-red-400">
+                <p className="text-xs text-red-500 dark:text-red-400">
                   <T id="feedback.error">
                     Something went wrong. Please try again.
                   </T>
