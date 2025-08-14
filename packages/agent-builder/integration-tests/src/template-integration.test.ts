@@ -3,12 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
-import { openai } from '@ai-sdk/openai';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { mergeTemplateWorkflow, fetchMastraTemplates } from '../../src/index';
+import { mergeTemplateWorkflow } from '../../src/workflows';
+import { fetchMastraTemplates } from '../../src/utils';
 import { Mastra } from '@mastra/core';
 
 // Helper to find an available port
