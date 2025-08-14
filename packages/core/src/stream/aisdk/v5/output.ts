@@ -1,5 +1,5 @@
 import { TransformStream } from 'stream/web';
-import { getErrorMessage } from '@ai-sdk/provider-v5';
+import { getErrorMessage, type LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type { MessageList } from '../../../agent/message-list';
@@ -85,9 +85,9 @@ export class AISDKV5OutputStream {
     const responseMessageId =
       generateMessageId != null
         ? getResponseUIMessageId({
-          originalMessages,
-          responseMessageId: generateMessageId,
-        })
+            originalMessages,
+            responseMessageId: generateMessageId,
+          })
         : undefined;
 
     return createUIMessageStream({
@@ -231,39 +231,41 @@ export class AISDKV5OutputStream {
     let startEvent: TextStreamPart<ToolSet> | undefined;
     let hasStarted: boolean = false;
     // let stepCounter = 1;
-    return this.#modelOutput.fullStream.pipeThrough(
-      new TransformStream<ChunkType, TextStreamPart<ToolSet>>({
-        transform(chunk, controller) {
-          if (chunk.type === 'step-start' && !startEvent) {
-            startEvent = convertMastraChunkToAISDKv5({
+    return this.#modelOutput.fullStream
+      .pipeThrough(createObjectStreamTransformer({ objectOptions: this.#options.objectOptions }))
+      .pipeThrough(
+        new TransformStream<ChunkType, TextStreamPart<ToolSet>>({
+          transform(chunk, controller) {
+            if (chunk.type === 'step-start' && !startEvent) {
+              startEvent = convertMastraChunkToAISDKv5({
+                chunk,
+              });
+              // stepCounter++;
+              return;
+            } else if (chunk.type !== 'error') {
+              hasStarted = true;
+            }
+
+            if (startEvent && hasStarted) {
+              controller.enqueue(startEvent as any);
+              startEvent = undefined;
+            }
+
+            const transformedChunk = convertMastraChunkToAISDKv5({
               chunk,
             });
-            // stepCounter++;
-            return;
-          } else if (chunk.type !== 'error') {
-            hasStarted = true;
-          }
 
-          if (startEvent && hasStarted) {
-            controller.enqueue(startEvent as any);
-            startEvent = undefined;
-          }
+            if (transformedChunk) {
+              // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
+              //   console.log('step counter', stepCounter);
+              //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
+              // }
 
-          const transformedChunk = convertMastraChunkToAISDKv5({
-            chunk,
-          });
-
-          if (transformedChunk) {
-            // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
-            //   console.log('step counter', stepCounter);
-            //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
-            // }
-
-            controller.enqueue(transformedChunk);
-          }
-        },
-      }),
-    );
+              controller.enqueue(transformedChunk);
+            }
+          },
+        }),
+      );
   }
 
   async getFullOutput() {

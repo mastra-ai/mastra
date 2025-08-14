@@ -348,6 +348,7 @@ export function createLLMExecutionStep({
   options,
   toolCallStreaming,
   controller,
+  objectOptions,
 }: OuterLLMRun) {
   return createStep({
     id: 'llm-execution',
@@ -379,6 +380,7 @@ export function createLLMExecutionStep({
             modelSettings,
             telemetry_settings,
             includeRawChunks,
+            objectOptions,
             onResult: ({
               warnings: warningsFromStream,
               request: requestFromStream,
