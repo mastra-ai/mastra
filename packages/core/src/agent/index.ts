@@ -9,8 +9,7 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
-import { MastraLLM } from '../llm/model';
-import type { MastraLLMBase } from '../llm/model';
+import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
   GenerateTextWithMessagesArgs,
@@ -23,8 +22,8 @@ import type {
   ToolSet,
   OriginalStreamTextOnFinishEventArg,
   OriginalStreamObjectOnFinishEventArg,
-  TripwireProperties,
 } from '../llm/model/base.types';
+import type { TripwireProperties } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -563,7 +562,7 @@ export class Agent<
   }: {
     runtimeContext?: RuntimeContext;
     model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
-  } = {}): MastraLLMBase | Promise<MastraLLMBase> {
+  } = {}): MastraLLMV1 | Promise<MastraLLMV1> {
     // If model is provided, resolve it; otherwise use the agent's model
     const modelToUse = model
       ? typeof model === 'function'
@@ -572,7 +571,7 @@ export class Agent<
       : this.getModel({ runtimeContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
-      const llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
+      const llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
 
       // Apply stored primitives if available
       if (this.#primitives) {
@@ -809,16 +808,16 @@ export class Agent<
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
           ? await Promise.all([
-              memory
-                .rememberMessages({
-                  threadId,
-                  resourceId,
-                  config: memoryConfig,
-                  vectorMessageSearch: messageList.getLatestUserContent() || '',
-                })
-                .then((r: any) => r.messagesV2),
-              memory.getSystemMessage({ threadId, memoryConfig }),
-            ])
+            memory
+              .rememberMessages({
+                threadId,
+                resourceId,
+                config: memoryConfig,
+                vectorMessageSearch: messageList.getLatestUserContent() || '',
+              })
+              .then((r: any) => r.messagesV2),
+            memory.getSystemMessage({ threadId, memoryConfig }),
+          ])
           : [[], null];
 
       this.logger.debug('Fetched messages from memory', {
@@ -1533,12 +1532,12 @@ export class Agent<
         let [memoryMessages, memorySystemMessage] = await Promise.all([
           existingThread
             ? this.getMemoryMessages({
-                resourceId,
-                threadId: threadObject.id,
-                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-                memoryConfig,
-                runtimeContext,
-              })
+              resourceId,
+              threadId: threadObject.id,
+              vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+              memoryConfig,
+              runtimeContext,
+            })
             : [],
           memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
         ]);
@@ -1910,11 +1909,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     before: () => Promise<
       Omit<
         Output extends undefined
-          ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-          : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-              output?: Output;
-              experimental_output?: never;
-            },
+        ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+        : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+          output?: Output;
+          experimental_output?: never;
+        },
         'runId'
       > & { runId: string } & TripwireProperties
     >;
@@ -1923,7 +1922,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
     }) => Promise<void>;
-    llm: MastraLLMBase;
+    llm: MastraLLMV1;
   }>;
   private prepareLLMOptions<
     Tools extends ToolSet,
@@ -1936,11 +1935,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     before: () => Promise<
       Omit<
         Output extends undefined
-          ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-          : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-              output?: Output;
-              experimental_output?: never;
-            },
+        ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+        : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+          output?: Output;
+          experimental_output?: never;
+        },
         'runId'
       > & { runId: string } & TripwireProperties
     >;
@@ -1949,7 +1948,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
     }) => Promise<void>;
-    llm: MastraLLMBase;
+    llm: MastraLLMV1;
   }>;
   private async prepareLLMOptions<
     Tools extends ToolSet,
@@ -1962,35 +1961,35 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     },
   ): Promise<{
     before:
-      | (() => Promise<
-          Omit<
-            Output extends undefined
-              ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-              : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-                  output?: Output;
-                  experimental_output?: never;
-                },
-            'runId'
-          > & { runId: string } & TripwireProperties
-        >)
-      | (() => Promise<
-          Omit<
-            Output extends undefined
-              ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-              : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-                  output?: Output;
-                  experimental_output?: never;
-                },
-            'runId'
-          > & { runId: string } & TripwireProperties
-        >);
+    | (() => Promise<
+      Omit<
+        Output extends undefined
+        ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+        : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+          output?: Output;
+          experimental_output?: never;
+        },
+        'runId'
+      > & { runId: string } & TripwireProperties
+    >)
+    | (() => Promise<
+      Omit<
+        Output extends undefined
+        ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+        : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+          output?: Output;
+          experimental_output?: never;
+        },
+        'runId'
+      > & { runId: string } & TripwireProperties
+    >);
     after:
-      | ((args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>)
-      | ((args: {
-          result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
-          outputText: string;
-        }) => Promise<void>);
-    llm: MastraLLMBase;
+    | ((args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>)
+    | ((args: {
+      result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
+      outputText: string;
+    }) => Promise<void>);
+    llm: MastraLLMV1;
   }> {
     const {
       context,
@@ -2137,10 +2136,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       }:
         | { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string; structuredOutput?: boolean }
         | {
-            result: StreamReturn<any, Output, ExperimentalOutput>;
-            outputText: string;
-            structuredOutput?: boolean;
-          }) => {
+          result: StreamReturn<any, Output, ExperimentalOutput>;
+          outputText: string;
+          structuredOutput?: boolean;
+        }) => {
         await after({
           result,
           outputText,
@@ -2288,10 +2287,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-          ? z.infer<OUTPUT>
-          : EXPERIMENTAL_OUTPUT extends ZodSchema
-            ? z.infer<EXPERIMENTAL_OUTPUT>
-            : unknown
+        ? z.infer<OUTPUT>
+        : EXPERIMENTAL_OUTPUT extends ZodSchema
+        ? z.infer<EXPERIMENTAL_OUTPUT>
+        : unknown
       >['experimental_partialOutputStream'];
     }
   >;
@@ -2443,26 +2442,26 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
   ): MastraAgentStream<
     Output extends ZodSchema
-      ? z.infer<Output>
-      : StructuredOutput extends ZodSchema
-        ? z.infer<StructuredOutput>
-        : unknown
+    ? z.infer<Output>
+    : StructuredOutput extends ZodSchema
+    ? z.infer<StructuredOutput>
+    : unknown
   > {
     type ResolvedOutput = Output extends ZodSchema
       ? z.infer<Output>
       : StructuredOutput extends ZodSchema
-        ? z.infer<StructuredOutput>
-        : unknown;
+      ? z.infer<StructuredOutput>
+      : unknown;
     const defaultStreamOptionsPromise = this.getDefaultVNextStreamOptions<Output, StructuredOutput>({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
     return new MastraAgentStream<
       Output extends ZodSchema
-        ? z.infer<Output>
-        : StructuredOutput extends ZodSchema
-          ? z.infer<StructuredOutput>
-          : unknown
+      ? z.infer<Output>
+      : StructuredOutput extends ZodSchema
+      ? z.infer<StructuredOutput>
+      : unknown
     >({
       getOptions: async () => {
         const defaultStreamOptions = await defaultStreamOptionsPromise;

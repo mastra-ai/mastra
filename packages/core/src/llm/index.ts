@@ -45,26 +45,26 @@ export type StructuredOutputType = 'array' | 'string' | 'number' | 'object' | 'b
 
 export type StructuredOutputArrayItem =
   | {
-      type: BaseStructuredOutputType;
-    }
+    type: BaseStructuredOutputType;
+  }
   | {
-      type: 'object';
-      items: StructuredOutput;
-    };
+    type: 'object';
+    items: StructuredOutput;
+  };
 
 export type StructuredOutput = {
   [key: string]:
-    | {
-        type: BaseStructuredOutputType;
-      }
-    | {
-        type: 'object';
-        items: StructuredOutput;
-      }
-    | {
-        type: 'array';
-        items: StructuredOutputArrayItem;
-      };
+  | {
+    type: BaseStructuredOutputType;
+  }
+  | {
+    type: 'object';
+    items: StructuredOutput;
+  }
+  | {
+    type: 'array';
+    items: StructuredOutputArrayItem;
+  };
 };
 
 export type {
@@ -74,8 +74,8 @@ export type {
   GenerateTextResult,
   StreamObjectResult,
   StreamTextResult,
-  TripwireProperties,
 } from './model/base.types';
+export type { TripwireProperties } from './model/shared.types';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
