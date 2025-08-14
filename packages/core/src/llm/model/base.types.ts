@@ -25,7 +25,6 @@ import type { inferOutput, TripwireProperties } from './shared.types';
 
 export type { ToolSet } from 'ai';
 
-
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;
   telemetry?: TelemetrySettings;

@@ -808,16 +808,16 @@ export class Agent<
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
           ? await Promise.all([
-            memory
-              .rememberMessages({
-                threadId,
-                resourceId,
-                config: memoryConfig,
-                vectorMessageSearch: messageList.getLatestUserContent() || '',
-              })
-              .then((r: any) => r.messagesV2),
-            memory.getSystemMessage({ threadId, memoryConfig }),
-          ])
+              memory
+                .rememberMessages({
+                  threadId,
+                  resourceId,
+                  config: memoryConfig,
+                  vectorMessageSearch: messageList.getLatestUserContent() || '',
+                })
+                .then((r: any) => r.messagesV2),
+              memory.getSystemMessage({ threadId, memoryConfig }),
+            ])
           : [[], null];
 
       this.logger.debug('Fetched messages from memory', {
@@ -1532,12 +1532,12 @@ export class Agent<
         let [memoryMessages, memorySystemMessage] = await Promise.all([
           existingThread
             ? this.getMemoryMessages({
-              resourceId,
-              threadId: threadObject.id,
-              vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-              memoryConfig,
-              runtimeContext,
-            })
+                resourceId,
+                threadId: threadObject.id,
+                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                memoryConfig,
+                runtimeContext,
+              })
             : [],
           memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
         ]);
@@ -1909,11 +1909,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     before: () => Promise<
       Omit<
         Output extends undefined
-        ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
+          ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+          : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+              output?: Output;
+              experimental_output?: never;
+            },
         'runId'
       > & { runId: string } & TripwireProperties
     >;
@@ -1935,11 +1935,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     before: () => Promise<
       Omit<
         Output extends undefined
-        ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
+          ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+          : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+              output?: Output;
+              experimental_output?: never;
+            },
         'runId'
       > & { runId: string } & TripwireProperties
     >;
@@ -1961,34 +1961,34 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     },
   ): Promise<{
     before:
-    | (() => Promise<
-      Omit<
-        Output extends undefined
-        ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
-        'runId'
-      > & { runId: string } & TripwireProperties
-    >)
-    | (() => Promise<
-      Omit<
-        Output extends undefined
-        ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-        : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-          output?: Output;
-          experimental_output?: never;
-        },
-        'runId'
-      > & { runId: string } & TripwireProperties
-    >);
+      | (() => Promise<
+          Omit<
+            Output extends undefined
+              ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+              : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+                  output?: Output;
+                  experimental_output?: never;
+                },
+            'runId'
+          > & { runId: string } & TripwireProperties
+        >)
+      | (() => Promise<
+          Omit<
+            Output extends undefined
+              ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+              : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+                  output?: Output;
+                  experimental_output?: never;
+                },
+            'runId'
+          > & { runId: string } & TripwireProperties
+        >);
     after:
-    | ((args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>)
-    | ((args: {
-      result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
-      outputText: string;
-    }) => Promise<void>);
+      | ((args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>)
+      | ((args: {
+          result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
+          outputText: string;
+        }) => Promise<void>);
     llm: MastraLLMV1;
   }> {
     const {
@@ -2136,10 +2136,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       }:
         | { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string; structuredOutput?: boolean }
         | {
-          result: StreamReturn<any, Output, ExperimentalOutput>;
-          outputText: string;
-          structuredOutput?: boolean;
-        }) => {
+            result: StreamReturn<any, Output, ExperimentalOutput>;
+            outputText: string;
+            structuredOutput?: boolean;
+          }) => {
         await after({
           result,
           outputText,
@@ -2287,10 +2287,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-        ? z.infer<OUTPUT>
-        : EXPERIMENTAL_OUTPUT extends ZodSchema
-        ? z.infer<EXPERIMENTAL_OUTPUT>
-        : unknown
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
       >['experimental_partialOutputStream'];
     }
   >;
@@ -2442,26 +2442,26 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
   ): MastraAgentStream<
     Output extends ZodSchema
-    ? z.infer<Output>
-    : StructuredOutput extends ZodSchema
-    ? z.infer<StructuredOutput>
-    : unknown
+      ? z.infer<Output>
+      : StructuredOutput extends ZodSchema
+        ? z.infer<StructuredOutput>
+        : unknown
   > {
     type ResolvedOutput = Output extends ZodSchema
       ? z.infer<Output>
       : StructuredOutput extends ZodSchema
-      ? z.infer<StructuredOutput>
-      : unknown;
+        ? z.infer<StructuredOutput>
+        : unknown;
     const defaultStreamOptionsPromise = this.getDefaultVNextStreamOptions<Output, StructuredOutput>({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
     return new MastraAgentStream<
       Output extends ZodSchema
-      ? z.infer<Output>
-      : StructuredOutput extends ZodSchema
-      ? z.infer<StructuredOutput>
-      : unknown
+        ? z.infer<Output>
+        : StructuredOutput extends ZodSchema
+          ? z.infer<StructuredOutput>
+          : unknown
     >({
       getOptions: async () => {
         const defaultStreamOptions = await defaultStreamOptionsPromise;
