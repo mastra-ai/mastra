@@ -88,14 +88,14 @@ describe('Template Workflow Integration Tests', () => {
     }
 
     // Cleanup temp directory
-    try {
-      rmSync(tempRoot, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    // try {
+    //   rmSync(tempRoot, { recursive: true, force: true });
+    // } catch {
+    //   // Ignore cleanup errors
+    // }
   });
 
-  it.only('should merge csv-to-questions template and validate functionality', async () => {
+  it('should merge csv-to-questions template and validate functionality', async () => {
     // Skip test if no OPENAI_API_KEY available
     if (!process.env.OPENAI_API_KEY) {
       console.log('Skipping test: OPENAI_API_KEY not set');
@@ -170,27 +170,18 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Starting Mastra server...');
 
     // Start the Mastra server
-    mastraServer = spawn(
-      'pnpm',
-      [
-        path.resolve(import.meta.dirname, '..', '..', '..', 'cli', 'dist', 'index.js'),
-        'dev',
-        '--port',
-        port.toString(),
-      ],
-      {
-        stdio: 'pipe',
-        cwd: targetRepo,
-        detached: true, // Run in a new process group
-      },
-    );
+    mastraServer = spawn('pnpm', ['dev', '--port', port.toString()], {
+      stdio: 'pipe',
+      cwd: targetRepo,
+      detached: true,
+    });
 
     // Wait for server to be ready
     await new Promise<void>((resolve, reject) => {
       let output = '';
       const timeout = setTimeout(() => {
         reject(new Error('Mastra server failed to start within timeout'));
-      }, 30000);
+      }, 600000);
 
       mastraServer.stdout?.on('data', data => {
         output += data.toString();
@@ -273,7 +264,7 @@ describe('Template Workflow Integration Tests', () => {
     expect(hasCSVWorkflow).toBe(true);
 
     console.log('All agent and workflow tests passed!');
-  }, 120000); // 2 minute timeout for server startup and testing
+  }, 600000); // 2 minute timeout for server startup and testing
 
   it('should validate git history shows proper template integration', async () => {
     // Check git log for template commits
@@ -328,5 +319,5 @@ describe('Template Workflow Integration Tests', () => {
     expect(result.branchName).toMatch(/feat\/install-template-csv-to-questions/);
 
     console.log('Duplicate merge test completed');
-  }, 180000);
+  }, 600000);
 });

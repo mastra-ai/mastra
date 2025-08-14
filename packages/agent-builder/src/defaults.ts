@@ -629,7 +629,7 @@ export const tools = await mcpClient.getTools();
               }),
             )
             .describe('File edit operations to perform'),
-          createBackup: z.boolean().default(true).describe('Create backup files before editing'),
+          createBackup: z.boolean().default(false).describe('Create backup files before editing'),
         }),
         outputSchema: z.object({
           success: z.boolean(),

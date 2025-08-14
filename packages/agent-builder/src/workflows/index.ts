@@ -977,6 +977,7 @@ const validationAndFixStep = createStep({
         }),
       )
       .optional(),
+    maxIterations: z.number().optional().default(3),
   }),
   outputSchema: z.object({
     success: z.boolean(),
@@ -991,8 +992,10 @@ const validationAndFixStep = createStep({
   }),
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Validation and fix step starting...');
-    const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved } = inputData;
+    const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 3 } = inputData;
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+
+    let currentIteration = 1; // Declare at function scope for error handling
 
     try {
       const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath, 'template');
@@ -1010,7 +1013,7 @@ const validationAndFixStep = createStep({
 
 2. **Fix validation errors systematically**:
    - Use readFile to examine files with errors
-   - Use writeFile to fix issues like missing imports, incorrect paths, syntax errors
+   - Use multiEdit to fix issues like missing imports, incorrect paths, syntax errors
    - Use listDirectory to understand project structure when fixing import paths
    - Update file contents to resolve TypeScript and linting issues
 
@@ -1049,46 +1052,81 @@ Be thorough and methodical. Always use listDirectory to verify actual file exist
         tools: {
           validateCode: allTools.validateCode,
           readFile: allTools.readFile,
-          writeFile: allTools.writeFile,
+          multiEdit: allTools.multiEdit,
           listDirectory: allTools.listDirectory,
           executeCommand: allTools.executeCommand,
         },
       });
 
-      console.log('Starting validation and fix agent...');
-
-      const result = await validationAgent.stream(
-        `Please validate the template integration and fix any errors found in the project at ${targetPath}. The template "${slug}" (${commitSha.substring(0, 7)}) was just integrated and may have validation issues that need fixing.
-
-Start by running validateCode with all validation types to get a complete picture of any issues, then systematically fix them.`,
-        { experimental_output: z.object({ success: z.boolean() }) },
-      );
+      console.log('Starting validation and fix agent with internal loop...');
 
       let validationResults = {
         valid: false,
         errorsFixed: 0,
-        remainingErrors: 0,
+        remainingErrors: 1, // Start with 1 to enter the loop
+        iteration: currentIteration,
       };
 
-      for await (const chunk of result.fullStream) {
-        if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
-          console.log({
-            type: chunk.type,
-            msgId: chunk.messageId,
-          });
-        } else {
-          console.log(JSON.stringify(chunk, null, 2));
-        }
-        if (chunk.type === 'tool-result') {
-          // Track validation results
-          if (chunk.toolName === 'validateCode') {
-            const toolResult = chunk.result as any;
-            if (toolResult?.summary) {
-              validationResults.remainingErrors = toolResult.summary.totalErrors || 0;
-              validationResults.valid = toolResult.valid || false;
+      // Loop up to maxIterations times or until all errors are fixed
+      while (validationResults.remainingErrors > 0 && currentIteration <= maxIterations) {
+        console.log(`\n=== Validation Iteration ${currentIteration} ===`);
+
+        const iterationPrompt =
+          currentIteration === 1
+            ? `Please validate the template integration and fix any errors found in the project at ${targetPath}. The template "${slug}" (${commitSha.substring(0, 7)}) was just integrated and may have validation issues that need fixing.
+
+Start by running validateCode with all validation types to get a complete picture of any issues, then systematically fix them.`
+            : `Continue validation and fixing for the template integration at ${targetPath}. This is iteration ${currentIteration} of validation.
+
+Previous iterations may have fixed some issues, so start by re-running validateCode to see the current state, then fix any remaining issues.`;
+
+        const result = await validationAgent.stream(iterationPrompt, {
+          experimental_output: z.object({ success: z.boolean() }),
+        });
+
+        let iterationErrors = 0;
+        let previousErrors = validationResults.remainingErrors;
+
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+            console.log({
+              type: chunk.type,
+              msgId: chunk.messageId,
+              iteration: currentIteration,
+            });
+          } else {
+            console.log(JSON.stringify(chunk, null, 2));
+          }
+          if (chunk.type === 'tool-result') {
+            // Track validation results
+            if (chunk.toolName === 'validateCode') {
+              const toolResult = chunk.result as any;
+              if (toolResult?.summary) {
+                iterationErrors = toolResult.summary.totalErrors || 0;
+                console.log(`Iteration ${currentIteration}: Found ${iterationErrors} errors`);
+              }
             }
           }
         }
+
+        // Update results for this iteration
+        validationResults.remainingErrors = iterationErrors;
+        validationResults.errorsFixed += Math.max(0, previousErrors - iterationErrors);
+        validationResults.valid = iterationErrors === 0;
+        validationResults.iteration = currentIteration;
+
+        console.log(`Iteration ${currentIteration} complete: ${iterationErrors} errors remaining`);
+
+        // Break if no errors or max iterations reached
+        if (iterationErrors === 0) {
+          console.log(`✅ All validation issues resolved in ${currentIteration} iterations!`);
+          break;
+        } else if (currentIteration >= maxIterations) {
+          console.log(`⚠️  Max iterations (${maxIterations}) reached. ${iterationErrors} errors still remaining.`);
+          break;
+        }
+
+        currentIteration++;
       }
 
       // Commit the validation fixes
@@ -1106,8 +1144,12 @@ Start by running validateCode with all validation types to get a complete pictur
       return {
         success: true,
         applied: true,
-        message: `Validation and fixes completed for ${slug}. ${validationResults.valid ? 'All issues resolved!' : `${validationResults.remainingErrors} issues remaining`}`,
-        validationResults,
+        message: `Validation completed in ${currentIteration} iteration${currentIteration > 1 ? 's' : ''}. ${validationResults.valid ? 'All issues resolved!' : `${validationResults.remainingErrors} issues remaining`}`,
+        validationResults: {
+          valid: validationResults.valid,
+          errorsFixed: validationResults.errorsFixed,
+          remainingErrors: validationResults.remainingErrors,
+        },
       };
     } catch (error) {
       console.error('Validation and fix failed:', error);
