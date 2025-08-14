@@ -184,7 +184,7 @@ console.log("Structured Output:", response.object);
 
 ### Using Tools
 
-If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` property instead of `output`. Here's how:
+If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` or `structuredOutput` property instead of `output`. Here's how:
 
 ```typescript showLineNumbers copy
 const schema = z.object({
@@ -192,7 +192,7 @@ const schema = z.object({
   keywords: z.array(z.string()),
 });
 
-const response = await testAgent.generate(
+const responseWithExperimentalOutput = await testAgent.generate(
   [
     {
       role: "user",
@@ -206,7 +206,25 @@ const response = await testAgent.generate(
   },
 );
 
-console.log("Structured Output:", response.object);
+console.log("Structured Output:", responseWithExperimentalOutput.object);
+
+const responseWithStructuredOutput = await testAgent.generate(
+  [
+    {
+      role: "user",
+      content:
+        "Please analyze this repository and provide a summary and keywords...",
+    },
+  ],
+  {
+    structuredOutput: {
+      schema,
+      model,
+    }
+  },
+);
+
+console.log("Structured Output:", responseWithStructuredOutput.object);
 ```
 
 <br />

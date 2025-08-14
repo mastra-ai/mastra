@@ -240,7 +240,7 @@ class ResponseLengthLimiter implements Processor {
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
-    // Track cumulative length in state
+    // Track cumulative length in state, each processor gets its own state
     if (!state.cumulativeLength) {
       state.cumulativeLength = 0;
     }
