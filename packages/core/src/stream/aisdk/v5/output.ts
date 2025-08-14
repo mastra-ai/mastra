@@ -1,7 +1,7 @@
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
-import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
@@ -9,7 +9,8 @@ import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
 import { transformResponse, transformSteps } from './output-helpers';
-import { convertMastraChunkToAISDKv5, type OutputChunkType } from './transform';
+import { convertMastraChunkToAISDKv5 } from './transform';
+import type { OutputChunkType } from './transform';
 
 type AISDKV5OutputStreamOptions = {
   toolCallStreaming?: boolean;

@@ -5,7 +5,7 @@ import type {
   LanguageModelV2ProviderDefinedTool,
 } from '@ai-sdk/provider-v5';
 import { stepCountIs, tool } from 'ai-v5';
-import type { TextStreamPart, Tool } from 'ai-v5';
+import type { TextStreamPart } from 'ai-v5';
 import {
   convertArrayToReadableStream,
   convertReadableStreamToArray,
@@ -35,7 +35,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       const abortController = new AbortController();
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel({
           stream: convertArrayToReadableStream([
@@ -124,7 +124,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: new MockLanguageModelV2({
           doStream: async ({ providerOptions }) => {
@@ -6791,7 +6791,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           model: new MockLanguageModelV2({
             doStream: async () => ({
               stream: new ReadableStream({
-                start(controller) {
+                start() {
                   streamCalls++;
                   pullCalls = 0;
                 },

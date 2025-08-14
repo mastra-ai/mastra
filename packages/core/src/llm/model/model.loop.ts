@@ -132,9 +132,8 @@ export class MastraLLMVNext extends MastraBase {
     telemetry,
     threadId,
     resourceId,
-    runtimeContext,
     objectOptions,
-    ...rest
+    // ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): MastraModelOutput {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
@@ -267,6 +266,7 @@ export class MastraLLMVNext extends MastraBase {
             });
           },
         },
+        // ...rest,
         // TODO:
         // experimental_output: schema
         //     ? (Output.object({
