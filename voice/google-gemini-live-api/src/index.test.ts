@@ -370,9 +370,9 @@ describe('GeminiLiveVoice', () => {
       // Verify a session.update was sent with the requested voice
       const updateMsg = sentPayloads.find((p: any) => p.session && p.session.generation_config);
       expect(updateMsg).toBeDefined();
-      expect(
-        updateMsg.session.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name,
-      ).toBe('Puck');
+      expect(updateMsg.session.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe(
+        'Puck',
+      );
 
       // Verify the client_content was sent with the text
       const clientContent = sentPayloads.find((p: any) => p.client_content);
