@@ -12,21 +12,29 @@ export type StreamInternal = {
   currentDate?: () => Date;
 };
 
+export type LoopConfig = {
+  onChunk?: (chunk: ChunkType) => Promise<void> | void;
+  onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
+  onFinish?: (event: any) => Promise<void> | void;
+  onStepFinish?: (event: any) => Promise<void> | void;
+  onAbort?: (event: any) => Promise<void> | void;
+  activeTools?: Array<keyof ToolSet> | undefined;
+  abortSignal?: AbortSignal;
+};
+
 export type LoopOptions = {
   model: LanguageModelV2;
   logger?: IMastraLogger;
   runId?: string;
   idGenerator?: MastraIdGenerator;
+  toolCallStreaming?: boolean;
   telemetry_settings?: TelemetrySettings;
   messageList: MessageList;
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<any>;
-  options?: {
-    abortSignal?: AbortSignal;
-    activeTools?: string[];
-  };
+  options?: LoopConfig;
   providerOptions?: SharedV2ProviderOptions;
   tools: ToolSet;
 };
