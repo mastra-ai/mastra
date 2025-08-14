@@ -3,8 +3,8 @@ import { promisify } from 'util';
 import { spawn as nodeSpawn } from 'child_process';
 import { createRequire } from 'module';
 import semver from 'semver';
-import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
-import { join, dirname, relative } from 'path';
+import { readFile, writeFile, mkdir, stat, readdir, copyFile } from 'fs/promises';
+import { join, dirname, relative, basename } from 'path';
 
 export const exec = promisify(execNodejs);
 
@@ -154,4 +154,55 @@ export async function getMastraTemplate(slug: string) {
     throw new Error(`Template "${slug}" not found. Available templates: ${templates.map(t => t.slug).join(', ')}`);
   }
   return template;
+}
+
+// Git commit tracking utility
+export async function logGitState(targetPath: string, label: string): Promise<void> {
+  try {
+    const gitStatusResult = await exec('git status --porcelain', { cwd: targetPath });
+    const gitLogResult = await exec('git log --oneline -3', { cwd: targetPath });
+    const gitCountResult = await exec('git rev-list --count HEAD', { cwd: targetPath });
+
+    console.log(`📊 Git state ${label}:`);
+    console.log('Status:', gitStatusResult.stdout.trim() || 'Clean working directory');
+    console.log('Recent commits:', gitLogResult.stdout.trim());
+    console.log('Total commits:', gitCountResult.stdout.trim());
+  } catch (gitError) {
+    console.warn(`Could not get git state ${label}:`, gitError);
+  }
+}
+
+// File conflict resolution utilities (for future use)
+export async function backupAndReplaceFile(sourceFile: string, targetFile: string): Promise<void> {
+  // Create backup of existing file
+  const backupFile = `${targetFile}.backup-${Date.now()}`;
+  await copyFile(targetFile, backupFile);
+  console.log(`📦 Created backup: ${basename(backupFile)}`);
+
+  // Replace with template file
+  await copyFile(sourceFile, targetFile);
+  console.log(`🔄 Replaced file with template version (backup created)`);
+}
+
+export async function renameAndCopyFile(sourceFile: string, targetFile: string): Promise<string> {
+  const { copyFile } = await import('fs/promises');
+  const { existsSync } = await import('fs');
+  const { basename, extname, dirname, resolve } = await import('path');
+
+  // Find unique filename
+  let counter = 1;
+  let uniqueTargetFile = targetFile;
+  const baseName = basename(targetFile, extname(targetFile));
+  const extension = extname(targetFile);
+  const directory = dirname(targetFile);
+
+  while (existsSync(uniqueTargetFile)) {
+    const uniqueName = `${baseName}.template-${counter}${extension}`;
+    uniqueTargetFile = resolve(directory, uniqueName);
+    counter++;
+  }
+
+  await copyFile(sourceFile, uniqueTargetFile);
+  console.log(`📝 Copied with unique name: ${basename(uniqueTargetFile)}`);
+  return uniqueTargetFile;
 }

@@ -8,7 +8,15 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { existsSync } from 'fs';
 import { AgentBuilderDefaults } from '../defaults';
-import { exec, getMastraTemplate, kindWeight, spawnSWPM } from '../utils';
+import {
+  exec,
+  getMastraTemplate,
+  kindWeight,
+  spawnSWPM,
+  logGitState,
+  backupAndReplaceFile,
+  renameAndCopyFile,
+} from '../utils';
 import { AgentBuilder } from '..';
 import type { TemplateUnit } from '../types';
 import { ApplyResultSchema, MergeInputSchema, TemplateUnitSchema } from '../types';
@@ -634,6 +642,9 @@ Template information:
       console.log(`Creating task list with ${tasks.length} tasks...`);
       await AgentBuilderDefaults.manageTaskList({ action: 'create', tasks });
 
+      // Log git state before merge operations
+      await logGitState(targetPath, 'before intelligent merge');
+
       // Process tasks systematically
       const result = await agentBuilder.stream(`
 You need to work through a task list to complete the template integration.
@@ -689,6 +700,10 @@ Start by listing your tasks and work through them systematically!
           console.log(JSON.stringify(chunk, null, 2));
         }
       }
+
+      // Log git state after merge operations
+      await logGitState(targetPath, 'after intelligent merge');
+
       // TODO: Extract actual conflict resolution details from agent execution
       // For now, create placeholder resolution data based on input conflicts
       const conflictResolutions = conflicts.map(conflict => ({
@@ -716,6 +731,25 @@ Start by listing your tasks and work through them systematically!
     }
   },
 });
+
+// Helper function to determine conflict resolution strategy
+const determineConflictStrategy = (
+  unit: { kind: string; id: string },
+  targetFile: string,
+): 'skip' | 'backup-and-replace' | 'rename' => {
+  // For now, always skip conflicts to avoid disrupting existing files
+  // TODO: Enable advanced strategies based on user feedback
+  return 'skip';
+
+  // Future logic (currently disabled):
+  // if (['agent', 'workflow', 'network'].includes(unit.kind)) {
+  //   return 'backup-and-replace';
+  // }
+  // if (unit.kind === 'tool') {
+  //   return 'rename';
+  // }
+  // return 'backup-and-replace';
+};
 
 // Step 6: Programmatic File Copy Step - copies template files to target project
 const programmaticFileCopyStep = createStep({
@@ -899,15 +933,73 @@ const programmaticFileCopyStep = createStep({
 
         const targetFile = resolve(targetPath, targetDir, convertedFileName);
 
-        // Check if target file already exists (conflict)
+        // Handle file conflicts with strategy-based resolution
         if (existsSync(targetFile)) {
-          conflicts.push({
-            unit: { kind: unit.kind, id: unit.id },
-            issue: `Target file already exists: ${convertedFileName}`,
-            sourceFile: unit.file,
-            targetFile: convertedFileName,
-          });
-          continue;
+          const strategy = determineConflictStrategy(unit, targetFile);
+          console.log(`File exists: ${convertedFileName}, using strategy: ${strategy}`);
+
+          switch (strategy) {
+            case 'skip':
+              conflicts.push({
+                unit: { kind: unit.kind, id: unit.id },
+                issue: `File exists - skipped: ${convertedFileName}`,
+                sourceFile: unit.file,
+                targetFile: convertedFileName,
+              });
+              console.log(`⏭️ Skipped ${unit.kind} "${unit.id}": file already exists`);
+              continue;
+
+            case 'backup-and-replace':
+              try {
+                await backupAndReplaceFile(sourceFile, targetFile);
+                copiedFiles.push({
+                  source: sourceFile,
+                  destination: targetFile,
+                  unit: { kind: unit.kind, id: unit.id },
+                });
+                console.log(
+                  `🔄 Replaced ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName} (backup created)`,
+                );
+                continue;
+              } catch (backupError) {
+                conflicts.push({
+                  unit: { kind: unit.kind, id: unit.id },
+                  issue: `Failed to backup and replace: ${backupError instanceof Error ? backupError.message : String(backupError)}`,
+                  sourceFile: unit.file,
+                  targetFile: convertedFileName,
+                });
+                continue;
+              }
+
+            case 'rename':
+              try {
+                const uniqueTargetFile = await renameAndCopyFile(sourceFile, targetFile);
+                copiedFiles.push({
+                  source: sourceFile,
+                  destination: uniqueTargetFile,
+                  unit: { kind: unit.kind, id: unit.id },
+                });
+                console.log(`📝 Renamed ${unit.kind} "${unit.id}": ${unit.file} → ${basename(uniqueTargetFile)}`);
+                continue;
+              } catch (renameError) {
+                conflicts.push({
+                  unit: { kind: unit.kind, id: unit.id },
+                  issue: `Failed to rename and copy: ${renameError instanceof Error ? renameError.message : String(renameError)}`,
+                  sourceFile: unit.file,
+                  targetFile: convertedFileName,
+                });
+                continue;
+              }
+
+            default:
+              conflicts.push({
+                unit: { kind: unit.kind, id: unit.id },
+                issue: `Unknown conflict strategy: ${strategy}`,
+                sourceFile: unit.file,
+                targetFile: convertedFileName,
+              });
+              continue;
+          }
         }
 
         // Ensure target directory exists
@@ -1018,6 +1110,26 @@ const validationAndFixStep = createStep({
     console.log('Validation and fix step starting...');
     const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 3 } = inputData;
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+
+    // Skip validation if no changes were made
+    const hasChanges = copiedFiles.length > 0 || (conflictsResolved && conflictsResolved.length > 0);
+    if (!hasChanges) {
+      console.log('⏭️ Skipping validation - no files copied or conflicts resolved');
+      return {
+        success: true,
+        applied: false,
+        message: 'No changes to validate - template already integrated or no conflicts resolved',
+        validationResults: {
+          valid: true,
+          errorsFixed: 0,
+          remainingErrors: 0,
+        },
+      };
+    }
+
+    console.log(
+      `📋 Changes detected: ${copiedFiles.length} files copied, ${conflictsResolved?.length || 0} conflicts resolved`,
+    );
 
     let currentIteration = 1; // Declare at function scope for error handling
 
