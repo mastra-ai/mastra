@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy } from 'lucide-react';
+import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, EyeIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -144,6 +144,11 @@ const links = [
     name: 'Scorers',
     url: '/scorers',
     icon: GaugeIcon,
+  },
+  {
+    name: 'AI Telemetry',
+    url: '/telemetry',
+    icon: EyeIcon,
   },
   {
     name: 'Runtime Context',

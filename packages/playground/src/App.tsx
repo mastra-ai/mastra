@@ -34,6 +34,7 @@ import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
+import Telemetry from './pages/telemetry';
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
@@ -65,6 +66,15 @@ function App() {
                 >
                   <Route path="/scorers" element={<Scorers />} />
                   <Route path="/scorers/:scorerId" element={<Scorer />} />
+                </Route>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/telemetry" element={<Telemetry />} />
                 </Route>
                 <Route
                   element={

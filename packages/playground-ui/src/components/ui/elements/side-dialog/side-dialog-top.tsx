@@ -33,13 +33,13 @@ export function SideDialogTop({ children, onNext, onPrevious, showInnerNav }: Si
                 // '[&>button]:text-[0.875rem] [&>button]:flex [&>button]:items-center [&>button]:px-[0.5rem] [&>button]:py-[0.8rem] [&>button]:leading-[1]',
               )}
             >
-              <Button onClick={handleOnNext} disabled={!onNext} variant="ghost">
-                Next
-                <ArrowUpIcon />
-              </Button>
               <Button onClick={handleOnPrevious} disabled={!onPrevious} variant="ghost">
                 Previous
                 <ArrowDownIcon />
+              </Button>
+              <Button onClick={handleOnNext} disabled={!onNext} variant="ghost">
+                Next
+                <ArrowUpIcon />
               </Button>
             </div>
           </>
