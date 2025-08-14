@@ -9,8 +9,7 @@ import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
-import { MastraLLM } from '../llm/model';
-import type { MastraLLMBase } from '../llm/model';
+import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
   GenerateTextWithMessagesArgs,
@@ -23,8 +22,8 @@ import type {
   ToolSet,
   OriginalStreamTextOnFinishEventArg,
   OriginalStreamObjectOnFinishEventArg,
-  TripwireProperties,
 } from '../llm/model/base.types';
+import type { TripwireProperties } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -47,7 +46,7 @@ import type { AgentVNextStreamOptions } from './agent.types';
 import type { InputProcessor } from './input-processor';
 import { runInputProcessors } from './input-processor/runner';
 import { MessageList } from './message-list';
-import type { MessageInput, UIMessageWithMetadata } from './message-list';
+import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -55,7 +54,6 @@ import type {
   MastraLanguageModel,
   AgentGenerateOptions,
   AgentStreamOptions,
-  AiMessageType,
   ToolsetsInput,
   ToolsInput,
   AgentMemoryOption,
@@ -564,7 +562,7 @@ export class Agent<
   }: {
     runtimeContext?: RuntimeContext;
     model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
-  } = {}): MastraLLMBase | Promise<MastraLLMBase> {
+  } = {}): MastraLLMV1 | Promise<MastraLLMV1> {
     // If model is provided, resolve it; otherwise use the agent's model
     const modelToUse = model
       ? typeof model === 'function'
@@ -573,7 +571,7 @@ export class Agent<
       : this.getModel({ runtimeContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
-      const llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
+      const llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
 
       // Apply stored primitives if available
       if (this.#primitives) {
@@ -1404,7 +1402,7 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+    messages: MessageListInput;
     runtimeContext: RuntimeContext;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
@@ -1927,7 +1925,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     options: AgentGenerateOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1952,14 +1950,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         output: ScorerRunOutputForAgent;
       };
     }>;
-    llm: MastraLLMBase;
+    llm: MastraLLMV1;
   }>;
   private prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     options: AgentStreamOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1984,14 +1982,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         output: ScorerRunOutputForAgent;
       };
     }>;
-    llm: MastraLLMBase;
+    llm: MastraLLMV1;
   }>;
   private async prepareLLMOptions<
     Tools extends ToolSet,
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
     },
@@ -2042,7 +2040,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             output: ScorerRunOutputForAgent;
           };
         }>);
-    llm: MastraLLMBase;
+    llm: MastraLLMV1;
   }> {
     const {
       context,
@@ -2210,15 +2208,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   }
 
   async generate(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
   async generate<OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
   async generate<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2228,7 +2226,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
@@ -2327,21 +2325,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
   ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2362,7 +2360,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
@@ -2502,7 +2500,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | undefined = undefined,
     StructuredOutput extends ZodSchema | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
   ): MastraAgentStream<
     Output extends ZodSchema
