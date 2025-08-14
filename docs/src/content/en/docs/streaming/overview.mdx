@@ -3,9 +3,9 @@ title: "Streaming Overview | Streaming | Mastra"
 description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
 ---
 
-# Streaming overview
+# Streaming Overview
 
-Mastra supports real-time, incremental responses from agents and workflows, so users see output as it’s generated instead of waiting for completion. This is useful for chat, long-form content, multi-step workflows, or any scenario where immediate feedback matters.
+Mastra supports real-time, incremental responses from agents and workflows, allowing users to see output as it’s generated instead of waiting for completion. This is useful for chat, long-form content, multi-step workflows, or any scenario where immediate feedback matters.
 
 ## Getting started
 
@@ -16,13 +16,13 @@ Mastra currently supports two streaming methods:
 
 ## Streaming with agents
 
-Use `.stream()` for real-time responses. Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
+You can pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
 
 A `textStream` breaks the response into chunks as it’s generated, allowing output to stream progressively instead of arriving all at once.
 
 ### Using `Agent.stream()`
 
-The `.stream()` method is the current stable streaming implementation for agents.
+This is the current stable API.
 
 ```typescript {3,7} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
@@ -38,9 +38,20 @@ for await (const chunk of stream.textStream) {
 
 > See [Agent.stream()](../../reference/agents/stream.mdx) for more information.
 
+### Output from `Agent.stream()`
+
+The output shows the generated response from the agent.
+
+```text
+Of course!
+To help you organize your day effectively, I need a bit more information.
+Here are some questions to consider:
+...
+```
+
 ### Using `Agent.streamVNext()`
 
-The `.streamVNext()` method is the experimental streaming API that provides enhanced capabilities and improved performance.
+This is the experimental API.
 
 ```typescript {3,7} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
@@ -55,3 +66,102 @@ for await (const chunk of stream.textStream) {
 ```
 
 > See [Agent.streamVNext()](../../reference/agents/streamVNext.mdx) for more information.
+
+### Output from `Agent.streamVNext()`
+
+The output shows the generated response from the agent.
+
+```text
+Of course!
+To help you organize your day effectively, I need a bit more information.
+Here are some questions to consider:
+...
+```
+
+## Streaming with workflows
+
+Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created.
+
+### Using `Run.stream()`
+
+This is the current stable API. It returns an object with a `stream` property containing `ReadableStream` events.
+
+```typescript {3,9} showLineNumbers copy
+const run = await testWorkflow.createRunAsync();
+
+const result = await run.stream({
+  inputData: {
+    value: "initial data"
+  }
+});
+
+for await (const chunk of result.stream) {
+  console.log(chunk);
+}
+```
+
+> See [Run.stream()](../../reference/workflows/run-methods/stream.mdx) for more information.
+
+### Output from `Run.stream()`
+
+The stable API event structure nests all data (except `type`) under `payload`.
+
+```typescript
+// ...
+{
+  type: 'step-start',
+  payload: {
+    id: 'step-1',
+    stepCallId: '0746ca4e-7595-446e-8b23-752ce7e7a584',
+    payload: { value: 'initial data' },
+    startedAt: 1755121714139,
+    status: 'running'
+  }
+}
+```
+
+### Using `Run.streamVNext()`
+
+This is the experimental API. It returns a `ReadableStream` of events directly.
+
+```typescript {3,9} showLineNumbers copy
+const run = await testWorkflow.createRunAsync();
+
+const stream = await run.streamVNext({
+  inputData: {
+    value: "initial data"
+  }
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+> See [Run.streamVNext()](../../reference/workflows/run-methods/streamVNext.mdx) for more information.
+
+### Output from `Run.streamVNext()`
+
+The experimental API event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
+
+```typescript
+// ...
+{
+  type: 'step-start',
+  runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
+  from: 'WORKFLOW',
+  payload: {
+    stepName: 'step-1',
+    args: { value: 'initial data' },
+    stepCallId: '8e15e618-be0e-4215-a5d6-08e58c152068',
+    startedAt: 1755121710066,
+    status: 'running'
+  }
+}
+```
+
+## Related
+
+- [Streaming events](./events.mdx)
+- [Using Agents](../agents/overview.mdx)
+- [Workflows overview](../workflows/overview.mdx)
