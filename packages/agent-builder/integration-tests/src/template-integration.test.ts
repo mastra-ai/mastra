@@ -155,7 +155,7 @@ describe('Template Workflow Integration Tests', () => {
     expect(hasTemplateScript).toBe(true);
 
     console.log('Template merge completed successfully');
-  }, 60000000); // 3 minute timeout for full workflow
+  }, 300000); // 5 minute timeout for full workflow
 
   it('should start Mastra server and validate both original and new agents work', async () => {
     // Skip test if no OPENAI_API_KEY available
@@ -178,7 +178,7 @@ describe('Template Workflow Integration Tests', () => {
       let output = '';
       const timeout = setTimeout(() => {
         reject(new Error('Mastra server failed to start within timeout'));
-      }, 600000);
+      }, 300000);
 
       mastraServer.stdout?.on('data', data => {
         output += data.toString();
@@ -262,7 +262,7 @@ describe('Template Workflow Integration Tests', () => {
     expect(hasCSVWorkflow).toBe(true);
 
     console.log('All agent and workflow tests passed!');
-  }, 600000); // 2 minute timeout for server startup and testing
+  }, 300000); // 5 minute timeout for server startup and testing
 
   it('should validate git history shows proper template integration', async () => {
     // Check git log for template commits
@@ -321,5 +321,5 @@ describe('Template Workflow Integration Tests', () => {
     }
 
     console.log('Duplicate merge test completed');
-  }, 600000);
+  }, 300000);
 });

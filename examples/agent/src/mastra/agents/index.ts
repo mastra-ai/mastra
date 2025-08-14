@@ -16,7 +16,6 @@ import {
 } from '@mastra/core/agent/input-processor/processors';
 import { MCPClient } from '@mastra/mcp';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const memory = new Memory();
 
