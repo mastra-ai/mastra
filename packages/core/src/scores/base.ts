@@ -336,10 +336,7 @@ class MastraScorer<
       runId = randomUUID();
     }
 
-    console.log('input', JSON.stringify(input, null, 2));
-
     const run = { ...input, runId };
-    console.log('run', JSON.stringify(run, null, 2));
 
     const workflow = this.toMastraWorkflow();
     const workflowRun = await workflow.createRunAsync();
