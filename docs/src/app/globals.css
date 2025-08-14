@@ -591,23 +591,11 @@ aside > div:nth-child(1) button {
   }
 }
 
-.nextra-toc div > p {
+.nextra-toc div {
   position: relative;
   color: var(--color-el-3);
   font-weight: 500;
-  padding-inline-start: 2.24rem;
-
-  &::before {
-    content: "";
-    position: absolute;
-    left: 12px;
-    bottom: 1;
-    width: 1rem;
-    height: 1rem;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-image: url("icons/on-this-page.svg");
-  }
+  --nextra-navbar-height: 20px;
 }
 
 .nextra-toc ul a {
