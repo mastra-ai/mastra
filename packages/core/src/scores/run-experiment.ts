@@ -1,9 +1,9 @@
 import type { CoreMessage } from 'ai';
 import pMap from 'p-map';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../agent';
+import { MastraError } from '../error';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer } from './base';
-import { MastraError } from '../error';
 
 type RunExperimentDataItem = {
   input: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
