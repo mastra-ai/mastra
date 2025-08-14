@@ -313,16 +313,12 @@ export async function streamGenerateHandler({
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
-    console.log('create final runtime context');
-
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
       ...Array.from(runtimeContext.entries()),
       ...Array.from(Object.entries(agentRuntimeContext ?? {})),
     ]);
 
     validateBody({ messages });
-
-    console.log('validated body, start streaming');
 
     const streamResult = await agent.stream(messages, {
       ...rest,
@@ -351,7 +347,6 @@ export async function streamGenerateHandler({
 
     return streamResponse;
   } catch (error) {
-    console.log('error streaming agent response===', error);
     return handleError(error, 'error streaming agent response');
   }
 }
@@ -417,17 +412,15 @@ export function updateAgentModelHandler({
 
     const { modelId, provider } = body;
 
-    let model = openai(modelId);
+    const providerMap = {
+      openai: openai(modelId),
+      anthropic: anthropic(modelId),
+      groq: groq(modelId),
+      xai: xai(modelId),
+      google: google(modelId),
+    };
 
-    if (provider === 'anthropic') {
-      model = anthropic(modelId);
-    } else if (provider === 'groq') {
-      model = groq(modelId);
-    } else if (provider === 'xai') {
-      model = xai(modelId);
-    } else if (provider === 'google') {
-      model = google(modelId);
-    }
+    let model = providerMap[provider];
 
     agent.__updateModel({ model });
 

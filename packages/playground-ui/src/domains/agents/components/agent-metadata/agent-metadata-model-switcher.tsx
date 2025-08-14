@@ -66,10 +66,6 @@ export const AgentMetadataModelSwitcher = ({
 
   const model = allModels.find(model => model.model === selectedModel);
 
-  // const provider = providersList.find(provider => provider.provider === selectedProvider);
-
-  // const icon = model?.icon ?? provider?.icon ?? defaultProvider;
-
   const handleSave = async () => {
     setLoading(true);
     const providerToUse = model?.provider ?? selectedProvider;
@@ -77,8 +73,6 @@ export const AgentMetadataModelSwitcher = ({
     setLoading(false);
     closeEditor();
   };
-
-  // const providersList = ['']
 
   return (
     <TooltipProvider>

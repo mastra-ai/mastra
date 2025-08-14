@@ -32,18 +32,12 @@ export const useModelProviders = () => {
 export const useUpdateAgentModel = (agentId: string) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: UpdateModelParams) => {
-      try {
-        const res = await client.getAgent(agentId).updateModel(payload);
-
-        return res;
-      } catch (error) {
-        console.error('Error updating model', error);
-        throw error;
-      }
-    },
+    mutationFn: async (payload: UpdateModelParams) => client.getAgent(agentId).updateModel(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+    onError: err => {
+      console.error('Error updating model', err);
     },
   });
 };
