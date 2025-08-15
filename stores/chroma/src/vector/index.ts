@@ -11,8 +11,8 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import { ChromaClient, CloudClient, type Metadata } from 'chromadb';
-import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection } from 'chromadb';
+import { ChromaClient, CloudClient } from 'chromadb';
+import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata } from 'chromadb';
 import type { ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
 
