@@ -1,12 +1,11 @@
 import type { ToolSet } from 'ai-v5';
 import { createStep } from '../../workflows';
-import { getRootSpan } from '../telemetry';
+import { assembleOperationName, getTracer } from '../telemetry';
 import type { OuterLLMRun } from '../types';
 import { toolCallInputSchema, toolCallOutputSchema } from './schema';
 
 export function createToolCallStep<Tools extends ToolSet = ToolSet>({
   tools,
-  model,
   messageList,
   options,
   telemetry_settings,
@@ -41,16 +40,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet>({
         return inputData;
       }
 
-      const { rootSpan } = getRootSpan({
-        operationId: 'mastra.stream.toolCall',
-        model: {
-          modelId: model.modelId,
-          provider: model.provider,
-        },
-        telemetry_settings: telemetry_settings,
+      const tracer = getTracer({
+        isEnabled: telemetry_settings?.isEnabled,
+        tracer: telemetry_settings?.tracer,
       });
 
-      const span = rootSpan.setAttributes({
+      const span = tracer.startSpan('mastra.stream.toolCall').setAttributes({
+        ...assembleOperationName({
+          operationId: 'mastra.stream.toolCall',
+          telemetry: telemetry_settings,
+        }),
         'stream.toolCall.toolName': inputData.toolName,
         'stream.toolCall.toolCallId': inputData.toolCallId,
         'stream.toolCall.args': JSON.stringify(inputData.args),

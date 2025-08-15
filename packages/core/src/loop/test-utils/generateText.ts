@@ -1,11 +1,12 @@
+import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
 import type { generateText as generateText5 } from 'ai-v5';
-import { MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
-import { createTestModel, modelWithReasoning, modelWithSources } from './utils';
+import { createTestModel, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
@@ -30,133 +31,132 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
   };
 
   describe('generateText', () => {
-    // describe('result.content', () => {
-    //   // TODO: content is not in the correct shape. missing `source` chunks if tool calls are included in stream
-    //   it.todo('should generate content', async () => {
-    //     const messageList = new MessageList();
-    //     messageList.add(
-    //       {
-    //         role: 'user',
-    //         content: 'prompt',
-    //       },
-    //       'input',
-    //     );
+    describe('result.content', () => {
+      // TODO: content is not in the correct shape. missing `source` chunks if tool calls are included in stream
+      it.todo('should generate content', async () => {
+        const messageList = new MessageList();
+        messageList.add(
+          {
+            role: 'user',
+            content: 'prompt',
+          },
+          'input',
+        );
 
-    //     const result = await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doStream: async () => ({
-    //           stream: convertArrayToReadableStream([
-    //             { type: 'text-start', id: '1' },
-    //             { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-    //             { type: 'text-end', id: '1' },
-    //             {
-    //               id: '123',
-    //               providerMetadata: {
-    //                 provider: {
-    //                   custom: 'value',
-    //                 },
-    //               },
-    //               sourceType: 'url',
-    //               title: 'Example',
-    //               type: 'source',
-    //               url: 'https://example.com',
-    //             },
-    //             { type: 'file', data: new Uint8Array([1, 2, 3]), mediaType: 'image/png' },
-    //             { type: 'reasoning-start', id: '1' },
-    //             { type: 'reasoning-delta', delta: 'I will open the conversation with witty banter.' },
-    //             { type: 'reasoning-end', id: '1' },
-    //             { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool1', input: `{ "value": "value" }` },
-    //             { type: 'text-start', id: '2' },
-    //             { type: 'text-delta', id: '2', delta: 'More text' },
-    //             { type: 'text-end', id: '2' },
-    //             {
-    //               type: 'finish',
-    //               finishReason: 'stop',
-    //               usage: testUsage,
-    //               providerMetadata: {
-    //                 testProvider: { testKey: 'testValue' },
-    //               },
-    //             },
-    //           ]),
-    //         }),
-    //       }),
-    //       messageList,
-    //       tools: {
-    //         tool1: {
-    //           inputSchema: z.object({ value: z.string() }),
-    //           execute: async args => {
-    //             expect(args).toStrictEqual({ value: 'value' });
-    //             return 'result1';
-    //           },
-    //         },
-    //       },
-    //     });
+        const result = await generateText({
+          model: createTestModel({
+            stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Hello, world!' },
+              { type: 'text-end', id: '1' },
+              {
+                id: '123',
+                providerMetadata: {
+                  provider: {
+                    custom: 'value',
+                  },
+                },
+                sourceType: 'url',
+                title: 'Example',
+                type: 'source',
+                url: 'https://example.com',
+              },
+              { type: 'file', data: new Uint8Array([1, 2, 3]), mediaType: 'image/png' },
+              { type: 'reasoning-start', id: '1' },
+              { type: 'reasoning-delta', id: '1', delta: 'I will open the conversation with witty banter.' },
+              { type: 'reasoning-end', id: '1' },
+              { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool1', input: `{ "value": "value" }` },
+              { type: 'text-start', id: '2' },
+              { type: 'text-delta', id: '2', delta: 'More text' },
+              { type: 'text-end', id: '2' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+                providerMetadata: {
+                  testProvider: { testKey: 'testValue' },
+                },
+              },
+            ]),
+          }),
+          messageList,
+          tools: {
+            tool1: {
+              inputSchema: z.object({ value: z.string() }),
+              execute: async args => {
+                expect(args).toStrictEqual({ value: 'value' });
+                return 'result1';
+              },
+            },
+          },
+        });
 
-    //     console.dir({ resultContent: result.content }, { depth: null });
+        console.dir({ resultContent: result.content }, { depth: null });
 
-    //     expect(result.content).toMatchInlineSnapshot(`
-    //         [
-    //           {
-    //             "text": "Hello, world!",
-    //             "type": "text",
-    //           },
-    //           {
-    //             "id": "123",
-    //             "providerMetadata": {
-    //               "provider": {
-    //                 "custom": "value",
-    //               },
-    //             },
-    //             "sourceType": "url",
-    //             "title": "Example",
-    //             "type": "source",
-    //             "url": "https://example.com",
-    //           },
-    //           {
-    //             "file": DefaultGeneratedFileWithType {
-    //               "type":"file",
-    //               "base64Data": "AQID",
-    //               "mediaType": "image/png",
-    //               "uint8ArrayData": Uint8Array [
-    //                 1,
-    //                 2,
-    //                 3,
-    //               ],
-    //             },
-    //             "type": "file",
-    //           },
-    //           {
-    //             "text": "I will open the conversation with witty banter.",
-    //             "type": "reasoning",
-    //           },
-    //           {
-    //             "input": {
-    //               "value": "value",
-    //             },
-    //             "providerExecuted": undefined,
-    //             "providerMetadata": undefined,
-    //             "toolCallId": "call-1",
-    //             "toolName": "tool1",
-    //             "type": "tool-call",
-    //           },
-    //           {
-    //             "text": "More text",
-    //             "type": "text",
-    //           },
-    //           {
-    //             "dynamic": false,
-    //             "input": {
-    //               "value": "value",
-    //             },
-    //             "output": "result1",
-    //             "toolCallId": "call-1",
-    //             "toolName": "tool1",
-    //             "type": "tool-result",
-    //           },
-    //         ]
-    //       `);
-    //   });
-    // });
+        expect(result.content).toMatchInlineSnapshot(`
+            [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+              {
+                "id": "123",
+                "providerMetadata": {
+                  "provider": {
+                    "custom": "value",
+                  },
+                },
+                "sourceType": "url",
+                "title": "Example",
+                "type": "source",
+                "url": "https://example.com",
+              },
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "type":"file",
+                  "base64Data": "AQID",
+                  "mediaType": "image/png",
+                  "uint8ArrayData": Uint8Array [
+                    1,
+                    2,
+                    3,
+                  ],
+                },
+                "type": "file",
+              },
+              {
+                "text": "I will open the conversation with witty banter.",
+                "type": "reasoning",
+                "providerOptions": undefined,
+              },
+              {
+                "text": "More text",
+                "type": "text",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerMetadata": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "dynamic": false,
+                "input": {
+                  "value": "value",
+                },
+                "output": "result1",
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ]
+          `);
+      });
+    });
 
     describe('result.text', () => {
       it('should generate text', async () => {
@@ -194,68 +194,140 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       });
     });
 
-    // describe('result.files', () => {
-    //   // TODO: text data is being added as base64Data
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should contain files', async () => {
-    //     const result = await generateText({
-    //       model: modelWithFiles,
-    //       prompt: 'prompt',
-    //     });
+    describe('result.files', () => {
+      it.todo('should contain files', async () => {
+        const result = await generateText({
+          model: modelWithFiles,
+          messageList: new MessageList(),
+        });
 
-    //     expect(result.files).toMatchSnapshot();
-    //   });
-    // });
+        expect(result.files).toMatchSnapshot();
+      });
+    });
 
-    // describe('result.steps', () => {
-    //   // TODO: include `reasoning` and `reasoningDetails` in step result
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should add the reasoning from the model response to the step result', async () => {
-    //     const result = await generateText({
-    //       model: modelWithReasoning,
-    //       prompt: 'prompt',
-    //       _internal: {
-    //         generateId: mockId({ prefix: 'id' }),
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
+    describe('result.steps', () => {
+      const modelWithReasoning = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'reasoning-start', id: '1' },
+            {
+              type: 'reasoning-delta',
+              id: '1',
+              delta: 'I will open the conversation',
+            },
+            {
+              type: 'reasoning-delta',
+              id: '1',
+              delta: ' with witty banter.',
+            },
+            {
+              type: 'reasoning-delta',
+              id: '1',
+              delta: '',
+              providerMetadata: {
+                testProvider: { signature: '1234567890' },
+              } as SharedV2ProviderMetadata,
+            },
+            { type: 'reasoning-end', id: '1' },
+            {
+              type: 'reasoning-start',
+              id: '2',
+              providerMetadata: {
+                testProvider: { redactedData: 'redacted-reasoning-data' },
+              },
+            },
+            { type: 'reasoning-end', id: '2' },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Hello,' },
+            { type: 'text-delta', id: '1', delta: ' world!' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+      });
 
-    //     expect(result.steps).toMatchSnapshot();
-    //   });
+      const modelWithSources = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Hello, world!' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'source',
+              sourceType: 'url',
+              id: '123',
+              url: 'https://example.com',
+              title: 'Example',
+              providerMetadata: { provider: { custom: 'value' } },
+            },
+            {
+              type: 'source',
+              sourceType: 'url',
+              id: '456',
+              url: 'https://example.com/2',
+              title: 'Example 2',
+              providerMetadata: { provider: { custom: 'value2' } },
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+      });
 
-    //   // TODO: include `sources` in step result
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should contain sources', async () => {
-    //     const result = await generateText({
-    //       model: modelWithSources,
-    //       prompt: 'prompt',
-    //       _internal: {
-    //         generateId: mockId({ prefix: 'id' }),
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
-    //     expect(result.steps).toMatchSnapshot();
-    //   });
+      it.todo('should add the reasoning from the model response to the step result', async () => {
+        const result = await generateText({
+          model: modelWithReasoning,
+          messageList: new MessageList(),
+          _internal: {
+            generateId: mockId({ prefix: 'id' }),
+            currentDate: () => new Date(0),
+          },
+        });
 
-    //   // TODO: include `files` in step result
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should contain files', async () => {
-    //     const result = await generateText({
-    //       model: modelWithFiles,
-    //       prompt: 'prompt',
-    //       _internal: {
-    //         generateId: mockId({ prefix: 'id' }),
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
+        expect(result.steps).toMatchSnapshot();
+      });
 
-    //     expect(result.steps).toMatchSnapshot();
-    //   });
-    // });
+      it.todo('should contain sources', async () => {
+        const result = await generateText({
+          model: modelWithSources,
+          messageList: new MessageList(),
+          _internal: {
+            generateId: mockId({ prefix: 'id' }),
+            currentDate: () => new Date(0),
+          },
+        });
+        expect(result.steps).toMatchSnapshot();
+      });
+
+      // TODO: include `files` in step result
+      // generateText uses a defaurt StepResult class than streaming does
+      // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
+      it.todo('should contain files', async () => {
+        const result = await generateText({
+          model: modelWithFiles,
+          messageList: new MessageList(),
+          _internal: {
+            generateId: mockId({ prefix: 'id' }),
+            currentDate: () => new Date(0),
+          },
+        });
+
+        expect(result.steps).toMatchSnapshot();
+      });
+    });
 
     describe.todo('result.toolCalls', () => {
       it('should contain tool calls', async () => {

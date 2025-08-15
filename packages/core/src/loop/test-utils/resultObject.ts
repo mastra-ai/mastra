@@ -678,7 +678,6 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         {
                           "data": "Hello World",
                           "mediaType": "text/plain",
-                          "providerOptions": undefined,
                           "type": "file",
                         },
                         {
@@ -688,7 +687,6 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         {
                           "data": "QkFVRw==",
                           "mediaType": "image/jpeg",
-                          "providerOptions": undefined,
                           "type": "file",
                         },
                       ],
