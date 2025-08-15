@@ -2,7 +2,7 @@ import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon }
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, TextIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { Fragment, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -11,7 +11,6 @@ import type { ScoreRowData } from '@mastra/core/scores';
 
 import * as Dialog from '@radix-ui/react-dialog';
 
-import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 
@@ -190,8 +189,8 @@ function ScorerHeader({
       )}
     >
       <div className="grid gap-[1rem] w">
-        <h1 className="text-icon6 text-[1.25rem]">{scorer.scorer.name}</h1>
-        <p className="m-0 text-[0.875rem]">{scorer.scorer.description}</p>
+        <h1 className="text-icon6 text-[1.25rem]">{scorer?.scorer?.config?.name}</h1>
+        <p className="m-0 text-[0.875rem]">{scorer?.scorer?.config?.description}</p>
         <div
           className={cn(
             'flex gap-[1rem] mt-[1rem] text-[0.875rem] items-center mb-[0.25rem]',
@@ -257,7 +256,7 @@ function ScoreListHeader({
                 <SelectItem key={entity.id} value={`${idx}`}>
                   <div className="flex items-center gap-[0.5rem] [&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:text-icon3">
                     {entity.type === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />}
-                    {entity.name}
+                    {entity.name || entity.id}
                   </div>
                 </SelectItem>
               ))}
@@ -418,9 +417,13 @@ function ScoreDetails({
   onNext?: (() => void) | null;
   onPrevious?: (() => void) | null;
 }) {
+  const [reasonTextOnly, setReasonTextOnly] = useState<boolean>(false);
+
   if (!score) {
     return null;
   }
+
+  const scoreReasonObj = parseJsonString(score?.reason || '');
 
   const handleOnNext = () => {
     if (onNext) {
@@ -450,7 +453,7 @@ function ScoreDetails({
             'fixed top-0 bottom-0 right-0 border-l border-border1 w-[70rem] max-w-[calc(100vw-15rem)] z-[100] bg-surface4 px-[1rem] overflow-y-scroll',
           )}
         >
-          <div className="bg-surface4 border-b-2 border-border1 flex items-center py-[1.5rem] px-[1rem] top-0 sticky">
+          <div className="bg-surface4 border-b-2 border-border1 flex items-center py-[1.5rem] px-[1rem] top-0 sticky z-[100]">
             <h2 className=" w-full text-[0.875rem] !text-icon5 !font-normal flex items-center gap-[1rem]">
               <span>{score.id}</span>|<span>{format(new Date(score.createdAt), 'LLL do yyyy, hh:mm:ss bb')}</span>
             </h2>
@@ -475,34 +478,48 @@ function ScoreDetails({
           </div>
 
           <div className="grid gap-[2rem] px-[1rem] py-[2rem] pb-[4rem] ">
-            <section
-              className={cn(
-                'p-[1.5rem] rounded-lg px-[2rem] bg-surface5 grid grid-cols-[5rem_1fr] gap-x-[2rem]',
-                '[&>em]:flex [&>em]:justify-between',
-                '[&_svg]:w-[1.1em] [&>svg]:h-[1.1em] [&_svg]:text-icon3 ',
-                '[&_b]:text-icon6 [&_b]:font-semibold',
-                'text-[0.875rem] break-all',
-              )}
-            >
-              <em>
-                Score <ArrowRightIcon />
-              </em>
-              <b>{score?.score ?? 'n/a'}</b>
-              <em>
-                Reason <ArrowRightIcon />
-              </em>
-              <MarkdownRenderer>{score?.reason || 'n/a'}</MarkdownRenderer>
-            </section>
             <section className="border border-border1 rounded-lg">
-              <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
-              {score.input && (
-                <div className="py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4 break-all">
-                  <CodeMirrorBlock value={JSON.stringify(score.input, null, 2)} />
+              <div className="border-b border-border1 last:border-b-0 grid">
+                <div className="flex justify-between items-center  w-full border-b border-border1">
+                  <h3 className="p-[1rem] px-[1.5rem] ">
+                    Score: <b>{typeof score.score === 'number' ? score.score : 'n/a'}</b>
+                  </h3>
+                  <Button variant={'ghost'} onClick={() => setReasonTextOnly(!reasonTextOnly)}>
+                    <TextIcon />
+                  </Button>
                 </div>
-              )}
+                {scoreReasonObj?.reason ? (
+                  <>
+                    {reasonTextOnly ? (
+                      <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
+                        {<pre className="text-wrap">{scoreReasonObj.reason}</pre>}
+                      </div>
+                    ) : (
+                      <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
+                        <CodeMirrorBlock value={JSON.stringify(scoreReasonObj, null, 2)} />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
+                    {<pre className="text-wrap">{score?.reason}</pre>}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="border border-border1 rounded-lg">
+              <div className="border-b border-border1 last:border-b-0 grid">
+                <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
+                {score.input && (
+                  <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
+                    <CodeMirrorBlock value={JSON.stringify(score.input, null, 2)} />
+                  </div>
+                )}
+              </div>
             </section>
             <section className="border border-border1 rounded-lg">
-              <div className="border-b border-border1 last:border-b-0">
+              <div className="border-b border-border1 last:border-b-0 grid">
                 <div className="flex items-center justify-between border-b border-border1 p-[1rem] px-[1.5rem]">
                   <h3>Output</h3>
                   {score.output?.usage && (
@@ -521,8 +538,7 @@ function ScoreDetails({
                     </div>
                   )}
                 </div>
-                <div className="text-icon4 text-[0.875rem] p-[1.5rem] py-[1rem] break-all">
-                  {score.output?.text && <MarkdownRenderer>{score.output.text}</MarkdownRenderer>}
+                <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
                   {score.output && <CodeMirrorBlock value={JSON.stringify(score.output, null, 2)} />}
                 </div>
               </div>
@@ -552,4 +568,19 @@ function ScoreDetails({
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function parseJsonString(input: string) {
+  // Remove triple backticks and optional "json" label
+  const cleaned = input
+    .replace(/```json\s*/i, '')
+    .replace(/```/g, '')
+    .trim();
+
+  try {
+    // Parse into object
+    return JSON.parse(cleaned) || {};
+  } catch (error) {
+    return null;
+  }
 }
