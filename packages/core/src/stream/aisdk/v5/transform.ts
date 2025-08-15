@@ -6,7 +6,7 @@ import type {
 } from '@ai-sdk/provider-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
 import type { ChunkType } from '../../types';
-import { DefaultGeneratedFileWithType } from './file';
+import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
 type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
@@ -312,7 +312,13 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
 export type OutputChunkType = TextStreamPart<ToolSet> | ObjectStreamPart<any> | undefined;
 
-export function convertMastraChunkToAISDKv5({ chunk }: { chunk: ChunkType }): OutputChunkType {
+export function convertMastraChunkToAISDKv5({
+  chunk,
+  mode = 'stream',
+}: {
+  chunk: ChunkType;
+  mode?: 'generate' | 'stream';
+}): OutputChunkType {
   switch (chunk.type) {
     case 'start':
       return {
@@ -383,6 +389,16 @@ export function convertMastraChunkToAISDKv5({ chunk }: { chunk: ChunkType }): Ou
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'file':
+      if (mode === 'generate') {
+        return {
+          type: 'file',
+          file: new DefaultGeneratedFile({
+            data: chunk.payload.data,
+            mediaType: chunk.payload.mimeType,
+          }),
+        };
+      }
+
       return {
         type: 'file',
         file: new DefaultGeneratedFileWithType({
