@@ -171,7 +171,10 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result2 = await memory.processMessages({ messages: v2ToCoreMessages(queryResult2.uiMessages), processors: [] });
+    const result2 = await memory.processMessages({
+      messages: v2ToCoreMessages(queryResult2.uiMessages),
+      processors: [],
+    });
     const messages2 = new MessageList({ threadId: thread.id, resourceId }).add(result2, 'response').get.all.v2();
     expect(new MessageList().add(messages2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);

@@ -40,7 +40,7 @@ const builder = new AgentBuilder({
 
 // Generate an agent from natural language
 const result = await builder.generateAgent(
-  'Create a weather agent that can get current weather and suggest activities'
+  'Create a weather agent that can get current weather and suggest activities',
 );
 ```
 
@@ -62,15 +62,13 @@ The AgentBuilder requires a configuration object with:
 // Install packages
 await builder.tools.manageProject({
   action: 'install',
-  packages: [
-    { name: '@mastra/workflows', version: 'latest' }
-  ]
+  packages: [{ name: '@mastra/workflows', version: 'latest' }],
 });
 
 // Validate generated code
 await builder.tools.validateCode({
   validationType: ['types', 'lint'],
-  files: ['src/agents/my-agent.ts']
+  files: ['src/agents/my-agent.ts'],
 });
 ```
 
@@ -80,14 +78,14 @@ await builder.tools.validateCode({
 // Start development server
 await builder.tools.manageServer({
   action: 'start',
-  port: 4200
+  port: 4200,
 });
 
 // Test API endpoints
 await builder.tools.httpRequest({
   method: 'GET',
   url: '/health',
-  baseUrl: 'http://localhost:4200'
+  baseUrl: 'http://localhost:4200',
 });
 ```
 
@@ -108,4 +106,4 @@ The AgentBuilder includes specialized memory processors:
 
 ## License
 
-Apache-2.0 
+Apache-2.0

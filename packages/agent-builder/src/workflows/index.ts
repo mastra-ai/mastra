@@ -133,41 +133,152 @@ const analyzePackageStep = createStep({
   },
 });
 
-const flatInstallStep = createStep({
-  id: 'flat-install',
-  description: 'Run a flat install command without specifying packages',
+// Step 3: Discover template units by scanning the templates directory
+const discoverUnitsStep = createStep({
+  id: 'discover-units',
+  description: 'Discover template units by analyzing the templates directory structure',
   inputSchema: z.object({
-    targetPath: z.string().describe('Path to the project to install packages in'),
+    templateDir: z.string(),
+    commitSha: z.string(),
+    slug: z.string(),
   }),
   outputSchema: z.object({
-    success: z.boolean(),
-    message: z.string(),
-    details: z.string().optional(),
+    units: z.array(TemplateUnitSchema),
   }),
-  execute: async ({ inputData, runtimeContext }) => {
-    console.log('Running flat install...');
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+  execute: async ({ inputData }) => {
+    const { templateDir } = inputData;
 
-    try {
-      // Run flat install using swpm (no specific packages)
-      await spawnSWPM(targetPath, 'install', []);
+    const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
-      return {
-        success: true,
-        message: 'Successfully ran flat install command',
-        details: 'Installed all dependencies from package.json',
-      };
-    } catch (error) {
-      console.error('Flat install failed:', error);
-      return {
-        success: false,
-        message: `Flat install failed: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
+    const agent = new Agent({
+      model: openai('gpt-4o-mini'),
+      instructions: `You are an expert at analyzing Mastra projects.
+
+Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
+
+Mastram Project Structure Analysis:
+- Each Mastra project has a structure like: ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.agent}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.workflow}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network}
+- Analyze TypeScript files in each category directory to identify exported units
+
+CRITICAL: YOU MUST USE YOUR TOOLS (readFile, listDirectory) TO DISCOVER THE UNITS IN THE TEMPLATE DIRECTORY.
+
+IMPORTANT - Agent Discovery Rules:
+1. **Multiple Agent Files**: Some templates have separate files for each agent (e.g., evaluationAgent.ts, researchAgent.ts)
+2. **Single File Multiple Agents**: Some files may export multiple agents (look for multiple 'export const' or 'export default' statements)
+3. **Agent Identification**: Look for exported variables that are instances of 'new Agent()' or similar patterns
+4. **Naming Convention**: Agent names should be extracted from the export name (e.g., 'weatherAgent', 'evaluationAgent')
+
+For each Mastra project directory you analyze:
+1. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.agent} and identify ALL exported agents
+2. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.workflow} and identify ALL exported workflows
+3. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} and identify ALL exported tools
+4. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']} and identify ALL exported MCP servers
+5. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network} and identify ALL exported networks
+6. Scan for any OTHER files in src/mastra that are NOT in the above default folders (e.g., lib/, utils/, types/, etc.) and identify them as 'other' files
+
+IMPORTANT - Naming Consistency Rules:
+- For ALL unit types (including 'other'), the 'name' field should be the filename WITHOUT extension
+- For structured units (agents, workflows, tools, etc.), prefer the actual export name if clearly identifiable
+- use the base filename without extension for the id (e.g., 'util.ts' → name: 'util')
+- use the relative path from the template root for the file (e.g., 'src/mastra/lib/util.ts' → file: 'src/mastra/lib/util.ts')
+
+Return the actual exported names of the units, as well as the file names.`,
+      name: 'Mastra Project Discoverer',
+      tools: {
+        readFile: tools.readFile,
+        listDirectory: tools.listDirectory,
+      },
+    });
+
+    const result = await agent.generate(
+      `Analyze the Mastra project directory structure at "${templateDir}".
+
+            List directory contents using listDirectory tool, and then analyze each file with readFile tool.
+      IMPORTANT:
+      - Look inside the actual file content to find export statements like 'export const agentName = new Agent(...)'
+      - A single file may contain multiple exports
+      - Return the actual exported variable names, as well as the file names
+      - If a directory doesn't exist or has no files, return an empty array
+
+      Return the analysis in the exact format specified in the output schema.`,
+      {
+        experimental_output: z.object({
+          agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        }),
+        maxSteps: 100,
+      },
+    );
+
+    const template = result.object ?? {};
+
+    const units: TemplateUnit[] = [];
+
+    // Add agents
+    template.agents?.forEach((agentId: { name: string; file: string }) => {
+      units.push({ kind: 'agent', id: agentId.name, file: agentId.file });
+    });
+
+    // Add workflows
+    template.workflows?.forEach((workflowId: { name: string; file: string }) => {
+      units.push({ kind: 'workflow', id: workflowId.name, file: workflowId.file });
+    });
+
+    // Add tools
+    template.tools?.forEach((toolId: { name: string; file: string }) => {
+      units.push({ kind: 'tool', id: toolId.name, file: toolId.file });
+    });
+
+    // Add MCP servers
+    template.mcp?.forEach((mcpId: { name: string; file: string }) => {
+      units.push({ kind: 'mcp-server', id: mcpId.name, file: mcpId.file });
+    });
+
+    // Add networks
+    template.networks?.forEach((networkId: { name: string; file: string }) => {
+      units.push({ kind: 'network', id: networkId.name, file: networkId.file });
+    });
+
+    // Add other files
+    template.other?.forEach((otherId: { name: string; file: string }) => {
+      units.push({ kind: 'other', id: otherId.name, file: otherId.file });
+    });
+
+    console.log('Discovered units:', JSON.stringify(units, null, 2));
+
+    return { units };
   },
 });
 
-// NOTE: This is commented out code to let the agent handle package.json merging. Leaving in case we want to use it later.
+// Step 4: Topological ordering (simplified)
+const orderUnitsStep = createStep({
+  id: 'order-units',
+  description: 'Sort units in topological order based on kind weights',
+  inputSchema: z.object({
+    units: z.array(TemplateUnitSchema),
+  }),
+  outputSchema: z.object({
+    orderedUnits: z.array(TemplateUnitSchema),
+  }),
+  execute: async ({ inputData }) => {
+    const { units } = inputData;
+
+    // Simple sort by kind weight (mcp-servers first, then tools, agents, workflows, integration last)
+    const orderedUnits = [...units].sort((a, b) => {
+      const aWeight = kindWeight(a.kind);
+      const bWeight = kindWeight(b.kind);
+      return aWeight - bWeight;
+    });
+
+    return { orderedUnits };
+  },
+});
+
+// Step 5: Package merge
 const packageMergeStep = createStep({
   id: 'package-merge',
   description: 'Merge template package.json dependencies into target project and install',
@@ -282,146 +393,350 @@ Be systematic and thorough. Always read the existing package.json first, then me
   },
 });
 
-// Step 3: Discover template units by scanning the templates directory
-const discoverUnitsStep = createStep({
-  id: 'discover-units',
-  description: 'Discover template units by analyzing the templates directory structure',
+// Step 6: Flat install
+const flatInstallStep = createStep({
+  id: 'flat-install',
+  description: 'Run a flat install command without specifying packages',
   inputSchema: z.object({
+    targetPath: z.string().describe('Path to the project to install packages in'),
+  }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    message: z.string(),
+    details: z.string().optional(),
+  }),
+  execute: async ({ inputData, runtimeContext }) => {
+    console.log('Running flat install...');
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+
+    try {
+      // Run flat install using swpm (no specific packages)
+      await spawnSWPM(targetPath, 'install', []);
+
+      return {
+        success: true,
+        message: 'Successfully ran flat install command',
+        details: 'Installed all dependencies from package.json',
+      };
+    } catch (error) {
+      console.error('Flat install failed:', error);
+      return {
+        success: false,
+        message: `Flat install failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  },
+});
+
+// Step 7: Programmatic File Copy Step - copies template files to target project
+const programmaticFileCopyStep = createStep({
+  id: 'programmatic-file-copy',
+  description: 'Programmatically copy template files to target project based on ordered units',
+  inputSchema: z.object({
+    orderedUnits: z.array(
+      z.object({
+        kind: z.string(),
+        id: z.string(),
+        file: z.string(),
+      }),
+    ),
     templateDir: z.string(),
     commitSha: z.string(),
     slug: z.string(),
+    targetPath: z.string().optional(),
   }),
   outputSchema: z.object({
-    units: z.array(TemplateUnitSchema),
-  }),
-  execute: async ({ inputData }) => {
-    const { templateDir } = inputData;
-
-    const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
-
-    const agent = new Agent({
-      model: openai('gpt-4o-mini'),
-      instructions: `You are an expert at analyzing Mastra projects.
-
-Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
-
-Mastram Project Structure Analysis:
-- Each Mastra project has a structure like: ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.agent}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.workflow}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network}
-- Analyze TypeScript files in each category directory to identify exported units
-
-CRITICAL: YOU MUST USE YOUR TOOLS (readFile, listDirectory) TO DISCOVER THE UNITS IN THE TEMPLATE DIRECTORY.
-
-IMPORTANT - Agent Discovery Rules:
-1. **Multiple Agent Files**: Some templates have separate files for each agent (e.g., evaluationAgent.ts, researchAgent.ts)
-2. **Single File Multiple Agents**: Some files may export multiple agents (look for multiple 'export const' or 'export default' statements)
-3. **Agent Identification**: Look for exported variables that are instances of 'new Agent()' or similar patterns
-4. **Naming Convention**: Agent names should be extracted from the export name (e.g., 'weatherAgent', 'evaluationAgent')
-
-For each Mastra project directory you analyze:
-1. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.agent} and identify ALL exported agents
-2. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.workflow} and identify ALL exported workflows
-3. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} and identify ALL exported tools
-4. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']} and identify ALL exported MCP servers
-5. Scan all TypeScript files in ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network} and identify ALL exported networks
-6. Scan for any OTHER files in src/mastra that are NOT in the above default folders (e.g., lib/, utils/, types/, etc.) and identify them as 'other' files
-
-Return the actual exported names of the units, as well as the file names.`,
-      name: 'Mastra Project Discoverer',
-      tools: {
-        readFile: tools.readFile,
-        listDirectory: tools.listDirectory,
-      },
-    });
-
-    const result = await agent.generate(
-      `Analyze the Mastra project directory structure at "${templateDir}".
-
-            List directory contents using listDirectory tool, and then analyze each file with readFile tool.
-      IMPORTANT:
-      - Look inside the actual file content to find export statements like 'export const agentName = new Agent(...)'
-      - A single file may contain multiple exports
-      - Return the actual exported variable names, as well as the file names
-      - If a directory doesn't exist or has no files, return an empty array
-
-      Return the analysis in the exact format specified in the output schema.`,
-      {
-        experimental_output: z.object({
-          agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+    success: z.boolean(),
+    copiedFiles: z.array(
+      z.object({
+        source: z.string(),
+        destination: z.string(),
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
         }),
-        maxSteps: 100,
-      },
-    );
+      }),
+    ),
+    conflicts: z.array(
+      z.object({
+        unit: z.object({
+          kind: z.string(),
+          id: z.string(),
+        }),
+        issue: z.string(),
+        sourceFile: z.string(),
+        targetFile: z.string(),
+      }),
+    ),
+    message: z.string(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ inputData, runtimeContext }) => {
+    console.log('Programmatic file copy step starting...');
+    const { orderedUnits, templateDir, commitSha, slug } = inputData;
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
-    const template = result.object ?? {};
+    try {
+      const copiedFiles: Array<{
+        source: string;
+        destination: string;
+        unit: { kind: string; id: string };
+      }> = [];
 
-    const units: TemplateUnit[] = [];
+      const conflicts: Array<{
+        unit: { kind: string; id: string };
+        issue: string;
+        sourceFile: string;
+        targetFile: string;
+      }> = [];
 
-    // Add agents
-    template.agents?.forEach((agentId: { name: string; file: string }) => {
-      units.push({ kind: 'agent', id: agentId.name, file: agentId.file });
-    });
+      // Analyze target project naming convention first
+      const analyzeNamingConvention = async (
+        directory: string,
+      ): Promise<'camelCase' | 'snake_case' | 'kebab-case' | 'PascalCase' | 'unknown'> => {
+        try {
+          const files = await readdir(resolve(targetPath, directory), { withFileTypes: true });
+          const tsFiles = files.filter(f => f.isFile() && f.name.endsWith('.ts')).map(f => f.name);
 
-    // Add workflows
-    template.workflows?.forEach((workflowId: { name: string; file: string }) => {
-      units.push({ kind: 'workflow', id: workflowId.name, file: workflowId.file });
-    });
+          if (tsFiles.length === 0) return 'unknown';
 
-    // Add tools
-    template.tools?.forEach((toolId: { name: string; file: string }) => {
-      units.push({ kind: 'tool', id: toolId.name, file: toolId.file });
-    });
+          // Check for patterns
+          const camelCaseCount = tsFiles.filter(f => /^[a-z][a-zA-Z0-9]*\.ts$/.test(f)).length;
+          const snakeCaseCount = tsFiles.filter(f => /^[a-z][a-z0-9_]*\.ts$/.test(f) && f.includes('_')).length;
+          const kebabCaseCount = tsFiles.filter(f => /^[a-z][a-z0-9-]*\.ts$/.test(f) && f.includes('-')).length;
+          const pascalCaseCount = tsFiles.filter(f => /^[A-Z][a-zA-Z0-9]*\.ts$/.test(f)).length;
 
-    // Add MCP servers
-    template.mcp?.forEach((mcpId: { name: string; file: string }) => {
-      units.push({ kind: 'mcp-server', id: mcpId.name, file: mcpId.file });
-    });
+          const max = Math.max(camelCaseCount, snakeCaseCount, kebabCaseCount, pascalCaseCount);
+          if (max === 0) return 'unknown';
 
-    // Add networks
-    template.networks?.forEach((networkId: { name: string; file: string }) => {
-      units.push({ kind: 'network', id: networkId.name, file: networkId.file });
-    });
+          if (camelCaseCount === max) return 'camelCase';
+          if (snakeCaseCount === max) return 'snake_case';
+          if (kebabCaseCount === max) return 'kebab-case';
+          if (pascalCaseCount === max) return 'PascalCase';
 
-    // Add other files
-    template.other?.forEach((otherId: { name: string; file: string }) => {
-      units.push({ kind: 'other', id: otherId.name, file: otherId.file });
-    });
+          return 'unknown';
+        } catch {
+          return 'unknown';
+        }
+      };
 
-    console.log('Discovered units:', JSON.stringify(units, null, 2));
+      // Convert naming based on convention
+      const convertNaming = (name: string, convention: string): string => {
+        const baseName = basename(name, extname(name));
+        const ext = extname(name);
 
-    return { units };
+        switch (convention) {
+          case 'camelCase':
+            return (
+              baseName
+                .replace(/[-_]/g, '')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? p1.toLowerCase() : p1)) + ext
+            );
+          case 'snake_case':
+            return (
+              baseName
+                .replace(/[-]/g, '_')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '_') + p1.toLowerCase()) + ext
+            );
+          case 'kebab-case':
+            return (
+              baseName
+                .replace(/[_]/g, '-')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '-') + p1.toLowerCase()) + ext
+            );
+          case 'PascalCase':
+            return baseName.replace(/[-_]/g, '').replace(/^[a-z]/, match => match.toUpperCase()) + ext;
+          default:
+            return name;
+        }
+      };
+
+      // Process each unit
+      for (const unit of orderedUnits) {
+        console.log(`Processing ${unit.kind} unit "${unit.id}" from file "${unit.file}"`);
+
+        // Resolve source file path with fallback logic
+        let sourceFile: string;
+        let resolvedUnitFile: string;
+
+        // Check if unit.file already contains directory structure
+        if (unit.file.includes('/')) {
+          // unit.file has path structure (e.g., "src/mastra/agents/weatherAgent.ts")
+          sourceFile = resolve(templateDir, unit.file);
+          resolvedUnitFile = unit.file;
+        } else {
+          // unit.file is just filename (e.g., "weatherAgent.ts") - use fallback
+          const folderPath =
+            AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE[
+              unit.kind as keyof typeof AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE
+            ];
+          if (!folderPath) {
+            conflicts.push({
+              unit: { kind: unit.kind, id: unit.id },
+              issue: `Unknown unit kind: ${unit.kind}`,
+              sourceFile: unit.file,
+              targetFile: 'N/A',
+            });
+            continue;
+          }
+          resolvedUnitFile = `${folderPath}/${unit.file}`;
+          sourceFile = resolve(templateDir, resolvedUnitFile);
+        }
+
+        // Check if source file exists
+        if (!existsSync(sourceFile)) {
+          conflicts.push({
+            unit: { kind: unit.kind, id: unit.id },
+            issue: `Source file not found: ${sourceFile}`,
+            sourceFile: resolvedUnitFile,
+            targetFile: 'N/A',
+          });
+          continue;
+        }
+
+        // Extract target directory from resolved unit file path
+        const targetDir = dirname(resolvedUnitFile);
+
+        // Analyze target naming convention
+        const namingConvention = await analyzeNamingConvention(targetDir);
+        console.log(`Detected naming convention in ${targetDir}: ${namingConvention}`);
+
+        // Convert unit.id to target filename with proper extension
+        // Note: Check if unit.id already includes extension to avoid double extensions
+        const hasExtension = extname(unit.id) !== '';
+        const baseId = hasExtension ? basename(unit.id, extname(unit.id)) : unit.id;
+        const fileExtension = extname(unit.file);
+        const convertedFileName =
+          namingConvention !== 'unknown'
+            ? convertNaming(baseId + fileExtension, namingConvention)
+            : baseId + fileExtension;
+
+        const targetFile = resolve(targetPath, targetDir, convertedFileName);
+
+        // Handle file conflicts with strategy-based resolution
+        if (existsSync(targetFile)) {
+          const strategy = determineConflictStrategy(unit, targetFile);
+          console.log(`File exists: ${convertedFileName}, using strategy: ${strategy}`);
+
+          switch (strategy) {
+            case 'skip':
+              conflicts.push({
+                unit: { kind: unit.kind, id: unit.id },
+                issue: `File exists - skipped: ${convertedFileName}`,
+                sourceFile: unit.file,
+                targetFile: `${targetDir}/${convertedFileName}`,
+              });
+              console.log(`⏭️ Skipped ${unit.kind} "${unit.id}": file already exists`);
+              continue;
+
+            case 'backup-and-replace':
+              try {
+                await backupAndReplaceFile(sourceFile, targetFile);
+                copiedFiles.push({
+                  source: sourceFile,
+                  destination: targetFile,
+                  unit: { kind: unit.kind, id: unit.id },
+                });
+                console.log(
+                  `🔄 Replaced ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName} (backup created)`,
+                );
+                continue;
+              } catch (backupError) {
+                conflicts.push({
+                  unit: { kind: unit.kind, id: unit.id },
+                  issue: `Failed to backup and replace: ${backupError instanceof Error ? backupError.message : String(backupError)}`,
+                  sourceFile: unit.file,
+                  targetFile: `${targetDir}/${convertedFileName}`,
+                });
+                continue;
+              }
+
+            case 'rename':
+              try {
+                const uniqueTargetFile = await renameAndCopyFile(sourceFile, targetFile);
+                copiedFiles.push({
+                  source: sourceFile,
+                  destination: uniqueTargetFile,
+                  unit: { kind: unit.kind, id: unit.id },
+                });
+                console.log(`📝 Renamed ${unit.kind} "${unit.id}": ${unit.file} → ${basename(uniqueTargetFile)}`);
+                continue;
+              } catch (renameError) {
+                conflicts.push({
+                  unit: { kind: unit.kind, id: unit.id },
+                  issue: `Failed to rename and copy: ${renameError instanceof Error ? renameError.message : String(renameError)}`,
+                  sourceFile: unit.file,
+                  targetFile: `${targetDir}/${convertedFileName}`,
+                });
+                continue;
+              }
+
+            default:
+              conflicts.push({
+                unit: { kind: unit.kind, id: unit.id },
+                issue: `Unknown conflict strategy: ${strategy}`,
+                sourceFile: unit.file,
+                targetFile: `${targetDir}/${convertedFileName}`,
+              });
+              continue;
+          }
+        }
+
+        // Ensure target directory exists
+        await mkdir(dirname(targetFile), { recursive: true });
+
+        // Copy the file
+        try {
+          await copyFile(sourceFile, targetFile);
+          copiedFiles.push({
+            source: sourceFile,
+            destination: targetFile,
+            unit: { kind: unit.kind, id: unit.id },
+          });
+          console.log(`✓ Copied ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName}`);
+        } catch (copyError) {
+          conflicts.push({
+            unit: { kind: unit.kind, id: unit.id },
+            issue: `Failed to copy file: ${copyError instanceof Error ? copyError.message : String(copyError)}`,
+            sourceFile: unit.file,
+            targetFile: `${targetDir}/${convertedFileName}`,
+          });
+        }
+      }
+
+      // Commit the copied files
+      if (copiedFiles.length > 0) {
+        try {
+          const fileList = copiedFiles.map(f => f.destination);
+          const gitCommand = ['git', 'add', ...fileList];
+          await exec(gitCommand.join(' '), { cwd: targetPath });
+          await exec(
+            `git commit -m "feat(template): copy ${copiedFiles.length} files from ${slug}@${commitSha.substring(0, 7)}"`,
+            { cwd: targetPath },
+          );
+          console.log(`✓ Committed ${copiedFiles.length} copied files`);
+        } catch (commitError) {
+          console.warn('Failed to commit copied files:', commitError);
+        }
+      }
+
+      const message = `Programmatic file copy completed. Copied ${copiedFiles.length} files, ${conflicts.length} conflicts detected.`;
+      console.log(message);
+
+      return {
+        success: true,
+        copiedFiles,
+        conflicts,
+        message,
+      };
+    } catch (error) {
+      console.error('Programmatic file copy failed:', error);
+      throw new Error(`Programmatic file copy failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 });
 
-// Step 4: Topological ordering (simplified)
-const orderUnitsStep = createStep({
-  id: 'order-units',
-  description: 'Sort units in topological order based on kind weights',
-  inputSchema: z.object({
-    units: z.array(TemplateUnitSchema),
-  }),
-  outputSchema: z.object({
-    orderedUnits: z.array(TemplateUnitSchema),
-  }),
-  execute: async ({ inputData }) => {
-    const { units } = inputData;
-
-    // Simple sort by kind weight (mcp-servers first, then tools, agents, workflows, integration last)
-    const orderedUnits = [...units].sort((a, b) => {
-      const aWeight = kindWeight(a.kind);
-      const bWeight = kindWeight(b.kind);
-      return aWeight - bWeight;
-    });
-
-    return { orderedUnits };
-  },
-});
-
-// Step 4: Intelligent merging with AgentBuilder
+// Step 8: Intelligent merging with AgentBuilder
 const intelligentMergeStep = createStep({
   id: 'intelligent-merge',
   description: 'Use AgentBuilder to intelligently merge template files',
@@ -784,331 +1099,7 @@ Start by listing your tasks and work through them systematically!
   },
 });
 
-// Helper function to determine conflict resolution strategy
-const determineConflictStrategy = (
-  _unit: { kind: string; id: string },
-  _targetFile: string,
-): 'skip' | 'backup-and-replace' | 'rename' => {
-  // For now, always skip conflicts to avoid disrupting existing files
-  // TODO: Enable advanced strategies based on user feedback
-  return 'skip';
-
-  // Future logic (currently disabled):
-  // if (['agent', 'workflow', 'network'].includes(unit.kind)) {
-  //   return 'backup-and-replace';
-  // }
-  // if (unit.kind === 'tool') {
-  //   return 'rename';
-  // }
-  // return 'backup-and-replace';
-};
-
-// Step 6: Programmatic File Copy Step - copies template files to target project
-const programmaticFileCopyStep = createStep({
-  id: 'programmatic-file-copy',
-  description: 'Programmatically copy template files to target project based on ordered units',
-  inputSchema: z.object({
-    orderedUnits: z.array(
-      z.object({
-        kind: z.string(),
-        id: z.string(),
-        file: z.string(),
-      }),
-    ),
-    templateDir: z.string(),
-    commitSha: z.string(),
-    slug: z.string(),
-    targetPath: z.string().optional(),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    copiedFiles: z.array(
-      z.object({
-        source: z.string(),
-        destination: z.string(),
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-      }),
-    ),
-    conflicts: z.array(
-      z.object({
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-        issue: z.string(),
-        sourceFile: z.string(),
-        targetFile: z.string(),
-      }),
-    ),
-    message: z.string(),
-    error: z.string().optional(),
-  }),
-  execute: async ({ inputData, runtimeContext }) => {
-    console.log('Programmatic file copy step starting...');
-    const { orderedUnits, templateDir, commitSha, slug } = inputData;
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
-
-    try {
-      const copiedFiles: Array<{
-        source: string;
-        destination: string;
-        unit: { kind: string; id: string };
-      }> = [];
-
-      const conflicts: Array<{
-        unit: { kind: string; id: string };
-        issue: string;
-        sourceFile: string;
-        targetFile: string;
-      }> = [];
-
-      // Analyze target project naming convention first
-      const analyzeNamingConvention = async (
-        directory: string,
-      ): Promise<'camelCase' | 'snake_case' | 'kebab-case' | 'PascalCase' | 'unknown'> => {
-        try {
-          const files = await readdir(resolve(targetPath, directory), { withFileTypes: true });
-          const tsFiles = files.filter(f => f.isFile() && f.name.endsWith('.ts')).map(f => f.name);
-
-          if (tsFiles.length === 0) return 'unknown';
-
-          // Check for patterns
-          const camelCaseCount = tsFiles.filter(f => /^[a-z][a-zA-Z0-9]*\.ts$/.test(f)).length;
-          const snakeCaseCount = tsFiles.filter(f => /^[a-z][a-z0-9_]*\.ts$/.test(f) && f.includes('_')).length;
-          const kebabCaseCount = tsFiles.filter(f => /^[a-z][a-z0-9-]*\.ts$/.test(f) && f.includes('-')).length;
-          const pascalCaseCount = tsFiles.filter(f => /^[A-Z][a-zA-Z0-9]*\.ts$/.test(f)).length;
-
-          const max = Math.max(camelCaseCount, snakeCaseCount, kebabCaseCount, pascalCaseCount);
-          if (max === 0) return 'unknown';
-
-          if (camelCaseCount === max) return 'camelCase';
-          if (snakeCaseCount === max) return 'snake_case';
-          if (kebabCaseCount === max) return 'kebab-case';
-          if (pascalCaseCount === max) return 'PascalCase';
-
-          return 'unknown';
-        } catch {
-          return 'unknown';
-        }
-      };
-
-      // Convert naming based on convention
-      const convertNaming = (name: string, convention: string): string => {
-        const baseName = basename(name, extname(name));
-        const ext = extname(name);
-
-        switch (convention) {
-          case 'camelCase':
-            return (
-              baseName
-                .replace(/[-_]/g, '')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? p1.toLowerCase() : p1)) + ext
-            );
-          case 'snake_case':
-            return (
-              baseName
-                .replace(/[-]/g, '_')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '_') + p1.toLowerCase()) + ext
-            );
-          case 'kebab-case':
-            return (
-              baseName
-                .replace(/[_]/g, '-')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '-') + p1.toLowerCase()) + ext
-            );
-          case 'PascalCase':
-            return baseName.replace(/[-_]/g, '').replace(/^[a-z]/, match => match.toUpperCase()) + ext;
-          default:
-            return name;
-        }
-      };
-
-      // Process each unit
-      for (const unit of orderedUnits) {
-        console.log(`Processing ${unit.kind} unit "${unit.id}" from file "${unit.file}"`);
-
-        // Resolve source file path with fallback logic
-        let sourceFile: string;
-        let resolvedUnitFile: string;
-
-        // Check if unit.file already contains directory structure
-        if (unit.file.includes('/')) {
-          // unit.file has path structure (e.g., "src/mastra/agents/weatherAgent.ts")
-          sourceFile = resolve(templateDir, unit.file);
-          resolvedUnitFile = unit.file;
-        } else {
-          // unit.file is just filename (e.g., "weatherAgent.ts") - use fallback
-          const folderPath =
-            AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE[
-              unit.kind as keyof typeof AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE
-            ];
-          if (!folderPath) {
-            conflicts.push({
-              unit: { kind: unit.kind, id: unit.id },
-              issue: `Unknown unit kind: ${unit.kind}`,
-              sourceFile: unit.file,
-              targetFile: 'N/A',
-            });
-            continue;
-          }
-          resolvedUnitFile = `${folderPath}/${unit.file}`;
-          sourceFile = resolve(templateDir, resolvedUnitFile);
-        }
-
-        // Check if source file exists
-        if (!existsSync(sourceFile)) {
-          conflicts.push({
-            unit: { kind: unit.kind, id: unit.id },
-            issue: `Source file not found: ${sourceFile}`,
-            sourceFile: resolvedUnitFile,
-            targetFile: 'N/A',
-          });
-          continue;
-        }
-
-        // Extract target directory from resolved unit file path
-        const targetDir = dirname(resolvedUnitFile);
-
-        // Analyze target naming convention
-        const namingConvention = await analyzeNamingConvention(targetDir);
-        console.log(`Detected naming convention in ${targetDir}: ${namingConvention}`);
-
-        // Convert unit.id to target filename with proper extension
-        const fileExtension = extname(unit.file);
-        const convertedFileName =
-          namingConvention !== 'unknown'
-            ? convertNaming(unit.id + fileExtension, namingConvention)
-            : unit.id + fileExtension;
-
-        const targetFile = resolve(targetPath, targetDir, convertedFileName);
-
-        // Handle file conflicts with strategy-based resolution
-        if (existsSync(targetFile)) {
-          const strategy = determineConflictStrategy(unit, targetFile);
-          console.log(`File exists: ${convertedFileName}, using strategy: ${strategy}`);
-
-          switch (strategy) {
-            case 'skip':
-              conflicts.push({
-                unit: { kind: unit.kind, id: unit.id },
-                issue: `File exists - skipped: ${convertedFileName}`,
-                sourceFile: unit.file,
-                targetFile: `${targetDir}/${convertedFileName}`,
-              });
-              console.log(`⏭️ Skipped ${unit.kind} "${unit.id}": file already exists`);
-              continue;
-
-            case 'backup-and-replace':
-              try {
-                await backupAndReplaceFile(sourceFile, targetFile);
-                copiedFiles.push({
-                  source: sourceFile,
-                  destination: targetFile,
-                  unit: { kind: unit.kind, id: unit.id },
-                });
-                console.log(
-                  `🔄 Replaced ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName} (backup created)`,
-                );
-                continue;
-              } catch (backupError) {
-                conflicts.push({
-                  unit: { kind: unit.kind, id: unit.id },
-                  issue: `Failed to backup and replace: ${backupError instanceof Error ? backupError.message : String(backupError)}`,
-                  sourceFile: unit.file,
-                  targetFile: `${targetDir}/${convertedFileName}`,
-                });
-                continue;
-              }
-
-            case 'rename':
-              try {
-                const uniqueTargetFile = await renameAndCopyFile(sourceFile, targetFile);
-                copiedFiles.push({
-                  source: sourceFile,
-                  destination: uniqueTargetFile,
-                  unit: { kind: unit.kind, id: unit.id },
-                });
-                console.log(`📝 Renamed ${unit.kind} "${unit.id}": ${unit.file} → ${basename(uniqueTargetFile)}`);
-                continue;
-              } catch (renameError) {
-                conflicts.push({
-                  unit: { kind: unit.kind, id: unit.id },
-                  issue: `Failed to rename and copy: ${renameError instanceof Error ? renameError.message : String(renameError)}`,
-                  sourceFile: unit.file,
-                  targetFile: `${targetDir}/${convertedFileName}`,
-                });
-                continue;
-              }
-
-            default:
-              conflicts.push({
-                unit: { kind: unit.kind, id: unit.id },
-                issue: `Unknown conflict strategy: ${strategy}`,
-                sourceFile: unit.file,
-                targetFile: `${targetDir}/${convertedFileName}`,
-              });
-              continue;
-          }
-        }
-
-        // Ensure target directory exists
-        await mkdir(dirname(targetFile), { recursive: true });
-
-        // Copy the file
-        try {
-          await copyFile(sourceFile, targetFile);
-          copiedFiles.push({
-            source: sourceFile,
-            destination: targetFile,
-            unit: { kind: unit.kind, id: unit.id },
-          });
-          console.log(`✓ Copied ${unit.kind} "${unit.id}": ${unit.file} → ${convertedFileName}`);
-        } catch (copyError) {
-          conflicts.push({
-            unit: { kind: unit.kind, id: unit.id },
-            issue: `Failed to copy file: ${copyError instanceof Error ? copyError.message : String(copyError)}`,
-            sourceFile: unit.file,
-            targetFile: `${targetDir}/${convertedFileName}`,
-          });
-        }
-      }
-
-      // Commit the copied files
-      if (copiedFiles.length > 0) {
-        try {
-          const fileList = copiedFiles.map(f => f.destination);
-          const gitCommand = ['git', 'add', ...fileList];
-          await exec(gitCommand.join(' '), { cwd: targetPath });
-          await exec(
-            `git commit -m "feat(template): copy ${copiedFiles.length} files from ${slug}@${commitSha.substring(0, 7)}"`,
-            { cwd: targetPath },
-          );
-          console.log(`✓ Committed ${copiedFiles.length} copied files`);
-        } catch (commitError) {
-          console.warn('Failed to commit copied files:', commitError);
-        }
-      }
-
-      const message = `Programmatic file copy completed. Copied ${copiedFiles.length} files, ${conflicts.length} conflicts detected.`;
-      console.log(message);
-
-      return {
-        success: true,
-        copiedFiles,
-        conflicts,
-        message,
-      };
-    } catch (error) {
-      console.error('Programmatic file copy failed:', error);
-      throw new Error(`Programmatic file copy failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  },
-});
-
-// Step 7: Validation and Fix Step - validates merged code and fixes any issues
+// Step 9: Validation and Fix Step - validates merged code and fixes any issues
 const validationAndFixStep = createStep({
   id: 'validation-and-fix',
   description: 'Validate the merged template code and fix any validation errors using a specialized agent',
@@ -1529,3 +1520,22 @@ export async function mergeTemplateBySlug(slug: string, targetPath?: string) {
     },
   });
 }
+
+// Helper function to determine conflict resolution strategy
+const determineConflictStrategy = (
+  _unit: { kind: string; id: string },
+  _targetFile: string,
+): 'skip' | 'backup-and-replace' | 'rename' => {
+  // For now, always skip conflicts to avoid disrupting existing files
+  // TODO: Enable advanced strategies based on user feedback
+  return 'skip';
+
+  // Future logic (currently disabled):
+  // if (['agent', 'workflow', 'network'].includes(unit.kind)) {
+  //   return 'backup-and-replace';
+  // }
+  // if (unit.kind === 'tool') {
+  //   return 'rename';
+  // }
+  // return 'backup-and-replace';
+};
