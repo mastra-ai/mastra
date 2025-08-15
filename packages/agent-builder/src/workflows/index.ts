@@ -156,7 +156,7 @@ const discoverUnitsStep = createStep({
 
 Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
 
-Mastram Project Structure Analysis:
+Mastra Project Structure Analysis:
 - Each Mastra project has a structure like: ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.agent}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.workflow}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE['mcp-server']}, ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.network}
 - Analyze TypeScript files in each category directory to identify exported units
 
