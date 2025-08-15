@@ -1,11 +1,12 @@
 import type { generateText as generateText5 } from 'ai-v5';
-import { MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
-import { createTestModel, modelWithReasoning, modelWithSources } from './utils';
+import { createTestModel, modelWithReasoning, modelWithSources, testUsage } from './utils';
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
@@ -30,133 +31,132 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
   };
 
   describe('generateText', () => {
-    // describe('result.content', () => {
-    //   // TODO: content is not in the correct shape. missing `source` chunks if tool calls are included in stream
-    //   it.todo('should generate content', async () => {
-    //     const messageList = new MessageList();
-    //     messageList.add(
-    //       {
-    //         role: 'user',
-    //         content: 'prompt',
-    //       },
-    //       'input',
-    //     );
+    describe('result.content', () => {
+      // TODO: content is not in the correct shape. missing `source` chunks if tool calls are included in stream
+      it.todo('should generate content', async () => {
+        const messageList = new MessageList();
+        messageList.add(
+          {
+            role: 'user',
+            content: 'prompt',
+          },
+          'input',
+        );
 
-    //     const result = await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doStream: async () => ({
-    //           stream: convertArrayToReadableStream([
-    //             { type: 'text-start', id: '1' },
-    //             { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-    //             { type: 'text-end', id: '1' },
-    //             {
-    //               id: '123',
-    //               providerMetadata: {
-    //                 provider: {
-    //                   custom: 'value',
-    //                 },
-    //               },
-    //               sourceType: 'url',
-    //               title: 'Example',
-    //               type: 'source',
-    //               url: 'https://example.com',
-    //             },
-    //             { type: 'file', data: new Uint8Array([1, 2, 3]), mediaType: 'image/png' },
-    //             { type: 'reasoning-start', id: '1' },
-    //             { type: 'reasoning-delta', delta: 'I will open the conversation with witty banter.' },
-    //             { type: 'reasoning-end', id: '1' },
-    //             { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool1', input: `{ "value": "value" }` },
-    //             { type: 'text-start', id: '2' },
-    //             { type: 'text-delta', id: '2', delta: 'More text' },
-    //             { type: 'text-end', id: '2' },
-    //             {
-    //               type: 'finish',
-    //               finishReason: 'stop',
-    //               usage: testUsage,
-    //               providerMetadata: {
-    //                 testProvider: { testKey: 'testValue' },
-    //               },
-    //             },
-    //           ]),
-    //         }),
-    //       }),
-    //       messageList,
-    //       tools: {
-    //         tool1: {
-    //           inputSchema: z.object({ value: z.string() }),
-    //           execute: async args => {
-    //             expect(args).toStrictEqual({ value: 'value' });
-    //             return 'result1';
-    //           },
-    //         },
-    //       },
-    //     });
+        const result = await generateText({
+          model: createTestModel({
+            stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Hello, world!' },
+              { type: 'text-end', id: '1' },
+              {
+                id: '123',
+                providerMetadata: {
+                  provider: {
+                    custom: 'value',
+                  },
+                },
+                sourceType: 'url',
+                title: 'Example',
+                type: 'source',
+                url: 'https://example.com',
+              },
+              { type: 'file', data: new Uint8Array([1, 2, 3]), mediaType: 'image/png' },
+              { type: 'reasoning-start', id: '1' },
+              { type: 'reasoning-delta', id: '1', delta: 'I will open the conversation with witty banter.' },
+              { type: 'reasoning-end', id: '1' },
+              { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool1', input: `{ "value": "value" }` },
+              { type: 'text-start', id: '2' },
+              { type: 'text-delta', id: '2', delta: 'More text' },
+              { type: 'text-end', id: '2' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+                providerMetadata: {
+                  testProvider: { testKey: 'testValue' },
+                },
+              },
+            ]),
+          }),
+          messageList,
+          tools: {
+            tool1: {
+              inputSchema: z.object({ value: z.string() }),
+              execute: async args => {
+                expect(args).toStrictEqual({ value: 'value' });
+                return 'result1';
+              },
+            },
+          },
+        });
 
-    //     console.dir({ resultContent: result.content }, { depth: null });
+        console.dir({ resultContent: result.content }, { depth: null });
 
-    //     expect(result.content).toMatchInlineSnapshot(`
-    //         [
-    //           {
-    //             "text": "Hello, world!",
-    //             "type": "text",
-    //           },
-    //           {
-    //             "id": "123",
-    //             "providerMetadata": {
-    //               "provider": {
-    //                 "custom": "value",
-    //               },
-    //             },
-    //             "sourceType": "url",
-    //             "title": "Example",
-    //             "type": "source",
-    //             "url": "https://example.com",
-    //           },
-    //           {
-    //             "file": DefaultGeneratedFileWithType {
-    //               "type":"file",
-    //               "base64Data": "AQID",
-    //               "mediaType": "image/png",
-    //               "uint8ArrayData": Uint8Array [
-    //                 1,
-    //                 2,
-    //                 3,
-    //               ],
-    //             },
-    //             "type": "file",
-    //           },
-    //           {
-    //             "text": "I will open the conversation with witty banter.",
-    //             "type": "reasoning",
-    //           },
-    //           {
-    //             "input": {
-    //               "value": "value",
-    //             },
-    //             "providerExecuted": undefined,
-    //             "providerMetadata": undefined,
-    //             "toolCallId": "call-1",
-    //             "toolName": "tool1",
-    //             "type": "tool-call",
-    //           },
-    //           {
-    //             "text": "More text",
-    //             "type": "text",
-    //           },
-    //           {
-    //             "dynamic": false,
-    //             "input": {
-    //               "value": "value",
-    //             },
-    //             "output": "result1",
-    //             "toolCallId": "call-1",
-    //             "toolName": "tool1",
-    //             "type": "tool-result",
-    //           },
-    //         ]
-    //       `);
-    //   });
-    // });
+        expect(result.content).toMatchInlineSnapshot(`
+            [
+              {
+                "text": "Hello, world!",
+                "type": "text",
+              },
+              {
+                "id": "123",
+                "providerMetadata": {
+                  "provider": {
+                    "custom": "value",
+                  },
+                },
+                "sourceType": "url",
+                "title": "Example",
+                "type": "source",
+                "url": "https://example.com",
+              },
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "type":"file",
+                  "base64Data": "AQID",
+                  "mediaType": "image/png",
+                  "uint8ArrayData": Uint8Array [
+                    1,
+                    2,
+                    3,
+                  ],
+                },
+                "type": "file",
+              },
+              {
+                "text": "I will open the conversation with witty banter.",
+                "type": "reasoning",
+                "providerOptions": undefined,
+              },
+              {
+                "text": "More text",
+                "type": "text",
+              },
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "providerMetadata": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+              {
+                "dynamic": false,
+                "input": {
+                  "value": "value",
+                },
+                "output": "result1",
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ]
+          `);
+      });
+    });
 
     describe('result.text', () => {
       it('should generate text', async () => {
