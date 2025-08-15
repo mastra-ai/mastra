@@ -9,7 +9,7 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/google": "^1.2.22",
     "@ai-sdk/openai": "latest",
-    "@mastra/agent-builder": "link:../../packages/agent-builder",
+    "@mastra/agent-builder": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
