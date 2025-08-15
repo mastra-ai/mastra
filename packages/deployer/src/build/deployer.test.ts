@@ -22,4 +22,16 @@ describe('getDeployer', () => {
 
     expect(result?.output[0].code).toMatchSnapshot();
   });
+
+  it('should support json imports', async () => {
+    const bundle = await getDeployerBundler(join(_dirname, './plugins/__fixtures__/basic-with-json.js'), {
+      isDeployerRemoved: false,
+    });
+
+    const result = await bundle.generate({
+      format: 'esm',
+    });
+
+    expect(result?.output[0].code).toMatchSnapshot();
+  });
 });

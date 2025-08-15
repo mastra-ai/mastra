@@ -1,6 +1,6 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
@@ -14,6 +14,7 @@ export class StoreScoresLance extends ScoresStorage {
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
     try {
+      const id = crypto.randomUUID();
       const table = await this.client.openTable(TABLE_SCORERS);
       // Fetch schema fields for mastra_scorers
       const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
@@ -36,8 +37,7 @@ export class StoreScoresLance extends ScoresStorage {
         }
       }
 
-      console.log('Saving score to LanceStorage:', filteredScore);
-
+      filteredScore.id = id;
       await table.add([filteredScore], { mode: 'append' });
       return { score };
     } catch (error: any) {
@@ -82,24 +82,46 @@ export class StoreScoresLance extends ScoresStorage {
   async getScoresByScorerId({
     scorerId,
     pagination,
+    entityId,
+    entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const table = await this.client.openTable(TABLE_SCORERS);
       // Use zero-based pagination (default page = 0)
       const { page = 0, perPage = 10 } = pagination || {};
       const offset = page * perPage;
-      // Query for scores with the given scorerId
-      // Must use backticks for field names to handle camelCase
-      const query = table.query().where(`\`scorerId\` = '${scorerId}'`).limit(perPage);
+
+      let query = table.query().where(`\`scorerId\` = '${scorerId}'`);
+
+      if (source) {
+        query = query.where(`\`source\` = '${source}'`);
+      }
+
+      if (entityId) {
+        query = query.where(`\`entityId\` = '${entityId}'`);
+      }
+      if (entityType) {
+        query = query.where(`\`entityType\` = '${entityType}'`);
+      }
+
+      query = query.limit(perPage);
       if (offset > 0) query.offset(offset);
       const records = await query.toArray();
       const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
       const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
-      const allRecords = await table.query().where(`\`scorerId\` = '${scorerId}'`).toArray();
+      let totalQuery = table.query().where(`\`scorerId\` = '${scorerId}'`);
+      if (source) {
+        totalQuery = totalQuery.where(`\`source\` = '${source}'`);
+      }
+      const allRecords = await totalQuery.toArray();
       const total = allRecords.length;
 
       return {

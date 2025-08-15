@@ -1,9 +1,9 @@
 ---
-title: "Reference: Agent | Agents | Mastra Docs"
+title: "Reference: Agent Class | Agents | Mastra Docs"
 description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
 ---
 
-# Agent
+# Agent Class
 
 The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
 
@@ -13,7 +13,7 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
-const agent = new Agent({
+export const agent = new Agent({
   name: "test-agent",
   instructions: 'message for agent',
   model: openai("gpt-4o")
@@ -116,9 +116,15 @@ const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "InputProcessor[] | ({ runtimeContext: RuntimeContext }) => InputProcessor[] | Promise<InputProcessor[]>",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
-      description: "Input processors that can modify or validate messages before they are processed by the agent.",
+      description: "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      isOptional: true,
+      description: "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
     },
   ]}
 />
@@ -135,3 +141,7 @@ const agent = new Agent({
   ]}
 />
 
+## Related
+
+- [Agents overview](../../docs/agents/overview.mdx)
+- [Calling Agents](../../examples/agents/calling-agents.mdx)
