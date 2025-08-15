@@ -1,7 +1,8 @@
+import type { TextStreamPart, TextPart, ObjectStreamPart } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import type { PIIDetectionResult, PIIDetection } from './pii-detector';
 import { PIIDetector } from './pii-detector';
 
@@ -79,7 +80,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('Hello world')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]);
@@ -89,7 +90,7 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
 
-      const result = await detector.process({ messages: [], abort: vi.fn() as any });
+      const result = await detector.processInput({ messages: [], abort: vi.fn() as any });
 
       expect(result).toEqual([]);
     });
@@ -106,7 +107,7 @@ describe('PIIDetector', () => {
         },
       ];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]);
@@ -117,7 +118,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]);
@@ -139,7 +140,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('My email is test@example.com')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -162,7 +163,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('My phone number is (555) 123-4567')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -185,7 +186,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('Card: 4111-1111-1111-1111')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -199,7 +200,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('Hello world')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]);
@@ -226,7 +227,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('My email is test@example.com and key sk_test_123456789')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -252,7 +253,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model });
       const messages = [createTestMessage('Hello world'), createTestMessage('My phone number is 555-1234')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(2);
       expect(result[0]).toBe(messages[0]); // First message unchanged
@@ -272,7 +273,7 @@ describe('PIIDetector', () => {
       });
       const messages = [createTestMessage('Hello world'), createTestMessage('My email is test@example.com')];
 
-      await expect(detector.process({ messages, abort: mockAbort as any })).rejects.toThrow('PII detected');
+      await expect(detector.processInput({ messages, abort: mockAbort as any })).rejects.toThrow('PII detected');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('PII detected'));
     });
@@ -282,7 +283,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, strategy: 'block' });
       const messages = [createTestMessage('Hello world')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]);
@@ -305,7 +306,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, strategy: 'filter' });
       const messages = [createTestMessage('My email is test@example.com')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(0);
     });
@@ -315,7 +316,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, strategy: 'filter' });
       const messages = [createTestMessage('SSN: 123-45-6789'), createTestMessage('Another SSN: 987-65-4321')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(0);
     });
@@ -343,7 +344,7 @@ describe('PIIDetector', () => {
         createTestMessage('Credit card: 1234-5678-9012-3456'), // PII without redaction
       ];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]); // Only non-PII message remains
@@ -357,7 +358,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, strategy: 'warn' });
       const messages = [createTestMessage('My email is test@example.com')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]);
@@ -383,7 +384,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, strategy: 'redact' });
       const messages = [createTestMessage('My email is test@example.com')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -408,7 +409,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, strategy: 'redact' });
       const messages = [createTestMessage('Contact me at john@example.com for info', 'user', 'msg1')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -447,7 +448,7 @@ describe('PIIDetector', () => {
       });
       const messages = [createTestMessage('test@example.com and 555-1234', 'user')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].content.parts?.[0]).toEqual({
@@ -481,7 +482,7 @@ describe('PIIDetector', () => {
         throw new TripWire('PII detected');
       });
 
-      await expect(detector.process({ messages, abort: mockAbort as any })).rejects.toThrow();
+      await expect(detector.processInput({ messages, abort: mockAbort as any })).rejects.toThrow();
     });
 
     it('should not trigger when below threshold', async () => {
@@ -494,7 +495,7 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, threshold: 0.6 });
       const messages = [createTestMessage('test@example.com')];
 
-      const result = await detector.process({ messages, abort: vi.fn() as any });
+      const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe(messages[0]);
@@ -530,7 +531,7 @@ describe('PIIDetector', () => {
       const messages = [createTestMessage('EMP-12345 submitted the report', 'user')];
 
       await expect(async () => {
-        await detector.process({ messages, abort: mockAbort as any });
+        await detector.processInput({ messages, abort: mockAbort as any });
       }).rejects.toThrow('Custom PII blocked');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('employee-id'));
@@ -560,7 +561,7 @@ describe('PIIDetector', () => {
         createdAt: new Date(),
       };
 
-      await detector.process({ messages: [message], abort: mockAbort as any });
+      await detector.processInput({ messages: [message], abort: mockAbort as any });
 
       // The model should have been called with the concatenated text
       // We can't easily verify the exact call without exposing internals,
@@ -587,7 +588,7 @@ describe('PIIDetector', () => {
         createdAt: new Date(),
       };
 
-      await detector.process({ messages: [message], abort: mockAbort as any });
+      await detector.processInput({ messages: [message], abort: mockAbort as any });
 
       expect(mockAbort).not.toHaveBeenCalled();
     });
@@ -610,7 +611,7 @@ describe('PIIDetector', () => {
         createdAt: new Date(),
       };
 
-      const result = await detector.process({ messages: [message], abort: mockAbort as any });
+      const result = await detector.processInput({ messages: [message], abort: mockAbort as any });
 
       expect(result).toEqual([message]);
       // Model should not have been called for empty text
@@ -634,7 +635,7 @@ describe('PIIDetector', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('test@example.com', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toEqual(messages); // Should allow content through
       expect(mockAbort).not.toHaveBeenCalled();
@@ -653,7 +654,7 @@ describe('PIIDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const result = await detector.process({ messages: [], abort: mockAbort as any });
+      const result = await detector.processInput({ messages: [], abort: mockAbort as any });
 
       expect(result).toEqual([]);
       expect(mockAbort).not.toHaveBeenCalled();
@@ -673,7 +674,7 @@ describe('PIIDetector', () => {
       const invalidMessage = null as any;
 
       await expect(async () => {
-        await detector.process({ messages: [invalidMessage], abort: mockAbort as any });
+        await detector.processInput({ messages: [invalidMessage], abort: mockAbort as any });
       }).rejects.toThrow();
 
       expect(mockAbort).not.toHaveBeenCalled();
@@ -702,7 +703,7 @@ describe('PIIDetector', () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('test@example.com', 'user')];
-      await detector.process({ messages, abort: mockAbort as any });
+      await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Detections: 1 items'));
 
@@ -742,7 +743,7 @@ describe('PIIDetector', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('test@example.com', 'user')];
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       // Should fail open and allow content
       expect(result).toEqual(messages);
@@ -762,7 +763,7 @@ describe('PIIDetector', () => {
       const longText = 'test@example.com '.repeat(100);
       const messages = [createTestMessage(longText, 'user')];
 
-      const result = await detector.process({ messages, abort: mockAbort as any });
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toEqual(messages);
     });
@@ -804,10 +805,278 @@ describe('PIIDetector', () => {
       const messages = [createTestMessage('Complex message with multiple PII types', 'user')];
 
       await expect(async () => {
-        await detector.process({ messages, abort: mockAbort as any });
+        await detector.processInput({ messages, abort: mockAbort as any });
       }).rejects.toThrow('Multiple PII blocked');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('email, phone, credit-card'));
+    });
+  });
+
+  describe('processOutputStream', () => {
+    it('should return non-text chunks unchanged', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model });
+
+      const part: ObjectStreamPart<any> = {
+        type: 'object' as const,
+        object: { status: 'ok' },
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual(part);
+    });
+
+    it('should return empty text chunks unchanged', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model });
+
+      const part: TextStreamPart<any> = {
+        type: 'text-delta' as const,
+        textDelta: '',
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual(part);
+    });
+
+    it('should detect and redact PII in text chunks', async () => {
+      const detections = [
+        {
+          type: 'email',
+          value: 'test@example.com',
+          confidence: 0.9,
+          start: 12,
+          end: 28,
+        },
+      ];
+      const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
+      const detector = new PIIDetector({ model });
+
+      const part: TextStreamPart<any> = {
+        type: 'text-delta',
+        textDelta: 'My email is test@example.com',
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        textDelta: 'My email is j***.d**@e******.com',
+      });
+    });
+
+    it('should block streaming content when strategy is block and PII is detected', async () => {
+      const model = setupMockModel(createMockPIIResult(['email']));
+      const detector = new PIIDetector({ model, strategy: 'block' });
+
+      const part: TextStreamPart<any> = {
+        type: 'text-delta',
+        textDelta: 'My email is test@example.com',
+      };
+
+      const mockAbort = vi.fn().mockImplementation(() => {
+        throw new TripWire('PII detected in streaming content');
+      });
+
+      await expect(
+        detector.processOutputStream({
+          part,
+          streamParts: [],
+          state: {},
+          abort: mockAbort as any,
+        }),
+      ).rejects.toThrow('PII detected in streaming content');
+
+      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('PII detected in streaming content'));
+    });
+
+    it('should filter streaming chunks when strategy is filter and PII is detected', async () => {
+      const model = setupMockModel(createMockPIIResult(['email']));
+      const detector = new PIIDetector({ model, strategy: 'filter' });
+
+      const part: TextStreamPart<any> = {
+        type: 'text-delta',
+        textDelta: 'My email is test@example.com',
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('should warn but allow content when strategy is warn and PII is detected', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const model = setupMockModel(createMockPIIResult(['email']));
+      const detector = new PIIDetector({ model, strategy: 'warn' });
+
+      const part: TextStreamPart<any> = {
+        type: 'text-delta',
+        textDelta: 'My email is test@example.com',
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual(part);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('PII detected in streaming content'));
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle streaming detection failures gracefully', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('Detection failed');
+        },
+      });
+      const detector = new PIIDetector({ model });
+
+      const part: TextStreamPart<any> = {
+        type: 'text-delta',
+        textDelta: 'My email is test@example.com',
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual(part); // Should return original part on failure
+    });
+  });
+
+  describe('processOutputResult', () => {
+    it('should return empty messages array unchanged', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model });
+
+      const messages: MastraMessageV2[] = [];
+      const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
+      expect(result).toEqual(messages);
+    });
+
+    it('should return messages without text content unchanged', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model });
+
+      const messages: MastraMessageV2[] = [createTestMessage('Some reasoning', 'assistant', 'test-id1')];
+
+      const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
+      expect(result).toEqual(messages);
+    });
+
+    it('should detect and redact PII in output messages', async () => {
+      const detections = [
+        {
+          type: 'email',
+          value: 'test@example.com',
+          confidence: 0.9,
+          start: 12,
+          end: 28,
+        },
+      ];
+      const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
+      const detector = new PIIDetector({ model });
+
+      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant', 'test-id1')];
+
+      const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
+
+      expect(result).toHaveLength(1);
+      expect((result[0].content.parts[0] as TextPart).text).toBe('My email is j***.d**@e******.com');
+    });
+
+    it('should block output when strategy is block and PII is detected', async () => {
+      const model = setupMockModel(createMockPIIResult(['email']));
+      const detector = new PIIDetector({ model, strategy: 'block' });
+
+      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant', 'test-id1')];
+
+      const mockAbort = vi.fn().mockImplementation(() => {
+        throw new TripWire('PII detected');
+      });
+
+      await expect(detector.processOutputResult({ messages, abort: mockAbort as any })).rejects.toThrow('PII detected');
+      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('PII detected'));
+    });
+
+    it('should filter output messages when strategy is filter and PII is detected', async () => {
+      const model = setupMockModel([
+        createMockPIIResult(['email']), // PII for first message
+        createMockPIIResult(), // No PII for second message
+      ]);
+      const detector = new PIIDetector({ model, strategy: 'filter' });
+
+      const messages: MastraMessageV2[] = [
+        createTestMessage('My email is test@example.com', 'assistant', 'test-id1'),
+        createTestMessage('This is safe content', 'assistant', 'test-id2'),
+      ];
+
+      const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
+
+      expect(result).toHaveLength(1);
+      expect((result[0].content.parts[0] as TextPart).text).toBe('This is safe content');
+    });
+
+    it('should warn but allow content when strategy is warn and PII is detected', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const model = setupMockModel(createMockPIIResult(['email']));
+      const detector = new PIIDetector({ model, strategy: 'warn' });
+
+      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant')];
+
+      const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(messages[0]);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('PII detected'));
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle output detection failures gracefully', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('Detection failed');
+        },
+      });
+      const detector = new PIIDetector({ model });
+      const messages: MastraMessageV2[] = [createTestMessage('My email is test@example.com', 'assistant')];
+
+      const result = await detector.processOutputResult({ messages, abort: vi.fn() as any });
+      expect(result).toEqual(messages); // Should return original messages on failure
     });
   });
 });
