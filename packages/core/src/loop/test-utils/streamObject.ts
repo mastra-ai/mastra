@@ -56,7 +56,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
   describe('streamObject', () => {
     describe('output = "object"', () => {
       describe('result.objectStream', () => {
-        it.todo('should send object deltas', async () => {
+        it('should send object deltas', async () => {
           const mockModel = createTestModel();
 
           const messageList = new MessageList();
@@ -256,7 +256,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
         });
 
-        it.todo('should reject object promise when the streamed object does not match the schema', async () => {
+        it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
             runId,
             model: new MockLanguageModelV2({

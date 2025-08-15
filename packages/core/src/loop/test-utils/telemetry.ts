@@ -38,7 +38,7 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
       expect(tracer.jsonSpans).toMatchSnapshot();
     });
 
-    it.only('should record telemetry data when enabled', async () => {
+    it('should record telemetry data when enabled', async () => {
       const messageList = new MessageList();
       messageList.add(
         {
