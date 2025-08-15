@@ -116,24 +116,26 @@ export const AgentMetadataModelSwitcher = ({
             />
           </PopoverTrigger>
 
-          <PopoverContent
-            onOpenAutoFocus={e => e.preventDefault()}
-            className="flex flex-col gap-2 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto"
-          >
-            {filteredModels.map(model => (
-              <div
-                className="flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2"
-                key={model.provider + model.model}
-                onClick={() => {
-                  setSelectedModel(model.model);
-                  setShowSuggestions(false);
-                }}
-              >
-                <Icon>{providerMapToIcon[model.icon as keyof typeof providerMapToIcon]}</Icon>
-                {model.model}
-              </div>
-            ))}
-          </PopoverContent>
+          {filteredModels.length > 0 && (
+            <PopoverContent
+              onOpenAutoFocus={e => e.preventDefault()}
+              className="flex flex-col gap-2 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto"
+            >
+              {filteredModels.map(model => (
+                <div
+                  className="flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2"
+                  key={model.provider + model.model}
+                  onClick={() => {
+                    setSelectedModel(model.model);
+                    setShowSuggestions(false);
+                  }}
+                >
+                  <Icon>{providerMapToIcon[model.icon as keyof typeof providerMapToIcon]}</Icon>
+                  {model.model}
+                </div>
+              ))}
+            </PopoverContent>
+          )}
         </Popover>
         <Tooltip>
           <TooltipTrigger asChild>
