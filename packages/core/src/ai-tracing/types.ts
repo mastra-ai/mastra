@@ -167,7 +167,7 @@ export interface AISpan<TType extends AISpanType> {
   /** When span ended */
   endTime?: Date;
   /** AI-specific attributes - strongly typed based on span type */
-  attributes: AISpanTypeMap[TType];
+  attributes?: AISpanTypeMap[TType];
   /** Parent span reference (undefined for root spans) */
   parent?: AnyAISpan;
   /** The top-level span - can be any type */

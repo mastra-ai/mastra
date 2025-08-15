@@ -140,7 +140,7 @@ describe('AI Tracing', () => {
       expect(agentSpan.id).toBeValidSpanId();
       expect(agentSpan.name).toBe('test-agent');
       expect(agentSpan.type).toBe(AISpanType.AGENT_RUN);
-      expect(agentSpan.attributes.agentId).toBe('agent-123');
+      expect(agentSpan.attributes?.agentId).toBe('agent-123');
       expect(agentSpan.startTime).toBeInstanceOf(Date);
       expect(agentSpan.endTime).toBeUndefined();
       expect(agentSpan.trace).toBe(agentSpan); // Root span is its own trace
@@ -172,7 +172,7 @@ describe('AI Tracing', () => {
 
       expect(toolSpan.id).toBeValidSpanId();
       expect(toolSpan.type).toBe(AISpanType.TOOL_CALL);
-      expect(toolSpan.attributes.toolId).toBe('tool-456');
+      expect(toolSpan.attributes?.toolId).toBe('tool-456');
       expect(toolSpan.trace).toBe(agentSpan); // Child inherits trace from parent
       expect(toolSpan.traceId).toBe(agentSpan.traceId); // Child spans inherit trace ID
     });
@@ -1028,7 +1028,7 @@ describe('AI Tracing', () => {
         },
       });
 
-      expect(agentSpan.attributes.agentId).toBe('agent-123');
+      expect(agentSpan.attributes?.agentId).toBe('agent-123');
 
       // LLM attributes
       const llmSpan = tracing.startSpan({
@@ -1042,7 +1042,7 @@ describe('AI Tracing', () => {
         },
       });
 
-      expect(llmSpan.attributes.model).toBe('gpt-4');
+      expect(llmSpan.attributes?.model).toBe('gpt-4');
 
       // Tool attributes
       const toolSpan = tracing.startSpan({
@@ -1054,7 +1054,7 @@ describe('AI Tracing', () => {
         },
       });
 
-      expect(toolSpan.attributes.toolId).toBe('calculator');
+      expect(toolSpan.attributes?.toolId).toBe('calculator');
     });
   });
 
@@ -1152,16 +1152,16 @@ describe('AI Tracing', () => {
         const attributes = filtered!.attributes;
 
         // Check that sensitive fields are redacted
-        expect(attributes['password']).toBe('[REDACTED]');
-        expect(attributes['Token']).toBe('[REDACTED]');
-        expect(attributes['SECRET']).toBe('[REDACTED]');
-        expect(attributes['apiKey']).toBe('[REDACTED]');
-        expect(attributes['AUTHORIZATION']).toBe('[REDACTED]');
-        expect(attributes['sessionId']).toBe('[REDACTED]');
+        expect(attributes?.['password']).toBe('[REDACTED]');
+        expect(attributes?.['Token']).toBe('[REDACTED]');
+        expect(attributes?.['SECRET']).toBe('[REDACTED]');
+        expect(attributes?.['apiKey']).toBe('[REDACTED]');
+        expect(attributes?.['AUTHORIZATION']).toBe('[REDACTED]');
+        expect(attributes?.['sessionId']).toBe('[REDACTED]');
 
         // Check that normal fields are visible
-        expect(attributes['normalField']).toBe('visible-data');
-        expect(attributes['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
+        expect(attributes?.['normalField']).toBe('visible-data');
+        expect(attributes?.['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
       });
 
       it('should allow custom sensitive fields', () => {
@@ -1192,13 +1192,13 @@ describe('AI Tracing', () => {
         const attributes = filtered!.attributes;
 
         // Custom fields should be redacted
-        expect(attributes['customSecret']).toBe('[REDACTED]');
-        expect(attributes['InternalId']).toBe('[REDACTED]');
+        expect(attributes?.['customSecret']).toBe('[REDACTED]');
+        expect(attributes?.['InternalId']).toBe('[REDACTED]');
 
         // Default sensitive fields should be visible (not in custom list)
-        expect(attributes['password']).toBe('should-be-visible');
-        expect(attributes['publicData']).toBe('visible-data');
-        expect(attributes['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
+        expect(attributes?.['password']).toBe('should-be-visible');
+        expect(attributes?.['publicData']).toBe('visible-data');
+        expect(attributes?.['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
       });
 
       it('should recursively filter nested sensitive fields', () => {
@@ -1242,20 +1242,20 @@ describe('AI Tracing', () => {
         const attributes = filtered!.attributes;
 
         // All sensitive fields should be redacted at any level
-        expect(attributes['apiKey']).toBe('[REDACTED]');
-        expect(attributes['config']['apiKey']).toBe('[REDACTED]');
-        expect(attributes['config']['auth']['token']).toBe('[REDACTED]');
-        expect(attributes['headers']['Authorization']).toBe('[REDACTED]');
-        expect(attributes['results'][0]['secret']).toBe('[REDACTED]');
-        expect(attributes['results'][1]['password']).toBe('[REDACTED]');
+        expect(attributes?.['apiKey']).toBe('[REDACTED]');
+        expect(attributes?.['config']['apiKey']).toBe('[REDACTED]');
+        expect(attributes?.['config']['auth']['token']).toBe('[REDACTED]');
+        expect(attributes?.['headers']['Authorization']).toBe('[REDACTED]');
+        expect(attributes?.['results'][0]['secret']).toBe('[REDACTED]');
+        expect(attributes?.['results'][1]['password']).toBe('[REDACTED]');
 
         // Non-sensitive fields should be visible
-        expect(attributes['model']).toBe('gpt-4');
-        expect(attributes['config']['temperature']).toBe(0.7);
-        expect(attributes['config']['auth']['userId']).toBe('user123');
-        expect(attributes['headers']['Content-Type']).toBe('application/json');
-        expect(attributes['results'][0]['data']).toBe('visible');
-        expect(attributes['results'][1]['value']).toBe(42);
+        expect(attributes?.['model']).toBe('gpt-4');
+        expect(attributes?.['config']['temperature']).toBe(0.7);
+        expect(attributes?.['config']['auth']['userId']).toBe('user123');
+        expect(attributes?.['headers']['Content-Type']).toBe('application/json');
+        expect(attributes?.['results'][0]['data']).toBe('visible');
+        expect(attributes?.['results'][1]['value']).toBe(42);
       });
 
       it('should handle circular references', () => {
@@ -1287,9 +1287,9 @@ describe('AI Tracing', () => {
         expect(filtered).not.toBeNull();
 
         const attributes = filtered!.attributes;
-        expect(attributes['apiKey']).toBe('[REDACTED]');
-        expect(attributes['self']).toBe('[Circular Reference]');
-        expect(attributes['name']).toBe('test');
+        expect(attributes?.['apiKey']).toBe('[REDACTED]');
+        expect(attributes?.['self']).toBe('[Circular Reference]');
+        expect(attributes?.['name']).toBe('test');
       });
 
       it('should return heavily redacted content on filtering error', () => {
@@ -1328,13 +1328,13 @@ describe('AI Tracing', () => {
         expect(filtered).not.toBeNull();
 
         const attributes = filtered!.attributes;
-        expect(attributes['[FILTERING_ERROR]']).toBe('Attributes were completely redacted due to filtering error');
-        expect(attributes['[ERROR_MESSAGE]']).toBe('Property access error');
+        expect(attributes?.['[FILTERING_ERROR]']).toBe('Attributes were completely redacted due to filtering error');
+        expect(attributes?.['[ERROR_MESSAGE]']).toBe('Property access error');
 
         // Should NOT contain the original sensitive data
-        expect(attributes['sensitiveData']).toBeUndefined();
-        expect(attributes['agentId']).toBeUndefined();
-        expect(attributes['problematicObject']).toBeUndefined();
+        expect(attributes?.['sensitiveData']).toBeUndefined();
+        expect(attributes?.['agentId']).toBeUndefined();
+        expect(attributes?.['problematicObject']).toBeUndefined();
       });
     });
 
@@ -1366,12 +1366,12 @@ describe('AI Tracing', () => {
 
         // Check that the exported span has filtered attributes
         const startSpan = testExporter.events[0].span;
-        expect(startSpan.attributes['agentId']).toBe('agent-123');
-        expect(startSpan.attributes['instructions']).toBe('Test agent');
+        expect(startSpan.attributes?.['agentId']).toBe('agent-123');
+        expect(startSpan.attributes?.['instructions']).toBe('Test agent');
 
         // Check the updated span for the filtered field
         const updatedSpan = testExporter.events[1].span; // span_updated event
-        expect(updatedSpan.attributes['apiKey']).toBe('[REDACTED]');
+        expect(updatedSpan.attributes?.['apiKey']).toBe('[REDACTED]');
       });
     });
   });
