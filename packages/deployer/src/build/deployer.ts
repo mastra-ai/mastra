@@ -5,6 +5,7 @@ import esbuild from 'rollup-plugin-esbuild';
 
 import { removeAllExceptDeployer } from './babel/get-deployer';
 import commonjs from '@rollup/plugin-commonjs';
+import json from '@rollup/plugin-json';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
 export function getDeployerBundler(entryFile: string, result: { isDeployerRemoved: boolean }) {
@@ -80,6 +81,7 @@ export function getDeployerBundler(entryFile: string, result: { isDeployerRemove
         platform: 'node',
         minify: false,
       }),
+      json(),
     ],
   });
 }

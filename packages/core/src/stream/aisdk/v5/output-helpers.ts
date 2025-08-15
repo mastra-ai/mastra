@@ -120,26 +120,26 @@ export function transformResponse({
 }) {
   const newResponse = { ...response };
   const messageList = new MessageList();
-  messageList.add(response.messages, 'response');
+  messageList.add(response?.messages ?? [], 'response');
 
   const formattedMessages = messageList.get.response.v2().filter((message: any) => message.role !== 'user');
 
-  const hasTools = formattedMessages.some(
+  const hasTools = formattedMessages?.some(
     (message: any) =>
       Array.isArray(message.content) && message.content.some((part: any) => part.type === 'tool-result'),
   );
-  newResponse.messages = formattedMessages.map((message: any) => {
+  newResponse.messages = formattedMessages?.map((message: any) => {
     // Handle string content
     if (typeof message.content === 'string') {
       return message;
     }
 
-    let newContent = message.content.map((part: any) => {
+    let newContent = message?.content?.parts?.map((part: any) => {
       if (part.type === 'file') {
         if (isMessages) {
           return {
             type: 'file',
-            mediaType: part.mediaType,
+            mediaType: part.mimeType,
             data: part.data,
             providerOptions: part.providerOptions,
           };
@@ -151,12 +151,17 @@ export function transformResponse({
             from: 'AGENT',
             payload: {
               data: part.data,
-              mimeType: part.mediaType,
+              mimeType: part.mimeType,
             },
           },
         });
 
         return transformedFile;
+      } else if (part.type === 'source') {
+        return {
+          type: 'source',
+          ...part.source,
+        };
       }
 
       if (!isMessages) {
@@ -175,9 +180,10 @@ export function transformResponse({
       newContent = newContent.filter((part: any) => part.type !== 'source');
     }
 
+    message.content.parts = newContent;
+
     return {
       ...message,
-      content: newContent,
     };
   });
 
@@ -186,12 +192,26 @@ export function transformResponse({
 
 export function transformSteps({ steps, runId }: { steps: any[]; runId: string }) {
   return steps.map(step => {
+    const response = transformResponse({ response: step.response, isMessages: true, runId });
+    const newResponse = {
+      ...response,
+      messages: response.messages?.map((message: any) => ({
+        role: message.role,
+        content: message.content?.parts,
+      })),
+    };
+
+    const content =
+      transformResponse({ response: step.response, isMessages: false, runId }).messages?.flatMap((message: any) => {
+        return message.content?.parts;
+      }) ?? [];
+
     return new DefaultStepResult({
-      content: transformResponse(step.response).messages?.flatMap((message: any) => message.content) ?? [],
+      content,
       warnings: step.warnings ?? [],
       providerMetadata: step.providerMetadata,
       finishReason: step.finishReason as StepResult<ToolSet>['finishReason'],
-      response: transformResponse({ response: step.response, isMessages: true, runId }),
+      response: newResponse,
       request: step.request,
       usage: step.usage,
     });
