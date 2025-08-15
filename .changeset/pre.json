@@ -70,10 +70,25 @@
     "@mastra/voice-playai": "0.10.7",
     "@mastra/voice-sarvam": "0.10.7",
     "@mastra/voice-speechify": "0.10.7",
-    "@mastra/inngest": "0.11.9"
+    "@mastra/inngest": "0.11.9",
+    "@mastra/voice-google-gemini-live": "0.10.6"
   },
   "changesets": [
+    "bright-bikes-shout",
     "cold-bottles-fix",
-    "smooth-suns-know"
+    "cuddly-badgers-watch",
+    "cyan-paws-hunt",
+    "deep-items-stop",
+    "empty-ears-relate",
+    "five-goats-count",
+    "great-panthers-occur",
+    "lovely-experts-do",
+    "nervous-deers-call",
+    "silver-lions-sit",
+    "sixty-times-relax",
+    "smooth-suns-know",
+    "spotty-months-draw",
+    "swift-steaks-love",
+    "tired-paws-study"
   ]
 }
