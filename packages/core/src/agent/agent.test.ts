@@ -5927,7 +5927,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
 
       console.log('Natural text:', result.text);
       console.log('Structured color data:', result.object);
-    }, 15000); // 15 second timeout for real API calls
+    }, 40000);
 
     it('should handle complex nested schemas for article analysis', async () => {
       const articleSchema = z.object({
@@ -6005,7 +6005,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
 
       console.log('Natural text:', result.text);
       console.log('Structured article analysis:', result.object);
-    }, 20000); // 20 second timeout for complex analysis
+    }, 40000);
 
     it('should handle fallback strategy gracefully', async () => {
       const strictSchema = z.object({
@@ -6040,7 +6040,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
 
       console.log('Natural text:', result.text);
       console.log('Fallback object:', result.object);
-    }, 15000);
+    }, 40000);
 
     it('should work with different models for main agent vs structuring agent', async () => {
       const ideaSchema = z.object({
@@ -6088,7 +6088,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
 
       console.log('Natural text:', result.text);
       console.log('Structured idea data:', result.object);
-    }, 20000);
+    }, 40000);
   });
 
   it('should work with streamVNext', async () => {
@@ -6140,5 +6140,5 @@ describe('StructuredOutputProcessor Integration Tests', () => {
 
     console.log('Natural text:', resultText);
     console.log('Structured idea data:', resultObj);
-  }, 20000);
+  }, 40000);
 });
