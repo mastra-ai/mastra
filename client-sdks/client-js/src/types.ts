@@ -16,7 +16,7 @@ import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorer, MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type { MastraScorerEntry, ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,
@@ -465,6 +465,7 @@ export interface GetScoresByScorerIdParams {
   entityType?: string;
   page?: number;
   perPage?: number;
+  source?: ScoringSource;
 }
 
 export interface GetScoresByEntityIdParams {
