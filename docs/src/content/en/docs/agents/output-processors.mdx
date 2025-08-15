@@ -234,9 +234,9 @@ class ResponseLengthLimiter implements Processor {
   
   constructor(private maxLength: number = 1000) {}
 
-  async processOutputStream({ chunk, allChunks, state, abort }: { // will run on every stream part emitted from the LLM
+  async processOutputStream({ chunk, streamParts, state, abort }: { // will run on every stream part emitted from the LLM
     chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {

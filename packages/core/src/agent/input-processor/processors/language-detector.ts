@@ -10,6 +10,7 @@ import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for LanguageDetector that implements the old InputProcessor interface
+ * @deprecated Use LanguageDetector directly instead from @mastra/core/processors
  */
 export class LanguageDetectorInputProcessor implements InputProcessor {
   readonly name = 'language-detector';

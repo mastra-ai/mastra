@@ -511,21 +511,21 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
    * Process streaming output chunks for PII detection and redaction
    */
   async processOutputStream(args: {
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: TextStreamPart<any> | ObjectStreamPart<any>;
+    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
-    const { chunk, abort } = args;
+    const { part, abort } = args;
     try {
       // Only process text-delta chunks
-      if (chunk.type !== 'text-delta') {
-        return chunk;
+      if (part.type !== 'text-delta') {
+        return part;
       }
 
-      const textContent = chunk.textDelta;
+      const textContent = part.textDelta;
       if (!textContent.trim()) {
-        return chunk;
+        return part;
       }
 
       const detectionResult = await this.detectPII(textContent);
@@ -539,13 +539,13 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
             console.warn(
               `[PIIDetector] PII detected in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
             );
-            return chunk; // Allow content through with warning
+            return part; // Allow content through with warning
 
           case 'filter':
             console.info(
-              `[PIIDetector] Filtered streaming chunk with PII: ${this.getDetectedTypes(detectionResult).join(', ')}`,
+              `[PIIDetector] Filtered streaming part with PII: ${this.getDetectedTypes(detectionResult).join(', ')}`,
             );
-            return null; // Don't emit this chunk
+            return null; // Don't emit this part
 
           case 'redact':
             if (detectionResult.redacted_content) {
@@ -553,26 +553,26 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
                 `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
               );
               return {
-                ...chunk,
+                ...part,
                 textDelta: detectionResult.redacted_content,
               };
             } else {
-              console.warn(`[PIIDetector] No redaction available for streaming chunk, filtering`);
+              console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
               return null; // Fallback to filtering if no redaction available
             }
 
           default:
-            return chunk;
+            return part;
         }
       }
 
-      return chunk;
+      return part;
     } catch (error) {
       if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
       console.warn('[PIIDetector] Streaming detection failed, allowing content:', error);
-      return chunk; // Fail open - allow content if detection fails
+      return part; // Fail open - allow content if detection fails
     }
   }
 

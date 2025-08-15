@@ -817,38 +817,38 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
 
-      const chunk: ObjectStreamPart<any> = {
+      const part: ObjectStreamPart<any> = {
         type: 'object' as const,
         object: { status: 'ok' },
       };
 
       const result = await detector.processOutputStream({
-        chunk,
-        allChunks: [],
+        part,
+        streamParts: [],
         state: {},
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should return empty text chunks unchanged', async () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta' as const,
         textDelta: '',
       };
 
       const result = await detector.processOutputStream({
-        chunk,
-        allChunks: [],
+        part,
+        streamParts: [],
         state: {},
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should detect and redact PII in text chunks', async () => {
@@ -864,14 +864,14 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
       const detector = new PIIDetector({ model });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: 'My email is test@example.com',
       };
 
       const result = await detector.processOutputStream({
-        chunk,
-        allChunks: [],
+        part,
+        streamParts: [],
         state: {},
         abort: vi.fn() as any,
       });
@@ -886,7 +886,7 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'block' });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: 'My email is test@example.com',
       };
@@ -897,8 +897,8 @@ describe('PIIDetector', () => {
 
       await expect(
         detector.processOutputStream({
-          chunk,
-          allChunks: [],
+          part,
+          streamParts: [],
           state: {},
           abort: mockAbort as any,
         }),
@@ -911,14 +911,14 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'filter' });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: 'My email is test@example.com',
       };
 
       const result = await detector.processOutputStream({
-        chunk,
-        allChunks: [],
+        part,
+        streamParts: [],
         state: {},
         abort: vi.fn() as any,
       });
@@ -932,19 +932,19 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email']));
       const detector = new PIIDetector({ model, strategy: 'warn' });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: 'My email is test@example.com',
       };
 
       const result = await detector.processOutputStream({
-        chunk,
-        allChunks: [],
+        part,
+        streamParts: [],
         state: {},
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('PII detected in streaming content'));
 
       consoleSpy.mockRestore();
@@ -959,19 +959,19 @@ describe('PIIDetector', () => {
       });
       const detector = new PIIDetector({ model });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: 'My email is test@example.com',
       };
 
       const result = await detector.processOutputStream({
-        chunk,
-        allChunks: [],
+        part,
+        streamParts: [],
         state: {},
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual(chunk); // Should return original chunk on failure
+      expect(result).toEqual(part); // Should return original part on failure
     });
   });
 

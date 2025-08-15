@@ -38,12 +38,12 @@ export class BatchPartsProcessor implements Processor {
   }
 
   async processOutputStream(args: {
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: TextStreamPart<any> | ObjectStreamPart<any>;
+    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
-    const { chunk, state } = args;
+    const { part, state } = args;
 
     // Initialize state if not present
     if (!state.batch) {
@@ -56,25 +56,25 @@ export class BatchPartsProcessor implements Processor {
     // Check if a timeout has triggered a flush
     if (state.timeoutTriggered && state.batch.length > 0) {
       state.timeoutTriggered = false;
-      // Add the current chunk to the batch before flushing
-      state.batch.push(chunk);
+      // Add the current part to the batch before flushing
+      state.batch.push(part);
       const batchedChunk = this.flushBatch(state);
       return batchedChunk;
     }
 
     // If it's a non-text part and we should emit immediately, flush the batch first
-    if (this.options.emitOnNonText && chunk.type !== 'text-delta') {
+    if (this.options.emitOnNonText && part.type !== 'text-delta') {
       const batchedChunk = this.flushBatch(state);
-      // Return the batched chunk if there was one, otherwise return the current chunk
-      // Don't add the current non-text chunk to the batch - emit it immediately
+      // Return the batched part if there was one, otherwise return the current part
+      // Don't add the current non-text part to the batch - emit it immediately
       if (batchedChunk) {
         return batchedChunk;
       }
-      return chunk;
+      return part;
     }
 
-    // Add the chunk to the current batch
-    state.batch.push(chunk);
+    // Add the part to the current batch
+    state.batch.push(part);
 
     // Check if we should emit based on batch size
     if (state.batch.length >= this.options.batchSize!) {
@@ -90,7 +90,7 @@ export class BatchPartsProcessor implements Processor {
       }, this.options.maxWaitTime);
     }
 
-    // Don't emit this chunk yet - it's batched
+    // Don't emit this part yet - it's batched
     return null;
   }
 
@@ -105,21 +105,21 @@ export class BatchPartsProcessor implements Processor {
       state.timeoutId = undefined;
     }
 
-    // If we only have one chunk, return it directly
+    // If we only have one part, return it directly
     if (state.batch.length === 1) {
-      const chunk = state.batch[0];
+      const part = state.batch[0];
       state.batch = [];
-      return chunk || null;
+      return part || null;
     }
 
-    // Combine multiple text chunks into a single text chunk
-    const textChunks = state.batch.filter((chunk: any) => chunk.type === 'text-delta') as TextStreamPart<any>[];
+    // Combine multiple text chunks into a single text part
+    const textChunks = state.batch.filter((part: any) => part.type === 'text-delta') as TextStreamPart<any>[];
 
     if (textChunks.length > 0) {
       // Combine all text deltas
-      const combinedText = textChunks.map(chunk => (chunk as any).textDelta).join('');
+      const combinedText = textChunks.map(part => (part as any).textDelta).join('');
 
-      // Create a new combined text chunk
+      // Create a new combined text part
       const combinedChunk: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: combinedText,
@@ -131,10 +131,10 @@ export class BatchPartsProcessor implements Processor {
 
       return combinedChunk;
     } else {
-      // If no text chunks, return the first non-text chunk
-      const chunk = state.batch[0];
+      // If no text chunks, return the first non-text part
+      const part = state.batch[0];
       state.batch = state.batch.slice(1);
-      return chunk || null;
+      return part || null;
     }
   }
 

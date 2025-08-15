@@ -560,7 +560,7 @@ describe('ModerationProcessor', () => {
   });
 
   describe('processOutputStream', () => {
-    it('should always moderate current chunk even when chunkWindow is 0', async () => {
+    it('should always moderate current part even when chunkWindow is 0', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
       const moderator = new ModerationProcessor({
         model,
@@ -572,14 +572,14 @@ describe('ModerationProcessor', () => {
         throw new TripWire('Content flagged');
       });
 
-      const chunk = { type: 'text-delta' as const, textDelta: 'Flagged content' };
-      const allChunks: any[] = []; // Empty context
+      const part = { type: 'text-delta' as const, textDelta: 'Flagged content' };
+      const streamParts: any[] = []; // Empty context
 
-      // Should attempt to moderate the current chunk and abort
+      // Should attempt to moderate the current part and abort
       await expect(async () => {
         await moderator.processOutputStream({
-          chunk,
-          allChunks,
+          part,
+          streamParts,
           state: {},
           abort: mockAbort as any,
         });
@@ -602,16 +602,16 @@ describe('ModerationProcessor', () => {
         { type: 'text-delta' as const, textDelta: 'Previous content ' },
         { type: 'text-delta' as const, textDelta: 'more context ' },
       ];
-      const currentChunk = { type: 'text-delta' as const, textDelta: 'current chunk' };
+      const currentChunk = { type: 'text-delta' as const, textDelta: 'current part' };
 
       const result = await moderator.processOutputStream({
-        chunk: currentChunk,
-        allChunks: previousChunks,
+        part: currentChunk,
+        streamParts: previousChunks,
         state: {},
         abort: mockAbort as any,
       });
 
-      // Should return the chunk if moderation passes
+      // Should return the part if moderation passes
       expect(result).toEqual(currentChunk);
       expect(mockAbort).not.toHaveBeenCalled();
     });
@@ -628,18 +628,18 @@ describe('ModerationProcessor', () => {
       const objectChunk = { type: 'object' as const, object: { key: 'value' } };
 
       const result = await moderator.processOutputStream({
-        chunk: objectChunk,
-        allChunks: [],
+        part: objectChunk,
+        streamParts: [],
         state: {},
         abort: mockAbort as any,
       });
 
-      // Should return the chunk without moderation
+      // Should return the part without moderation
       expect(result).toEqual(objectChunk);
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
-    it('should properly handle chunkWindow=0 with current chunk in allChunks', async () => {
+    it('should properly handle chunkWindow=0 with current part in streamParts', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
       const moderator = new ModerationProcessor({
         model,
@@ -650,16 +650,16 @@ describe('ModerationProcessor', () => {
       const mockAbort = vi.fn();
 
       const currentChunk = { type: 'text-delta' as const, textDelta: 'Safe content' };
-      const allChunks = [currentChunk]; // allChunks includes the current chunk
+      const streamParts = [currentChunk]; // streamParts includes the current part
 
       const result = await moderator.processOutputStream({
-        chunk: currentChunk,
-        allChunks,
+        part: currentChunk,
+        streamParts,
         state: {},
         abort: mockAbort as any,
       });
 
-      // Should moderate the current chunk and return it if safe
+      // Should moderate the current part and return it if safe
       expect(result).toEqual(currentChunk);
       expect(mockAbort).not.toHaveBeenCalled();
     });

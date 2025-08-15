@@ -11,6 +11,7 @@ import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for PIIDetector that implements the old InputProcessor interface
+ * @deprecated Use PIIDetector directly instead from @mastra/core/processors
  */
 export class PIIDetectorInputProcessor implements InputProcessor {
   readonly name = 'pii-detector';

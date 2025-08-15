@@ -27,10 +27,10 @@ describe('TokenLimiterProcessor', () => {
     it('should allow chunks within token limit', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
       expect(processor.getCurrentTokens()).toBeGreaterThan(0);
       expect(processor.getCurrentTokens()).toBeLessThanOrEqual(10);
     });
@@ -38,24 +38,24 @@ describe('TokenLimiterProcessor', () => {
     it('should truncate when token limit is exceeded (default strategy)', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
-      // First chunk should be allowed
+      // First part should be allowed
       const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
       const result1 = await processor.processOutputStream({
-        chunk: chunk1,
-        allChunks: [],
+        part: chunk1,
+        streamParts: [],
         state: {},
         abort: mockAbort,
       });
       expect(result1).toEqual(chunk1);
 
-      // Second chunk should be truncated
+      // Second part should be truncated
       const chunk2: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: ' world this is a very long message that will exceed the token limit',
       };
       const result2 = await processor.processOutputStream({
-        chunk: chunk2,
-        allChunks: [],
+        part: chunk2,
+        streamParts: [],
         state: {},
         abort: mockAbort,
       });
@@ -65,10 +65,10 @@ describe('TokenLimiterProcessor', () => {
     it('should accept simple number constructor', async () => {
       processor = new TokenLimiterProcessor(10);
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
       expect(processor.getMaxTokens()).toBe(10);
     });
   });
@@ -80,21 +80,21 @@ describe('TokenLimiterProcessor', () => {
         strategy: 'abort',
       });
 
-      // First chunk should be allowed
+      // First part should be allowed
       const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
       const result1 = await processor.processOutputStream({
-        chunk: chunk1,
-        allChunks: [],
+        part: chunk1,
+        streamParts: [],
         state: {},
         abort: mockAbort,
       });
       expect(result1).toEqual(chunk1);
 
-      // Second chunk should trigger abort
+      // Second part should trigger abort
       const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world this is a very long message' };
 
       // The abort function should be called
-      await processor.processOutputStream({ chunk: chunk2, allChunks: [], state: {}, abort: mockAbort });
+      await processor.processOutputStream({ part: chunk2, streamParts: [], state: {}, abort: mockAbort });
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Token limit of 5 exceeded'));
     });
   });
@@ -110,86 +110,86 @@ describe('TokenLimiterProcessor', () => {
         textDelta: ' this is a very long message that will definitely exceed the token limit',
       };
 
-      await processor.processOutputStream({ chunk: chunk1, allChunks: [], state: {}, abort: mockAbort });
+      await processor.processOutputStream({ part: chunk1, streamParts: [], state: {}, abort: mockAbort });
       const tokensAfter1 = processor.getCurrentTokens();
 
-      await processor.processOutputStream({ chunk: chunk2, allChunks: [], state: {}, abort: mockAbort });
+      await processor.processOutputStream({ part: chunk2, streamParts: [], state: {}, abort: mockAbort });
       const tokensAfter2 = processor.getCurrentTokens();
 
       expect(tokensAfter2).toBeGreaterThan(tokensAfter1);
 
-      // Third chunk should be truncated due to cumulative limit
+      // Third part should be truncated due to cumulative limit
       const result3 = await processor.processOutputStream({
-        chunk: chunk3,
-        allChunks: [],
+        part: chunk3,
+        streamParts: [],
         state: {},
         abort: mockAbort,
       });
       expect(result3).toBeNull();
     });
 
-    it('should use chunk counting when specified', async () => {
+    it('should use part counting when specified', async () => {
       processor = new TokenLimiterProcessor({
         limit: 5,
-        countMode: 'chunk',
+        countMode: 'part',
       });
 
       const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
       const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world this is a very long message' };
 
-      // First chunk should be allowed (within limit)
+      // First part should be allowed (within limit)
       const result1 = await processor.processOutputStream({
-        chunk: chunk1,
-        allChunks: [],
+        part: chunk1,
+        streamParts: [],
         state: {},
         abort: mockAbort,
       });
       expect(result1).toEqual(chunk1);
 
-      // Second chunk should be truncated (exceeds limit)
+      // Second part should be truncated (exceeds limit)
       const result2 = await processor.processOutputStream({
-        chunk: chunk2,
-        allChunks: [],
+        part: chunk2,
+        streamParts: [],
         state: {},
         abort: mockAbort,
       });
       expect(result2).toBeNull();
 
-      // Token count should be reset for next chunk
+      // Token count should be reset for next part
       expect(processor.getCurrentTokens()).toBe(0);
     });
   });
 
-  describe('different chunk types', () => {
+  describe('different part types', () => {
     it('should handle text-delta chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello world' };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello world' };
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should handle object chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 50 });
 
-      const chunk: ObjectStreamPart<any> = {
+      const part: ObjectStreamPart<any> = {
         type: 'object',
         object: { message: 'Hello world', count: 42 },
       };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should count tokens in object chunks correctly', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
-      const chunk: ObjectStreamPart<any> = {
+      const part: ObjectStreamPart<any> = {
         type: 'object',
         object: { message: 'This is a very long message that will exceed the token limit' },
       };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toBeNull();
     });
@@ -199,8 +199,8 @@ describe('TokenLimiterProcessor', () => {
     it('should reset token counter', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(processor.getCurrentTokens()).toBeGreaterThan(0);
 
@@ -218,8 +218,8 @@ describe('TokenLimiterProcessor', () => {
 
       expect(processor.getCurrentTokens()).toBe(0);
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(processor.getCurrentTokens()).toBeGreaterThan(0);
     });
@@ -229,36 +229,36 @@ describe('TokenLimiterProcessor', () => {
     it('should handle empty text chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: '' };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: '' };
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
       expect(processor.getCurrentTokens()).toBe(0);
     });
 
     it('should handle single character chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 1 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'a' };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'a' };
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should handle very large limits', async () => {
       processor = new TokenLimiterProcessor({ limit: 1000000 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello world' };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello world' };
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should handle zero limit', async () => {
       processor = new TokenLimiterProcessor({ limit: 0 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const result = await processor.processOutputStream({ chunk, allChunks: [], state: {}, abort: mockAbort });
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toBeNull();
     });
@@ -277,21 +277,21 @@ describe('TokenLimiterProcessor', () => {
 
       for (let i = 0; i < chunks.length; i++) {
         const result = await processor.processOutputStream({
-          chunk: chunks[i],
-          allChunks: [],
+          part: chunks[i],
+          streamParts: [],
           state: {},
           abort: mockAbort,
         });
         if (i < 3) {
           expect(result).toEqual(chunks[i]);
         } else {
-          // Last chunk might be truncated depending on token count
+          // Last part might be truncated depending on token count
           expect(result === chunks[i] || result === null).toBe(true);
         }
       }
     });
 
-    it('should work with mixed chunk types', async () => {
+    it('should work with mixed part types', async () => {
       processor = new TokenLimiterProcessor({ limit: 30 });
 
       const chunks: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [
@@ -302,15 +302,15 @@ describe('TokenLimiterProcessor', () => {
 
       for (let i = 0; i < chunks.length; i++) {
         const result = await processor.processOutputStream({
-          chunk: chunks[i],
-          allChunks: [],
+          part: chunks[i],
+          streamParts: [],
           state: {},
           abort: mockAbort,
         });
         if (i < 2) {
           expect(result).toEqual(chunks[i]);
         } else {
-          // Last chunk might be truncated depending on token count
+          // Last part might be truncated depending on token count
           expect(result === chunks[i] || result === null).toBe(true);
         }
       }

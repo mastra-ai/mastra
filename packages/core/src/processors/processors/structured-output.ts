@@ -19,7 +19,7 @@ export type { StructuredOutputOptions } from '../../agent/types';
  * - Automatic instruction generation based on schema
  */
 export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Processor {
-  readonly name = 'experimental-output';
+  readonly name = 'structured-output';
 
   public schema: S;
   private structuringAgent: Agent;
@@ -33,7 +33,7 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
 
     // Create internal structuring agent
     this.structuringAgent = new Agent({
-      name: 'experimental-output-structurer',
+      name: 'structured-output-structurer',
       instructions: options.instructions || this.generateInstructions(),
       model: options.model,
     });

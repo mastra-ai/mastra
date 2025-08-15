@@ -73,7 +73,7 @@ export interface ModerationOptions {
 
   /**
    * Number of previous chunks to include for context when moderating stream chunks.
-   * If set to 1, includes the previous chunk. If set to 2, includes the two previous chunks, etc.
+   * If set to 1, includes the previous part. If set to 2, includes the two previous chunks, etc.
    * Default: 0 (no context window)
    */
   chunkWindow?: number;
@@ -181,21 +181,21 @@ export class ModerationProcessor implements Processor {
   }
 
   async processOutputStream(args: {
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: TextStreamPart<any> | ObjectStreamPart<any>;
+    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null | undefined> {
     try {
-      const { chunk, allChunks, abort } = args;
+      const { part, streamParts, abort } = args;
 
       // Only process text-delta chunks for moderation
-      if (chunk.type !== 'text-delta') {
-        return chunk;
+      if (part.type !== 'text-delta') {
+        return part;
       }
 
-      // Build context from chunks based on chunkWindow (allChunks includes the current chunk)
-      const contentToModerate = this.buildContextFromChunks(allChunks);
+      // Build context from chunks based on chunkWindow (streamParts includes the current part)
+      const contentToModerate = this.buildContextFromChunks(streamParts);
 
       const moderationResult = await this.moderateContent(contentToModerate, true);
 
@@ -204,18 +204,18 @@ export class ModerationProcessor implements Processor {
 
         // If we reach here, strategy is 'warn' or 'filter'
         if (this.strategy === 'filter') {
-          return null; // Don't emit this chunk
+          return null; // Don't emit this part
         }
       }
 
-      return chunk;
+      return part;
     } catch (error) {
       if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
       // Log error but don't block the stream
       console.warn('[ModerationProcessor] Stream moderation failed:', error);
-      return args.chunk;
+      return args.part;
     }
   }
 
@@ -349,27 +349,27 @@ Content: "${content}"`;
 
   /**
    * Build context string from chunks based on chunkWindow
-   * allChunks includes the current chunk
+   * streamParts includes the current part
    */
-  private buildContextFromChunks(allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[]): string {
+  private buildContextFromChunks(streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[]): string {
     if (this.chunkWindow === 0) {
-      // When chunkWindow is 0, only moderate the current chunk (last chunk in allChunks)
-      const currentChunk = allChunks[allChunks.length - 1];
+      // When chunkWindow is 0, only moderate the current part (last part in streamParts)
+      const currentChunk = streamParts[streamParts.length - 1];
       if (currentChunk && currentChunk.type === 'text-delta') {
         return currentChunk.textDelta;
       }
       return '';
     }
 
-    // Get the last N chunks (allChunks includes the current chunk)
-    const contextChunks = allChunks.slice(-this.chunkWindow);
+    // Get the last N chunks (streamParts includes the current part)
+    const contextChunks = streamParts.slice(-this.chunkWindow);
 
     // Extract text content from text-delta chunks
     const textContent = contextChunks
-      .filter(chunk => chunk.type === 'text-delta')
-      .map(chunk => {
-        if (chunk.type === 'text-delta') {
-          return chunk.textDelta;
+      .filter(part => part.type === 'text-delta')
+      .map(part => {
+        if (part.type === 'text-delta') {
+          return part.textDelta;
         }
         return '';
       })

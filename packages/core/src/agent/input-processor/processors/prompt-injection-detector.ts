@@ -9,6 +9,7 @@ import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for PromptInjectionDetector that implements the old InputProcessor interface
+ * @deprecated Use PromptInjectionDetector directly instead from @mastra/core/processors
  */
 export class PromptInjectionDetectorInputProcessor implements InputProcessor {
   readonly name = 'prompt-injection-detector';

@@ -140,14 +140,14 @@ async function runSingleOutputsTest(
 
     const generateOptions: any = {
       maxSteps: 1,
-      // experimental_output: testTool.inputSchema!,
-      outputProcessors: [
-        new StructuredOutputProcessor({
-          schema: testTool.inputSchema!,
-          model: model,
-          errorStrategy: 'strict',
-        }),
-      ],
+      experimental_output: testTool.inputSchema!,
+      // outputProcessors: [
+      //   new StructuredOutputProcessor({
+      //     schema: testTool.inputSchema!,
+      //     model: model,
+      //     errorStrategy: 'strict',
+      //   }),
+      // ],
     };
 
     if (model.provider.includes('openai') || model.modelId.includes('openai')) {
@@ -158,6 +158,11 @@ async function runSingleOutputsTest(
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
+    }
+
+    const parsed = testTool.inputSchema?.parse(response.object);
+    if (!parsed) {
+      throw new Error('Failed to parse object for schema: ' + schemaName + ' with text: ' + response.text);
     }
 
     return {
@@ -378,7 +383,7 @@ describe('Tool Schema Compatibility', () => {
     // The compatibility layer still fixes things in the same way, output schemas and input schemas fail in a similar way for a model
     // but the LLM sometimes makes silly mistakes with output schemas, like returning a json string instead of an object or not returning anything.
     // Skipping this also saves us a lot of cost in CI for running tests. I'll keep the tests here for now if we ever want to test it manually.
-    describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+    describe.only(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
         describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
           testTools.forEach(testTool => {

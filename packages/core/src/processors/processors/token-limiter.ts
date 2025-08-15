@@ -20,11 +20,11 @@ export interface TokenLimiterOptions {
    */
   strategy?: 'truncate' | 'abort';
   /**
-   * Whether to count tokens from the beginning of the stream or just the current chunk
+   * Whether to count tokens from the beginning of the stream or just the current part
    * - 'cumulative': Count all tokens from the start (default)
-   * - 'chunk': Only count tokens in the current chunk
+   * - 'part': Only count tokens in the current part
    */
-  countMode?: 'cumulative' | 'chunk';
+  countMode?: 'cumulative' | 'part';
 }
 
 /**
@@ -37,7 +37,7 @@ export class TokenLimiterProcessor implements Processor {
   private maxTokens: number;
   private currentTokens: number = 0;
   private strategy: 'truncate' | 'abort';
-  private countMode: 'cumulative' | 'chunk';
+  private countMode: 'cumulative' | 'part';
 
   constructor(options: number | TokenLimiterOptions) {
     if (typeof options === 'number') {
@@ -56,21 +56,21 @@ export class TokenLimiterProcessor implements Processor {
   }
 
   async processOutputStream(args: {
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: TextStreamPart<any> | ObjectStreamPart<any>;
+    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
-    const { chunk, abort } = args;
+    const { part, abort } = args;
 
-    // Count tokens in the current chunk
-    const chunkTokens = this.countTokensInChunk(chunk);
+    // Count tokens in the current part
+    const chunkTokens = this.countTokensInChunk(part);
 
     if (this.countMode === 'cumulative') {
       // Add to cumulative count
       this.currentTokens += chunkTokens;
     } else {
-      // Only check the current chunk
+      // Only check the current part
       this.currentTokens = chunkTokens;
     }
 
@@ -79,60 +79,60 @@ export class TokenLimiterProcessor implements Processor {
       if (this.strategy === 'abort') {
         abort(`Token limit of ${this.maxTokens} exceeded (current: ${this.currentTokens})`);
       } else {
-        // truncate strategy - don't emit this chunk
-        // If we're in chunk mode, reset the count for next chunk
-        if (this.countMode === 'chunk') {
+        // truncate strategy - don't emit this part
+        // If we're in part mode, reset the count for next part
+        if (this.countMode === 'part') {
           this.currentTokens = 0;
         }
         return null;
       }
     }
 
-    // Emit the chunk
-    const result = chunk;
+    // Emit the part
+    const result = part;
 
-    // If we're in chunk mode, reset the count for next chunk
-    if (this.countMode === 'chunk') {
+    // If we're in part mode, reset the count for next part
+    if (this.countMode === 'part') {
       this.currentTokens = 0;
     }
 
     return result;
   }
 
-  private countTokensInChunk(chunk: TextStreamPart<any> | ObjectStreamPart<any>): number {
-    if (chunk.type === 'text-delta') {
+  private countTokensInChunk(part: TextStreamPart<any> | ObjectStreamPart<any>): number {
+    if (part.type === 'text-delta') {
       // For text chunks, count the text content directly
-      return this.encoder.encode(chunk.textDelta).length;
-    } else if (chunk.type === 'object') {
+      return this.encoder.encode(part.textDelta).length;
+    } else if (part.type === 'object') {
       // For object chunks, count the JSON representation
       // This is similar to how the memory processor handles object content
-      const objectString = JSON.stringify(chunk.object);
+      const objectString = JSON.stringify(part.object);
       return this.encoder.encode(objectString).length;
-    } else if (chunk.type === 'tool-call') {
+    } else if (part.type === 'tool-call') {
       // For tool-call chunks, count tool name and args
-      let tokenString = chunk.toolName;
-      if (chunk.args) {
-        if (typeof chunk.args === 'string') {
-          tokenString += chunk.args;
+      let tokenString = part.toolName;
+      if (part.args) {
+        if (typeof part.args === 'string') {
+          tokenString += part.args;
         } else {
-          tokenString += JSON.stringify(chunk.args);
+          tokenString += JSON.stringify(part.args);
         }
       }
       return this.encoder.encode(tokenString).length;
-    } else if (chunk.type === 'tool-result') {
+    } else if (part.type === 'tool-result') {
       // For tool-result chunks, count the result
       let tokenString = '';
-      if (chunk.result !== undefined) {
-        if (typeof chunk.result === 'string') {
-          tokenString += chunk.result;
+      if (part.result !== undefined) {
+        if (typeof part.result === 'string') {
+          tokenString += part.result;
         } else {
-          tokenString += JSON.stringify(chunk.result);
+          tokenString += JSON.stringify(part.result);
         }
       }
       return this.encoder.encode(tokenString).length;
     } else {
-      // For other chunk types, count the JSON representation
-      return this.encoder.encode(JSON.stringify(chunk)).length;
+      // For other part types, count the JSON representation
+      return this.encoder.encode(JSON.stringify(part)).length;
     }
   }
 

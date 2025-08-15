@@ -6,7 +6,6 @@
   "main": "index.js",
   "version": "0.0.1",
   "dependencies": {
-    "@ai-sdk/cerebras": "^0.2.16",
     "@ai-sdk/google": "latest",
     "@ai-sdk/openai": "latest",
     "@mastra/client-js": "latest",

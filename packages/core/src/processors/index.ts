@@ -15,11 +15,11 @@ export interface Processor {
   /**
    * Process output stream chunks with built-in state management
    * This allows processors to accumulate chunks and make decisions based on larger context
-   * Return null, or undefined to skip emitting the chunk
+   * Return null, or undefined to skip emitting the part
    */
   processOutputStream?(args: {
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: TextStreamPart<any> | ObjectStreamPart<any>;
+    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null | undefined>;

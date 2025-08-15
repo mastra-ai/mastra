@@ -4520,7 +4520,7 @@ describe('output processors', () => {
 
         async processOutputStream(args: {
           chunk: any;
-          allChunks: any[];
+          streamParts: any[];
           state: Record<string, any>;
           abort: (reason?: string) => never;
         }) {

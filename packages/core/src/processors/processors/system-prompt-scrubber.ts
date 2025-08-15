@@ -86,21 +86,21 @@ export class SystemPromptScrubber implements Processor {
    * Process streaming chunks to detect and handle system prompts
    */
   async processOutputStream(args: {
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: TextStreamPart<any> | ObjectStreamPart<any>;
+    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
-    const { chunk, abort } = args;
+    const { part, abort } = args;
 
     // Only process text-delta chunks
-    if (chunk.type !== 'text-delta') {
-      return chunk;
+    if (part.type !== 'text-delta') {
+      return part;
     }
 
-    const text = chunk.textDelta;
+    const text = part.textDelta;
     if (!text || text.trim() === '') {
-      return chunk;
+      return part;
     }
 
     try {
@@ -115,7 +115,7 @@ export class SystemPromptScrubber implements Processor {
             break;
 
           case 'filter':
-            return null; // Don't emit this chunk
+            return null; // Don't emit this part
 
           case 'warn':
             console.warn(
@@ -124,24 +124,24 @@ export class SystemPromptScrubber implements Processor {
             if (this.includeDetections && detectionResult.detections) {
               console.warn(`[SystemPromptScrubber] Detections: ${detectionResult.detections.length} items`);
             }
-            return chunk; // Allow content through
+            return part; // Allow content through
 
           case 'redact':
           default:
             const redactedText =
               detectionResult.redacted_content || this.redactText(text, detectionResult.detections || []);
             return {
-              ...chunk,
+              ...part,
               textDelta: redactedText,
             };
         }
       }
 
-      return chunk;
+      return part;
     } catch (error) {
       // Fail open - allow content through if detection fails
       console.warn('[SystemPromptScrubber] Detection failed, allowing content:', error);
-      return chunk;
+      return part;
     }
   }
 

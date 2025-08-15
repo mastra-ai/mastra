@@ -5,6 +5,7 @@ import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for UnicodeNormalizer that implements the old InputProcessor interface
+ * @deprecated Use UnicodeNormalizer directly instead from @mastra/core/processors
  */
 export class UnicodeNormalizerInputProcessor implements InputProcessor {
   readonly name = 'unicode-normalizer';

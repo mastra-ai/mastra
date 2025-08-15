@@ -228,37 +228,37 @@ describe('SystemPromptScrubber', () => {
     it('should return non-text chunks unchanged', async () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
-      const chunk: ObjectStreamPart<any> = {
+      const part: ObjectStreamPart<any> = {
         type: 'object',
         object: { key: 'value' },
       };
 
       const result = await processor.processOutputStream({
-        chunk,
-        allChunks: [chunk],
+        part,
+        streamParts: [part],
         state: {},
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should return empty text chunks unchanged', async () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: '',
       };
 
       const result = await processor.processOutputStream({
-        chunk,
-        allChunks: [chunk],
+        part,
+        streamParts: [part],
         state: {},
         abort: vi.fn() as any,
       });
 
-      expect(result).toEqual(chunk);
+      expect(result).toEqual(part);
     });
 
     it('should redact system prompts in streaming chunks', async () => {
@@ -283,14 +283,14 @@ describe('SystemPromptScrubber', () => {
         usage: { completionTokens: 10, promptTokens: 5 },
       });
 
-      const chunk: TextStreamPart<any> = {
+      const part: TextStreamPart<any> = {
         type: 'text-delta',
         textDelta: 'You are an AI. Hello there!',
       };
 
       const result = await processor.processOutputStream({
-        chunk,
-        allChunks: [chunk],
+        part,
+        streamParts: [part],
         state: {},
         abort: vi.fn() as any,
       });

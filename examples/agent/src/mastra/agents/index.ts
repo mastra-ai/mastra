@@ -10,12 +10,6 @@ import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProce
 import { MCPClient } from '@mastra/mcp';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
-import { createCerebras } from '@ai-sdk/cerebras';
-
-const cerebras = createCerebras({
-  apiKey: `csk-j8f4pfx63kt2w4rre5rw268h6d35fr6hrrpyrkm2n2fdxkw6`,
-});
-
 const memory = new Memory();
 
 // Define schema directly compatible with OpenAI's requirements
@@ -112,7 +106,7 @@ const vegetarianProcessor: InputProcessor = {
 
 const piiDetector = new PIIDetector({
   // model: google('gemini-2.0-flash-001'),
-  model: cerebras('qwen-3-coder-480b'),
+  model: openai('gpt-4o'),
   redactionMethod: 'mask',
   preserveFormat: true,
   includeDetections: true,

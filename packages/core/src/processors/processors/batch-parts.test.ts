@@ -27,24 +27,24 @@ describe('BatchPartsProcessor', () => {
       const state: Record<string, any> = {};
 
       const result1 = await processor.processOutputStream({
-        chunk: chunk1,
-        allChunks: [chunk1],
+        part: chunk1,
+        streamParts: [chunk1],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       const result2 = await processor.processOutputStream({
-        chunk: chunk2,
-        allChunks: [chunk1, chunk2],
+        part: chunk2,
+        streamParts: [chunk1, chunk2],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       const result3 = await processor.processOutputStream({
-        chunk: chunk3,
-        allChunks: [chunk1, chunk2, chunk3],
+        part: chunk3,
+        streamParts: [chunk1, chunk2, chunk3],
         state,
         abort: () => {
           throw new Error('abort');
@@ -76,8 +76,8 @@ describe('BatchPartsProcessor', () => {
       // First 4 should return null
       for (let i = 0; i < 4; i++) {
         const result = await processor.processOutputStream({
-          chunk: chunks[i],
-          allChunks: chunks.slice(0, i),
+          part: chunks[i],
+          streamParts: chunks.slice(0, i),
           state,
           abort: () => {
             throw new Error('abort');
@@ -88,8 +88,8 @@ describe('BatchPartsProcessor', () => {
 
       // 5th should emit the combined batch
       const result = await processor.processOutputStream({
-        chunk: chunks[4],
-        allChunks: chunks.slice(0, 4),
+        part: chunks[4],
+        streamParts: chunks.slice(0, 4),
         state,
         abort: () => {
           throw new Error('abort');
@@ -103,7 +103,7 @@ describe('BatchPartsProcessor', () => {
   });
 
   describe('non-text chunks', () => {
-    it('should emit immediately when non-text chunk is encountered (default behavior)', async () => {
+    it('should emit immediately when non-text part is encountered (default behavior)', async () => {
       processor = new BatchPartsProcessor({ batchSize: 5 });
 
       // Add some text chunks first
@@ -114,27 +114,27 @@ describe('BatchPartsProcessor', () => {
       const state: Record<string, any> = {};
 
       await processor.processOutputStream({
-        chunk: textChunk1,
-        allChunks: [textChunk1],
+        part: textChunk1,
+        streamParts: [textChunk1],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       await processor.processOutputStream({
-        chunk: textChunk2,
-        allChunks: [textChunk1, textChunk2],
+        part: textChunk2,
+        streamParts: [textChunk1, textChunk2],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
 
-      // Now add a non-text chunk
+      // Now add a non-text part
       const objectChunk: ObjectStreamPart<any> = { type: 'object', object: { key: 'value' } };
       const result = await processor.processOutputStream({
-        chunk: objectChunk,
-        allChunks: [textChunk1, textChunk2],
+        part: objectChunk,
+        streamParts: [textChunk1, textChunk2],
         state,
         abort: () => {
           throw new Error('abort');
@@ -154,19 +154,19 @@ describe('BatchPartsProcessor', () => {
       // Add some text chunks first
       const textChunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
       await processor.processOutputStream({
-        chunk: textChunk,
-        allChunks: [textChunk],
+        part: textChunk,
+        streamParts: [textChunk],
         state: {},
         abort: () => {
           throw new Error('abort');
         },
       });
 
-      // Add a non-text chunk
+      // Add a non-text part
       const objectChunk: ObjectStreamPart<any> = { type: 'object', object: { key: 'value' } };
       const result = await processor.processOutputStream({
-        chunk: objectChunk,
-        allChunks: [objectChunk],
+        part: objectChunk,
+        streamParts: [objectChunk],
         state: {},
         abort: () => {
           throw new Error('abort');
@@ -190,10 +190,10 @@ describe('BatchPartsProcessor', () => {
       // Use shared state object
       const state: Record<string, any> = {};
 
-      // First chunk - should not emit
+      // First part - should not emit
       let result = await processor.processOutputStream({
-        chunk: chunks[0],
-        allChunks: [chunks[0]],
+        part: chunks[0],
+        streamParts: [chunks[0]],
         state,
         abort: () => {
           throw new Error('abort');
@@ -201,10 +201,10 @@ describe('BatchPartsProcessor', () => {
       });
       expect(result).toBeNull();
 
-      // Second chunk (object) - should emit the text chunk immediately
+      // Second part (object) - should emit the text part immediately
       result = await processor.processOutputStream({
-        chunk: chunks[1],
-        allChunks: [chunks[1]],
+        part: chunks[1],
+        streamParts: [chunks[1]],
         state,
         abort: () => {
           throw new Error('abort');
@@ -217,8 +217,8 @@ describe('BatchPartsProcessor', () => {
 
       // Third and fourth chunks - should batch together
       result = await processor.processOutputStream({
-        chunk: chunks[2],
-        allChunks: [chunks[2]],
+        part: chunks[2],
+        streamParts: [chunks[2]],
         state,
         abort: () => {
           throw new Error('abort');
@@ -227,8 +227,8 @@ describe('BatchPartsProcessor', () => {
       expect(result).toBeNull();
 
       result = await processor.processOutputStream({
-        chunk: chunks[3],
-        allChunks: [chunks[3]],
+        part: chunks[3],
+        streamParts: [chunks[3]],
         state,
         abort: () => {
           throw new Error('abort');
@@ -250,16 +250,16 @@ describe('BatchPartsProcessor', () => {
 
       // Add chunks
       await processor.processOutputStream({
-        chunk: chunk1,
-        allChunks: [chunk1],
+        part: chunk1,
+        streamParts: [chunk1],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       await processor.processOutputStream({
-        chunk: chunk2,
-        allChunks: [chunk2],
+        part: chunk2,
+        streamParts: [chunk2],
         state,
         abort: () => {
           throw new Error('abort');
@@ -270,18 +270,18 @@ describe('BatchPartsProcessor', () => {
       vi.advanceTimersByTime(1100);
 
       // The timeout should have triggered and emitted the batch
-      // We need to process another chunk to see the result
+      // We need to process another part to see the result
       const chunk3: TextStreamPart<any> = { type: 'text-delta', textDelta: '!' };
       const result = await processor.processOutputStream({
-        chunk: chunk3,
-        allChunks: [chunk3],
+        part: chunk3,
+        streamParts: [chunk3],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
 
-      // Should emit the batched text including the current chunk when timeout triggers
+      // Should emit the batched text including the current part when timeout triggers
       expect(result).toEqual({
         type: 'text-delta',
         textDelta: 'Hello world!',
@@ -291,10 +291,10 @@ describe('BatchPartsProcessor', () => {
     it('should not set timeout if maxWaitTime is not specified', async () => {
       processor = new BatchPartsProcessor({ batchSize: 5 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
       await processor.processOutputStream({
-        chunk: chunk,
-        allChunks: [chunk],
+        part: part,
+        streamParts: [part],
         state: {},
         abort: () => {
           throw new Error('abort');
@@ -307,8 +307,8 @@ describe('BatchPartsProcessor', () => {
       // Should still not emit until batch size is reached
       const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world' };
       const result = await processor.processOutputStream({
-        chunk: chunk2,
-        allChunks: [chunk2],
+        part: chunk2,
+        streamParts: [chunk2],
         state: {},
         abort: () => {
           throw new Error('abort');
@@ -332,16 +332,16 @@ describe('BatchPartsProcessor', () => {
 
       // Add chunks (should not emit yet)
       await processor.processOutputStream({
-        chunk: chunks[0],
-        allChunks: [chunks[0]],
+        part: chunks[0],
+        streamParts: [chunks[0]],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       await processor.processOutputStream({
-        chunk: chunks[1],
-        allChunks: [chunks[1]],
+        part: chunks[1],
+        streamParts: [chunks[1]],
         state,
         abort: () => {
           throw new Error('abort');
@@ -364,13 +364,13 @@ describe('BatchPartsProcessor', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle single chunk correctly', async () => {
+    it('should handle single part correctly', async () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
-      const chunk: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
       const result = await processor.processOutputStream({
-        chunk: chunk,
-        allChunks: [chunk],
+        part: part,
+        streamParts: [part],
         state: {},
         abort: () => {
           throw new Error('abort');
@@ -391,16 +391,16 @@ describe('BatchPartsProcessor', () => {
       const state: Record<string, any> = {};
 
       const result1 = await processor.processOutputStream({
-        chunk: chunk1,
-        allChunks: [chunk1],
+        part: chunk1,
+        streamParts: [chunk1],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       const result2 = await processor.processOutputStream({
-        chunk: chunk2,
-        allChunks: [chunk2],
+        part: chunk2,
+        streamParts: [chunk2],
         state,
         abort: () => {
           throw new Error('abort');
@@ -424,16 +424,16 @@ describe('BatchPartsProcessor', () => {
       const state: Record<string, any> = {};
 
       const result1 = await processor.processOutputStream({
-        chunk: objectChunk1,
-        allChunks: [objectChunk1],
+        part: objectChunk1,
+        streamParts: [objectChunk1],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       const result2 = await processor.processOutputStream({
-        chunk: objectChunk2,
-        allChunks: [objectChunk2],
+        part: objectChunk2,
+        streamParts: [objectChunk2],
         state,
         abort: () => {
           throw new Error('abort');
@@ -458,16 +458,16 @@ describe('BatchPartsProcessor', () => {
 
       // First two should not emit
       await processor.processOutputStream({
-        chunk: textChunk1,
-        allChunks: [textChunk1],
+        part: textChunk1,
+        streamParts: [textChunk1],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
       await processor.processOutputStream({
-        chunk: textChunk2,
-        allChunks: [textChunk1, textChunk2],
+        part: textChunk2,
+        streamParts: [textChunk1, textChunk2],
         state,
         abort: () => {
           throw new Error('abort');
@@ -476,8 +476,8 @@ describe('BatchPartsProcessor', () => {
 
       // Third should emit the combined text
       const result = await processor.processOutputStream({
-        chunk: textChunk3,
-        allChunks: [textChunk1, textChunk2, textChunk3],
+        part: textChunk3,
+        streamParts: [textChunk1, textChunk2, textChunk3],
         state,
         abort: () => {
           throw new Error('abort');
@@ -489,18 +489,18 @@ describe('BatchPartsProcessor', () => {
         textDelta: 'Hello world!',
       });
 
-      // Now add a non-text chunk - it should be emitted immediately and not accumulated
+      // Now add a non-text part - it should be emitted immediately and not accumulated
       const objectChunk: ObjectStreamPart<any> = { type: 'object', object: { key: 'value' } };
       const result2 = await processor.processOutputStream({
-        chunk: objectChunk,
-        allChunks: [objectChunk],
+        part: objectChunk,
+        streamParts: [objectChunk],
         state,
         abort: () => {
           throw new Error('abort');
         },
       });
 
-      // Should emit the object chunk immediately, not accumulate it
+      // Should emit the object part immediately, not accumulate it
       expect(result2).toEqual(objectChunk);
     });
   });
