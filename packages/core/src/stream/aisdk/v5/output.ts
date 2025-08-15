@@ -1,7 +1,7 @@
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
-import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type { StepResult, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
@@ -223,6 +223,10 @@ export class AISDKV5OutputStream {
     return transformSteps({ steps: this.#modelOutput.steps });
   }
 
+  get generateTextSteps() {
+    return transformSteps({ steps: this.#modelOutput.steps });
+  }
+
   get content() {
     return this.#messageList.get.response.aiV5.modelContent();
   }
@@ -280,7 +284,7 @@ export class AISDKV5OutputStream {
     return {
       text: this.#modelOutput.text,
       usage: this.#modelOutput.usage,
-      steps: this.steps,
+      steps: this.generateTextSteps,
       finishReason: this.#modelOutput.finishReason,
       warnings: this.#modelOutput.warnings,
       providerMetadata: this.#modelOutput.providerMetadata,

@@ -856,25 +856,33 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
 
 exports[`Loop Tests > AISDK v5 > generateText > result.steps > should add the reasoning from the model response to the step result 1`] = `
 [
-  {
-    "experimental_providerMetadata": undefined,
-    "files": [],
-    "finishReason": "stop",
-    "isContinued": false,
-    "logprobs": undefined,
-    "providerMetadata": undefined,
-    "reasoning": "I will open the conversation with witty banter.",
-    "reasoningDetails": [
+  DefaultStepResult {
+    "content": [
       {
-        "signature": "signature",
+        "providerMetadata": {
+          "testProvider": {
+            "signature": "signature",
+          },
+        },
         "text": "I will open the conversation with witty banter.",
+        "type": "reasoning",
+      },
+      {
+        "providerMetadata": {
+          "testProvider": {
+            "redactedData": "redacted-reasoning-data",
+          },
+        },
+        "text": "",
+        "type": "reasoning",
+      },
+      {
+        "text": "Hello, world!",
         "type": "text",
       },
-      {
-        "data": "redacted-reasoning-data",
-        "type": "redacted",
-      },
     ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
     "request": {},
     "response": {
       "headers": undefined,
@@ -883,37 +891,43 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should add the re
         {
           "content": [
             {
-              "signature": "signature",
+              "providerOptions": {
+                "testProvider": {
+                  "signature": "signature",
+                },
+              },
               "text": "I will open the conversation with witty banter.",
               "type": "reasoning",
             },
             {
-              "data": "redacted-reasoning-data",
-              "type": "redacted-reasoning",
+              "providerOptions": {
+                "testProvider": {
+                  "redactedData": "redacted-reasoning-data",
+                },
+              },
+              "text": "",
+              "type": "reasoning",
             },
             {
+              "providerOptions": undefined,
               "text": "Hello, world!",
               "type": "text",
             },
           ],
-          "id": "msg-0",
           "role": "assistant",
         },
       ],
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
-    "sources": [],
-    "stepType": "initial",
-    "text": "Hello, world!",
-    "toolCalls": [],
-    "toolResults": [],
     "usage": {
-      "completionTokens": 20,
-      "promptTokens": 10,
-      "totalTokens": 30,
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
     },
-    "warnings": undefined,
+    "warnings": [],
   },
 ]
 `;

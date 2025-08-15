@@ -1,12 +1,12 @@
 import type { generateText as generateText5 } from 'ai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
 import { createTestModel, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
@@ -205,54 +205,104 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       });
     });
 
-    // describe('result.steps', () => {
-    //   // TODO: include `reasoning` and `reasoningDetails` in step result
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should add the reasoning from the model response to the step result', async () => {
-    //     const result = await generateText({
-    //       model: modelWithReasoning,
-    //       prompt: 'prompt',
-    //       _internal: {
-    //         generateId: mockId({ prefix: 'id' }),
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
+    describe('result.steps', () => {
+      const modelWithReasoning = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'reasoning-start', id: '1' },
+            {
+              type: 'reasoning-delta',
+              id: '1',
+              delta: 'I will open the conversation',
+            },
+            {
+              type: 'reasoning-delta',
+              id: '1',
+              delta: ' with witty banter.',
+            },
+            {
+              type: 'reasoning-delta',
+              id: '1',
+              delta: '',
+              providerMetadata: {
+                testProvider: { signature: '1234567890' },
+              } as SharedV2ProviderMetadata,
+            },
+            { type: 'reasoning-end', id: '1' },
+            {
+              type: 'reasoning-start',
+              id: '2',
+              providerMetadata: {
+                testProvider: { redactedData: 'redacted-reasoning-data' },
+              },
+            },
+            { type: 'reasoning-end', id: '2' },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Hello,' },
+            { type: 'text-delta', id: '1', delta: ' world!' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+      });
 
-    //     expect(result.steps).toMatchSnapshot();
-    //   });
+      // TODO: include `reasoning` and `reasoningDetails` in step result
+      // generateText uses a defaurt StepResult class than streaming does
+      // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
+      it.todo('should add the reasoning from the model response to the step result', async () => {
+        const result = await generateText({
+          model: modelWithReasoning,
+          messageList: new MessageList(),
+          _internal: {
+            generateId: mockId({ prefix: 'id' }),
+            currentDate: () => new Date(0),
+          },
+        });
 
-    //   // TODO: include `sources` in step result
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should contain sources', async () => {
-    //     const result = await generateText({
-    //       model: modelWithSources,
-    //       prompt: 'prompt',
-    //       _internal: {
-    //         generateId: mockId({ prefix: 'id' }),
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
-    //     expect(result.steps).toMatchSnapshot();
-    //   });
+        expect(result.steps).toMatchSnapshot();
+      });
 
-    //   // TODO: include `files` in step result
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should contain files', async () => {
-    //     const result = await generateText({
-    //       model: modelWithFiles,
-    //       prompt: 'prompt',
-    //       _internal: {
-    //         generateId: mockId({ prefix: 'id' }),
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
+      // TODO: include `sources` in step result
+      // generateText uses a defaurt StepResult class than streaming does
+      // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
+      it.todo('should contain sources', async () => {
+        const result = await generateText({
+          model: modelWithSources,
+          messageList: new MessageList(),
+          _internal: {
+            generateId: mockId({ prefix: 'id' }),
+            currentDate: () => new Date(0),
+          },
+        });
+        expect(result.steps).toMatchSnapshot();
+      });
 
-    //     expect(result.steps).toMatchSnapshot();
-    //   });
-    // });
+      // TODO: include `files` in step result
+      // generateText uses a defaurt StepResult class than streaming does
+      // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
+      it.todo('should contain files', async () => {
+        const result = await generateText({
+          model: modelWithFiles,
+          messageList: new MessageList(),
+          _internal: {
+            generateId: mockId({ prefix: 'id' }),
+            currentDate: () => new Date(0),
+          },
+        });
+
+        expect(result.steps).toMatchSnapshot();
+      });
+    });
 
     describe.todo('result.toolCalls', () => {
       it('should contain tool calls', async () => {
