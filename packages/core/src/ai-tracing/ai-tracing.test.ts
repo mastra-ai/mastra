@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
-import { Mastra } from '../mastra';
 import { MastraAITracing } from './base';
 import { DefaultAITracing, DefaultConsoleExporter, SensitiveDataFilter, aiTracingDefaultConfig } from './default';
 import {
@@ -13,6 +12,8 @@ import {
   getDefaultAITracing,
   setAITracingSelector,
   getSelectedAITracing,
+  setupAITracing,
+  shutdownAITracingRegistry,
 } from './registry';
 import type {
   AITracingEvent,
@@ -23,7 +24,7 @@ import type {
   AISpanOptions,
   AISpan,
   TracingSelector,
-  AITracingContext,
+  AITracingSelectorContext,
 } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
@@ -711,11 +712,11 @@ describe('AI Tracing', () => {
 
       setAITracingSelector(selector);
 
-      const prodContext: AITracingContext = {
+      const prodContext: AITracingSelectorContext = {
         runtimeContext: { environment: 'production' } as any,
       };
 
-      const devContext: AITracingContext = {
+      const devContext: AITracingSelectorContext = {
         runtimeContext: { environment: 'development' } as any,
       };
 
@@ -735,7 +736,7 @@ describe('AI Tracing', () => {
       const selector: TracingSelector = (_context, _availableTracers) => 'non-existent';
       setAITracingSelector(selector);
 
-      const context: AITracingContext = {
+      const context: AITracingSelectorContext = {
         runtimeContext: undefined,
       };
 
@@ -768,17 +769,15 @@ describe('AI Tracing', () => {
 
   describe('Mastra Integration', () => {
     it('should configure AI tracing with simple config', async () => {
-      const config: AITracingInstanceConfig = {
+      const instanceConfig: AITracingInstanceConfig = {
         serviceName: 'test-service',
         instanceName: 'test-instance',
         exporters: [],
       };
 
-      const mastra = new Mastra({
-        aiTracing: {
-          instances: {
-            test: config,
-          },
+      setupAITracing({
+        instances: {
+          test: instanceConfig,
         },
       });
 
@@ -790,20 +789,18 @@ describe('AI Tracing', () => {
       expect(getDefaultAITracing()).toBe(tracing); // First one becomes default
 
       // Cleanup
-      await mastra.shutdown();
+      await shutdownAITracingRegistry();
     });
 
     it('should use ALWAYS sampling by default when sampling is not specified', async () => {
-      const config: AITracingInstanceConfig = {
+      const instanceConfig: AITracingInstanceConfig = {
         serviceName: 'default-sampling-test',
         instanceName: 'default-sampling-instance',
       };
 
-      const mastra = new Mastra({
-        aiTracing: {
-          instances: {
-            test: config,
-          },
+      setupAITracing({
+        instances: {
+          test: instanceConfig,
         },
       });
 
@@ -811,7 +808,7 @@ describe('AI Tracing', () => {
       expect(tracing?.getConfig().sampling?.type).toBe(SamplingStrategyType.ALWAYS);
 
       // Cleanup
-      await mastra.shutdown();
+      await shutdownAITracingRegistry();
     });
 
     it('should configure AI tracing with custom implementation', async () => {
@@ -845,11 +842,9 @@ describe('AI Tracing', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      const mastra = new Mastra({
-        aiTracing: {
-          instances: {
-            custom: customInstance,
-          },
+      setupAITracing({
+        instances: {
+          custom: customInstance,
         },
       });
 
@@ -860,7 +855,7 @@ describe('AI Tracing', () => {
       expect(tracing?.getConfig().serviceName).toBe('custom-service');
 
       // Cleanup
-      await mastra.shutdown();
+      await shutdownAITracingRegistry();
     });
 
     it('should support mixed configuration (config + instance)', async () => {
@@ -876,16 +871,14 @@ describe('AI Tracing', () => {
         sampling: { type: SamplingStrategyType.NEVER },
       });
 
-      const mastra = new Mastra({
-        aiTracing: {
-          instances: {
-            standard: {
-              serviceName: 'standard-service',
-              instanceName: 'standard-instance',
-              exporters: [],
-            },
-            custom: customInstance,
+      setupAITracing({
+        instances: {
+          standard: {
+            serviceName: 'standard-service',
+            instanceName: 'standard-instance',
+            exporters: [],
           },
+          custom: customInstance,
         },
       });
 
@@ -902,7 +895,7 @@ describe('AI Tracing', () => {
       expect(customTracing?.getConfig().serviceName).toBe('custom-service');
 
       // Cleanup
-      await mastra.shutdown();
+      await shutdownAITracingRegistry();
     });
 
     it('should handle registry shutdown during Mastra shutdown', async () => {
@@ -925,11 +918,9 @@ describe('AI Tracing', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      const mastra = new Mastra({
-        aiTracing: {
-          instances: {
-            test: testInstance,
-          },
+      setupAITracing({
+        instances: {
+          test: testInstance,
         },
       });
 
@@ -937,7 +928,7 @@ describe('AI Tracing', () => {
       expect(getAITracing('test')).toBe(testInstance);
 
       // Shutdown should call instance shutdown and clear registry
-      await mastra.shutdown();
+      await shutdownAITracingRegistry();
 
       expect(shutdownCalled).toBe(true);
       expect(getAITracing('test')).toBeUndefined();
@@ -950,21 +941,17 @@ describe('AI Tracing', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       };
 
-      const mastra1 = new Mastra({
-        aiTracing: {
-          instances: {
-            duplicate: config,
-          },
+      setupAITracing({
+        instances: {
+          duplicate: config,
         },
       });
 
       // Attempting to register the same name should throw
       expect(() => {
-        new Mastra({
-          aiTracing: {
-            instances: {
-              duplicate: config,
-            },
+        setupAITracing({
+          instances: {
+            duplicate: config,
           },
         });
       }).toThrow("AI Tracing instance 'duplicate' already registered");
@@ -977,39 +964,37 @@ describe('AI Tracing', () => {
         return undefined; // Use default
       };
 
-      const mastra = new Mastra({
-        aiTracing: {
-          instances: {
-            console: {
-              serviceName: 'console-service',
-              instanceName: 'console-instance',
-              exporters: [],
-            },
-            langfuse: {
-              serviceName: 'langfuse-service',
-              instanceName: 'langfuse-instance',
-              exporters: [],
-            },
-            datadog: {
-              serviceName: 'datadog-service',
-              instanceName: 'datadog-instance',
-              exporters: [],
-            },
+      setupAITracing({
+        instances: {
+          console: {
+            serviceName: 'console-service',
+            instanceName: 'console-instance',
+            exporters: [],
           },
-          selector: selector,
+          langfuse: {
+            serviceName: 'langfuse-service',
+            instanceName: 'langfuse-instance',
+            exporters: [],
+          },
+          datadog: {
+            serviceName: 'datadog-service',
+            instanceName: 'datadog-instance',
+            exporters: [],
+          },
         },
+        selector: selector,
       });
 
       // Test selector functionality
-      const agentContext: AITracingContext = {
+      const agentContext: AITracingSelectorContext = {
         runtimeContext: { service: 'agent' } as any,
       };
 
-      const workflowContext: AITracingContext = {
+      const workflowContext: AITracingSelectorContext = {
         runtimeContext: { service: 'workflow' } as any,
       };
 
-      const genericContext: AITracingContext = {
+      const genericContext: AITracingSelectorContext = {
         runtimeContext: undefined,
       };
 
@@ -1019,7 +1004,7 @@ describe('AI Tracing', () => {
       expect(getSelectedAITracing(genericContext)).toBe(getDefaultAITracing()); // Falls back to default (console)
 
       // Cleanup
-      await mastra.shutdown();
+      await shutdownAITracingRegistry();
     });
   });
 

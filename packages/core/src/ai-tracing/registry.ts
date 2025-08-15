@@ -4,9 +4,10 @@
  * Provides a global registry for AI tracing instances.
  */
 
-import type { MastraAITracing } from './base';
+import { MastraAITracing } from './base';
+import { DefaultAITracing } from './default';
 import { SamplingStrategyType } from './types';
-import type { TracingSelector, AITracingSelectorContext } from './types';
+import type { TracingSelector, AITracingSelectorContext, AITracingConfig, AITracingInstanceConfig } from './types';
 
 // ============================================================================
 // Global AI Tracing Registry
@@ -188,4 +189,33 @@ export function hasAITracing(name: string): boolean {
 
   // Check if sampling allows tracing
   return sampling.type !== SamplingStrategyType.NEVER;
+}
+
+/**
+ * Type guard to check if an object is a MastraAITracing instance
+ */
+function isAITracingInstance(obj: AITracingInstanceConfig | MastraAITracing): obj is MastraAITracing {
+  return obj instanceof MastraAITracing;
+}
+
+/**
+ * Setup AI tracing from the AITracingConfig
+ */
+export function setupAITracing(config: AITracingConfig): void {
+  const entries = Object.entries(config.instances);
+
+  entries.forEach(([name, tracingDef], index) => {
+    const instance = isAITracingInstance(tracingDef)
+      ? tracingDef // Pre-instantiated custom implementation
+      : new DefaultAITracing({ ...tracingDef, instanceName: name }); // Config -> DefaultAITracing with instance name
+
+    // First registered instance becomes default
+    const isDefault = index === 0;
+    registerAITracing(name, instance, isDefault);
+  });
+
+  // Set selector function if provided
+  if (config.selector) {
+    setAITracingSelector(config.selector);
+  }
 }
