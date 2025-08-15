@@ -1,10 +1,11 @@
 import type { LanguageModelV1ProviderMetadata } from '@ai-sdk/provider';
 import type { IDGenerator, Message, TelemetrySettings } from 'ai';
-import type { ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 import type { CoreMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
+import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
-import type { AgentMemoryOption, ToolsetsInput, ToolsInput } from './types';
+import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
 
 export type CallSettings = {
   /**
@@ -135,6 +136,15 @@ export type AgentVNextStreamOptions<
 
   /** Whether to save messages incrementally on step finish */
   savePerStep?: boolean;
+  /** Input processors to use for this stream call (overrides agent's default) */
+  inputProcessors?: InputProcessor[];
+  /** Output processors to use for this stream call (overrides agent's default) */
+  outputProcessors?: OutputProcessor[];
+  /**
+   * Structured output configuration using StructuredOutputProcessor.
+   * This provides better DX than manually creating the processor.
+   */
+  structuredOutput?: StructuredOutput extends z.ZodTypeAny ? StructuredOutputOptions<StructuredOutput> : never;
 } & CallSettings &
   Prompt &
   (Output extends undefined

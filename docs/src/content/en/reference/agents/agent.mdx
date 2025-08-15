@@ -116,9 +116,15 @@ export const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "InputProcessor[] | ({ runtimeContext: RuntimeContext }) => InputProcessor[] | Promise<InputProcessor[]>",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
-      description: "Input processors that can modify or validate messages before they are processed by the agent.",
+      description: "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      isOptional: true,
+      description: "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
     },
   ]}
 />

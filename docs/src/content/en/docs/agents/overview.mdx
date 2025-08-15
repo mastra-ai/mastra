@@ -172,7 +172,7 @@ console.log(response.object);
 
 ### Using Tools
 
-If you need to generate structured output with an agent that uses a tool, use `experimental_output` instead of `output`:
+If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` or `structuredOutput` property instead of `output`. Here's how:
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate("Monkey, Ice Cream, Boat", {
@@ -182,7 +182,42 @@ const response = await testAgent.generate("Monkey, Ice Cream, Boat", {
   })
 });
 
-console.log(response.object);
+const responseWithExperimentalOutput = await testAgent.generate(
+  [
+    {
+      role: "user",
+      content:
+        "Please analyze this repository and provide a summary and keywords...",
+    },
+  ],
+  {
+    // Use experimental_output to enable both structured output and tool calls
+    experimental_output: schema,
+  },
+);
+
+console.log("Structured Output:", responseWithExperimentalOutput.object);
+
+const responseWithStructuredOutput = await testAgent.generate(
+  [
+    {
+      role: "user",
+      content:
+        "Please analyze this repository and provide a summary and keywords...",
+    },
+  ],
+  {
+    structuredOutput: {
+      schema: z.object({
+        summary: z.string(),
+        keywords: z.array(z.string())
+      }),
+      model: openai("gpt-4o-mini"),
+    }
+  },
+);
+
+console.log("Structured Output:", responseWithStructuredOutput.object);
 ```
 
 ## Describing images
