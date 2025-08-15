@@ -1,12 +1,11 @@
 import type { ToolSet } from 'ai-v5';
 import { createStep } from '../../workflows';
-import { assembleOperationName, getRootSpan, getTracer } from '../telemetry';
+import { assembleOperationName, getTracer } from '../telemetry';
 import type { OuterLLMRun } from '../types';
 import { toolCallInputSchema, toolCallOutputSchema } from './schema';
 
 export function createToolCallStep<Tools extends ToolSet = ToolSet>({
   tools,
-  model,
   messageList,
   options,
   telemetry_settings,

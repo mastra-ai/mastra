@@ -3,7 +3,6 @@ import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import type { ChunkType } from '../../stream/types';
 import { createWorkflow } from '../../workflows';
-import { getRootSpan } from '../telemetry';
 import type { LoopRun } from '../types';
 import { createOuterLLMWorkflow } from './outer-llm-step';
 import { llmIterationOutputSchema } from './schema';
