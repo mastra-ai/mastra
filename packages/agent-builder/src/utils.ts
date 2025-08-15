@@ -1,11 +1,11 @@
-import { exec as execNodejs } from 'child_process';
-import { promisify } from 'util';
-import { spawn as nodeSpawn } from 'child_process';
-import { createRequire } from 'module';
-import { copyFile } from 'fs/promises';
-import { dirname, basename, extname, resolve } from 'path';
-import { UNIT_KINDS, type UnitKind } from './types';
+import { exec as execNodejs, spawn as nodeSpawn } from 'child_process';
 import { existsSync } from 'fs';
+import { copyFile } from 'fs/promises';
+import { createRequire } from 'module';
+import { dirname, basename, extname, resolve } from 'path';
+import { promisify } from 'util';
+import { UNIT_KINDS } from './types';
+import type { UnitKind } from './types';
 
 export const exec = promisify(execNodejs);
 

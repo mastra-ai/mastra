@@ -1,14 +1,12 @@
-import { spawn, ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
-import path from 'node:path';
-import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execSync } from 'node:child_process';
-import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { mergeTemplateWorkflow } from '../../src/workflows';
-import { fetchMastraTemplates } from '../../src/utils';
 import { Mastra } from '@mastra/core';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { fetchMastraTemplates } from '../../src/utils';
+import { mergeTemplateWorkflow } from '../../src/workflows';
 
 function exec(cmd: string, cwd?: string): string {
   return execSync(cmd, { stdio: 'pipe', cwd, encoding: 'utf-8' });

@@ -1,9 +1,9 @@
+import { spawn as nodeSpawn } from 'child_process';
 import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
 import { join, dirname, relative, isAbsolute, resolve } from 'path';
 import { createTool } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
 import { z } from 'zod';
-import { spawn as nodeSpawn } from 'child_process';
 import { exec, spawnSWPM } from './utils';
 
 export class AgentBuilderDefaults {
@@ -1913,10 +1913,10 @@ export const tools = await mcpClient.getTools();
     includeTests?: boolean;
   }) {
     try {
-      const { action, path, language, depth = 3, includeTests = false } = context;
+      const { action, path, language, depth = 3 } = context;
 
       // Use ripgrep for fast searching
-      const excludePatterns = includeTests ? [] : ['*test*', '*spec*', '__tests__'];
+      // const excludePatterns = includeTests ? [] : ['*test*', '*spec*', '__tests__'];
       const languagePattern = language ? `*.${language}` : '*';
 
       switch (action) {
@@ -2361,7 +2361,7 @@ export const tools = await mcpClient.getTools();
           patterns: [query],
         },
       };
-    } catch (error) {
+    } catch {
       return {
         success: false,
         matches: [],
@@ -2649,10 +2649,10 @@ export const tools = await mcpClient.getTools();
       const {
         query,
         maxResults = 10,
-        region = 'us',
-        language = 'en',
-        includeImages = false,
-        dateRange = 'all',
+        // region = 'us',
+        // language = 'en',
+        // includeImages = false,
+        // dateRange = 'all',
       } = context;
 
       const startTime = Date.now();

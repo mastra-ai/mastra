@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import { mkdtemp, copyFile, readFile, mkdir, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, dirname, resolve, extname, basename } from 'path';
@@ -6,8 +7,10 @@ import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { existsSync } from 'fs';
+import { AgentBuilder } from '..';
 import { AgentBuilderDefaults } from '../defaults';
+import type { TemplateUnit } from '../types';
+import { ApplyResultSchema, MergeInputSchema, TemplateUnitSchema } from '../types';
 import {
   exec,
   getMastraTemplate,
@@ -17,9 +20,6 @@ import {
   backupAndReplaceFile,
   renameAndCopyFile,
 } from '../utils';
-import { AgentBuilder } from '..';
-import type { TemplateUnit } from '../types';
-import { ApplyResultSchema, MergeInputSchema, TemplateUnitSchema } from '../types';
 
 // Step 1: Clone template to temp directory
 const cloneTemplateStep = createStep({
@@ -195,7 +195,7 @@ const packageMergeStep = createStep({
   }),
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Package merge step starting...');
-    const { commitSha, slug, packageInfo } = inputData;
+    const { slug, packageInfo } = inputData;
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
@@ -295,7 +295,7 @@ const discoverUnitsStep = createStep({
     units: z.array(TemplateUnitSchema),
   }),
   execute: async ({ inputData }) => {
-    const { templateDir, slug } = inputData;
+    const { templateDir } = inputData;
 
     const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
@@ -491,7 +491,7 @@ const intelligentMergeStep = createStep({
             // Try to switch to existing branch
             await exec(`git checkout "${branchName}"`, { cwd: targetPath });
             console.log(`Switched to existing branch: ${branchName}`);
-          } catch (switchError) {
+          } catch {
             // If can't switch, create a unique branch name
             const timestamp = Date.now().toString().slice(-6);
             branchName = `${baseBranchName}-${timestamp}`;
@@ -621,7 +621,7 @@ Template information:
       const tasks = [];
 
       // Add conflict resolution tasks
-      conflicts.forEach((conflict, index) => {
+      conflicts.forEach(conflict => {
         tasks.push({
           id: `conflict-${conflict.unit.kind}-${conflict.unit.id}`,
           content: `Resolve conflict: ${conflict.issue}`,
@@ -786,8 +786,8 @@ Start by listing your tasks and work through them systematically!
 
 // Helper function to determine conflict resolution strategy
 const determineConflictStrategy = (
-  unit: { kind: string; id: string },
-  targetFile: string,
+  _unit: { kind: string; id: string },
+  _targetFile: string,
 ): 'skip' | 'backup-and-replace' | 'rename' => {
   // For now, always skip conflicts to avoid disrupting existing files
   // TODO: Enable advanced strategies based on user feedback

@@ -3,10 +3,10 @@ import { Agent } from '@mastra/core/agent';
 import type { AiMessageType, AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
+import { AgentBuilderDefaults } from './defaults';
 import { ToolSummaryProcessor } from './processors/tool-summary';
 import { WriteToDiskProcessor } from './processors/write-file';
 import type { AgentBuilderConfig, GenerateAgentOptions } from './types';
-import { AgentBuilderDefaults } from './defaults';
 import { mergeTemplateWorkflow } from './workflows';
 
 // =============================================================================

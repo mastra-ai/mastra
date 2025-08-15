@@ -1,9 +1,9 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { describe, it, expect, vi } from 'vitest';
+import { AgentBuilderDefaults } from './defaults';
 import { ToolSummaryProcessor } from './processors/tool-summary';
 import { AgentBuilder } from './index';
-import { AgentBuilderDefaults } from './defaults';
 
 // Mock the openai model for testing
 const mockModel = {

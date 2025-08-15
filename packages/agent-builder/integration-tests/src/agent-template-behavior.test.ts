@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { execSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execSync } from 'node:child_process';
-import { AgentBuilder } from '../../src/index';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { AgentBuilder } from '../../src/index';
 
 // Import openai dynamically to handle cases where it might not be available
 const openai = (() => {
