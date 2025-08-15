@@ -4,7 +4,7 @@ import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5'
 import type { ToolSet } from 'ai-v5';
 import type { MessageList } from '../../agent/message-list';
 import { execute } from '../../stream/aisdk/v5/execute';
-import { DefaultStepResult, transformResponse } from '../../stream/aisdk/v5/output-helpers';
+import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
@@ -47,7 +47,7 @@ async function processOutputStream({
     }
 
     if (chunk.type == 'object') {
-      controller.enqueue(chunk);
+      // controller.enqueue(chunk);
       continue;
     }
 
@@ -537,32 +537,23 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
 
       const steps = inputData.output?.steps || [];
 
-      const v5NonUserMessages = messageList.get.response.aiV5.ui();
-
       steps.push(
         new DefaultStepResult({
           warnings: outputStream.warnings,
           providerMetadata: providerOptions,
           finishReason: runState.state.stepResult?.reason,
-          content: transformResponse({
-            response: { ...responseMetadata, messages: v5NonUserMessages },
-            isMessages: false,
-            runId,
-          }),
-          response: transformResponse({
-            response: { ...responseMetadata, messages: v5NonUserMessages },
-            isMessages: true,
-            runId,
-          }),
+          content: messageList.get.response.aiV5.modelContent(),
+          // @ts-ignore this is how it worked internally for transformResponse which was removed TODO: how should this actually work?
+          response: { ...responseMetadata, messages: messageList.get.response.aiV5.model() },
           request: request,
           usage: outputStream.usage as LanguageModelV2Usage,
         }),
       );
 
       const messages = {
-        all: messageList.get.all.v3(),
-        user: messageList.get.input.v3(),
-        nonUser: messageList.get.response.v3(),
+        all: messageList.get.all.aiV5.model(),
+        user: messageList.get.input.aiV5.model(),
+        nonUser: messageList.get.response.aiV5.model(),
       };
 
       return {

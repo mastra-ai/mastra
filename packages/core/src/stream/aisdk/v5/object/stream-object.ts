@@ -86,7 +86,11 @@ export function createObjectStreamTransformer({
           textAccumulatedText += chunk.payload.text;
           const { value: currentObjectJson } = await parsePartialJson(textAccumulatedText);
 
-          if (currentObjectJson !== undefined && !isDeepEqualData(textPreviousObject, currentObjectJson)) {
+          if (
+            currentObjectJson !== undefined &&
+            typeof currentObjectJson === 'object' &&
+            !isDeepEqualData(textPreviousObject, currentObjectJson)
+          ) {
             textPreviousObject = currentObjectJson;
             controller.enqueue({
               type: 'object',
