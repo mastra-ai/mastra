@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 0.14.0-alpha.1
+
+### Minor Changes
+
+- 3b5fec7: Added AIV5 support to internal MessageList, precursor to full AIV5 support in latest Mastra
+
+### Patch Changes
+
+- 8e59433: Finish the execution step
+- 49281f5: Loop wip
+- 6faaee5: Reworks agent Processor API to include output processors. Adds structuredOutput property in agent.streamVNext and agent.generate to replace experimental_output. Move imports for processors to @mastra/core/processors. Adds 6 new output processors, BatchParts, StructuredOutputProcessor, TokenLimiter, SystemPromptScrubber, ModerationProcessor, PiiDetectorProcessor.
+- 4232b14: Fix provider metadata preservation during V5 message conversions
+
+  Provider metadata (providerMetadata and callProviderMetadata) is now properly preserved when converting messages between AI SDK V5 and internal V2 formats. This ensures provider-specific information isn't lost during message transformations.
+
+- 6720c51: Finalize loop
+- 2256977: v5 model input
+- c597dc5: initial loop fn p3
+- a722c0b: Added a patch to filter out system messages that were stored in the db via an old memory bug that was patched long ago (see issue 6689). Users upgrading from the old version that still had the bug would see errors when the memory messages were retrieved from the db
+- 7444737: initial loop fn p4
+- 83d180b: initial loop fn p2
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes
