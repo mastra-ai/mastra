@@ -5,7 +5,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
-import { createTestModel, modelWithReasoning, modelWithSources, testUsage } from './utils';
+import { createTestModel, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
@@ -194,19 +194,16 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       });
     });
 
-    // describe('result.files', () => {
-    //   // TODO: text data is being added as base64Data
-    //   // generateText uses a defaurt StepResult class than streaming does
-    //   // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
-    //   it.todo('should contain files', async () => {
-    //     const result = await generateText({
-    //       model: modelWithFiles,
-    //       prompt: 'prompt',
-    //     });
+    describe('result.files', () => {
+      it.todo('should contain files', async () => {
+        const result = await generateText({
+          model: modelWithFiles,
+          messageList: new MessageList(),
+        });
 
-    //     expect(result.files).toMatchSnapshot();
-    //   });
-    // });
+        expect(result.files).toMatchSnapshot();
+      });
+    });
 
     // describe('result.steps', () => {
     //   // TODO: include `reasoning` and `reasoningDetails` in step result

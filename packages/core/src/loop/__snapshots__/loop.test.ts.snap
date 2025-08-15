@@ -678,20 +678,18 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
 
 exports[`Loop Tests > AISDK v5 > generateText > result.files > should contain files 1`] = `
 [
-  DefaultGeneratedFileWithType {
-    "base64Data": undefined,
-    "mimeType": "image/png",
-    "type": "file",
+  DefaultGeneratedFile {
+    "base64Data": "AQID",
+    "mediaType": "image/png",
     "uint8ArrayData": Uint8Array [
       1,
       2,
       3,
     ],
   },
-  DefaultGeneratedFileWithType {
+  DefaultGeneratedFile {
     "base64Data": "QkFVRw==",
-    "mimeType": "image/jpeg",
-    "type": "file",
+    "mediaType": "image/jpeg",
     "uint8ArrayData": undefined,
   },
 ]

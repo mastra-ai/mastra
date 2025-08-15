@@ -173,6 +173,22 @@ export class AISDKV5OutputStream {
       .filter(Boolean);
   }
 
+  get generateTextFiles() {
+    return this.#modelOutput.files
+      .map(file => {
+        if (file.type === 'file') {
+          return (
+            convertMastraChunkToAISDKv5({
+              chunk: file,
+              mode: 'generate',
+            }) as any
+          )?.file;
+        }
+        return;
+      })
+      .filter(Boolean);
+  }
+
   get toolCalls() {
     return this.#modelOutput.toolCalls.map(toolCall => {
       return convertMastraChunkToAISDKv5({
@@ -274,7 +290,7 @@ export class AISDKV5OutputStream {
       toolCalls: this.toolCalls,
       toolResults: this.toolResults,
       sources: this.sources,
-      files: this.files,
+      files: this.generateTextFiles,
       response: this.response,
       content: this.content,
       totalUsage: this.#modelOutput.totalUsage,
