@@ -1,0 +1,183 @@
+name: Test Redirects
+
+on:
+  pull_request:
+    paths:
+      - 'docs/next.config.mjs'
+      - 'docs/src/**'
+      - 'docs/scripts/test-*.js'
+      - 'docs/scripts/run-all-tests.js'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/next.config.mjs' 
+      - 'docs/src/**'
+  workflow_dispatch:
+    inputs:
+      test_url:
+        description: 'URL to test against (leave empty for local)'
+        required: false
+        type: string
+
+jobs:
+  test-redirects:
+    name: Test Redirects and Locale Handling
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: docs
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'docs/package-lock.json'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+          
+      - name: Install dependencies
+        run: pnpm install
+        
+      - name: Build application
+        run: pnpm build
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          
+      - name: Start application
+        run: |
+          pnpm start &
+          echo $! > server.pid
+          # Wait for server to be ready
+          timeout 60 bash -c 'until curl -f http://localhost:3000 > /dev/null 2>&1; do sleep 2; done'
+        env:
+          PORT: 3000
+          
+      - name: Run redirect tests
+        run: |
+          if [ -n "${{ github.event.inputs.test_url }}" ]; then
+            export TEST_BASE_URL="${{ github.event.inputs.test_url }}"
+            export SKIP_SERVER_START=true
+            echo "Testing against: $TEST_BASE_URL"
+          else
+            export TEST_BASE_URL="http://localhost:3000"
+            echo "Testing against local server: $TEST_BASE_URL"
+          fi
+          
+          pnpm test:all-redirects
+          
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redirect-test-results
+          path: |
+            docs/redirect-test-report.md
+            docs/locale-redirect-test-report.md
+            docs/combined-test-report.md
+            docs/redirect-test-results.json
+            docs/locale-redirect-test-results.json
+          retention-days: 30
+          
+      - name: Comment test results on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            try {
+              const reportPath = path.join('docs', 'combined-test-report.md');
+              
+              if (fs.existsSync(reportPath)) {
+                const report = fs.readFileSync(reportPath, 'utf8');
+                
+                // Find existing comment
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                });
+                
+                const existingComment = comments.find(comment => 
+                  comment.body.includes('## Redirect Test Results')
+                );
+                
+                const commentBody = `## Redirect Test Results
+            
+            ${report}
+            
+            <details>
+            <summary>View detailed reports</summary>
+            
+            📄 **Available Reports:**
+            - Combined Test Report
+            - Redirect Test Report  
+            - Locale-Specific Test Report
+            
+            All reports are available in the GitHub Actions artifacts.
+            </details>`;
+                
+                if (existingComment) {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: existingComment.id,
+                    body: commentBody
+                  });
+                } else {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: commentBody
+                  });
+                }
+              }
+            } catch (error) {
+              console.error('Error posting comment:', error);
+            }
+            
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+            rm server.pid
+          fi
+          
+      - name: Fail if tests failed
+        run: |
+          # Check if any test results indicate failures
+          if [ -f redirect-test-results.json ]; then
+            failed=$(node -e "
+              const results = require('./redirect-test-results.json');
+              console.log(results.summary.failed || 0);
+            ")
+            if [ "$failed" -gt 0 ]; then
+              echo "❌ $failed redirect tests failed"
+              exit 1
+            fi
+          fi
+          
+          if [ -f locale-redirect-test-results.json ]; then
+            failed=$(node -e "
+              const results = require('./locale-redirect-test-results.json');
+              console.log(results.summary.failed || 0);
+            ")
+            if [ "$failed" -gt 0 ]; then
+              echo "❌ $failed locale tests failed"
+              exit 1
+            fi
+          fi
+          
+          echo "✅ All tests passed!"
