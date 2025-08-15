@@ -108,7 +108,7 @@ describe('runExperiment', () => {
       expect(mockAgent.generate).toHaveBeenCalledTimes(1);
       expect(mockAgent.generate).toHaveBeenCalledWith('test input', {
         scorers: {},
-        returnScorerInputs: true,
+        returnScorerData: true,
         runtimeContext: undefined,
       });
     });
@@ -131,7 +131,7 @@ describe('runExperiment', () => {
       expect(mockAgent.generate).toHaveBeenCalledTimes(1);
       expect(mockAgent.generate).toHaveBeenCalledWith('test input', {
         scorers: {},
-        returnScorerInputs: true,
+        returnScorerData: true,
         runtimeContext,
       });
     });

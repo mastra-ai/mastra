@@ -371,7 +371,7 @@ export class MessageList {
         this.messages.filter(m => this.newResponseMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
     v2: (): MastraMessageV2[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
-    ui: (): UIMessageWithMetadata[] => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    ui: (): UIMessageWithMetadata[] => this.responsePersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
   };
 
   public drainUnsavedMessages(): MastraMessageV2[] {

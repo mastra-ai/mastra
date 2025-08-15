@@ -2288,7 +2288,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
       });
 
-      if (generateOptions.returnScorerInputs) {
+      if (generateOptions.returnScorerData) {
         result.scoringData = afterResult.scoringData;
       }
 
@@ -2313,7 +2313,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       structuredOutput: true,
     });
 
-    if (generateOptions.returnScorerInputs) {
+    if (generateOptions.returnScorerData) {
       result.scoringData = afterResult.scoringData;
     }
 
