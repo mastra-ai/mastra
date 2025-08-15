@@ -16,7 +16,7 @@ class ProcessorState {
   constructor(private readonly processorName: string) {}
 
   // Internal methods for the runner
-  addChunk(part: TextStreamPart<any> | ObjectStreamPart<any>): void {
+  addPart(part: TextStreamPart<any> | ObjectStreamPart<any>): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
       this.accumulatedText += part.textDelta;
@@ -118,11 +118,11 @@ export class ProcessorRunner {
     }
 
     try {
-      let processedChunk: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined = part;
+      let processedPart: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined = part;
 
       for (const processor of this.outputProcessors) {
         try {
-          if (processor.processOutputStream && processedChunk) {
+          if (processor.processOutputStream && processedPart) {
             // Get or create state for this processor
             let state = processorStates.get(processor.name);
             if (!state) {
@@ -131,19 +131,19 @@ export class ProcessorRunner {
             }
 
             // Add the current part to accumulated text
-            state.addChunk(processedChunk);
+            state.addPart(processedPart);
 
             const result = await processor.processOutputStream({
-              part: processedChunk,
+              part: processedPart,
               streamParts: state.streamParts,
               state: state.customState,
               abort: (reason?: string) => {
-                throw new TripWire(reason || `Chunk blocked by ${processor.name}`);
+                throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
             });
 
             // If result is null, or undefined, don't emit
-            processedChunk = result;
+            processedPart = result;
           }
         } catch (error) {
           if (error instanceof TripWire) {
@@ -154,9 +154,9 @@ export class ProcessorRunner {
         }
       }
 
-      return { part: processedChunk, blocked: false };
+      return { part: processedPart, blocked: false };
     } catch (error) {
-      this.logger.error(`[Agent:${this.agentName}] - Chunk processing failed:`, error);
+      this.logger.error(`[Agent:${this.agentName}] - Stream part processing failed:`, error);
       return { part, blocked: false };
     }
   }
@@ -178,14 +178,14 @@ export class ProcessorRunner {
               break;
             }
 
-            // Process all chunks through output processors
-            const { part: processedChunk, blocked, reason } = await this.processPart(value, processorStates);
+            // Process all stream parts through output processors
+            const { part: processedPart, blocked, reason } = await this.processPart(value, processorStates);
 
             if (blocked) {
               // Log that part was blocked
-              void this.logger.debug(`[Agent:${this.agentName}] - Chunk blocked by output processor`, {
+              void this.logger.debug(`[Agent:${this.agentName}] - Stream part blocked by output processor`, {
                 reason,
-                originalChunk: value,
+                originalPart: value,
               });
 
               // Send tripwire part and close stream for abort
@@ -195,11 +195,11 @@ export class ProcessorRunner {
               });
               controller.close();
               break;
-            } else if (processedChunk !== null) {
+            } else if (processedPart !== null) {
               // Send processed part only if it's not null (which indicates don't emit)
-              controller.enqueue(processedChunk);
+              controller.enqueue(processedPart);
             }
-            // If processedChunk is null, don't emit anything for this part
+            // If processedPart is null, don't emit anything for this part
           }
         } catch (error) {
           controller.error(error);

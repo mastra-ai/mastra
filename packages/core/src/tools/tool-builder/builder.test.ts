@@ -4,7 +4,6 @@ import type { LanguageModel } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
-import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
 import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
 import 'dotenv/config';
@@ -140,14 +139,11 @@ async function runSingleOutputsTest(
 
     const generateOptions: any = {
       maxSteps: 1,
-      experimental_output: testTool.inputSchema!,
-      // outputProcessors: [
-      //   new StructuredOutputProcessor({
-      //     schema: testTool.inputSchema!,
-      //     model: model,
-      //     errorStrategy: 'strict',
-      //   }),
-      // ],
+      structuredOutput: {
+        schema: testTool.inputSchema!,
+        model: model,
+        errorStrategy: 'strict',
+      },
     };
 
     if (model.provider.includes('openai') || model.modelId.includes('openai')) {
@@ -255,7 +251,9 @@ async function runSingleInputTest(
   }
 }
 
-describe('Tool Schema Compatibility', () => {
+// These tests are both expensive to run and occasionally a couple are flakey. We should run them manually for now
+// to make sure that we still have good coverage, for both input and output schemas.
+describe.only('Tool Schema Compatibility', () => {
   // Set a longer timeout for the entire test suite
   const SUITE_TIMEOUT = 120000; // 2 minutes
   const TEST_TIMEOUT = 60000; // 1 minute
@@ -379,11 +377,7 @@ describe('Tool Schema Compatibility', () => {
       });
     });
 
-    // Skipping these tests for now as LLM's seem to be flakier with output schemas than tool input schemas
-    // The compatibility layer still fixes things in the same way, output schemas and input schemas fail in a similar way for a model
-    // but the LLM sometimes makes silly mistakes with output schemas, like returning a json string instead of an object or not returning anything.
-    // Skipping this also saves us a lot of cost in CI for running tests. I'll keep the tests here for now if we ever want to test it manually.
-    describe.only(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+    describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
         describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
           testTools.forEach(testTool => {

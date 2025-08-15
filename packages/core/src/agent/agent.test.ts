@@ -4519,17 +4519,17 @@ describe('output processors', () => {
         readonly name = 'test-output-processor';
 
         async processOutputStream(args: {
-          chunk: any;
+          part: any;
           streamParts: any[];
           state: Record<string, any>;
           abort: (reason?: string) => never;
         }) {
-          const { chunk } = args;
+          const { part } = args;
           // Only process text-delta chunks
-          if (chunk.type === 'text-delta') {
-            return { type: 'text-delta', textDelta: chunk.textDelta.replace(/test/gi, 'TEST') };
+          if (part.type === 'text-delta') {
+            return { type: 'text-delta', textDelta: part.textDelta.replace(/test/gi, 'TEST') };
           }
-          return chunk;
+          return part;
         }
       }
 
@@ -4573,12 +4573,12 @@ describe('output processors', () => {
       class BlockingOutputProcessor implements Processor {
         readonly name = 'filtering-output-processor';
 
-        async processOutputStream({ chunk }) {
+        async processOutputStream({ part }) {
           // Filter out chunks containing "blocked"
-          if (chunk.type === 'text-delta' && chunk.textDelta?.includes('blocked')) {
+          if (part.type === 'text-delta' && part.textDelta?.includes('blocked')) {
             return null; // Return null to filter the chunk
           }
-          return chunk;
+          return part;
         }
       }
 
@@ -4622,12 +4622,12 @@ describe('output processors', () => {
       class AbortingOutputProcessor implements Processor {
         readonly name = 'aborting-output-processor';
 
-        async processOutputStream({ chunk, abort }) {
-          if (chunk.type === 'text-delta' && chunk.textDelta?.includes('abort')) {
+        async processOutputStream({ part, abort }) {
+          if (part.type === 'text-delta' && part.textDelta?.includes('abort')) {
             abort('Content triggered abort');
           }
 
-          return chunk;
+          return part;
         }
       }
 
@@ -4681,23 +4681,23 @@ describe('output processors', () => {
       class ReplaceProcessor implements Processor {
         readonly name = 'replace-processor';
 
-        async processOutputStream({ chunk }) {
-          if (chunk.type === 'text-delta') {
-            return { type: 'text-delta', textDelta: chunk.textDelta.replace(/hello/gi, 'HELLO') };
+        async processOutputStream({ part }) {
+          if (part.type === 'text-delta') {
+            return { type: 'text-delta', textDelta: part.textDelta.replace(/hello/gi, 'HELLO') };
           }
-          return chunk;
+          return part;
         }
       }
 
       class AddPrefixProcessor implements Processor {
         readonly name = 'prefix-processor';
 
-        async processOutputStream({ chunk }) {
+        async processOutputStream({ part }) {
           // Add prefix to any chunk that contains "HELLO"
-          if (chunk.type === 'text-delta' && chunk.textDelta?.includes('HELLO')) {
-            return { type: 'text-delta', textDelta: `[PROCESSED] ${chunk.textDelta}` };
+          if (part.type === 'text-delta' && part.textDelta?.includes('HELLO')) {
+            return { type: 'text-delta', textDelta: `[PROCESSED] ${part.textDelta}` };
           }
-          return chunk;
+          return part;
         }
       }
 
@@ -4739,11 +4739,11 @@ describe('output processors', () => {
       class BlockingOutputProcessor implements Processor {
         readonly name = 'filtering-output-processor';
 
-        async processOutputStream({ chunk, abort }) {
-          if (chunk.type === 'text-delta' && chunk.textDelta?.includes('blocked')) {
+        async processOutputStream({ part, abort }) {
+          if (part.type === 'text-delta' && part.textDelta?.includes('blocked')) {
             abort('blocked content');
           }
-          return chunk;
+          return part;
         }
       }
 
@@ -5178,23 +5178,23 @@ describe('output processors', () => {
       class StreamStructuredProcessor implements Processor {
         readonly name = 'stream-structured-processor';
 
-        async processOutputStream({ chunk }) {
+        async processOutputStream({ part }) {
           // Handle both text-delta and object-delta chunks
-          if (chunk.type === 'text-delta' && chunk.textDelta) {
+          if (part.type === 'text-delta' && part.textDelta) {
             // Collect and transform streaming chunks
             const modifiedChunk = {
-              ...chunk,
-              textDelta: chunk.textDelta.replace(/obama/gi, 'OBAMA'),
+              ...part,
+              textDelta: part.textDelta.replace(/obama/gi, 'OBAMA'),
             };
-            processedChunks.push(chunk.textDelta);
+            processedChunks.push(part.textDelta);
             return modifiedChunk;
-          } else if (chunk.type === 'object-delta' && (chunk as any).objectDelta) {
+          } else if (part.type === 'object-delta' && (part as any).objectDelta) {
             // Handle object streaming chunks
-            const stringified = JSON.stringify((chunk as any).objectDelta);
+            const stringified = JSON.stringify((part as any).objectDelta);
             processedChunks.push(stringified);
-            return chunk;
+            return part;
           }
-          return chunk;
+          return part;
         }
 
         async processOutputResult({ messages }) {
@@ -5289,19 +5289,19 @@ describe('output processors', () => {
       class ExperimentalStreamProcessor implements Processor {
         readonly name = 'experimental-stream-processor';
 
-        async processOutputStream({ chunk }) {
+        async processOutputStream({ part }) {
           // Handle both text-delta and object-delta chunks
           streamProcessorCalled = true; // Set this regardless of chunk type
 
-          if (chunk.type === 'text-delta') {
+          if (part.type === 'text-delta') {
             return {
-              ...chunk,
-              textDelta: chunk.textDelta?.replace(/green/gi, 'GREEN'),
+              ...part,
+              textDelta: part.textDelta?.replace(/green/gi, 'GREEN'),
             };
-          } else if (chunk.type === 'object-delta') {
-            return chunk;
+          } else if (part.type === 'object-delta') {
+            return part;
           }
-          return chunk;
+          return part;
         }
 
         async processOutputResult({ messages }) {
@@ -5385,12 +5385,12 @@ describe('output processors', () => {
         class StreamAbortProcessor implements Processor {
           readonly name = 'stream-abort-output-processor';
 
-          async processOutputStream({ chunk, abort }) {
+          async processOutputStream({ part, abort }) {
             // Abort on the second text-delta chunk
-            if (chunk.type === 'text-delta' && chunk.textDelta?.includes('Barack')) {
+            if (part.type === 'text-delta' && part.textDelta?.includes('Barack')) {
               abort('Stream aborted during structured output generation');
             }
-            return chunk;
+            return part;
           }
         }
 
@@ -5450,12 +5450,12 @@ describe('output processors', () => {
         class StreamAbortProcessor implements Processor {
           readonly name = 'stream-abort-experimental-processor';
 
-          async processOutputStream({ chunk, abort }) {
+          async processOutputStream({ part, abort }) {
             // Abort on the second text-delta chunk
-            if (chunk.type === 'text-delta' && chunk.textDelta?.includes('green')) {
+            if (part.type === 'text-delta' && part.textDelta?.includes('green')) {
               abort('Stream aborted during experimental output generation');
             }
-            return chunk;
+            return part;
           }
         }
 
@@ -5628,12 +5628,12 @@ describe('output processors', () => {
       it('should handle processor abort with default message', async () => {
         const abortProcessor = {
           name: 'abort-stream-output-processor',
-          async processOutputStream({ chunk, abort }) {
-            // Abort immediately on any text chunk
-            if (chunk.type === 'text-delta') {
+          async processOutputStream({ part, abort }) {
+            // Abort immediately on any text part
+            if (part.type === 'text-delta') {
               abort();
             }
-            return chunk;
+            return part;
           },
         } satisfies Processor;
 
@@ -5676,17 +5676,17 @@ describe('output processors', () => {
         // Should receive start, step-start, and tripwire chunk
         const tripwireChunk = chunks.find(c => c.type === 'tripwire');
         expect(tripwireChunk).toBeDefined();
-        expect(tripwireChunk.payload.tripwireReason).toBe('Chunk blocked by abort-stream-output-processor');
+        expect(tripwireChunk.payload.tripwireReason).toBe('Stream part blocked by abort-stream-output-processor');
       });
 
       it('should handle processor abort with custom message', async () => {
         const customAbortProcessor = {
           name: 'custom-abort-stream-output',
-          async processOutputStream({ chunk, abort }) {
-            if (chunk.type === 'text-delta') {
+          async processOutputStream({ part, abort }) {
+            if (part.type === 'text-delta') {
               abort('Custom stream output abort reason');
             }
-            return chunk;
+            return part;
           },
         } satisfies Processor;
 
@@ -5737,26 +5737,26 @@ describe('output processors', () => {
 
         const abortProcessor = {
           name: 'abort-first-stream-output',
-          async processOutputStream({ chunk, abort }) {
-            if (chunk.type === 'text-delta') {
+          async processOutputStream({ part, abort }) {
+            if (part.type === 'text-delta') {
               abortTriggered = true;
               abort('Stop here in stream');
             }
-            return chunk;
+            return part;
           },
         } satisfies Processor;
 
         const shouldNotRunProcessor = {
           name: 'should-not-run-stream-output',
-          async processOutputStream({ chunk }) {
+          async processOutputStream({ part }) {
             // If abort was already triggered, this processor shouldn't be called again
             if (abortTriggered) {
               secondProcessorCalledAfterAbort = true;
             }
-            if (chunk.type === 'text-delta') {
-              return { type: 'text-delta', textDelta: `${chunk.textDelta} [SHOULD NOT APPEAR]` };
+            if (part.type === 'text-delta') {
+              return { type: 'text-delta', textDelta: `${part.textDelta} [SHOULD NOT APPEAR]` };
             }
-            return chunk;
+            return part;
           },
         } satisfies Processor;
 
@@ -5805,11 +5805,11 @@ describe('output processors', () => {
       it('should not send any chunks after tripwire is triggered', async () => {
         const abortProcessor = {
           name: 'abort-on-first-text-chunk',
-          async processOutputStream({ chunk, abort }) {
-            if (chunk.type === 'text-delta') {
+          async processOutputStream({ part, abort }) {
+            if (part.type === 'text-delta') {
               abort('Stream terminated after first text chunk');
             }
-            return chunk;
+            return part;
           },
         } satisfies Processor;
 
