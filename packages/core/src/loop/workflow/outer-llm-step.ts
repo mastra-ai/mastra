@@ -18,6 +18,7 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
     model,
     _internal,
     modelStreamSpan,
+    telemetry_settings,
     ...rest,
   });
 
@@ -150,7 +151,18 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
     .then(llmExecutionStep)
     .map(({ inputData }) => {
       if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && inputData.output.toolCalls?.length) {
-        modelStreamSpan.setAttribute('stream.response.toolCalls', JSON.stringify(inputData.output.toolCalls));
+        modelStreamSpan.setAttribute(
+          'stream.response.toolCalls',
+          JSON.stringify(
+            inputData.output.toolCalls?.map((toolCall: any) => {
+              return {
+                toolCallId: toolCall.toolCallId,
+                args: toolCall.args,
+                toolName: toolCall.toolName,
+              };
+            }),
+          ),
+        );
       }
       return inputData.output.toolCalls || [];
     })

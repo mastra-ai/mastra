@@ -21,13 +21,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
     start: async controller => {
       const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
-      const { rootSpan } = getRootSpan({
-        operationId: `mastra.stream.model.aisdk`,
-        model,
-        telemetry_settings,
-      });
-
-      rootSpan.setAttributes({
+      modelStreamSpan.setAttributes({
         ...(telemetry_settings?.recordInputs !== false
           ? {
               'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
@@ -80,7 +74,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
             });
           }
 
-          rootSpan.setAttributes({
+          modelStreamSpan.setAttributes({
             'stream.response.id': inputData.metadata.id,
             'stream.response.model': model.modelId,
             ...(inputData.metadata.providerMetadata
@@ -98,7 +92,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
               : {}),
           });
 
-          rootSpan.end();
+          modelStreamSpan.end();
 
           const reason = inputData.stepResult.reason;
 
@@ -118,11 +112,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
 
       const msToFirstChunk = _internal?.now?.()! - rest.startTimestamp!;
 
-      rootSpan.addEvent('ai.stream.firstChunk', {
+      modelStreamSpan.addEvent('ai.stream.firstChunk', {
         'ai.response.msToFirstChunk': msToFirstChunk,
       });
 
-      rootSpan.setAttributes({
+      modelStreamSpan.setAttributes({
         'stream.response.timestamp': new Date(rest.startTimestamp).toISOString(),
         'stream.response.msToFirstChunk': msToFirstChunk,
       });
@@ -168,8 +162,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
       });
 
       const msToFinish = (_internal?.now?.() ?? Date.now()) - rest.startTimestamp;
-      rootSpan.addEvent('ai.stream.finish');
-      rootSpan.setAttributes({
+      modelStreamSpan.addEvent('ai.stream.finish');
+      modelStreamSpan.setAttributes({
         'stream.response.msToFinish': msToFinish,
         'stream.response.avgOutputTokensPerSecond':
           (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,

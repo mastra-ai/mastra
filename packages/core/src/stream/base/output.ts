@@ -315,8 +315,10 @@ export class MastraModelOutput extends MastraBase {
                         'stream.response.toolCalls': JSON.stringify(
                           baseFinishStep?.toolCalls?.map(chunk => {
                             return {
-                              type: chunk.type,
-                              ...chunk.payload,
+                              type: 'tool-call',
+                              toolCallId: chunk.payload.toolCallId,
+                              args: chunk.payload.args,
+                              toolName: chunk.payload.toolName,
                             };
                           }),
                         ),

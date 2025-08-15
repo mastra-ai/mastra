@@ -46,6 +46,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
       provider: model.provider,
     },
     modelSettings,
+    headers: modelSettings?.headers ?? rest.headers,
     telemetry_settings,
   });
 
@@ -57,6 +58,17 @@ export function loop<Tools extends ToolSet = ToolSet>({
       : {}),
   });
 
+  const { rootSpan: modelStreamSpan } = getRootSpan({
+    operationId: `mastra.stream.aisdk.doStream`,
+    model: {
+      modelId: model.modelId,
+      provider: model.provider,
+    },
+    modelSettings,
+    headers: modelSettings?.headers ?? rest.headers,
+    telemetry_settings,
+  });
+
   const workflowLoopProps: LoopRun<Tools> = {
     model,
     runId: runIdToUse,
@@ -66,7 +78,8 @@ export function loop<Tools extends ToolSet = ToolSet>({
     includeRawChunks: !!includeRawChunks,
     _internal: internalToUse,
     tools,
-    modelStreamSpan: rootSpan,
+    modelStreamSpan,
+    telemetry_settings,
     ...rest,
   };
 
