@@ -383,6 +383,24 @@ export class MemoryPG extends MemoryStorage {
     return dedupedRows;
   }
 
+  private parseRow(row: any): MastraMessageV2 {
+    let content = row.content;
+    try {
+      content = JSON.parse(row.content);
+    } catch {
+      // use content as is if it's not JSON
+    }
+    return {
+      id: row.id,
+      content,
+      role: row.role,
+      createdAt: new Date(row.createdAt as string),
+      threadId: row.threadId,
+      resourceId: row.resourceId,
+      ...(row.type && row.type !== 'v2' ? { type: row.type } : {}),
+    } satisfies MastraMessageV2;
+  }
+
   /**
    * @deprecated use getMessagesPaginated instead
    */
@@ -453,6 +471,60 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId,
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return [];
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
+
+    try {
+      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const query = `
+        ${selectStatement} FROM ${tableName} 
+        WHERE id IN (${messageIds.map((_, i) => `$${i + 1}`).join(', ')})
+        ORDER BY "createdAt" DESC
+      `;
+      const resultRows = await this.client.manyOrNone(query, messageIds);
+
+      const list = new MessageList().add(resultRows.map(this.parseRow), 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageIds: JSON.stringify(messageIds),
           },
         },
         error,
