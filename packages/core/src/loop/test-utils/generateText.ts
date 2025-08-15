@@ -256,9 +256,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         }),
       });
 
-      // TODO: include `reasoning` and `reasoningDetails` in step result
-      // generateText uses a defaurt StepResult class than streaming does
-      // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
       it.todo('should add the reasoning from the model response to the step result', async () => {
         const result = await generateText({
           model: modelWithReasoning,
