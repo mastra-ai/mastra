@@ -1,16 +1,16 @@
 ---
-title: "Reference: getLLM() | Agents | Mastra Docs"
-description: "Documentation for the `.getLLM()` method in Mastra agents, which retrieves the language model instance."
+title: "Reference: Agent.getLLM() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance."
 ---
 
-# getLLM()
+# Agent.getLLM()
 
 The `.getLLM()` method retrieves the language model instance configured for an agent, resolving it if it's a function. This method provides access to the underlying LLM that powers the agent's capabilities.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const llm = await agent.getLLM();
+```typescript copy
+await agent.getLLM();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const llm = await agent.getLLM();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLLMV1 | Promise<MastraLLMV1>",
+      description: "The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const llm = await agent.getLLM({
+```typescript copy
+await agent.getLLM({
   runtimeContext: new RuntimeContext(),
   model: openai('gpt-4')
 });
@@ -51,19 +63,12 @@ const llm = await agent.getLLM({
       name: "model",
       type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
       isOptional: true,
-      description: "Optional model override. If provided, this model will be used instead of the agent's configured model.",
+      description: "Optional model override. If provided, this model will be used used instead of the agent's configured model.",
     },
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "llm",
-      type: "MastraLLMBase | Promise<MastraLLMBase>",
-      description: "The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.",
-    },
-  ]}
-/>
+- [Agents overview](../../docs/agents/overview.mdx)
+- [Runtime variables](../../docs/agents/runtime-variables.mdx)

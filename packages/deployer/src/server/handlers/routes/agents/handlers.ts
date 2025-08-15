@@ -8,11 +8,13 @@ import {
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
   streamVNextGenerateHandler as getOriginalStreamVNextGenerateHandler,
+  updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
 import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
+import { AllowedProviderKeys } from '../../utils';
 
 // Agent handlers
 export async function getAgentsHandler(c: Context) {
@@ -189,4 +191,35 @@ export async function setAgentInstructionsHandler(c: Context) {
   } catch (error) {
     return handleError(error, 'Error setting agent instructions');
   }
+}
+
+export async function updateAgentModelHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const body = await c.req.json();
+
+    const result = getOriginalUpdateAgentModelHandler({
+      mastra,
+      agentId,
+      body,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error updating agent model');
+  }
+}
+
+export async function getModelProvidersHandler(c: Context) {
+  const isPlayground = c.get('playground') === true;
+  if (!isPlayground) {
+    return c.json({ error: 'This API is only available in the playground environment' }, 403);
+  }
+  const envVars = process.env;
+  const providers = Object.entries(AllowedProviderKeys);
+  const envKeys = Object.keys(envVars);
+  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
+  const availableProvidersNames = availableProviders.map(([key]) => key);
+  return c.json(availableProvidersNames);
 }

@@ -1,16 +1,16 @@
 ---
-title: "Reference: getDefaultVNextStreamOptions() | Agents | Mastra Docs"
-description: "Documentation for the `.getDefaultVNextStreamOptions()` method in Mastra agents, which retrieves the default options used for streamVNext calls."
+title: "Reference: Agent.getDefaultVNextStreamOptions() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultVNextStreamOptions()` method in Mastra agents, which retrieves the default options used for streamVNext calls."
 ---
 
-# getDefaultVNextStreamOptions()
+# Agent.getDefaultVNextStreamOptions()
 
-The `.getDefaultVNextStreamOptions()` method retrieves the default vNext streaming options configured for an agent, resolving them if they're a function. These options are used as the base configuration for all `streamVNext()` calls unless overridden.
+Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultVNextStreamOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `streamVNext()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const defaultOptions = await agent.getDefaultVNextStreamOptions();
+```typescript copy
+await agent.getDefaultVNextStreamOptions();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const defaultOptions = await agent.getDefaultVNextStreamOptions();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentVNextStreamOptions<Output, StructuredOutput> | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>",
+      description: "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const defaultOptions = await agent.getDefaultVNextStreamOptions({
+```typescript copy
+await agent.getDefaultVNextStreamOptions({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -49,14 +61,7 @@ const defaultOptions = await agent.getDefaultVNextStreamOptions({
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "defaultOptions",
-      type: "AgentVNextStreamOptions<Output, StructuredOutput> | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>",
-      description: "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
-    },
-  ]}
-/>
+- [Agent streaming](../../docs/agents/streaming.mdx)
+- [Runtime variables](../../docs/agents/runtime-variables.mdx)

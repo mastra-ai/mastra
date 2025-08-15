@@ -1,18 +1,18 @@
 ---
-title: "Reference: Workflow.branch() | Building Workflows | Mastra Docs"
-description: Documentation for the `.branch()` method in workflows, which creates conditional branches between steps.
+title: "Reference: Workflow.branch() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.
 ---
 
 # Workflow.branch()
 
 The `.branch()` method creates conditional branches between workflow steps, allowing for different paths to be taken based on the result of a previous step.
 
-## Usage
+## Usage example
 
-```typescript
+```typescript copy
 workflow.branch([
-  [async ({ context }) => true, stepOne],
-  [async ({ context }) => false, stepTwo],
+  [async ({ context }) => true, step1],
+  [async ({ context }) => false, step2],
 ]);
 ```
 
@@ -44,5 +44,5 @@ workflow.branch([
 
 ## Related
 
-- [Conditional branching](../../docs/workflows/flow-control.mdx#conditional-branching)
+- [Conditional branching](../../docs/workflows/control-flow.mdx)
 - [Conditional branching example](../../examples/workflows/conditional-branching.mdx)

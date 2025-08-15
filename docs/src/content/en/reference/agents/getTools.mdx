@@ -1,16 +1,16 @@
 ---
-title: "Reference: getTools() | Agents | Mastra Docs"
-description: "Documentation for the `.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+title: "Reference: Agent.getTools() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
 ---
 
-# getTools()
+# Agent.getTools()
 
 The `.getTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const tools = await agent.getTools();
+```typescript copy
+await agent.getTools();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const tools = await agent.getTools();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "TTools | Promise<TTools>",
+      description: "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const tools = await agent.getTools({
+```typescript copy
+await agent.getTools({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -49,14 +61,7 @@ const tools = await agent.getTools({
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "tools",
-      type: "TTools | Promise<TTools>",
-      description: "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
-    },
-  ]}
-/>
+- [Using tools with agents](../../docs/agents/using-tools-and-mcp.mdx)
+- [Creating tools](../../docs/tools-mcp/overview.mdx)

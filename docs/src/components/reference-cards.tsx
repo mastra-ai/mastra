@@ -56,6 +56,10 @@ export const ReferenceCards = () => {
             title: "mcp-docs-server",
             href: "/reference/cli/mcp-docs-server",
           },
+          {
+            title: "mastra scorers",
+            href: "/reference/cli/scorers",
+          },
         ],
         Agents: [
           {

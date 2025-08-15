@@ -1093,7 +1093,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
     let isTrue = true;
-    let result = { status: 'success', output: prevOutput } as unknown as StepResult<any, any, any, any>;
+    const prevPayload = stepResults[step.id]?.payload;
+    let result = { status: 'success', output: prevPayload ?? prevOutput } as unknown as StepResult<any, any, any, any>;
     let currentResume = resume;
 
     do {

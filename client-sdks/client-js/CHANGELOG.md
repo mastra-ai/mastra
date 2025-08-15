@@ -1,5 +1,54 @@
 # @mastra/client-js
 
+## 0.10.22-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [c30bca8]
+  - @mastra/core@0.13.3-alpha.0
+
+## 0.10.21
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+
+## 0.10.21-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+
+## 0.10.21-alpha.2
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.10.21-alpha.1
 
 ### Patch Changes

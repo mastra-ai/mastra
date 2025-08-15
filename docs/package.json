@@ -47,7 +47,8 @@
     "sonner": "^2.0.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss": "^4.0.17",
-    "use-stick-to-bottom": "^1.1.1"
+    "use-stick-to-bottom": "^1.1.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@shikijs/transformers": "^3.8.0",
