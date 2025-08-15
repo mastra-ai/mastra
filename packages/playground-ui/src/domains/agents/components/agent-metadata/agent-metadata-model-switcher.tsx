@@ -8,6 +8,7 @@ import { CircleCheck } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
 import { Select, SelectItem, SelectContent, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UpdateModelParams } from '@mastra/client-js';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -48,6 +49,7 @@ export const AgentMetadataModelSwitcher = ({
   modelProviders,
 }: AgentMetadataModelSwitcherProps) => {
   const [selectedModel, setSelectedModel] = useState(defaultModel);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(() => {
     if (defaultProvider) {
       const providerOnly = defaultProvider.split('.')[0];
@@ -74,6 +76,8 @@ export const AgentMetadataModelSwitcher = ({
     closeEditor();
   };
 
+  const filteredModels = allModels.filter(model => model.model.includes(selectedModel));
+
   return (
     <TooltipProvider>
       <div className="flex items-center gap-2">
@@ -96,14 +100,41 @@ export const AgentMetadataModelSwitcher = ({
             ))}
           </SelectContent>
         </Select>
-        <Input
-          id="model-input"
-          list="model-suggestions"
-          type="text"
-          value={selectedModel}
-          onChange={e => setSelectedModel(e.target.value)}
-          placeholder="Enter model name or select from suggestions..."
-        />
+        <Popover open={showSuggestions}>
+          <PopoverTrigger asChild>
+            <Input
+              id="model-input"
+              list="model-suggestions"
+              className="flex-1"
+              type="text"
+              value={selectedModel}
+              onChange={e => {
+                setSelectedModel(e.target.value);
+                setShowSuggestions(true);
+              }}
+              placeholder="Enter model name or select from suggestions..."
+            />
+          </PopoverTrigger>
+
+          <PopoverContent
+            onOpenAutoFocus={e => e.preventDefault()}
+            className="flex flex-col gap-2 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto"
+          >
+            {filteredModels.map(model => (
+              <div
+                className="flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2"
+                key={model.provider + model.model}
+                onClick={() => {
+                  setSelectedModel(model.model);
+                  setShowSuggestions(false);
+                }}
+              >
+                <Icon>{providerMapToIcon[model.icon as keyof typeof providerMapToIcon]}</Icon>
+                {model.model}
+              </div>
+            ))}
+          </PopoverContent>
+        </Popover>
         <Tooltip>
           <TooltipTrigger asChild>
             <button onClick={handleSave} className="text-icon3 hover:text-icon6">
@@ -113,15 +144,6 @@ export const AgentMetadataModelSwitcher = ({
           <TooltipContent>{loading ? 'Saving...' : 'Save new model'}</TooltipContent>
         </Tooltip>
       </div>
-
-      <datalist id="model-suggestions">
-        {allModels.map(model => (
-          <option key={model.provider + model.model} value={model.model}>
-            <Icon>{providerMapToIcon[model.icon as keyof typeof providerMapToIcon]}</Icon>
-            {model.model}
-          </option>
-        ))}
-      </datalist>
     </TooltipProvider>
   );
 };
