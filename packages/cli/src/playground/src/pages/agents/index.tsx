@@ -4,7 +4,7 @@ import { useAgents } from '@/hooks/use-agents';
 import { AgentsTable } from '@mastra/playground-ui';
 
 function Agents() {
-  const { agents, isLoading } = useAgents();
+  const { data: agents, isLoading } = useAgents();
 
   return (
     <MainContentLayout>

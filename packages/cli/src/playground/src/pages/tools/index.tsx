@@ -4,7 +4,7 @@ import { MainContentLayout, Header, HeaderTitle, MainContentContent, ToolList } 
 import { useTools } from '@/hooks/use-all-tools';
 
 export default function Tools() {
-  const { agents: agentsRecord, isLoading: isLoadingAgents } = useAgents();
+  const { data: agentsRecord, isLoading: isLoadingAgents } = useAgents();
   const { tools, isLoading: isLoadingTools } = useTools();
 
   const isEmpty = !isLoadingTools && Object.keys(tools).length === 0;

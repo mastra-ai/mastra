@@ -14,7 +14,7 @@ interface AgentPromptEnhancerProps {
 }
 
 export function AgentPromptEnhancer({ agentId }: AgentPromptEnhancerProps) {
-  const { agent } = useAgent(agentId);
+  const { data: agent } = useAgent(agentId);
   const [showVersionHistoryDialog, setShowVersionHistoryDialog] = useState(false);
 
   const {
