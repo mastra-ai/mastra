@@ -1,9 +1,9 @@
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import type { ModerationResult } from './moderation';
-import { ModerationInputProcessor } from './moderation';
+import { ModerationProcessor } from './moderation';
 
 function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
   return {
@@ -84,7 +84,7 @@ function setupMockModel(result: { object: ModerationResult } | { object: Moderat
   });
 }
 
-describe('ModerationInputProcessor', () => {
+describe('ModerationProcessor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -92,7 +92,7 @@ describe('ModerationInputProcessor', () => {
   describe('constructor and configuration', () => {
     it('should initialize with required model configuration', () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
@@ -101,7 +101,7 @@ describe('ModerationInputProcessor', () => {
 
     it('should use default categories when none specified', () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
@@ -110,7 +110,7 @@ describe('ModerationInputProcessor', () => {
 
     it('should accept custom categories', () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         categories: ['custom-category', 'another-category'],
       });
@@ -120,7 +120,7 @@ describe('ModerationInputProcessor', () => {
 
     it('should accept custom threshold and strategy', () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         threshold: 0.7,
         strategy: 'warn',
@@ -133,7 +133,7 @@ describe('ModerationInputProcessor', () => {
   describe('message processing with block strategy', () => {
     it('should return all messages when content is not flagged', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'block',
       });
@@ -145,7 +145,7 @@ describe('ModerationInputProcessor', () => {
         createTestMessage('I am doing well, thank you!', 'user', 'msg2'),
       ];
 
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toEqual(messages);
       expect(mockAbort).not.toHaveBeenCalled();
@@ -153,7 +153,7 @@ describe('ModerationInputProcessor', () => {
 
     it('should abort when content is flagged with block strategy', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['hate', 'harassment']) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'block',
       });
@@ -165,7 +165,7 @@ describe('ModerationInputProcessor', () => {
       const messages = [createTestMessage('This is hateful content', 'user')];
 
       await expect(async () => {
-        await moderator.process({ messages, abort: mockAbort as any });
+        await moderator.processInput({ messages, abort: mockAbort as any });
       }).rejects.toThrow('Content blocked');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Content flagged for moderation'));
@@ -176,7 +176,7 @@ describe('ModerationInputProcessor', () => {
         { object: createMockModerationResult(false) },
         { object: createMockModerationResult(true, ['violence']) },
       ]);
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'block',
       });
@@ -191,7 +191,7 @@ describe('ModerationInputProcessor', () => {
       ];
 
       await expect(async () => {
-        await moderator.process({ messages, abort: mockAbort as any });
+        await moderator.processInput({ messages, abort: mockAbort as any });
       }).rejects.toThrow('Content blocked');
 
       expect(mockAbort).toHaveBeenCalled();
@@ -201,7 +201,7 @@ describe('ModerationInputProcessor', () => {
   describe('message processing with warn strategy', () => {
     it('should log warning but allow flagged content through', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['harassment']) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'warn',
       });
@@ -211,12 +211,12 @@ describe('ModerationInputProcessor', () => {
 
       const messages = [createTestMessage('Questionable content', 'user')];
 
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toEqual(messages);
       expect(mockAbort).not.toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[ModerationInputProcessor] Content flagged for moderation'),
+        expect.stringContaining('[ModerationProcessor] Content flagged for moderation'),
       );
 
       consoleSpy.mockRestore();
@@ -229,7 +229,7 @@ describe('ModerationInputProcessor', () => {
         { object: createMockModerationResult(false) },
         { object: createMockModerationResult(true, ['hate']) },
       ]);
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'filter',
       });
@@ -242,21 +242,19 @@ describe('ModerationInputProcessor', () => {
         createTestMessage('Hateful message', 'user', 'msg2'),
       ];
 
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('msg1');
       expect(mockAbort).not.toHaveBeenCalled();
-      expect(consoleInfoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[ModerationInputProcessor] Filtered message'),
-      );
+      expect(consoleInfoSpy).toHaveBeenCalledWith(expect.stringContaining('[ModerationProcessor] Filtered message'));
 
       consoleInfoSpy.mockRestore();
     });
 
     it('should return empty array if all messages are flagged', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['harassment']) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'filter',
       });
@@ -268,7 +266,7 @@ describe('ModerationInputProcessor', () => {
         createTestMessage('Bad message 2', 'user', 'msg2'),
       ];
 
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(0);
       expect(mockAbort).not.toHaveBeenCalled();
@@ -282,7 +280,7 @@ describe('ModerationInputProcessor', () => {
       mockResult.category_scores!.violence = 0.7; // Above threshold (0.6)
       mockResult.reason = 'High violence score';
       const model = setupMockModel({ object: mockResult });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         threshold: 0.6,
         strategy: 'block',
@@ -295,7 +293,7 @@ describe('ModerationInputProcessor', () => {
       const messages = [createTestMessage('Borderline content', 'user')];
 
       await expect(async () => {
-        await moderator.process({ messages, abort: mockAbort as any });
+        await moderator.processInput({ messages, abort: mockAbort as any });
       }).rejects.toThrow('Content blocked');
 
       expect(mockAbort).toHaveBeenCalled();
@@ -306,7 +304,7 @@ describe('ModerationInputProcessor', () => {
       // Set violence score below threshold
       mockResult.category_scores!.violence = 0.7; // Below threshold (0.8)
       const model = setupMockModel({ object: mockResult });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         threshold: 0.8,
         strategy: 'block',
@@ -315,7 +313,7 @@ describe('ModerationInputProcessor', () => {
       const mockAbort = vi.fn();
 
       const messages = [createTestMessage('Borderline content', 'user')];
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toEqual(messages);
       expect(mockAbort).not.toHaveBeenCalled();
@@ -331,7 +329,7 @@ describe('ModerationInputProcessor', () => {
         reason: 'Detected spam content',
       };
       const model = setupMockModel({ object: mockResult });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         categories: ['spam', 'advertising', 'off-topic'],
         strategy: 'block',
@@ -344,7 +342,7 @@ describe('ModerationInputProcessor', () => {
       const messages = [createTestMessage('Buy now! Limited offer!', 'user')];
 
       await expect(async () => {
-        await moderator.process({ messages, abort: mockAbort as any });
+        await moderator.processInput({ messages, abort: mockAbort as any });
       }).rejects.toThrow('Content blocked');
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('spam'));
@@ -354,7 +352,7 @@ describe('ModerationInputProcessor', () => {
   describe('content extraction', () => {
     it('should extract text from parts array', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
@@ -370,7 +368,7 @@ describe('ModerationInputProcessor', () => {
         createdAt: new Date(),
       };
 
-      await moderator.process({ messages: [message], abort: mockAbort as any });
+      await moderator.processInput({ messages: [message], abort: mockAbort as any });
 
       // The model should have been called with the concatenated text
       // We can't easily verify the exact call without exposing internals,
@@ -380,21 +378,21 @@ describe('ModerationInputProcessor', () => {
 
     it('should extract text from content field', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
       const mockAbort = vi.fn();
 
       const message = createTestMessageWithContent('part text', 'content text');
-      await moderator.process({ messages: [message], abort: mockAbort as any });
+      await moderator.processInput({ messages: [message], abort: mockAbort as any });
 
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
     it('should skip messages with no text content', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
@@ -410,7 +408,7 @@ describe('ModerationInputProcessor', () => {
         createdAt: new Date(),
       };
 
-      const result = await moderator.process({ messages: [message], abort: mockAbort as any });
+      const result = await moderator.processInput({ messages: [message], abort: mockAbort as any });
 
       expect(result).toEqual([message]);
       // Model should not have been called for empty text
@@ -425,7 +423,7 @@ describe('ModerationInputProcessor', () => {
           throw new TripWire('Agent failed');
         },
       });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'block',
       });
@@ -434,12 +432,12 @@ describe('ModerationInputProcessor', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('Test content', 'user')];
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toEqual(messages); // Should allow content through
       expect(mockAbort).not.toHaveBeenCalled();
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[ModerationInputProcessor] Agent moderation failed'),
+        expect.stringContaining('[ModerationProcessor] Agent moderation failed'),
         expect.anything(),
       );
 
@@ -448,12 +446,12 @@ describe('ModerationInputProcessor', () => {
 
     it('should handle empty message array', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
       const mockAbort = vi.fn();
-      const result = await moderator.process({ messages: [], abort: mockAbort as any });
+      const result = await moderator.processInput({ messages: [], abort: mockAbort as any });
 
       expect(result).toEqual([]);
       expect(mockAbort).not.toHaveBeenCalled();
@@ -461,7 +459,7 @@ describe('ModerationInputProcessor', () => {
 
     it('should abort on non-tripwire errors during processing', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
@@ -473,7 +471,7 @@ describe('ModerationInputProcessor', () => {
       const invalidMessage = null as any;
 
       await expect(async () => {
-        await moderator.process({ messages: [invalidMessage], abort: mockAbort as any });
+        await moderator.processInput({ messages: [invalidMessage], abort: mockAbort as any });
       }).rejects.toThrow();
 
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Moderation failed'));
@@ -483,7 +481,7 @@ describe('ModerationInputProcessor', () => {
   describe('configuration options', () => {
     it('should include scores in logs when includeScores is enabled', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'warn',
         includeScores: true,
@@ -493,7 +491,7 @@ describe('ModerationInputProcessor', () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('Flagged content', 'user')];
-      await moderator.process({ messages, abort: mockAbort as any });
+      await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Scores:'));
 
@@ -504,7 +502,7 @@ describe('ModerationInputProcessor', () => {
       const customInstructions = 'Custom moderation instructions for testing';
       const model = setupMockModel({ object: createMockModerationResult(false) });
 
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         instructions: customInstructions,
       });
@@ -526,7 +524,7 @@ describe('ModerationInputProcessor', () => {
           text: 'invalid json',
         }),
       });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
         strategy: 'warn',
       });
@@ -535,7 +533,7 @@ describe('ModerationInputProcessor', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('Test content', 'user')];
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       // Should fail open and allow content
       expect(result).toEqual(messages);
@@ -546,7 +544,7 @@ describe('ModerationInputProcessor', () => {
 
     it('should handle very long content', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationInputProcessor({
+      const moderator = new ModerationProcessor({
         model,
       });
 
@@ -555,9 +553,115 @@ describe('ModerationInputProcessor', () => {
       const longText = 'A'.repeat(10000);
       const messages = [createTestMessage(longText, 'user')];
 
-      const result = await moderator.process({ messages, abort: mockAbort as any });
+      const result = await moderator.processInput({ messages, abort: mockAbort as any });
 
       expect(result).toEqual(messages);
+    });
+  });
+
+  describe('processOutputStream', () => {
+    it('should always moderate current part even when chunkWindow is 0', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
+      const moderator = new ModerationProcessor({
+        model,
+        chunkWindow: 0, // No context window
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn().mockImplementation(() => {
+        throw new TripWire('Content flagged');
+      });
+
+      const part = { type: 'text-delta' as const, textDelta: 'Flagged content' };
+      const streamParts: any[] = []; // Empty context
+
+      // Should attempt to moderate the current part and abort
+      await expect(async () => {
+        await moderator.processOutputStream({
+          part,
+          streamParts,
+          state: {},
+          abort: mockAbort as any,
+        });
+      }).rejects.toThrow('Content flagged');
+
+      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Content flagged for moderation'));
+    });
+
+    it('should include context when chunkWindow is greater than 0', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+      const moderator = new ModerationProcessor({
+        model,
+        chunkWindow: 2, // Include 2 previous chunks
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn();
+
+      const previousChunks = [
+        { type: 'text-delta' as const, textDelta: 'Previous content ' },
+        { type: 'text-delta' as const, textDelta: 'more context ' },
+      ];
+      const currentChunk = { type: 'text-delta' as const, textDelta: 'current part' };
+
+      const result = await moderator.processOutputStream({
+        part: currentChunk,
+        streamParts: previousChunks,
+        state: {},
+        abort: mockAbort as any,
+      });
+
+      // Should return the part if moderation passes
+      expect(result).toEqual(currentChunk);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('should skip non-text-delta chunks', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
+      const moderator = new ModerationProcessor({
+        model,
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn();
+
+      const objectChunk = { type: 'object' as const, object: { key: 'value' } };
+
+      const result = await moderator.processOutputStream({
+        part: objectChunk,
+        streamParts: [],
+        state: {},
+        abort: mockAbort as any,
+      });
+
+      // Should return the part without moderation
+      expect(result).toEqual(objectChunk);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('should properly handle chunkWindow=0 with current part in streamParts', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+      const moderator = new ModerationProcessor({
+        model,
+        chunkWindow: 0, // No context window
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn();
+
+      const currentChunk = { type: 'text-delta' as const, textDelta: 'Safe content' };
+      const streamParts = [currentChunk]; // streamParts includes the current part
+
+      const result = await moderator.processOutputStream({
+        part: currentChunk,
+        streamParts,
+        state: {},
+        abort: mockAbort as any,
+      });
+
+      // Should moderate the current part and return it if safe
+      expect(result).toEqual(currentChunk);
+      expect(mockAbort).not.toHaveBeenCalled();
     });
   });
 });

@@ -5,12 +5,14 @@ import * as AIV4 from 'ai';
 import * as AIV5 from 'ai-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
+type AIV5ResponseMessage = AIV5.StepResult<any>['response']['messages'][number];
 
 type MastraMessageShared = {
   id: string;
@@ -179,6 +181,14 @@ export class MessageList {
           this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
           this.newUserMessages.clear();
           return userMessages;
+        },
+      },
+      response: {
+        v2: () => {
+          const responseMessages = Array.from(this.newResponseMessages);
+          this.messages = this.messages.filter(m => !this.newResponseMessages.has(m));
+          this.newResponseMessages.clear();
+          return responseMessages;
         },
       },
     };
@@ -355,8 +365,59 @@ export class MessageList {
     v1: (): MastraMessageV1[] => convertToV1Messages(this.response.v3().map(MessageList.mastraMessageV3ToV2)),
 
     aiV5: {
-      model: (): AIV5Type.ModelMessage[] => this.aiV5UIMessagesToAIV5ModelMessages(this.response.aiV5.ui()),
       ui: (): AIV5Type.UIMessage[] => this.response.v3().map(MessageList.mastraMessageV3ToAIV5UIMessage),
+      model: (): AIV5ResponseMessage[] =>
+        this.aiV5UIMessagesToAIV5ModelMessages(this.response.aiV5.ui()).filter(
+          m => m.role === `tool` || m.role === `assistant`,
+        ),
+      modelContent: (): AIV5Type.StepResult<any>['content'] => {
+        return this.response.aiV5.model().map(this.response.aiV5.stepContent).flat();
+      },
+      stepContent: (message?: AIV5Type.ModelMessage): AIV5Type.StepResult<any>['content'] => {
+        const latest = message ? message : this.response.aiV5.model().at(-1);
+        if (!latest) return [];
+        if (typeof latest.content === `string`) {
+          return [{ type: 'text', text: latest.content }];
+        }
+        return latest.content.map(c => {
+          if (c.type === `tool-result`)
+            return {
+              type: 'tool-result',
+              input: {}, // TODO: we need to find the tool call here and add the input from it
+              output: c.output,
+              toolCallId: c.toolCallId,
+              toolName: c.toolName,
+            } satisfies AIV5Type.StaticToolResult<any>;
+          if (c.type === `file`)
+            return {
+              type: 'file',
+              file: new DefaultGeneratedFileWithType({
+                data:
+                  typeof c.data === `string`
+                    ? c.data
+                    : c.data instanceof URL
+                      ? c.data.toString()
+                      : convertDataContentToBase64String(c.data),
+                mediaType: c.mediaType,
+              }),
+            } satisfies Extract<AIV5Type.StepResult<any>['content'][number], { type: 'file' }>;
+          if (c.type === `image`) {
+            return {
+              type: 'file',
+              file: new DefaultGeneratedFileWithType({
+                data:
+                  typeof c.image === `string`
+                    ? c.image
+                    : c.image instanceof URL
+                      ? c.image.toString()
+                      : convertDataContentToBase64String(c.image),
+                mediaType: c.mediaType || 'unknown',
+              }),
+            };
+          }
+          return c;
+        });
+      },
     },
 
     aiV4: {
@@ -2362,7 +2423,7 @@ export class MessageList {
     return key;
   }
 
-  private static cacheKeyFromAIV5ModelMessageContent(content: AIV5Type.CoreMessage['content']): string {
+  private static cacheKeyFromAIV5ModelMessageContent(content: AIV5Type.ModelMessage['content']): string {
     if (typeof content === `string`) return content;
     let key = ``;
     for (const part of content) {

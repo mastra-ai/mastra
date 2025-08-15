@@ -1,4 +1,5 @@
 import type { LanguageModelV1StreamPart } from 'ai';
+import type { StepResult } from 'ai-v5';
 
 export type ChunkType = {
   type: string;
@@ -39,6 +40,7 @@ export interface StepBufferItem {
   response?: any;
   request?: any;
   usage?: any;
+  content: StepResult<any>['content'];
 }
 
 export interface BufferedByStep {
