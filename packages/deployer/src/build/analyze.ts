@@ -453,6 +453,7 @@ export async function analyzeBundle(
 
   await babel.transformAsync(mastraConfig, {
     filename: mastraEntry,
+    presets: ['@babel/preset-typescript'],
     plugins: [checkConfigExport(mastraConfigResult)],
   });
 
