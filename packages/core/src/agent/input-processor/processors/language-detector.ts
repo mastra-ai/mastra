@@ -1,5 +1,10 @@
 import { LanguageDetector } from '../../../processors/processors/language-detector';
-import type { LanguageDetectorOptions, LanguageDetectionResult, LanguageDetection, TranslationResult } from '../../../processors/processors/language-detector';
+import type {
+  LanguageDetectorOptions,
+  LanguageDetectionResult,
+  LanguageDetection,
+  TranslationResult,
+} from '../../../processors/processors/language-detector';
 import type { MastraMessageV2 } from '../../message-list';
 import type { InputProcessor } from '../index';
 

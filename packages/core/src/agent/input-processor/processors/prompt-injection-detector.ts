@@ -1,5 +1,9 @@
 import { PromptInjectionDetector } from '../../../processors/processors/prompt-injection-detector';
-import type { PromptInjectionOptions, PromptInjectionResult, PromptInjectionCategoryScores } from '../../../processors/processors/prompt-injection-detector';
+import type {
+  PromptInjectionOptions,
+  PromptInjectionResult,
+  PromptInjectionCategoryScores,
+} from '../../../processors/processors/prompt-injection-detector';
 import type { MastraMessageV2 } from '../../message-list';
 import type { InputProcessor } from '../index';
 

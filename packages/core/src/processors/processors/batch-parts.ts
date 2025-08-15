@@ -37,14 +37,12 @@ export class BatchPartsProcessor implements Processor {
     };
   }
 
-  async processOutputStream(
-    args: {
-      chunk: TextStreamPart<any> | ObjectStreamPart<any>;
-      allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
-      state: Record<string, any>;
-      abort: (reason?: string) => never;
-    },
-  ): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+  async processOutputStream(args: {
+    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
+    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    state: Record<string, any>;
+    abort: (reason?: string) => never;
+  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
     const { chunk, state } = args;
 
     // Initialize state if not present

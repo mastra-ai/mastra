@@ -1,5 +1,9 @@
 import { ModerationProcessor } from '../../../processors/processors/moderation';
-import type { ModerationOptions, ModerationResult, ModerationCategoryScores } from '../../../processors/processors/moderation';
+import type {
+  ModerationOptions,
+  ModerationResult,
+  ModerationCategoryScores,
+} from '../../../processors/processors/moderation';
 import type { MastraMessageV2 } from '../../message-list';
 import type { InputProcessor } from '../index';
 

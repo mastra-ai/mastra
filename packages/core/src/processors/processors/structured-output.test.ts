@@ -213,7 +213,9 @@ describe('StructuredOutputProcessor', () => {
         role: 'assistant',
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Some unstructured text about John who prefers dark theme and wants notifications' }],
+          parts: [
+            { type: 'text', text: 'Some unstructured text about John who prefers dark theme and wants notifications' },
+          ],
         },
         createdAt: new Date(),
       };

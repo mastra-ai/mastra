@@ -129,7 +129,9 @@ describe('SystemPromptScrubber', () => {
       });
       const messages = [createTestMessage('You are a helpful assistant. Hello there!')];
 
-      await expect(processor.processOutputResult({ messages, abort: mockAbort as any })).rejects.toThrow('System prompt detected: system_prompt');
+      await expect(processor.processOutputResult({ messages, abort: mockAbort as any })).rejects.toThrow(
+        'System prompt detected: system_prompt',
+      );
 
       expect(mockAbort).toHaveBeenCalledWith('System prompt detected: system_prompt');
     });
@@ -311,10 +313,7 @@ describe('SystemPromptScrubber', () => {
 
       const result = await processor.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toEqual(messages);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[SystemPromptScrubber] Detection agent failed:',
-        expect.any(Error),
-      );
+      expect(consoleSpy).toHaveBeenCalledWith('[SystemPromptScrubber] Detection agent failed:', expect.any(Error));
 
       consoleSpy.mockRestore();
     });

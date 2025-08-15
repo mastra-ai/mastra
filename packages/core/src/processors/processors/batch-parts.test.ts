@@ -2,8 +2,6 @@ import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BatchPartsProcessor } from './batch-parts';
 
-
-
 describe('BatchPartsProcessor', () => {
   let processor: BatchPartsProcessor;
 
@@ -32,19 +30,25 @@ describe('BatchPartsProcessor', () => {
         chunk: chunk1,
         allChunks: [chunk1],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       const result2 = await processor.processOutputStream({
         chunk: chunk2,
         allChunks: [chunk1, chunk2],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       const result3 = await processor.processOutputStream({
         chunk: chunk3,
         allChunks: [chunk1, chunk2, chunk3],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       expect(result1).toBeNull();
@@ -75,7 +79,9 @@ describe('BatchPartsProcessor', () => {
           chunk: chunks[i],
           allChunks: chunks.slice(0, i),
           state,
-          abort: () => { throw new Error('abort'); },
+          abort: () => {
+            throw new Error('abort');
+          },
         });
         expect(result).toBeNull();
       }
@@ -85,7 +91,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunks[4],
         allChunks: chunks.slice(0, 4),
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       expect(result).toEqual({
         type: 'text-delta',
@@ -109,13 +117,17 @@ describe('BatchPartsProcessor', () => {
         chunk: textChunk1,
         allChunks: [textChunk1],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       await processor.processOutputStream({
         chunk: textChunk2,
         allChunks: [textChunk1, textChunk2],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Now add a non-text chunk
@@ -124,7 +136,9 @@ describe('BatchPartsProcessor', () => {
         chunk: objectChunk,
         allChunks: [textChunk1, textChunk2],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Should emit the batched text first
@@ -143,16 +157,20 @@ describe('BatchPartsProcessor', () => {
         chunk: textChunk,
         allChunks: [textChunk],
         state: {},
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Add a non-text chunk
       const objectChunk: ObjectStreamPart<any> = { type: 'object', object: { key: 'value' } };
-        const result = await processor.processOutputStream({
+      const result = await processor.processOutputStream({
         chunk: objectChunk,
         allChunks: [objectChunk],
         state: {},
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Should not emit yet
@@ -177,7 +195,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunks[0],
         allChunks: [chunks[0]],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       expect(result).toBeNull();
 
@@ -186,7 +206,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunks[1],
         allChunks: [chunks[1]],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       expect(result).toEqual({
         type: 'text-delta',
@@ -198,7 +220,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunks[2],
         allChunks: [chunks[2]],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       expect(result).toBeNull();
 
@@ -206,7 +230,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunks[3],
         allChunks: [chunks[3]],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       expect(result).toBeNull(); // Should not emit yet since batch size is 3 and we only have 2 chunks
     });
@@ -227,13 +253,17 @@ describe('BatchPartsProcessor', () => {
         chunk: chunk1,
         allChunks: [chunk1],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       await processor.processOutputStream({
         chunk: chunk2,
         allChunks: [chunk2],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Advance time past the timeout
@@ -242,11 +272,13 @@ describe('BatchPartsProcessor', () => {
       // The timeout should have triggered and emitted the batch
       // We need to process another chunk to see the result
       const chunk3: TextStreamPart<any> = { type: 'text-delta', textDelta: '!' };
-        const result = await processor.processOutputStream({
+      const result = await processor.processOutputStream({
         chunk: chunk3,
         allChunks: [chunk3],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Should emit the batched text including the current chunk when timeout triggers
@@ -264,7 +296,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunk,
         allChunks: [chunk],
         state: {},
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Advance time - should not trigger any emission
@@ -276,7 +310,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunk2,
         allChunks: [chunk2],
         state: {},
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       expect(result).toBeNull();
     });
@@ -299,13 +335,17 @@ describe('BatchPartsProcessor', () => {
         chunk: chunks[0],
         allChunks: [chunks[0]],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       await processor.processOutputStream({
         chunk: chunks[1],
         allChunks: [chunks[1]],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Flush should emit the remaining chunks
@@ -332,7 +372,9 @@ describe('BatchPartsProcessor', () => {
         chunk: chunk,
         allChunks: [chunk],
         state: {},
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Should not emit until batch size is reached
@@ -352,13 +394,17 @@ describe('BatchPartsProcessor', () => {
         chunk: chunk1,
         allChunks: [chunk1],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       const result2 = await processor.processOutputStream({
         chunk: chunk2,
         allChunks: [chunk2],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       expect(result1).toBeNull();
@@ -381,13 +427,17 @@ describe('BatchPartsProcessor', () => {
         chunk: objectChunk1,
         allChunks: [objectChunk1],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       const result2 = await processor.processOutputStream({
         chunk: objectChunk2,
         allChunks: [objectChunk2],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Should emit both object chunks immediately since emitOnNonText is true
@@ -411,13 +461,17 @@ describe('BatchPartsProcessor', () => {
         chunk: textChunk1,
         allChunks: [textChunk1],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       await processor.processOutputStream({
         chunk: textChunk2,
         allChunks: [textChunk1, textChunk2],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Third should emit the combined text
@@ -425,7 +479,9 @@ describe('BatchPartsProcessor', () => {
         chunk: textChunk3,
         allChunks: [textChunk1, textChunk2, textChunk3],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       expect(result).toEqual({
@@ -439,7 +495,9 @@ describe('BatchPartsProcessor', () => {
         chunk: objectChunk,
         allChunks: [objectChunk],
         state,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
 
       // Should emit the object chunk immediately, not accumulate it
