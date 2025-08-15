@@ -1,35 +1,32 @@
-import {
-  parsePartialJson,
-  processDataStream,
-  type JSONValue,
-  type ReasoningUIPart,
-  type TextUIPart,
-  type ToolInvocation,
-  type ToolInvocationUIPart,
-  type UIMessage,
-  type UseChatOptions,
+import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
+import type {
+  JSONValue,
+  ReasoningUIPart,
+  TextUIPart,
+  ToolInvocation,
+  ToolInvocationUIPart,
+  UIMessage,
+  UseChatOptions,
 } from '@ai-sdk/ui-utils';
-import { Tool, type CoreMessage, type MastraLanguageModel } from '@mastra/core';
-import { type GenerateReturn } from '@mastra/core/llm';
-import type { JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
-import { zodToJsonSchema } from '../utils/zod-to-json-schema';
-import { processClientTools } from '../utils/process-client-tools';
 import { v4 as uuid } from '@lukeed/uuid';
+import type { CoreMessage, MastraLanguageModel, Tool } from '@mastra/core';
+import type { GenerateReturn } from '@mastra/core/llm';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { JSONSchema7 } from 'json-schema';
+import type { ZodSchema } from 'zod';
 
 import type {
+  ClientOptions,
   GenerateParams,
   GetAgentResponse,
   GetEvalsByAgentIdResponse,
   GetToolResponse,
-  ClientOptions,
   StreamParams,
 } from '../types';
-
-import { BaseResource } from './base';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { parseClientRuntimeContext } from '../utils';
-import { MessageList } from '@mastra/core/agent';
+import { processClientTools } from '../utils/process-client-tools';
+import { zodToJsonSchema } from '../utils/zod-to-json-schema';
+import { BaseResource } from './base';
 
 export class AgentVoice extends BaseResource {
   constructor(
@@ -557,7 +554,11 @@ export class Agent extends BaseResource {
     params: StreamParams<T>,
   ): Promise<
     Response & {
-      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+      processDataStream: (
+        options?: Omit<Parameters<typeof processDataStream>[0], 'stream'> & {
+          onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: unknown }) => void;
+        },
+      ) => Promise<void>;
     }
   > {
     const processedParams = {
@@ -585,10 +586,45 @@ export class Agent extends BaseResource {
 
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
-      await processDataStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
-        ...options,
-      });
+      const typedOptions = options as Omit<Parameters<typeof processDataStream>[0], 'stream'> & {
+        onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: unknown }) => void;
+      };
+
+      // If onFinish is provided, we need to process the stream through our internal method
+      if (typedOptions.onFinish) {
+        // Split the stream - one for the original processDataStream, one for our internal processing
+        const [streamForOriginal, streamForInternal] = (streamResponse.body as ReadableStream<Uint8Array>).tee();
+
+        // Update the response body for the original processDataStream
+        Object.defineProperty(streamResponse, 'body', {
+          value: streamForOriginal,
+          writable: true,
+          configurable: true,
+        });
+
+        // Process the internal stream to capture the final state for onFinish
+        void this.processChatResponse({
+          stream: streamForInternal,
+          update: () => {}, // No UI updates needed for this processing path
+          onFinish: typedOptions.onFinish,
+          lastMessage: undefined,
+        }).catch((error: Error) => {
+          console.error('Error in onFinish processing:', error);
+        });
+
+        // Call the original processDataStream without onFinish
+        const { onFinish: _, ...processOptions } = typedOptions;
+        await processDataStream({
+          stream: streamResponse.body as ReadableStream<Uint8Array>,
+          ...processOptions,
+        });
+      } else {
+        // No onFinish provided, use original behavior
+        await processDataStream({
+          stream: streamResponse.body as ReadableStream<Uint8Array>,
+          ...typedOptions,
+        });
+      }
     };
 
     return streamResponse;
@@ -612,9 +648,7 @@ export class Agent extends BaseResource {
 
     try {
       let toolCalls: ToolInvocation[] = [];
-      let finishReasonToolCalls = false;
       let messages: UIMessage[] = [];
-      let hasProcessedToolCalls = false;
 
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
@@ -629,7 +663,7 @@ export class Agent extends BaseResource {
         });
 
       // Process the other branch for chat response handling
-      this.processChatResponse({
+      void this.processChatResponse({
         stream: streamForProcessing,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
@@ -714,7 +748,7 @@ export class Agent extends BaseResource {
                 const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
 
                 // Recursively call stream with updated messages
-                this.processStreamResponse(
+                void this.processStreamResponse(
                   {
                     ...processedParams,
                     messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
