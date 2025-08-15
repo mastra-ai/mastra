@@ -1006,35 +1006,12 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain fi
 
 exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain sources 1`] = `
 [
-  {
-    "experimental_providerMetadata": undefined,
-    "files": [],
-    "finishReason": "stop",
-    "isContinued": false,
-    "logprobs": undefined,
-    "providerMetadata": undefined,
-    "reasoning": undefined,
-    "reasoningDetails": [],
-    "request": {},
-    "response": {
-      "headers": undefined,
-      "id": "id-0",
-      "messages": [
-        {
-          "content": [
-            {
-              "text": "Hello, world!",
-              "type": "text",
-            },
-          ],
-          "id": "msg-0",
-          "role": "assistant",
-        },
-      ],
-      "modelId": "mock-model-id",
-      "timestamp": 1970-01-01T00:00:00.000Z,
-    },
-    "sources": [
+  DefaultStepResult {
+    "content": [
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
       {
         "id": "123",
         "providerMetadata": {
@@ -1044,6 +1021,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain so
         },
         "sourceType": "url",
         "title": "Example",
+        "type": "source",
         "url": "https://example.com",
       },
       {
@@ -1055,19 +1033,40 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain so
         },
         "sourceType": "url",
         "title": "Example 2",
+        "type": "source",
         "url": "https://example.com/2",
       },
     ],
-    "stepType": "initial",
-    "text": "Hello, world!",
-    "toolCalls": [],
-    "toolResults": [],
-    "usage": {
-      "completionTokens": 20,
-      "promptTokens": 10,
-      "totalTokens": 30,
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": undefined,
+      "id": "id-0",
+      "messages": [
+        {
+          "content": [
+            {
+              "providerOptions": undefined,
+              "text": "Hello, world!",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "mock-model-id",
+      "timestamp": 1970-01-01T00:00:00.000Z,
     },
-    "warnings": undefined,
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
+    },
+    "warnings": [],
   },
 ]
 `;

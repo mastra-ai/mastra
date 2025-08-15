@@ -256,6 +256,37 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         }),
       });
 
+      const modelWithSources = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Hello, world!' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'source',
+              sourceType: 'url',
+              id: '123',
+              url: 'https://example.com',
+              title: 'Example',
+              providerMetadata: { provider: { custom: 'value' } },
+            },
+            {
+              type: 'source',
+              sourceType: 'url',
+              id: '456',
+              url: 'https://example.com/2',
+              title: 'Example 2',
+              providerMetadata: { provider: { custom: 'value2' } },
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+      });
+
       it.todo('should add the reasoning from the model response to the step result', async () => {
         const result = await generateText({
           model: modelWithReasoning,
@@ -269,9 +300,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         expect(result.steps).toMatchSnapshot();
       });
 
-      // TODO: include `sources` in step result
-      // generateText uses a defaurt StepResult class than streaming does
-      // https://github.com/vercel/ai/blob/53569b8e0e5c958db0186009b83ce941a5bc91c1/packages/ai/src/generate-text/generate-text.ts#L540
       it.todo('should contain sources', async () => {
         const result = await generateText({
           model: modelWithSources,
