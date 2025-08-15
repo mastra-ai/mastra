@@ -6,12 +6,7 @@ import { Memory } from '@mastra/memory';
 import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
-import {
-  PIIDetector,
-  LanguageDetector,
-  PromptInjectionDetector,
-  ModerationInputProcessor,
-} from '@mastra/core/agent/input-processor/processors';
+import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { MCPClient } from '@mastra/mcp';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
@@ -110,7 +105,8 @@ const vegetarianProcessor: InputProcessor = {
 };
 
 const piiDetector = new PIIDetector({
-  model: google('gemini-2.0-flash-001'),
+  // model: google('gemini-2.0-flash-001'),
+  model: openai('gpt-4o'),
   redactionMethod: 'mask',
   preserveFormat: true,
   includeDetections: true,
@@ -127,9 +123,10 @@ const promptInjectionDetector = new PromptInjectionDetector({
   strategy: 'block',
 });
 
-const moderationDetector = new ModerationInputProcessor({
+const moderationDetector = new ModerationProcessor({
   model: google('gemini-2.0-flash-001'),
   strategy: 'block',
+  chunkWindow: 10,
 });
 
 export const chefAgentResponses = new Agent({
@@ -140,6 +137,7 @@ export const chefAgentResponses = new Agent({
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
   model: openai.responses('gpt-4o'),
+  // model: cerebras('qwen-3-coder-480b'),
   tools: async () => {
     return {
       web_search_preview: openai.tools.webSearchPreview(),
@@ -149,9 +147,9 @@ export const chefAgentResponses = new Agent({
     myWorkflow,
   },
   inputProcessors: [
-    // piiDetector,
+    piiDetector,
     // vegetarianProcessor,
-    languageDetector,
+    // languageDetector,
     // promptInjectionDetector,
     // moderationDetector,
     {
@@ -188,6 +186,15 @@ export const chefAgentResponses = new Agent({
       },
     },
   ],
+});
+
+export const agentThatHarassesYou = new Agent({
+  name: 'Agent That Harasses You',
+  instructions: `
+    You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
+    `,
+  model: openai('gpt-4o'),
+  outputProcessors: [moderationDetector],
 });
 
 const answerRelevance = createAnswerRelevancyScorer({
