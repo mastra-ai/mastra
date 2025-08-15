@@ -3,8 +3,8 @@
  */
 
 import { MastraBase } from '../base';
-import { RegisteredLogger } from '../logger/constants';
 import type { IMastraLogger } from '../logger';
+import { RegisteredLogger } from '../logger/constants';
 import type { RuntimeContext } from '../runtime-context';
 import { NoOpAISpan } from './no-op';
 import type {

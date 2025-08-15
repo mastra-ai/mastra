@@ -703,7 +703,7 @@ describe('AI Tracing', () => {
       registerAITracing('console', tracing1);
       registerAITracing('langfuse', tracing2);
 
-      const selector: TracingSelector = (context, availableTracers) => {
+      const selector: TracingSelector = (context, _availableTracers) => {
         // For testing, we'll simulate routing based on runtime context
         if (context.runtimeContext?.['environment'] === 'production') return 'langfuse';
         if (context.runtimeContext?.['environment'] === 'development') return 'console';
@@ -860,7 +860,7 @@ describe('AI Tracing', () => {
 
     it('should support mixed configuration (config + instance)', async () => {
       class CustomAITracing extends MastraAITracing {
-        protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
+        protected createSpan<TType extends AISpanType>(_options: AISpanOptions<TType>): AISpan<TType> {
           return {} as AISpan<TType>; // Mock implementation
         }
       }
@@ -902,7 +902,7 @@ describe('AI Tracing', () => {
       let shutdownCalled = false;
 
       class TestAITracing extends MastraAITracing {
-        protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
+        protected createSpan<TType extends AISpanType>(_options: AISpanOptions<TType>): AISpan<TType> {
           return {} as AISpan<TType>;
         }
 
@@ -958,7 +958,7 @@ describe('AI Tracing', () => {
     });
 
     it('should support selector function configuration', async () => {
-      const selector: TracingSelector = (context, availableTracers) => {
+      const selector: TracingSelector = (context, _availableTracers) => {
         if (context.runtimeContext?.['service'] === 'agent') return 'langfuse';
         if (context.runtimeContext?.['service'] === 'workflow') return 'datadog';
         return undefined; // Use default
