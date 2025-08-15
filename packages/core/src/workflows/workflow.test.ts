@@ -6306,6 +6306,68 @@ describe('Workflow', () => {
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
     });
+
+    it('should allow destructured start method from createRun', async () => {
+      // Create a simple workflow
+      const stepOne = createStep({
+        id: 'stepOne',
+        description: 'Doubles the input',
+        inputSchema: z.object({
+          input: z.number(),
+        }),
+        outputSchema: z.object({
+          doubled: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { doubled: inputData.input * 2 };
+        },
+      });
+
+      const stepTwo = createStep({
+        id: 'stepTwo',
+        description: 'Adds 10 to the doubled value',
+        inputSchema: z.object({
+          doubled: z.number(),
+        }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { final: inputData.doubled + 10 };
+        },
+      });
+
+      const simpleWorkflow = createWorkflow({
+        id: 'simple-workflow',
+        inputSchema: z.object({ input: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      })
+        .then(stepOne)
+        .then(stepTwo);
+
+      simpleWorkflow.commit();
+
+      // Create Mastra instance with the workflow
+      const mastra = new Mastra({
+        workflows: {
+          simpleWorkflow,
+        },
+        storage: testStorage,
+      });
+
+      // Try to execute the workflow
+      const workflow = mastra.getWorkflow('simpleWorkflow');
+      expect(workflow).toBeTruthy();
+
+      // Test with destructured start method (regression test for context binding issue)
+      const { start } = workflow.createRun();
+      const result = await start({ inputData: { input: 10 } });
+
+      // Verify the workflow executed correctly
+      expect(result).toBeTruthy();
+      expect(result.status).toBe('success');
+      expect(result.result.final).toBe(30); // (10 * 2) + 10 = 30
+    });
   });
 
   describe('Accessing Mastra', () => {
