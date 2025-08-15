@@ -1,9 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
+import { Mastra } from '../mastra';
+import { MastraAITracing } from './base';
 import { DefaultAITracing, DefaultConsoleExporter, SensitiveDataFilter, aiTracingDefaultConfig } from './default';
-import { clearAITracingRegistry, getAITracing, registerAITracing, unregisterAITracing, hasAITracing } from './registry';
-import type { AITracingEvent, AITracingExporter, AITraceContext, LLMGenerationMetadata } from './types';
+import {
+  clearAITracingRegistry,
+  getAITracing,
+  registerAITracing,
+  unregisterAITracing,
+  hasAITracing,
+  getDefaultAITracing,
+  setAITracingSelector,
+  getSelectedAITracing,
+} from './registry';
+import type {
+  AITracingEvent,
+  AITracingExporter,
+  AITraceContext,
+  LLMGenerationAttributes,
+  AITracingInstanceConfig,
+  AISpanOptions,
+  AISpan,
+  TracingSelector,
+  AITracingContext,
+} from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -60,6 +81,7 @@ const mockConsole = {
   log: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
+  info: vi.fn(),
 };
 vi.stubGlobal('console', mockConsole);
 
@@ -98,21 +120,26 @@ describe('AI Tracing', () => {
     it('should create and start spans with type safety', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
       // Agent span
-      const agentSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'test-agent', {
-        agentId: 'agent-123',
-        instructions: 'Test instructions',
-        maxSteps: 5,
+      const agentSpan = tracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test instructions',
+          maxSteps: 5,
+        },
       });
 
       expect(agentSpan.id).toBeValidSpanId();
       expect(agentSpan.name).toBe('test-agent');
       expect(agentSpan.type).toBe(AISpanType.AGENT_RUN);
-      expect(agentSpan.metadata.agentId).toBe('agent-123');
+      expect(agentSpan.attributes.agentId).toBe('agent-123');
       expect(agentSpan.startTime).toBeInstanceOf(Date);
       expect(agentSpan.endTime).toBeUndefined();
       expect(agentSpan.trace).toBe(agentSpan); // Root span is its own trace
@@ -122,43 +149,112 @@ describe('AI Tracing', () => {
     it('should create child spans with different types', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const agentSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'parent-agent', { agentId: 'agent-123' });
+      const agentSpan = tracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'parent-agent',
+        attributes: { agentId: 'agent-123' },
+      });
 
-      const toolSpan = agentSpan.createChildSpan(AISpanType.TOOL_CALL, 'child-tool', {
-        toolId: 'tool-456',
-        success: true,
+      const toolSpan = agentSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: {
+          toolId: 'tool-456',
+          success: true,
+        },
       });
 
       expect(toolSpan.id).toBeValidSpanId();
       expect(toolSpan.type).toBe(AISpanType.TOOL_CALL);
-      expect(toolSpan.metadata.toolId).toBe('tool-456');
+      expect(toolSpan.attributes.toolId).toBe('tool-456');
       expect(toolSpan.trace).toBe(agentSpan); // Child inherits trace from parent
       expect(toolSpan.traceId).toBe(agentSpan.traceId); // Child spans inherit trace ID
     });
 
-    it('should maintain consistent traceId across span hierarchy', () => {
+    it('should correctly set parent relationships and isRootSpan property', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
       // Create root span
-      const rootSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'root-agent', { agentId: 'agent-123' });
+      const rootSpan = tracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-123' },
+      });
+
+      // Root span should have no parent and isRootSpan should be true
+      expect(rootSpan.parent).toBeUndefined();
+      expect(rootSpan.isRootSpan).toBe(true);
 
       // Create child span
-      const childSpan = rootSpan.createChildSpan(AISpanType.LLM_GENERATION, 'child-llm', {
-        model: 'gpt-4',
-        provider: 'openai',
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'child-llm',
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+      });
+
+      // Child span should have parent and isRootSpan should be false
+      expect(childSpan.parent).toBe(rootSpan);
+      expect(childSpan.isRootSpan).toBe(false);
+
+      // Create grandchild span
+      const grandchildSpan = childSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'grandchild-tool',
+        attributes: {
+          toolId: 'calculator',
+        },
+      });
+
+      // Grandchild should have correct parent and isRootSpan should be false
+      expect(grandchildSpan.parent).toBe(childSpan);
+      expect(grandchildSpan.isRootSpan).toBe(false);
+    });
+
+    it('should maintain consistent traceId across span hierarchy', () => {
+      const tracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        instanceName: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      // Create root span
+      const rootSpan = tracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-123' },
+      });
+
+      // Create child span
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'child-llm',
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
       });
 
       // Create grandchild span
-      const grandchildSpan = childSpan.createChildSpan(AISpanType.TOOL_CALL, 'grandchild-tool', {
-        toolId: 'calculator',
+      const grandchildSpan = childSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'grandchild-tool',
+        attributes: {
+          toolId: 'calculator',
+        },
       });
 
       // All spans should have the same traceId
@@ -175,43 +271,53 @@ describe('AI Tracing', () => {
     it('should emit events throughout span lifecycle', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = tracing.startSpan(AISpanType.LLM_GENERATION, 'test-llm', { model: 'gpt-4', provider: 'openai' });
+      const span = tracing.startSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'test-llm',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
 
       // Should emit span_started
       expect(testExporter.events).toHaveLength(1);
       expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_STARTED);
       expect(testExporter.events[0].span.id).toBe(span.id);
 
-      // Update span - cast to LLM metadata type for usage field
-      span.update({ usage: { totalTokens: 100 } });
+      // Update span - cast to LLM attributes type for usage field
+      span.update({ attributes: { usage: { totalTokens: 100 } } });
 
       // Should emit span_updated
       expect(testExporter.events).toHaveLength(2);
       expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_UPDATED);
-      expect((testExporter.events[1].span.metadata as LLMGenerationMetadata).usage?.totalTokens).toBe(100);
+      expect((testExporter.events[1].span.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(100);
 
       // End span
-      span.end({ usage: { totalTokens: 150 } });
+      span.end({ attributes: { usage: { totalTokens: 150 } } });
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(3);
       expect(testExporter.events[2].type).toBe(AITracingEventType.SPAN_ENDED);
       expect(testExporter.events[2].span.endTime).toBeInstanceOf(Date);
-      expect((testExporter.events[2].span.metadata as LLMGenerationMetadata).usage?.totalTokens).toBe(150);
+      expect((testExporter.events[2].span.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(150);
     });
 
     it('should handle errors with default endSpan=true', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = tracing.startSpan(AISpanType.TOOL_CALL, 'error-tool', { toolId: 'failing-tool' });
+      const span = tracing.startSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'error-tool',
+        attributes: { toolId: 'failing-tool' },
+      });
 
       const error = new MastraError({
         id: 'TOOL_ERROR',
@@ -222,12 +328,12 @@ describe('AI Tracing', () => {
       });
 
       // Error should end span by default
-      span.error(error);
+      span.error({ error });
 
       expect(span.endTime).toBeInstanceOf(Date);
-      expect(span.metadata.error?.message).toBe('Tool failed');
-      expect(span.metadata.error?.id).toBe('TOOL_ERROR');
-      expect(span.metadata.error?.category).toBe('SYSTEM');
+      expect(span.errorInfo?.message).toBe('Tool failed');
+      expect(span.errorInfo?.id).toBe('TOOL_ERROR');
+      expect(span.errorInfo?.category).toBe('SYSTEM');
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(2); // start + end
@@ -237,19 +343,24 @@ describe('AI Tracing', () => {
     it('should handle errors with explicit endSpan=false', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = tracing.startSpan(AISpanType.TOOL_CALL, 'recoverable-tool', { toolId: 'retry-tool' });
+      const span = tracing.startSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'recoverable-tool',
+        attributes: { toolId: 'retry-tool' },
+      });
 
       const error = new Error('Recoverable error');
 
       // Error should NOT end span when explicitly set to false
-      span.error(error, false);
+      span.error({ error, endSpan: false });
 
       expect(span.endTime).toBeUndefined();
-      expect(span.metadata.error?.message).toBe('Recoverable error');
+      expect(span.errorInfo?.message).toBe('Recoverable error');
 
       // Should emit span_updated (not ended)
       expect(testExporter.events).toHaveLength(2); // start + update
@@ -261,11 +372,16 @@ describe('AI Tracing', () => {
     it('should always sample with ALWAYS strategy', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
+      const span = tracing.startSpan({
+        type: AISpanType.GENERIC,
+        name: 'test-span',
+        attributes: {},
+      });
 
       expect(span.id).toBeValidSpanId();
       expect(testExporter.events).toHaveLength(1);
@@ -274,11 +390,16 @@ describe('AI Tracing', () => {
     it('should never sample with NEVER strategy', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.NEVER },
         exporters: [testExporter],
       });
 
-      const span = tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
+      const span = tracing.startSpan({
+        type: AISpanType.GENERIC,
+        name: 'test-span',
+        attributes: {},
+      });
 
       expect(span.id).toBe('no-op'); // No-op span created
       expect(testExporter.events).toHaveLength(0);
@@ -291,18 +412,27 @@ describe('AI Tracing', () => {
       // Test probability = 0.5
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
         exporters: [testExporter],
       });
 
       // First call: random = 0.3 < 0.5 -> should sample
       mockRandom.mockReturnValueOnce(0.3);
-      const span1 = tracing.startSpan(AISpanType.GENERIC, 'test-1', {});
+      const span1 = tracing.startSpan({
+        type: AISpanType.GENERIC,
+        name: 'test-1',
+        attributes: {},
+      });
       expect(span1.id).toBeValidSpanId();
 
       // Second call: random = 0.8 > 0.5 -> should not sample
       mockRandom.mockReturnValueOnce(0.8);
-      const span2 = tracing.startSpan(AISpanType.GENERIC, 'test-2', {});
+      const span2 = tracing.startSpan({
+        type: AISpanType.GENERIC,
+        name: 'test-2',
+        attributes: {},
+      });
       expect(span2.id).toBe('no-op');
 
       mockRandom.mockRestore();
@@ -315,18 +445,15 @@ describe('AI Tracing', () => {
 
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.CUSTOM, sampler: shouldSample },
         exporters: [testExporter],
       });
 
-      const span = tracing.startSpan(
-        AISpanType.GENERIC,
-        'test-span',
-        {},
-        undefined,
-        undefined, // runtime context
-        { attr: 'value' }, // attributes
-      );
+      const span = tracing.startSpan({
+        type: AISpanType.GENERIC,
+        name: 'test-span',
+      });
 
       expect(span.id).toBe('no-op'); // Custom sampler rejected
       expect(testExporter.events).toHaveLength(0);
@@ -335,14 +462,55 @@ describe('AI Tracing', () => {
     it('should handle invalid ratio probability', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.RATIO, probability: 1.5 }, // Invalid > 1
         exporters: [testExporter],
       });
 
-      const span = tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
+      const span = tracing.startSpan({
+        type: AISpanType.GENERIC,
+        name: 'test-span',
+        attributes: {},
+      });
 
       // Should default to no sampling for invalid probability
       expect(span.id).toBe('no-op');
+    });
+
+    it('should handle parent relationships correctly in NoOp spans', () => {
+      const tracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
+        instanceName: 'test-instance',
+        sampling: { type: SamplingStrategyType.NEVER }, // Force NoOp spans
+        exporters: [testExporter],
+      });
+
+      // Create root NoOp span
+      const rootSpan = tracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'no-op-root',
+        attributes: { agentId: 'agent-123' },
+      });
+
+      // Should be NoOp span with correct properties
+      expect(rootSpan.id).toBe('no-op');
+      expect(rootSpan.parent).toBeUndefined();
+      expect(rootSpan.isRootSpan).toBe(true);
+
+      // Create child NoOp span
+      const childSpan = rootSpan.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'no-op-child',
+        attributes: { toolId: 'tool-456' },
+      });
+
+      // Child should also be NoOp with correct parent relationship
+      expect(childSpan.id).toBe('no-op');
+      expect(childSpan.parent).toBe(rootSpan);
+      expect(childSpan.isRootSpan).toBe(false);
+
+      // No events should be emitted for NoOp spans
+      expect(testExporter.events).toHaveLength(0);
     });
   });
 
@@ -356,11 +524,16 @@ describe('AI Tracing', () => {
 
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [failingExporter, testExporter], // One fails, one succeeds
       });
 
-      tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
+      tracing.startSpan({
+        type: AISpanType.GENERIC,
+        name: 'test-span',
+        attributes: {},
+      });
 
       // Wait for async export to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -386,6 +559,7 @@ describe('AI Tracing', () => {
 
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [mockExporter],
       });
@@ -400,18 +574,19 @@ describe('AI Tracing', () => {
     it('should register and retrieve tracing instances', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'registry-test',
+        instanceName: 'registry-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('my-tracing', tracing, true);
+      registerAITracing('my-tracing', tracing);
 
       expect(getAITracing('my-tracing')).toBe(tracing);
-      expect(getAITracing()).toBe(tracing); // Default instance
     });
 
     it('should clear registry', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'registry-test',
+        instanceName: 'registry-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
       registerAITracing('test', tracing);
@@ -421,40 +596,56 @@ describe('AI Tracing', () => {
       expect(getAITracing('test')).toBeUndefined();
     });
 
-    it('should handle multiple instances and default selection', () => {
+    it('should handle multiple instances', () => {
       const tracing1 = new DefaultAITracing({
         serviceName: 'test-1',
+        instanceName: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
       const tracing2 = new DefaultAITracing({
         serviceName: 'test-2',
+        instanceName: 'instance-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('first', tracing1, true);
+      registerAITracing('first', tracing1);
       registerAITracing('second', tracing2);
 
       expect(getAITracing('first')).toBe(tracing1);
       expect(getAITracing('second')).toBe(tracing2);
-      expect(getAITracing()).toBe(tracing1); // First one marked as default
     });
 
-    it('should unregister instances correctly', () => {
+    it('should prevent duplicate registration', () => {
       const tracing1 = new DefaultAITracing({
         serviceName: 'test-1',
+        instanceName: 'instance-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
       const tracing2 = new DefaultAITracing({
         serviceName: 'test-2',
+        instanceName: 'instance-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITracing('first', tracing1, true);
-      registerAITracing('second', tracing2);
+      registerAITracing('duplicate', tracing1);
 
-      expect(unregisterAITracing('first')).toBe(true);
-      expect(getAITracing('first')).toBeUndefined();
-      expect(getAITracing()).toBe(tracing2); // Should switch default to remaining instance
+      expect(() => {
+        registerAITracing('duplicate', tracing2);
+      }).toThrow("AI Tracing instance 'duplicate' already registered");
+    });
+
+    it('should unregister instances correctly', () => {
+      const tracing = new DefaultAITracing({
+        serviceName: 'test-1',
+        instanceName: 'instance-1',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      registerAITracing('test', tracing);
+      expect(getAITracing('test')).toBe(tracing);
+
+      expect(unregisterAITracing('test')).toBe(true);
+      expect(getAITracing('test')).toBeUndefined();
     });
 
     it('should return false when unregistering non-existent instance', () => {
@@ -464,10 +655,12 @@ describe('AI Tracing', () => {
     it('should handle hasAITracing checks correctly', () => {
       const enabledTracing = new DefaultAITracing({
         serviceName: 'enabled-test',
+        instanceName: 'enabled-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
       const disabledTracing = new DefaultAITracing({
         serviceName: 'disabled-test',
+        instanceName: 'disabled-instance',
         sampling: { type: SamplingStrategyType.NEVER },
       });
 
@@ -482,6 +675,7 @@ describe('AI Tracing', () => {
     it('should access tracing config through registry', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'config-test',
+        instanceName: 'config-instance',
         sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
       });
 
@@ -492,42 +686,390 @@ describe('AI Tracing', () => {
       expect(retrieved!.getConfig().serviceName).toBe('config-test');
       expect(retrieved!.getConfig().sampling.type).toBe(SamplingStrategyType.RATIO);
     });
+
+    it('should use selector function when provided', () => {
+      const tracing1 = new DefaultAITracing({
+        serviceName: 'console-tracing',
+        instanceName: 'console-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+      const tracing2 = new DefaultAITracing({
+        serviceName: 'langfuse-tracing',
+        instanceName: 'langfuse-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      registerAITracing('console', tracing1);
+      registerAITracing('langfuse', tracing2);
+
+      const selector: TracingSelector = (context, availableTracers) => {
+        // For testing, we'll simulate routing based on runtime context
+        if (context.runtimeContext?.['environment'] === 'production') return 'langfuse';
+        if (context.runtimeContext?.['environment'] === 'development') return 'console';
+        return undefined; // Fall back to default
+      };
+
+      setAITracingSelector(selector);
+
+      const prodContext: AITracingContext = {
+        runtimeContext: { environment: 'production' } as any,
+      };
+
+      const devContext: AITracingContext = {
+        runtimeContext: { environment: 'development' } as any,
+      };
+
+      expect(getSelectedAITracing(prodContext)).toBe(tracing2); // langfuse
+      expect(getSelectedAITracing(devContext)).toBe(tracing1); // console
+    });
+
+    it('should fall back to default when selector returns invalid name', () => {
+      const tracing1 = new DefaultAITracing({
+        serviceName: 'default-tracing',
+        instanceName: 'default-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      registerAITracing('default', tracing1, true); // Explicitly set as default
+
+      const selector: TracingSelector = (_context, _availableTracers) => 'non-existent';
+      setAITracingSelector(selector);
+
+      const context: AITracingContext = {
+        runtimeContext: undefined,
+      };
+
+      expect(getSelectedAITracing(context)).toBe(tracing1); // Falls back to default
+    });
+
+    it('should handle default tracing behavior', () => {
+      const tracing1 = new DefaultAITracing({
+        serviceName: 'first-tracing',
+        instanceName: 'first-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+      const tracing2 = new DefaultAITracing({
+        serviceName: 'second-tracing',
+        instanceName: 'second-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      // First registered becomes default automatically
+      registerAITracing('first', tracing1);
+      registerAITracing('second', tracing2);
+
+      expect(getDefaultAITracing()).toBe(tracing1);
+
+      // Explicitly set second as default
+      registerAITracing('third', tracing2, true);
+      expect(getDefaultAITracing()).toBe(tracing2);
+    });
+  });
+
+  describe('Mastra Integration', () => {
+    it('should configure AI tracing with simple config', async () => {
+      const config: AITracingInstanceConfig = {
+        serviceName: 'test-service',
+        instanceName: 'test-instance',
+        exporters: [],
+      };
+
+      const mastra = new Mastra({
+        aiTracing: {
+          instances: {
+            test: config,
+          },
+        },
+      });
+
+      // Verify AI tracing was registered and set as default
+      const tracing = getAITracing('test');
+      expect(tracing).toBeDefined();
+      expect(tracing?.getConfig().serviceName).toBe('test-service');
+      expect(tracing?.getConfig().sampling?.type).toBe(SamplingStrategyType.ALWAYS); // Should default to ALWAYS
+      expect(getDefaultAITracing()).toBe(tracing); // First one becomes default
+
+      // Cleanup
+      await mastra.shutdown();
+    });
+
+    it('should use ALWAYS sampling by default when sampling is not specified', async () => {
+      const config: AITracingInstanceConfig = {
+        serviceName: 'default-sampling-test',
+        instanceName: 'default-sampling-instance',
+      };
+
+      const mastra = new Mastra({
+        aiTracing: {
+          instances: {
+            test: config,
+          },
+        },
+      });
+
+      const tracing = getAITracing('test');
+      expect(tracing?.getConfig().sampling?.type).toBe(SamplingStrategyType.ALWAYS);
+
+      // Cleanup
+      await mastra.shutdown();
+    });
+
+    it('should configure AI tracing with custom implementation', async () => {
+      class CustomAITracing extends MastraAITracing {
+        protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
+          // Custom implementation - just return a mock span for testing
+          return {
+            id: 'custom-span-id',
+            name: options.name,
+            type: options.type,
+            attributes: options.attributes,
+            parent: options.parent,
+            trace: options.parent?.trace || ({} as any),
+            traceId: 'custom-trace-id',
+            startTime: new Date(),
+            aiTracing: this,
+            end: () => {},
+            error: () => {},
+            update: () => {},
+            createChildSpan: () => ({}) as any,
+            get isRootSpan() {
+              return !options.parent;
+            },
+          } as AISpan<TType>;
+        }
+      }
+
+      const customInstance = new CustomAITracing({
+        serviceName: 'custom-service',
+        instanceName: 'custom-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      const mastra = new Mastra({
+        aiTracing: {
+          instances: {
+            custom: customInstance,
+          },
+        },
+      });
+
+      // Verify custom implementation was registered
+      const tracing = getAITracing('custom');
+      expect(tracing).toBeDefined();
+      expect(tracing).toBe(customInstance);
+      expect(tracing?.getConfig().serviceName).toBe('custom-service');
+
+      // Cleanup
+      await mastra.shutdown();
+    });
+
+    it('should support mixed configuration (config + instance)', async () => {
+      class CustomAITracing extends MastraAITracing {
+        protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
+          return {} as AISpan<TType>; // Mock implementation
+        }
+      }
+
+      const customInstance = new CustomAITracing({
+        serviceName: 'custom-service',
+        instanceName: 'custom-instance',
+        sampling: { type: SamplingStrategyType.NEVER },
+      });
+
+      const mastra = new Mastra({
+        aiTracing: {
+          instances: {
+            standard: {
+              serviceName: 'standard-service',
+              instanceName: 'standard-instance',
+              exporters: [],
+            },
+            custom: customInstance,
+          },
+        },
+      });
+
+      // Verify both instances were registered
+      const standardTracing = getAITracing('standard');
+      const customTracing = getAITracing('custom');
+
+      expect(standardTracing).toBeDefined();
+      expect(standardTracing).toBeInstanceOf(DefaultAITracing);
+      expect(standardTracing?.getConfig().serviceName).toBe('standard-service');
+
+      expect(customTracing).toBeDefined();
+      expect(customTracing).toBe(customInstance);
+      expect(customTracing?.getConfig().serviceName).toBe('custom-service');
+
+      // Cleanup
+      await mastra.shutdown();
+    });
+
+    it('should handle registry shutdown during Mastra shutdown', async () => {
+      let shutdownCalled = false;
+
+      class TestAITracing extends MastraAITracing {
+        protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
+          return {} as AISpan<TType>;
+        }
+
+        async shutdown(): Promise<void> {
+          shutdownCalled = true;
+          await super.shutdown();
+        }
+      }
+
+      const testInstance = new TestAITracing({
+        serviceName: 'test-service',
+        instanceName: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      const mastra = new Mastra({
+        aiTracing: {
+          instances: {
+            test: testInstance,
+          },
+        },
+      });
+
+      // Verify instance is registered
+      expect(getAITracing('test')).toBe(testInstance);
+
+      // Shutdown should call instance shutdown and clear registry
+      await mastra.shutdown();
+
+      expect(shutdownCalled).toBe(true);
+      expect(getAITracing('test')).toBeUndefined();
+    });
+
+    it('should prevent duplicate registration across multiple Mastra instances', () => {
+      const config: AITracingInstanceConfig = {
+        serviceName: 'test-service',
+        instanceName: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      };
+
+      const mastra1 = new Mastra({
+        aiTracing: {
+          instances: {
+            duplicate: config,
+          },
+        },
+      });
+
+      // Attempting to register the same name should throw
+      expect(() => {
+        new Mastra({
+          aiTracing: {
+            instances: {
+              duplicate: config,
+            },
+          },
+        });
+      }).toThrow("AI Tracing instance 'duplicate' already registered");
+    });
+
+    it('should support selector function configuration', async () => {
+      const selector: TracingSelector = (context, availableTracers) => {
+        if (context.runtimeContext?.['service'] === 'agent') return 'langfuse';
+        if (context.runtimeContext?.['service'] === 'workflow') return 'datadog';
+        return undefined; // Use default
+      };
+
+      const mastra = new Mastra({
+        aiTracing: {
+          instances: {
+            console: {
+              serviceName: 'console-service',
+              instanceName: 'console-instance',
+              exporters: [],
+            },
+            langfuse: {
+              serviceName: 'langfuse-service',
+              instanceName: 'langfuse-instance',
+              exporters: [],
+            },
+            datadog: {
+              serviceName: 'datadog-service',
+              instanceName: 'datadog-instance',
+              exporters: [],
+            },
+          },
+          selector: selector,
+        },
+      });
+
+      // Test selector functionality
+      const agentContext: AITracingContext = {
+        runtimeContext: { service: 'agent' } as any,
+      };
+
+      const workflowContext: AITracingContext = {
+        runtimeContext: { service: 'workflow' } as any,
+      };
+
+      const genericContext: AITracingContext = {
+        runtimeContext: undefined,
+      };
+
+      // Verify selector routes correctly
+      expect(getSelectedAITracing(agentContext)).toBe(getAITracing('langfuse'));
+      expect(getSelectedAITracing(workflowContext)).toBe(getAITracing('datadog'));
+      expect(getSelectedAITracing(genericContext)).toBe(getDefaultAITracing()); // Falls back to default (console)
+
+      // Cleanup
+      await mastra.shutdown();
+    });
   });
 
   describe('Type Safety', () => {
-    it('should enforce correct metadata types for different span types', () => {
+    it('should enforce correct attribute types for different span types', () => {
       const tracing = new DefaultAITracing({
         serviceName: 'test-tracing',
+        instanceName: 'test-instance',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      // Agent metadata
-      const agentSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'agent-test', {
-        agentId: 'agent-123',
-        instructions: 'Test agent',
-        maxSteps: 10,
+      // Agent attributes
+      const agentSpan = tracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'agent-test',
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          maxSteps: 10,
+        },
       });
 
-      expect(agentSpan.metadata.agentId).toBe('agent-123');
+      expect(agentSpan.attributes.agentId).toBe('agent-123');
 
-      // LLM metadata
-      const llmSpan = tracing.startSpan(AISpanType.LLM_GENERATION, 'llm-test', {
-        model: 'gpt-4',
-        provider: 'openai',
-        usage: { totalTokens: 100 },
-        streaming: false,
+      // LLM attributes
+      const llmSpan = tracing.startSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'llm-test',
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          usage: { totalTokens: 100 },
+          streaming: false,
+        },
       });
 
-      expect(llmSpan.metadata.model).toBe('gpt-4');
+      expect(llmSpan.attributes.model).toBe('gpt-4');
 
-      // Tool metadata
-      const toolSpan = tracing.startSpan(AISpanType.TOOL_CALL, 'tool-test', {
-        toolId: 'calculator',
-        success: true,
+      // Tool attributes
+      const toolSpan = tracing.startSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'tool-test',
+        attributes: {
+          toolId: 'calculator',
+          success: true,
+        },
       });
 
-      expect(toolSpan.metadata.toolId).toBe('calculator');
+      expect(toolSpan.attributes.toolId).toBe('calculator');
     });
   });
 
@@ -550,7 +1092,7 @@ describe('AI Tracing', () => {
         endTime: new Date(),
         traceId: 'trace-123',
         trace: { traceId: 'trace-123' },
-        metadata: { agentId: 'agent-123', normalField: 'visible-data' },
+        attributes: { agentId: 'agent-123', normalField: 'visible-data' },
       };
 
       await exporter.exportEvent({
@@ -565,10 +1107,10 @@ describe('AI Tracing', () => {
       expect(logger.info).toHaveBeenCalledWith('   ID: test-span-1');
       expect(logger.info).toHaveBeenCalledWith('   Trace ID: trace-123');
 
-      // Check that metadata is logged (filtering happens at processor level now)
-      const metadataCall = logger.info.mock.calls.find(call => call[0].includes('Metadata:'));
-      expect(metadataCall).toBeDefined();
-      expect(metadataCall![0]).toContain('visible-data');
+      // Check that attributes are logged (filtering happens at processor level now)
+      const attributesCall = logger.info.mock.calls.find(call => call[0].includes('Attributes:'));
+      expect(attributesCall).toBeDefined();
+      expect(attributesCall![0]).toContain('visible-data');
     });
 
     it('should throw error for unknown events', async () => {
@@ -602,7 +1144,7 @@ describe('AI Tracing', () => {
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
-          metadata: {
+          attributes: {
             agentId: 'agent-123',
             password: 'secret123', // Should be redacted
             Token: 'bearer-token', // Should be redacted (case insensitive)
@@ -622,19 +1164,19 @@ describe('AI Tracing', () => {
         const filtered = processor.process(mockSpan);
         expect(filtered).not.toBeNull();
 
-        const metadata = filtered!.metadata;
+        const attributes = filtered!.attributes;
 
         // Check that sensitive fields are redacted
-        expect(metadata['password']).toBe('[REDACTED]');
-        expect(metadata['Token']).toBe('[REDACTED]');
-        expect(metadata['SECRET']).toBe('[REDACTED]');
-        expect(metadata['apiKey']).toBe('[REDACTED]');
-        expect(metadata['AUTHORIZATION']).toBe('[REDACTED]');
-        expect(metadata['sessionId']).toBe('[REDACTED]');
+        expect(attributes['password']).toBe('[REDACTED]');
+        expect(attributes['Token']).toBe('[REDACTED]');
+        expect(attributes['SECRET']).toBe('[REDACTED]');
+        expect(attributes['apiKey']).toBe('[REDACTED]');
+        expect(attributes['AUTHORIZATION']).toBe('[REDACTED]');
+        expect(attributes['sessionId']).toBe('[REDACTED]');
 
         // Check that normal fields are visible
-        expect(metadata['normalField']).toBe('visible-data');
-        expect(metadata['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
+        expect(attributes['normalField']).toBe('visible-data');
+        expect(attributes['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
       });
 
       it('should allow custom sensitive fields', () => {
@@ -647,7 +1189,7 @@ describe('AI Tracing', () => {
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
-          metadata: {
+          attributes: {
             agentId: 'agent-123',
             password: 'should-be-visible', // NOT in custom list
             customSecret: 'should-be-hidden', // In custom list
@@ -662,16 +1204,16 @@ describe('AI Tracing', () => {
         } as any;
 
         const filtered = processor.process(mockSpan);
-        const metadata = filtered!.metadata;
+        const attributes = filtered!.attributes;
 
         // Custom fields should be redacted
-        expect(metadata['customSecret']).toBe('[REDACTED]');
-        expect(metadata['InternalId']).toBe('[REDACTED]');
+        expect(attributes['customSecret']).toBe('[REDACTED]');
+        expect(attributes['InternalId']).toBe('[REDACTED]');
 
         // Default sensitive fields should be visible (not in custom list)
-        expect(metadata['password']).toBe('should-be-visible');
-        expect(metadata['publicData']).toBe('visible-data');
-        expect(metadata['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
+        expect(attributes['password']).toBe('should-be-visible');
+        expect(attributes['publicData']).toBe('visible-data');
+        expect(attributes['agentId']).toBe('agent-123'); // agentId is part of AgentRunMetadata
       });
 
       it('should recursively filter nested sensitive fields', () => {
@@ -684,7 +1226,7 @@ describe('AI Tracing', () => {
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
-          metadata: {
+          attributes: {
             model: 'gpt-4',
             apiKey: 'top-level-secret', // Should be redacted (top-level)
             config: {
@@ -712,23 +1254,23 @@ describe('AI Tracing', () => {
         } as any;
 
         const filtered = processor.process(mockSpan);
-        const metadata = filtered!.metadata;
+        const attributes = filtered!.attributes;
 
         // All sensitive fields should be redacted at any level
-        expect(metadata['apiKey']).toBe('[REDACTED]');
-        expect(metadata['config']['apiKey']).toBe('[REDACTED]');
-        expect(metadata['config']['auth']['token']).toBe('[REDACTED]');
-        expect(metadata['headers']['Authorization']).toBe('[REDACTED]');
-        expect(metadata['results'][0]['secret']).toBe('[REDACTED]');
-        expect(metadata['results'][1]['password']).toBe('[REDACTED]');
+        expect(attributes['apiKey']).toBe('[REDACTED]');
+        expect(attributes['config']['apiKey']).toBe('[REDACTED]');
+        expect(attributes['config']['auth']['token']).toBe('[REDACTED]');
+        expect(attributes['headers']['Authorization']).toBe('[REDACTED]');
+        expect(attributes['results'][0]['secret']).toBe('[REDACTED]');
+        expect(attributes['results'][1]['password']).toBe('[REDACTED]');
 
         // Non-sensitive fields should be visible
-        expect(metadata['model']).toBe('gpt-4');
-        expect(metadata['config']['temperature']).toBe(0.7);
-        expect(metadata['config']['auth']['userId']).toBe('user123');
-        expect(metadata['headers']['Content-Type']).toBe('application/json');
-        expect(metadata['results'][0]['data']).toBe('visible');
-        expect(metadata['results'][1]['value']).toBe(42);
+        expect(attributes['model']).toBe('gpt-4');
+        expect(attributes['config']['temperature']).toBe(0.7);
+        expect(attributes['config']['auth']['userId']).toBe('user123');
+        expect(attributes['headers']['Content-Type']).toBe('application/json');
+        expect(attributes['results'][0]['data']).toBe('visible');
+        expect(attributes['results'][1]['value']).toBe(42);
       });
 
       it('should handle circular references', () => {
@@ -748,7 +1290,7 @@ describe('AI Tracing', () => {
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
-          metadata: circularObj,
+          attributes: circularObj,
           aiTracing: {} as any,
           end: () => {},
           error: () => {},
@@ -759,13 +1301,13 @@ describe('AI Tracing', () => {
         const filtered = processor.process(mockSpan);
         expect(filtered).not.toBeNull();
 
-        const metadata = filtered!.metadata;
-        expect(metadata['apiKey']).toBe('[REDACTED]');
-        expect(metadata['self']).toBe('[Circular Reference]');
-        expect(metadata['name']).toBe('test');
+        const attributes = filtered!.attributes;
+        expect(attributes['apiKey']).toBe('[REDACTED]');
+        expect(attributes['self']).toBe('[Circular Reference]');
+        expect(attributes['name']).toBe('test');
       });
 
-      it('should return heavily redacted metadata on filtering error', () => {
+      it('should return heavily redacted content on filtering error', () => {
         const processor = new SensitiveDataFilter();
 
         // Create a problematic object that will cause JSON serialization issues
@@ -785,7 +1327,7 @@ describe('AI Tracing', () => {
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
-          metadata: {
+          attributes: {
             agentId: 'agent-123',
             sensitiveData: 'this-should-not-be-visible',
             problematicObject: problematic,
@@ -800,14 +1342,14 @@ describe('AI Tracing', () => {
         const filtered = processor.process(mockSpan);
         expect(filtered).not.toBeNull();
 
-        const metadata = filtered!.metadata;
-        expect(metadata['[FILTERING_ERROR]']).toBe('Metadata was completely redacted due to filtering error');
-        expect(metadata['[ERROR_MESSAGE]']).toBe('Property access error');
+        const attributes = filtered!.attributes;
+        expect(attributes['[FILTERING_ERROR]']).toBe('Attributes were completely redacted due to filtering error');
+        expect(attributes['[ERROR_MESSAGE]']).toBe('Property access error');
 
         // Should NOT contain the original sensitive data
-        expect(metadata['sensitiveData']).toBeUndefined();
-        expect(metadata['agentId']).toBeUndefined();
-        expect(metadata['problematicObject']).toBeUndefined();
+        expect(attributes['sensitiveData']).toBeUndefined();
+        expect(attributes['agentId']).toBeUndefined();
+        expect(attributes['problematicObject']).toBeUndefined();
       });
     });
 
@@ -816,30 +1358,35 @@ describe('AI Tracing', () => {
         const tracing = new DefaultAITracing({
           ...aiTracingDefaultConfig,
           serviceName: 'test-tracing',
+          instanceName: 'test-instance',
           exporters: [testExporter],
         });
 
-        const span = tracing.startSpan(AISpanType.AGENT_RUN, 'test-agent', {
-          agentId: 'agent-123',
-          instructions: 'Test agent',
-        } as any);
+        const span = tracing.startSpan({
+          type: AISpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: {
+            agentId: 'agent-123',
+            instructions: 'Test agent',
+          } as any,
+        });
 
         // Update span with non-standard field that should be filtered
-        span.update({ apiKey: 'secret-key-456' } as any);
+        span.update({ attributes: { apiKey: 'secret-key-456' } as any });
 
         span.end();
 
         // Verify events were exported (3 events: start + update + end)
         expect(testExporter.events).toHaveLength(3);
 
-        // Check that the exported span has filtered metadata
+        // Check that the exported span has filtered attributes
         const startSpan = testExporter.events[0].span;
-        expect(startSpan.metadata['agentId']).toBe('agent-123');
-        expect(startSpan.metadata['instructions']).toBe('Test agent');
+        expect(startSpan.attributes['agentId']).toBe('agent-123');
+        expect(startSpan.attributes['instructions']).toBe('Test agent');
 
         // Check the updated span for the filtered field
         const updatedSpan = testExporter.events[1].span; // span_updated event
-        expect(updatedSpan.metadata['apiKey']).toBe('[REDACTED]');
+        expect(updatedSpan.attributes['apiKey']).toBe('[REDACTED]');
       });
     });
   });

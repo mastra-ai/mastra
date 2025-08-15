@@ -6,6 +6,7 @@
 
 import type { MastraAITracing } from './base';
 import { SamplingStrategyType } from './types';
+import type { TracingSelector, AITracingSelectorContext } from './types';
 
 // ============================================================================
 // Global AI Tracing Registry
@@ -17,12 +18,19 @@ import { SamplingStrategyType } from './types';
 class AITracingRegistry {
   private instances = new Map<string, MastraAITracing>();
   private defaultInstance?: MastraAITracing;
+  private selector?: TracingSelector;
 
   /**
    * Register a tracing instance
    */
   register(name: string, instance: MastraAITracing, isDefault = false): void {
+    if (this.instances.has(name)) {
+      throw new Error(`AI Tracing instance '${name}' already registered`);
+    }
+
     this.instances.set(name, instance);
+
+    // Set as default if explicitly marked or if it's the first instance
     if (isDefault || !this.defaultInstance) {
       this.defaultInstance = instance;
     }
@@ -31,10 +39,37 @@ class AITracingRegistry {
   /**
    * Get a tracing instance by name
    */
-  get(name?: string): MastraAITracing | undefined {
-    if (name) {
-      return this.instances.get(name);
+  get(name: string): MastraAITracing | undefined {
+    return this.instances.get(name);
+  }
+
+  /**
+   * Get the default tracing instance
+   */
+  getDefault(): MastraAITracing | undefined {
+    return this.defaultInstance;
+  }
+
+  /**
+   * Set the tracing selector function
+   */
+  setSelector(selector: TracingSelector): void {
+    this.selector = selector;
+  }
+
+  /**
+   * Get the selected tracing instance based on context
+   */
+  getSelected(context: AITracingSelectorContext): MastraAITracing | undefined {
+    // 1. Try selector function if provided
+    if (this.selector) {
+      const selected = this.selector(context, this.instances);
+      if (selected && this.instances.has(selected)) {
+        return this.instances.get(selected);
+      }
     }
+
+    // 2. Fall back to default
     return this.defaultInstance;
   }
 
@@ -42,21 +77,26 @@ class AITracingRegistry {
    * Unregister a tracing instance
    */
   unregister(name: string): boolean {
-    const instance = this.instances.get(name);
-    if (instance && instance === this.defaultInstance) {
-      // Find another instance to be the default
-      const remaining = Array.from(this.instances.values()).filter(i => i !== instance);
-      this.defaultInstance = remaining[0];
-    }
     return this.instances.delete(name);
   }
 
   /**
-   * Clear all instances
+   * Shutdown all instances and clear the registry
+   */
+  async shutdown(): Promise<void> {
+    const shutdownPromises = Array.from(this.instances.values()).map(instance => instance.shutdown());
+
+    await Promise.allSettled(shutdownPromises);
+    this.instances.clear();
+  }
+
+  /**
+   * Clear all instances without shutdown
    */
   clear(): void {
     this.instances.clear();
     this.defaultInstance = undefined;
+    this.selector = undefined;
   }
 
   /**
@@ -83,8 +123,29 @@ export function registerAITracing(name: string, instance: MastraAITracing, isDef
 /**
  * Get an AI tracing instance from the registry
  */
-export function getAITracing(name?: string): MastraAITracing | undefined {
+export function getAITracing(name: string): MastraAITracing | undefined {
   return aiTracingRegistry.get(name);
+}
+
+/**
+ * Get the default AI tracing instance
+ */
+export function getDefaultAITracing(): MastraAITracing | undefined {
+  return aiTracingRegistry.getDefault();
+}
+
+/**
+ * Set the AI tracing selector function
+ */
+export function setAITracingSelector(selector: TracingSelector): void {
+  aiTracingRegistry.setSelector(selector);
+}
+
+/**
+ * Get the selected AI tracing instance based on context
+ */
+export function getSelectedAITracing(context: AITracingSelectorContext): MastraAITracing | undefined {
+  return aiTracingRegistry.getSelected(context);
 }
 
 /**
@@ -95,16 +156,30 @@ export function unregisterAITracing(name: string): boolean {
 }
 
 /**
- * Clear all AI tracing instances
+ * Shutdown all AI tracing instances and clear the registry
+ */
+export async function shutdownAITracingRegistry(): Promise<void> {
+  await aiTracingRegistry.shutdown();
+}
+
+/**
+ * Clear all AI tracing instances without shutdown
  */
 export function clearAITracingRegistry(): void {
   aiTracingRegistry.clear();
 }
 
 /**
+ * Get all registered AI tracing instances
+ */
+export function getAllAITracing(): ReadonlyMap<string, MastraAITracing> {
+  return aiTracingRegistry.getAll();
+}
+
+/**
  * Check if AI tracing is available and enabled
  */
-export function hasAITracing(name?: string): boolean {
+export function hasAITracing(name: string): boolean {
   const tracing = getAITracing(name);
   if (!tracing) return false;
 
