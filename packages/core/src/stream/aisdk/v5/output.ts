@@ -1,19 +1,26 @@
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
-import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
+import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
-
 import type { MessageList } from '../../../agent/message-list';
+import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
-import { getResponseUIMessageId, consumeStream, convertFullStreamChunkToUIMessageStream } from './compat';
-import { transformResponse, transformSteps } from './output-helpers';
+import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
+import { transformSteps } from './output-helpers';
 import { convertMastraChunkToAISDKv5 } from './transform';
+import type { OutputChunkType } from './transform';
+
+type AISDKV5OutputStreamOptions = {
+  toolCallStreaming?: boolean;
+  includeRawChunks?: boolean;
+  objectOptions?: ObjectOptions;
+};
 
 export class AISDKV5OutputStream {
   #modelOutput: MastraModelOutput;
-  #options: { toolCallStreaming?: boolean; includeRawChunks?: boolean };
+  #options: AISDKV5OutputStreamOptions;
   #messageList: MessageList;
 
   constructor({
@@ -22,7 +29,7 @@ export class AISDKV5OutputStream {
     messageList,
   }: {
     modelOutput: MastraModelOutput;
-    options: { toolCallStreaming?: boolean; includeRawChunks?: boolean };
+    options: AISDKV5OutputStreamOptions;
     messageList: MessageList;
   }) {
     this.#modelOutput = modelOutput;
@@ -93,12 +100,12 @@ export class AISDKV5OutputStream {
       generateId: () => responseMessageId ?? generateMessageId?.(),
       execute: async ({ writer }) => {
         for await (const part of this.fullStream) {
-          const messageMetadataValue = messageMetadata?.({ part });
+          const messageMetadataValue = messageMetadata?.({ part: part as TextStreamPart<ToolSet> });
 
           const partType = part.type;
 
           const transformedChunk = convertFullStreamChunkToUIMessageStream({
-            part,
+            part: part as TextStreamPart<ToolSet>,
             sendReasoning,
             messageMetadataValue,
             sendSources,
@@ -155,9 +162,27 @@ export class AISDKV5OutputStream {
     return this.#modelOutput.files
       .map(file => {
         if (file.type === 'file') {
-          return convertMastraChunkToAISDKv5({
-            chunk: file,
-          });
+          return (
+            convertMastraChunkToAISDKv5({
+              chunk: file,
+            }) as any
+          )?.file;
+        }
+        return;
+      })
+      .filter(Boolean);
+  }
+
+  get generateTextFiles() {
+    return this.#modelOutput.files
+      .map(file => {
+        if (file.type === 'file') {
+          return (
+            convertMastraChunkToAISDKv5({
+              chunk: file,
+              mode: 'generate',
+            }) as any
+          )?.file;
         }
         return;
       })
@@ -189,33 +214,32 @@ export class AISDKV5OutputStream {
   }
 
   get response() {
-    return transformResponse({
-      response: this.#modelOutput.response,
-      isMessages: true,
-      runId: this.#modelOutput.runId,
-    });
+    return {
+      ...this.#modelOutput.response,
+    };
   }
 
   get steps() {
-    return transformSteps({ steps: this.#modelOutput.steps, runId: this.#modelOutput.runId });
+    return transformSteps({ steps: this.#modelOutput.steps });
+  }
+
+  get generateTextSteps() {
+    return transformSteps({ steps: this.#modelOutput.steps });
   }
 
   get content() {
-    return (
-      transformResponse({
-        response: this.response,
-        isMessages: true,
-        runId: this.#modelOutput.runId,
-      }).messages?.flatMap((message: any) => message.content) ?? []
-    );
+    return this.#messageList.get.response.aiV5.modelContent();
   }
 
   get fullStream() {
-    let startEvent: TextStreamPart<ToolSet> | undefined;
+    let startEvent: OutputChunkType;
     let hasStarted: boolean = false;
+
     // let stepCounter = 1;
-    return this.#modelOutput.fullStream.pipeThrough(
-      new TransformStream<ChunkType, TextStreamPart<ToolSet>>({
+    const fullStream = this.#modelOutput.fullStream;
+
+    return fullStream.pipeThrough(
+      new TransformStream<ChunkType, NonNullable<OutputChunkType>>({
         transform(chunk, controller) {
           if (chunk.type === 'step-start' && !startEvent) {
             startEvent = convertMastraChunkToAISDKv5({
@@ -251,10 +275,16 @@ export class AISDKV5OutputStream {
 
   async getFullOutput() {
     await this.consumeStream();
+
+    let object: any;
+    if (this.#options.objectOptions) {
+      object = await this.object;
+    }
+
     return {
       text: this.#modelOutput.text,
       usage: this.#modelOutput.usage,
-      steps: this.steps,
+      steps: this.generateTextSteps,
       finishReason: this.#modelOutput.finishReason,
       warnings: this.#modelOutput.warnings,
       providerMetadata: this.#modelOutput.providerMetadata,
@@ -264,11 +294,16 @@ export class AISDKV5OutputStream {
       toolCalls: this.toolCalls,
       toolResults: this.toolResults,
       sources: this.sources,
-      files: this.files,
+      files: this.generateTextFiles,
       response: this.response,
       content: this.content,
       totalUsage: this.#modelOutput.totalUsage,
+      ...(object ? { object } : {}),
       // experimental_output: // TODO
     };
+  }
+
+  get object() {
+    return this.#modelOutput.object;
   }
 }

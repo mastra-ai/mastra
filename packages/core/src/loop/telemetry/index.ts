@@ -21,6 +21,20 @@ export function getTracer({
   return trace.getTracer('mastra');
 }
 
+export function assembleOperationName({
+  operationId,
+  telemetry,
+}: {
+  operationId: string;
+  telemetry?: TelemetrySettings;
+}) {
+  return {
+    'mastra.operationId': operationId,
+    'operation.name': `${operationId}${telemetry?.functionId != null ? ` ${telemetry.functionId}` : ''}`,
+    ...(telemetry?.functionId ? { 'resource.name': telemetry?.functionId } : {}),
+  };
+}
+
 export function getTelemetryAttributes({
   model,
   settings,
@@ -63,11 +77,13 @@ export function getRootSpan({
   model,
   modelSettings,
   telemetry_settings,
+  headers,
 }: {
   operationId: string;
   model: { modelId: string; provider: string };
   modelSettings?: CallSettings;
   telemetry_settings?: TelemetrySettings;
+  headers?: Record<string, string | undefined> | undefined;
 }) {
   const tracer = getTracer({
     isEnabled: telemetry_settings?.isEnabled,
@@ -83,14 +99,15 @@ export function getRootSpan({
       maxRetries: 2,
     },
     telemetry: telemetry_settings,
-    headers: modelSettings?.headers,
+    headers,
   });
 
-  const rootSpan = tracer.startSpan('mastra.stream').setAttributes({
+  const rootSpan = tracer.startSpan(operationId).setAttributes({
+    ...assembleOperationName({
+      operationId,
+      telemetry: telemetry_settings,
+    }),
     ...baseTelemetryAttributes,
-    'mastra.operationId': operationId,
-    'operation.name': `${operationId}${telemetry_settings?.functionId != null ? ` ${telemetry_settings.functionId}` : ''}`,
-    ...(telemetry_settings?.functionId ? { 'resource.name': telemetry_settings?.functionId } : {}),
   });
 
   return {
