@@ -55,7 +55,8 @@ export class SystemPromptScrubber implements Processor {
   private instructions: string;
   private redactionMethod: 'mask' | 'placeholder' | 'remove';
   private placeholderText: string;
-  private model: MastraLanguageModel; // Store the model for lazy initialization
+  private model: MastraLanguageModel;
+  private detectionAgent: Agent;
 
   constructor(options: SystemPromptScrubberOptions) {
     if (!options.model) {
@@ -73,6 +74,12 @@ export class SystemPromptScrubber implements Processor {
 
     // Store the model for lazy initialization
     this.model = options.model;
+
+    this.detectionAgent = new Agent({
+      name: 'system-prompt-detector',
+      model: this.model,
+      instructions: this.instructions,
+    });
   }
 
   /**
@@ -198,6 +205,10 @@ export class SystemPromptScrubber implements Processor {
           processedMessages.push(message);
         }
       } catch (error) {
+        // Re-throw abort errors, but fail open for other errors
+        if (error instanceof Error && error.message.includes('System prompt detected:')) {
+          throw error;
+        }
         // Fail open - allow message through if detection fails
         console.warn('[SystemPromptScrubber] Detection failed, allowing content:', error);
         processedMessages.push(message);
@@ -211,14 +222,8 @@ export class SystemPromptScrubber implements Processor {
    * Detect system prompts in text using the detection agent
    */
   private async detectSystemPrompts(text: string): Promise<SystemPromptDetectionResult> {
-    const detectionAgent = new Agent({
-      name: 'system-prompt-detector',
-      model: this.model,
-      instructions: this.instructions,
-    });
-
     try {
-      const result = await detectionAgent.generate(text, {
+      const result = await this.detectionAgent.generate(text, {
         output: z.object({
           detections: z
             .array(

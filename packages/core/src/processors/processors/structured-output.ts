@@ -45,8 +45,6 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
   }): Promise<MastraMessageV2[]> {
     const { messages, abort } = args;
 
-    console.log(`StructuredOutputProcessor: ${JSON.stringify(messages, null, 2)}`);
-
     // Process the final assistant message
     const processedMessages = await Promise.all(
       messages.map(async message => {
@@ -68,8 +66,6 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
               output: this.schema,
             },
           );
-
-          console.log({ structuredResult: structuredResult.object });
 
           if (!structuredResult.object) {
             this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);

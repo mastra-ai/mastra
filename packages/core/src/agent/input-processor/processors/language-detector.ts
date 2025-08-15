@@ -1,12 +1,7 @@
-import {
-  LanguageDetector,
-  type LanguageDetectorOptions,
-  type LanguageDetectionResult,
-  type LanguageDetection,
-  type TranslationResult,
-} from '../../../processors/processors/language-detector';
-import type { InputProcessor } from '../index';
+import { LanguageDetector } from '../../../processors/processors/language-detector';
+import type { LanguageDetectorOptions, LanguageDetectionResult, LanguageDetection, TranslationResult } from '../../../processors/processors/language-detector';
 import type { MastraMessageV2 } from '../../message-list';
+import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for LanguageDetector that implements the old InputProcessor interface

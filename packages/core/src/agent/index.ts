@@ -969,7 +969,7 @@ export class Agent<
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors?.length) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors) {
       const runner = await this.getProcessorRunner({
         runtimeContext,
         inputProcessorOverrides,
@@ -2937,7 +2937,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             this.logger.debug('running output processors for stream');
             const runner = await this.getProcessorRunner({
               runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
-              outputProcessorOverrides: mergedStreamOptions.outputProcessors,
+              outputProcessorOverrides: effectiveOutputProcessors,
             });
 
             return runner.runOutputProcessorsForStream(streamResult) as unknown as ReadableStream<any>;

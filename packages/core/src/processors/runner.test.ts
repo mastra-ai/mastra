@@ -646,7 +646,7 @@ describe('ProcessorRunner', () => {
           name: 'moderationProcessor',
           processOutputStream: async ({ chunk, abort, allChunks }) => {
             // Check for violence in accumulated text
-            const accumulatedText = allChunks.map(chunk => (chunk as any).textDelta).join('');
+            const accumulatedText = allChunks.map(c => (c as any).textDelta).join('');
 
             if (accumulatedText.includes('punch') && accumulatedText.includes('face')) {
               abort('Violent content detected');

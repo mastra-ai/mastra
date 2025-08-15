@@ -39,10 +39,3 @@ export type InferGenerateResult<
   OUTPUT extends ZodSchema | JSONSchema7 | undefined,
   PROCESSORS extends readonly OutputProcessor[],
 > = OUTPUT extends undefined ? GenerateTextResultWithProcessors<PROCESSORS> : GenerateObjectResult<OUTPUT>;
-
-/**
- * Type guard to check if a processor is an StructuredOutputProcessor
- */
-export function isStructuredOutputProcessor(processor: OutputProcessor): processor is StructuredOutputProcessor<any> {
-  return processor.name === 'experimental-output' && 'schema' in processor;
-}

@@ -3,6 +3,7 @@ import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import type { MastraMessageV2 } from '../../agent/message-list';
+import type { Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter output processor
@@ -30,7 +31,7 @@ export interface TokenLimiterOptions {
  * Output processor that limits the number of tokens in generated responses.
  * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
  */
-export class TokenLimiterProcessor {
+export class TokenLimiterProcessor implements Processor {
   public readonly name = 'token-limiter';
   private encoder: Tiktoken;
   private maxTokens: number;
@@ -54,10 +55,14 @@ export class TokenLimiterProcessor {
     }
   }
 
-  async processOutputStream(
-    chunk: TextStreamPart<any> | ObjectStreamPart<any>,
-    abort: (reason?: string) => never,
-  ): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+  async processOutputStream(args: {
+    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
+    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    state: Record<string, any>;
+    abort: (reason?: string) => never;
+  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+    const { chunk, abort } = args;
+
     // Count tokens in the current chunk
     const chunkTokens = this.countTokensInChunk(chunk);
 
@@ -135,13 +140,11 @@ export class TokenLimiterProcessor {
    * Process the final result (non-streaming)
    * Truncates the text content if it exceeds the token limit
    */
-  async processOutputResult({
-    messages,
-    abort,
-  }: {
+  async processOutputResult(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
   }): Promise<MastraMessageV2[]> {
+    const { messages, abort } = args;
     // Reset token count for result processing
     this.currentTokens = 0;
 
@@ -155,29 +158,43 @@ export class TokenLimiterProcessor {
           const textContent = part.text;
           const tokens = this.encoder.encode(textContent).length;
 
-          if (tokens <= this.maxTokens) {
+          // Check if adding this part's tokens would exceed the cumulative limit
+          if (this.currentTokens + tokens <= this.maxTokens) {
             this.currentTokens += tokens;
             return part;
           } else {
             if (this.strategy === 'abort') {
-              abort(`Token limit of ${this.maxTokens} exceeded (current: ${tokens})`);
+              abort(`Token limit of ${this.maxTokens} exceeded (current: ${this.currentTokens + tokens})`);
             } else {
-              // Truncate the text to fit within token limit
+              // Truncate the text to fit within the remaining token limit
               let truncatedText = '';
               let currentTokens = 0;
+              const remainingTokens = this.maxTokens - this.currentTokens;
 
-              // Find the cutoff point that fits within the limit
-              for (let i = 0; i < textContent.length; i++) {
-                const testText = textContent.slice(0, i + 1);
+              // Find the cutoff point that fits within the remaining limit using binary search
+              let left = 0;
+              let right = textContent.length;
+              let bestLength = 0;
+              let bestTokens = 0;
+
+              while (left <= right) {
+                const mid = Math.floor((left + right) / 2);
+                const testText = textContent.slice(0, mid);
                 const testTokens = this.encoder.encode(testText).length;
 
-                if (testTokens <= this.maxTokens) {
-                  truncatedText = testText;
-                  currentTokens = testTokens;
+                if (testTokens <= remainingTokens) {
+                  // This length fits, try to find a longer one
+                  bestLength = mid;
+                  bestTokens = testTokens;
+                  left = mid + 1;
                 } else {
-                  break;
+                  // This length is too long, try a shorter one
+                  right = mid - 1;
                 }
               }
+
+              truncatedText = textContent.slice(0, bestLength);
+              currentTokens = bestTokens;
 
               this.currentTokens += currentTokens;
 

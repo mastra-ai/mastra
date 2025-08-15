@@ -1,4 +1,3 @@
-import type { TextUIPart } from '@ai-sdk/ui-utils';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import z from 'zod';
@@ -24,6 +23,7 @@ describe('StructuredOutputProcessor', () => {
         finishReason: 'stop',
         usage: { completionTokens: 10, promptTokens: 5 },
       }),
+      defaultObjectGenerationMode: 'json',
     });
 
     processor = new StructuredOutputProcessor({
@@ -106,9 +106,8 @@ describe('StructuredOutputProcessor', () => {
         abort: mockAbort as any,
       });
 
-      expect(result[0].content.parts[0]).toEqual({
-        type: 'text',
-        text: JSON.stringify({ color: 'default', intensity: 'medium' }, null, 2),
+      expect(result[0].content.metadata).toEqual({
+        structuredOutput: { color: 'default', intensity: 'medium' },
       });
       expect(mockAbort).not.toHaveBeenCalled();
     });
@@ -198,34 +197,43 @@ describe('StructuredOutputProcessor', () => {
         model: mockModel,
       });
 
-      const validJson = JSON.stringify({
+      const expectedObject = {
         user: {
           name: 'John',
           preferences: {
-            theme: 'dark',
+            theme: 'dark' as const,
             notifications: true,
           },
         },
         metadata: { source: 'test' },
-      });
+      };
 
-      const createMessage = (text: string): MastraMessageV2 => ({
+      const message: MastraMessageV2 = {
         id: 'test-id',
         role: 'assistant',
         content: {
           format: 2,
-          parts: [{ type: 'text', text }],
+          parts: [{ type: 'text', text: 'Some unstructured text about John who prefers dark theme and wants notifications' }],
         },
         createdAt: new Date(),
-      });
+      };
 
-      const message = createMessage(validJson);
+      // Mock the structuring agent's generate method to return the expected structured data
+      vi.spyOn(complexProcessor['structuringAgent'], 'generate').mockResolvedValueOnce({
+        text: JSON.stringify(expectedObject),
+        object: expectedObject,
+        finishReason: 'stop',
+        usage: { completionTokens: 10, promptTokens: 5 },
+      } as any);
+
       const result = await complexProcessor.processOutputResult({
         messages: [message],
         abort: mockAbort as any,
       });
 
-      expect((result[0].content.parts[0] as TextUIPart).text).toContain('"theme": "dark"');
+      expect(result[0].content.metadata).toEqual({
+        structuredOutput: expectedObject,
+      });
       expect(mockAbort).not.toHaveBeenCalled();
     });
   });

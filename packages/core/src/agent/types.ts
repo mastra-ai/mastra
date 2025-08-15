@@ -52,12 +52,6 @@ export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
-
-  /**
-   * Use a custom processor to process the output, defaults to the built in StructuredOutputProcessor
-   * This is useful when you want to use a custom processor to process the output
-   */
-  useProcessor?: z.infer<S>;
 } & FallbackFields<S>;
 
 export interface AgentConfig<
@@ -128,7 +122,8 @@ export type AgentGenerateOptions<
    */
   structuredOutput?: EXPERIMENTAL_OUTPUT extends z.ZodTypeAny
     ? StructuredOutputOptions<EXPERIMENTAL_OUTPUT>
-    : never /** Controls how tools are selected during generation */;
+    : never
+  /** Controls how tools are selected during generation */;
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Telemetry settings */
   telemetry?: TelemetrySettings;

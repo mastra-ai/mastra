@@ -1,6 +1,7 @@
-import { UnicodeNormalizer, type UnicodeNormalizerOptions } from '../../../processors/processors/unicode-normalizer';
-import type { InputProcessor } from '../index';
+import { UnicodeNormalizer } from '../../../processors/processors/unicode-normalizer';
+import type { UnicodeNormalizerOptions } from '../../../processors/processors/unicode-normalizer';
 import type { MastraMessageV2 } from '../../message-list';
+import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for UnicodeNormalizer that implements the old InputProcessor interface

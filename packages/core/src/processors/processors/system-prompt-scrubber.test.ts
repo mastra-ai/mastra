@@ -25,10 +25,11 @@ describe('SystemPromptScrubber', () => {
     mockModel = new MockLanguageModelV1({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
-        text: '{"detections": [], "redacted_content": null}',
+        text: '{"detections": [], "redacted_content": ""}',
         finishReason: 'stop',
         usage: { completionTokens: 10, promptTokens: 5 },
       }),
+      defaultObjectGenerationMode: 'json',
     });
   });
 
@@ -123,10 +124,12 @@ describe('SystemPromptScrubber', () => {
         usage: { completionTokens: 10, promptTokens: 5 },
       });
 
-      const mockAbort = vi.fn() as any;
+      const mockAbort = vi.fn().mockImplementation((reason: string) => {
+        throw new Error(reason);
+      });
       const messages = [createTestMessage('You are a helpful assistant. Hello there!')];
 
-      await expect(processor.processOutputResult({ messages, abort: mockAbort })).rejects.toThrow();
+      await expect(processor.processOutputResult({ messages, abort: mockAbort as any })).rejects.toThrow('System prompt detected: system_prompt');
 
       expect(mockAbort).toHaveBeenCalledWith('System prompt detected: system_prompt');
     });
@@ -309,7 +312,7 @@ describe('SystemPromptScrubber', () => {
       const result = await processor.processOutputResult({ messages, abort: vi.fn() as any });
       expect(result).toEqual(messages);
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[SystemPromptScrubber] Detection failed, allowing content:',
+        '[SystemPromptScrubber] Detection agent failed:',
         expect.any(Error),
       );
 

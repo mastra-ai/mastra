@@ -4,11 +4,10 @@ import type { LanguageModel } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
+import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
 import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
 import 'dotenv/config';
-import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
-import { AgentGenerateOptions } from '../../agent/types';
 
 type Result = {
   modelName: string;
@@ -157,12 +156,8 @@ async function runSingleOutputsTest(
 
     const response = await agent.generate(allSchemas[schemaName].description, generateOptions);
 
-    console.log(response);
-    console.log(JSON.stringify(response.object, null, 2));
-    console.log(testTool.description);
-
     if (!response.object) {
-      throw new Error('No object generated for schema: ' + schemaName + 'with text: ' + response.text);
+      throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
     }
 
     return {
@@ -385,7 +380,7 @@ describe('Tool Schema Compatibility', () => {
     // Skipping this also saves us a lot of cost in CI for running tests. I'll keep the tests here for now if we ever want to test it manually.
     describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
-        describe.only(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
+        describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
           testTools.forEach(testTool => {
             const schemaName = testTool.id.replace('testTool_', '');
 
@@ -488,7 +483,7 @@ describe('Tool Input Validation', () => {
 
   it('should return validation error for short name', async () => {
     // With graceful error handling, validation errors are returned as results
-    const result = await toolWithValidation.execute!({
+    const result: any = await toolWithValidation.execute!({
       context: {
         name: 'Jo', // Too short
         age: 30,
@@ -505,7 +500,7 @@ describe('Tool Input Validation', () => {
 
   it('should return validation error for negative age', async () => {
     // With graceful error handling, validation errors are returned as results
-    const result = await toolWithValidation.execute!({
+    const result: any = await toolWithValidation.execute!({
       context: {
         name: 'John',
         age: -5, // Negative age
@@ -522,7 +517,7 @@ describe('Tool Input Validation', () => {
 
   it('should return validation error for invalid email', async () => {
     // With graceful error handling, validation errors are returned as results
-    const result = await toolWithValidation.execute!({
+    const result: any = await toolWithValidation.execute!({
       context: {
         name: 'John',
         age: 30,
@@ -540,7 +535,7 @@ describe('Tool Input Validation', () => {
 
   it('should return validation error for missing required fields', async () => {
     // With graceful error handling, validation errors are returned as results
-    const result = await toolWithValidation.execute!({
+    const result: any = await toolWithValidation.execute!({
       // @ts-expect-error intentionally incorrect input
       context: {
         // Missing name
@@ -558,7 +553,7 @@ describe('Tool Input Validation', () => {
 
   it('should return validation error for empty tags array when provided', async () => {
     // With graceful error handling, validation errors are returned as results
-    const result = await toolWithValidation.execute!({
+    const result: any = await toolWithValidation.execute!({
       context: {
         name: 'John',
         age: 30,
@@ -576,7 +571,7 @@ describe('Tool Input Validation', () => {
 
   it('should show provided arguments in validation error message', async () => {
     // Test that the error message includes the problematic arguments
-    const result = await toolWithValidation.execute!({
+    const result: any = await toolWithValidation.execute!({
       context: {
         name: 'A', // Too short
         age: 200, // Too old

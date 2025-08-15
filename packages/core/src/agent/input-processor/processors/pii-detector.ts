@@ -1,13 +1,7 @@
-import {
-  PIIDetector,
-  type PIIDetectorOptions,
-  type PIIDetectionResult,
-  type PIICategories,
-  type PIICategoryScores,
-  type PIIDetection,
-} from '../../../processors/processors/pii-detector';
-import type { InputProcessor } from '../index';
+import { PIIDetector } from '../../../processors/processors/pii-detector';
+import type { PIIDetectorOptions, PIIDetectionResult, PIICategories, PIICategoryScores, PIIDetection } from '../../../processors/processors/pii-detector';
 import type { MastraMessageV2 } from '../../message-list';
+import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for PIIDetector that implements the old InputProcessor interface

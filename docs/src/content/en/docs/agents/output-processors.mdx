@@ -105,7 +105,7 @@ const agent = new Agent({
   ],
 });
 
-const result = agent.generate("Some conversational text")
+const result = await agent.generate("Some conversational text")
 
 console.log(result.object) // { sentiment: "positive", confidence: 0.6, topics: ["foo", "bar"] }
 ```

@@ -208,8 +208,11 @@ const responseWithStructuredOutput = await testAgent.generate(
   ],
   {
     structuredOutput: {
-      schema,
-      model,
+      schema: z.object({
+        summary: z.string(),
+        keywords: z.array(z.string())
+      }),
+      model: openai("gpt-4o-mini"),
     }
   },
 );

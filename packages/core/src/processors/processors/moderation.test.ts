@@ -558,4 +558,110 @@ describe('ModerationProcessor', () => {
       expect(result).toEqual(messages);
     });
   });
+
+  describe('processOutputStream', () => {
+    it('should always moderate current chunk even when chunkWindow is 0', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
+      const moderator = new ModerationProcessor({
+        model,
+        chunkWindow: 0, // No context window
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn().mockImplementation(() => {
+        throw new TripWire('Content flagged');
+      });
+
+      const chunk = { type: 'text-delta' as const, textDelta: 'Flagged content' };
+      const allChunks: any[] = []; // Empty context
+
+      // Should attempt to moderate the current chunk and abort
+      await expect(async () => {
+        await moderator.processOutputStream({
+          chunk,
+          allChunks,
+          state: {},
+          abort: mockAbort as any,
+        });
+      }).rejects.toThrow('Content flagged');
+
+      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Content flagged for moderation'));
+    });
+
+    it('should include context when chunkWindow is greater than 0', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+      const moderator = new ModerationProcessor({
+        model,
+        chunkWindow: 2, // Include 2 previous chunks
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn();
+
+      const previousChunks = [
+        { type: 'text-delta' as const, textDelta: 'Previous content ' },
+        { type: 'text-delta' as const, textDelta: 'more context ' },
+      ];
+      const currentChunk = { type: 'text-delta' as const, textDelta: 'current chunk' };
+
+      const result = await moderator.processOutputStream({
+        chunk: currentChunk,
+        allChunks: previousChunks,
+        state: {},
+        abort: mockAbort as any,
+      });
+
+      // Should return the chunk if moderation passes
+      expect(result).toEqual(currentChunk);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('should skip non-text-delta chunks', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
+      const moderator = new ModerationProcessor({
+        model,
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn();
+
+      const objectChunk = { type: 'object' as const, object: { key: 'value' } };
+
+      const result = await moderator.processOutputStream({
+        chunk: objectChunk,
+        allChunks: [],
+        state: {},
+        abort: mockAbort as any,
+      });
+
+      // Should return the chunk without moderation
+      expect(result).toEqual(objectChunk);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('should properly handle chunkWindow=0 with current chunk in allChunks', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+      const moderator = new ModerationProcessor({
+        model,
+        chunkWindow: 0, // No context window
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn();
+
+      const currentChunk = { type: 'text-delta' as const, textDelta: 'Safe content' };
+      const allChunks = [currentChunk]; // allChunks includes the current chunk
+
+      const result = await moderator.processOutputStream({
+        chunk: currentChunk,
+        allChunks,
+        state: {},
+        abort: mockAbort as any,
+      });
+
+      // Should moderate the current chunk and return it if safe
+      expect(result).toEqual(currentChunk);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+  });
 });

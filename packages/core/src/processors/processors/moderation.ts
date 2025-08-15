@@ -194,13 +194,8 @@ export class ModerationProcessor implements Processor {
         return chunk;
       }
 
-      // Build context from previous chunks based on chunkWindow
+      // Build context from chunks based on chunkWindow (allChunks includes the current chunk)
       const contentToModerate = this.buildContextFromChunks(allChunks);
-
-      // Skip moderation if no content to moderate
-      if (!contentToModerate.trim()) {
-        return chunk;
-      }
 
       const moderationResult = await this.moderateContent(contentToModerate, true);
 
@@ -353,14 +348,20 @@ Content: "${content}"`;
   }
 
   /**
-   * Build context string from previous chunks based on chunkWindow
+   * Build context string from chunks based on chunkWindow
+   * allChunks includes the current chunk
    */
   private buildContextFromChunks(allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[]): string {
     if (this.chunkWindow === 0) {
+      // When chunkWindow is 0, only moderate the current chunk (last chunk in allChunks)
+      const currentChunk = allChunks[allChunks.length - 1];
+      if (currentChunk && currentChunk.type === 'text-delta') {
+        return currentChunk.textDelta;
+      }
       return '';
     }
 
-    // Get the last N chunks (excluding the current one which is not in allChunks yet)
+    // Get the last N chunks (allChunks includes the current chunk)
     const contextChunks = allChunks.slice(-this.chunkWindow);
 
     // Extract text content from text-delta chunks

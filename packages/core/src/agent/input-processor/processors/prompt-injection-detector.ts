@@ -1,11 +1,7 @@
-import {
-  PromptInjectionDetector,
-  type PromptInjectionOptions,
-  type PromptInjectionResult,
-  type PromptInjectionCategoryScores,
-} from '../../../processors/processors/prompt-injection-detector';
-import type { InputProcessor } from '../index';
+import { PromptInjectionDetector } from '../../../processors/processors/prompt-injection-detector';
+import type { PromptInjectionOptions, PromptInjectionResult, PromptInjectionCategoryScores } from '../../../processors/processors/prompt-injection-detector';
 import type { MastraMessageV2 } from '../../message-list';
+import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for PromptInjectionDetector that implements the old InputProcessor interface

@@ -1,11 +1,7 @@
-import {
-  ModerationProcessor,
-  type ModerationOptions,
-  type ModerationResult,
-  type ModerationCategoryScores,
-} from '../../../processors/processors/moderation';
-import type { InputProcessor } from '../index';
+import { ModerationProcessor } from '../../../processors/processors/moderation';
+import type { ModerationOptions, ModerationResult, ModerationCategoryScores } from '../../../processors/processors/moderation';
 import type { MastraMessageV2 } from '../../message-list';
+import type { InputProcessor } from '../index';
 
 /**
  * Backward-compatible wrapper for ModerationProcessor that implements the old InputProcessor interface
