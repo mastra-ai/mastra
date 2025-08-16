@@ -40,7 +40,7 @@
     "@types/lodash": "^4.17.20",
     "@types/node": "^20.19.0",
     "jest": "^29.7.0",
-    "ts-jest": "^29.3.4",
+    "ts-jest": "^29.4.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "@internal/types-builder": "workspace:*"
