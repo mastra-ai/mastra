@@ -50,7 +50,7 @@ importers:
         specifier: link:../../voice/openai
         version: link:../../voice/openai
       ai:
-        specifier: ^4.3.16
+        specifier: ^4.3.19
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       fetch-to-node:
         specifier: ^2.1.0
