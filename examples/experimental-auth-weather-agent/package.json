@@ -21,7 +21,7 @@
     "@mastra/auth-auth0": "latest",
     "@mastra/auth-workos": "latest",
     "@mastra/auth-clerk": "latest",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "dotenv-cli": "^8.0.0"

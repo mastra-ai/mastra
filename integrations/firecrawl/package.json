@@ -53,7 +53,7 @@
     "@hey-api/client-fetch": "^0.3.4",
     "@mastra/rag": "workspace:^",
     "ts-to-zod": "^3.15.0",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.7-0 <0.14.0-0"

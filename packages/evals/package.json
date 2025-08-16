@@ -88,7 +88,7 @@
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.13.0-0 <0.14.0-0",
