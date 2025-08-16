@@ -17,7 +17,7 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.23",
+    "@ai-sdk/openai": "^1.3.24",
     "@e2b/code-interpreter": "^1.5.1",
     "@mastra/core": "latest",
     "@mastra/fastembed": "latest",
