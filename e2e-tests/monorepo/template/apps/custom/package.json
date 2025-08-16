@@ -19,7 +19,7 @@
     "@inner/hello-world": "workspace:*",
     "date-fns": "^2.30.0",
     "lodash": "^4.17.21",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "mastra": "monorepo-test"

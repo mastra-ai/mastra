@@ -17,7 +17,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {

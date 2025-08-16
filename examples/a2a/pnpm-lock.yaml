@@ -32,7 +32,7 @@ importers:
         specifier: ^16.3.1
         version: 16.6.1
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       mastra:

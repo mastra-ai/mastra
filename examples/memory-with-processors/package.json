@@ -18,7 +18,7 @@
     "js-tiktoken": "^1.0.13",
     "tiktoken": "^1.0.13",
     "tsx": "^4.6.2",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {
