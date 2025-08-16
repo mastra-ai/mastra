@@ -31,7 +31,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "cloudflare": "^4.5.0",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250803.0",
