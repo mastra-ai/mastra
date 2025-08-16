@@ -1,7 +1,8 @@
 import { jsonSchema } from 'ai';
 import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
+import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
@@ -33,18 +34,23 @@ import type { SchemaCompatLayer } from './schema-compatibility';
  */
 // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
 export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
-  return jsonSchema(
-    zodToJsonSchema(zodSchema, {
+  let jsonSchemaToUse: JSONSchema7;
+  if ('toJSONSchema' in z) {
+    // @ts-ignore
+    jsonSchemaToUse = z.toJSONSchema(zodSchema) as JSONSchema7;
+  } else {
+    jsonSchemaToUse = zodToJsonSchema(zodSchema, {
       $refStrategy: 'none',
       target,
-    }) as JSONSchema7,
-    {
-      validate: value => {
-        const result = zodSchema.safeParse(value);
-        return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
-      },
+    }) as JSONSchema7;
+  }
+
+  return jsonSchema(jsonSchemaToUse, {
+    validate: value => {
+      const result = zodSchema.safeParse(value);
+      return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
     },
-  );
+  });
 }
 
 /**
@@ -195,7 +201,7 @@ export function applyCompatLayer({
       return mode === 'jsonSchema' ? compat.processToJSONSchema(zodSchema) : compat.processToAISDKSchema(zodSchema);
     }
   }
-
+  debugger;
   // If no compatibility applied, convert back to appropriate format
   if (mode === 'jsonSchema') {
     return zodToJsonSchema(zodSchema, { $refStrategy: 'none', target: 'jsonSchema7' }) as JSONSchema7;

@@ -1161,7 +1161,7 @@ export class Agent<
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
           writableStream,
         };
-
+        console.log({ tool, options });
         return [k, makeCoreTool(tool, options)];
       }),
     );
@@ -1553,6 +1553,8 @@ export class Agent<
           runtimeContext,
           writableStream,
         });
+
+        console.log({ convertedTools });
 
         const messageList = new MessageList({
           threadId,
