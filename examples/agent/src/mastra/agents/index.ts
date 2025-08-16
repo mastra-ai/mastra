@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai';
+import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
@@ -48,7 +49,7 @@ export const chefAgent = new Agent({
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. 
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
-  model: openai('gpt-4o-mini'),
+  model: openai_v5('gpt-4o-mini'),
   tools: {
     cookingTool,
     weatherInfo,

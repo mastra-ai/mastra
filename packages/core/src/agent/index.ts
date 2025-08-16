@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { ReadableStream, WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
+import { asSchema } from 'ai-v5';
+import type { ModelMessage, StopCondition, ToolChoice } from 'ai-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
@@ -16,16 +18,19 @@ import type {
   GenerateReturn,
   GenerateObjectResult,
   GenerateTextResult,
-  StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
+  StreamTextWithMessagesArgs,
   StreamReturn,
   ToolSet,
   OriginalStreamTextOnFinishEventArg,
   OriginalStreamObjectOnFinishEventArg,
   StreamTextResult,
 } from '../llm/model/base.types';
+import { MastraLLMVNext } from '../llm/model/model.loop';
+import type { ModelLoopStreamArgs } from '../llm/model/model.loop.types';
 import type { TripwireProperties } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
+import type { LoopConfig } from '../loop/types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -60,6 +65,8 @@ import type {
   ToolsInput,
   AgentMemoryOption,
 } from './types';
+export type { ChunkType } from '../stream/types';
+export type { MastraAgentStream } from '../stream/MastraAgentStream';
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
@@ -605,7 +612,7 @@ export class Agent<
   }: {
     runtimeContext?: RuntimeContext;
     model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
-  } = {}): MastraLLMV1 | Promise<MastraLLMV1> {
+  } = {}): MastraLLMV1 | MastraLLMVNext | Promise<MastraLLMV1 | MastraLLMVNext> {
     // If model is provided, resolve it; otherwise use the agent's model
     const modelToUse = model
       ? typeof model === 'function'
@@ -614,7 +621,12 @@ export class Agent<
       : this.getModel({ runtimeContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
-      const llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
+      let llm: MastraLLMV1 | MastraLLMVNext;
+      if (resolvedModel.specificationVersion === 'v1') {
+        llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
+      } else {
+        llm = new MastraLLMVNext({ model: resolvedModel, mastra: this.#mastra });
+      }
 
       // Apply stored primitives if available
       if (this.#primitives) {
@@ -757,19 +769,43 @@ export class Agent<
     // Resolve instructions using the dedicated method
     const systemInstructions = await this.resolveTitleInstructions(runtimeContext, instructions);
 
-    const { text } = await llm.__text({
-      runtimeContext,
-      messages: [
-        {
-          role: 'system',
-          content: systemInstructions,
-        },
-        {
-          role: 'user',
-          content: JSON.stringify(partsToGen),
-        },
-      ],
-    });
+    let text = '';
+
+    if (llm.getModel().specificationVersion === 'v1') {
+      const result = await (llm as MastraLLMV1).__text({
+        runtimeContext,
+        messages: [
+          {
+            role: 'system',
+            content: systemInstructions,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(partsToGen),
+          },
+        ],
+      });
+
+      text = result.text;
+    } else {
+      const res = (llm as MastraLLMVNext).stream({
+        runtimeContext,
+        messages: [
+          {
+            role: 'system',
+            content: systemInstructions,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(partsToGen),
+          },
+        ],
+      });
+
+      const result = await res.getFullOutput();
+
+      text = result.text;
+    }
 
     // Strip out any r1 think tags if present
     const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
@@ -1794,7 +1830,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runId,
           result: resToLog,
           threadId,
+          resourceId,
         });
+
         const messageListResponses = new MessageList({
           threadId,
           resourceId,
@@ -1833,12 +1871,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 },
               ];
             }
+
             if (responseMessages) {
               // Remove IDs from response messages to ensure the custom ID generator is used
-              const messagesWithoutIds = responseMessages.map((m: any) => {
-                const { id, ...messageWithoutId } = m;
-                return messageWithoutId;
-              });
+              // @TODO: PREV VERSION DIDNT RETURN USER MESSAGES, SO WE FILTER THEM OUT
+              const messagesWithoutIds = responseMessages
+                .map((m: any) => {
+                  const { id, ...messageWithoutId } = m;
+                  return messageWithoutId;
+                })
+                .filter((m: any) => m.role !== 'user');
+
               messageList.add(messagesWithoutIds, 'response');
             }
 
@@ -2030,7 +2073,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
     }) => Promise<void>;
-    llm: MastraLLMV1;
+    llm: MastraLLMV1 | MastraLLMVNext;
   }>;
   private prepareLLMOptions<
     Tools extends ToolSet,
@@ -2056,7 +2099,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
     }) => Promise<void>;
-    llm: MastraLLMV1;
+    llm: MastraLLMV1 | MastraLLMVNext;
   }>;
   private async prepareLLMOptions<
     Tools extends ToolSet,
@@ -2097,7 +2140,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
           outputText: string;
         }) => Promise<void>);
-    llm: MastraLLMV1;
+    llm: MastraLLMV1 | MastraLLMVNext;
   }> {
     const {
       context,
@@ -2263,6 +2306,334 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
   }
 
+  async generate_vnext<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    generateOptions?: {
+      // @TODO: NEED TO SUPPORT
+      savePerStep?: boolean;
+      onStepFinish?: LoopConfig['onStepFinish'];
+      runtimeContext?: RuntimeContext;
+      format?: 'mastra' | 'aisdk';
+      output?: OUTPUT;
+      resourceId?: string;
+      threadId?: string;
+      memory?: AgentMemoryOption;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+      abortSignal?: AbortSignal;
+      toolChoice?: ToolChoice<any>;
+      stopWhen?: StopCondition<any>;
+      clientTools?: ToolsInput;
+    },
+  ) {
+    let runtimeContext = generateOptions?.runtimeContext || new RuntimeContext();
+    const defaultGenerateOptions = await this.getDefaultGenerateOptions({
+      runtimeContext,
+    });
+
+    const mergedGenerateOptions = {
+      ...defaultGenerateOptions,
+      ...generateOptions,
+      resourceId: generateOptions?.resourceId!,
+      threadId: generateOptions?.threadId!,
+    };
+
+    console.log('mergedGenerateOptions', mergedGenerateOptions);
+
+    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions);
+
+    if (llm.getModel().specificationVersion !== 'v2') {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'V1 models are not supported for generate_vnext. Please use generate instead.',
+      });
+    }
+
+    let llmToUse = llm as MastraLLMVNext;
+
+    const beforeResult = await before();
+
+    // Check for tripwire and return early if triggered
+    if (beforeResult.tripwire) {
+      const tripwireResult = {
+        text: '',
+        object: undefined,
+        usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
+        finishReason: 'other',
+        response: {
+          id: randomUUID(),
+          timestamp: new Date(),
+          modelId: 'tripwire',
+          messages: [],
+        },
+        responseMessages: [],
+        toolCalls: [],
+        toolResults: [],
+        warnings: undefined,
+        request: {
+          body: JSON.stringify({ messages: [] }),
+        },
+        experimental_output: undefined,
+        steps: undefined,
+        experimental_providerMetadata: undefined,
+        tripwire: true,
+        tripwireReason: beforeResult.tripwireReason,
+      };
+
+      return tripwireResult as unknown as OUTPUT extends undefined
+        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+        : GenerateObjectResult<OUTPUT>;
+    }
+
+    const loopOptions: ModelLoopStreamArgs<any, any> = {
+      messages: beforeResult.messages as ModelMessage[],
+      runtimeContext,
+      toolChoice: mergedGenerateOptions.toolChoice,
+      tools: beforeResult.tools,
+      stopWhen: mergedGenerateOptions.stopWhen,
+      resourceId: beforeResult.resourceId,
+      threadId: beforeResult.threadId,
+      options: {
+        onStepFinish: (beforeResult as any).onStepFinish,
+      },
+    };
+
+    const { experimental_output, output } = beforeResult;
+
+    if (!output || experimental_output) {
+      const result = llmToUse.stream({
+        ...loopOptions,
+      });
+
+      let fullOutput = await (mergedGenerateOptions.format === 'aisdk'
+        ? result.aisdk.v5.getFullOutput()
+        : result.getFullOutput());
+
+      const error = fullOutput.error;
+
+      if (fullOutput.finishReason === 'error' && error) {
+        throw error;
+      }
+
+      await after({
+        result: fullOutput as unknown as OUTPUT extends undefined
+          ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+          : GenerateObjectResult<OUTPUT>,
+        outputText: result.text,
+      });
+
+      return fullOutput as unknown as OUTPUT extends undefined
+        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+        : GenerateObjectResult<OUTPUT>;
+    }
+
+    const result = llmToUse.stream({
+      ...loopOptions,
+      objectOptions: {
+        schema: output,
+        output: asSchema(output).jsonSchema.type === 'array' ? 'array' : 'object',
+      },
+    });
+
+    let fullOutput = await (mergedGenerateOptions.format === 'aisdk'
+      ? result.aisdk.v5.getFullOutput()
+      : result.getFullOutput());
+
+    const error = fullOutput.error;
+
+    if (fullOutput.finishReason === 'error' && error) {
+      throw error;
+    }
+
+    await after({
+      result: fullOutput as unknown as OUTPUT extends undefined
+        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+        : GenerateObjectResult<OUTPUT>,
+      outputText: result.text,
+    });
+
+    return fullOutput as unknown as OUTPUT extends undefined
+      ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+      : GenerateObjectResult<OUTPUT>;
+  }
+
+  async stream_vnext<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: MessageListInput,
+    streamOptions?: {
+      savePerStep?: boolean;
+      runtimeContext?: RuntimeContext;
+      format?: 'mastra' | 'aisdk';
+      output?: OUTPUT;
+      resourceId?: string;
+      threadId?: string;
+      memory?: AgentMemoryOption;
+      abortSignal?: AbortSignal;
+      toolChoice?: ToolChoice<any>;
+      clientTools?: ToolsInput;
+      onStepFinish?: LoopConfig['onStepFinish'];
+    },
+  ) {
+    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions?.runtimeContext });
+
+    const mergedStreamOptions = {
+      ...defaultStreamOptions,
+      ...streamOptions,
+      resourceId: streamOptions?.resourceId!,
+      threadId: streamOptions?.threadId!,
+    };
+
+    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+
+    if (llm.getModel().specificationVersion !== 'v2') {
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'V1 models are not supported for stream_vnext. Please use stream instead.',
+      });
+    }
+
+    let llmToUse = llm as MastraLLMVNext;
+
+    const beforeResult = await before();
+
+    // TODO: CHANGE SHAPE BASED ON FORMAT
+    // Check for tripwire and return early if triggered
+    if (beforeResult.tripwire) {
+      // Return a promise that resolves immediately with empty result
+      const emptyResult = {
+        textStream: (async function* () {
+          // Empty async generator - yields nothing
+        })(),
+        fullStream: new (globalThis as any).ReadableStream({
+          start(controller: any) {
+            controller.close();
+          },
+        }),
+        objectStream: new (globalThis as any).ReadableStream({
+          start(controller: any) {
+            controller.close();
+          },
+        }),
+        text: Promise.resolve(''),
+        usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
+        finishReason: Promise.resolve('other'),
+        tripwire: true,
+        tripwireReason: beforeResult.tripwireReason,
+        response: {
+          id: randomUUID(),
+          timestamp: new Date(),
+          modelId: 'tripwire',
+          messages: [],
+        },
+        toolCalls: Promise.resolve([]),
+        toolResults: Promise.resolve([]),
+        warnings: Promise.resolve(undefined),
+        request: {
+          body: JSON.stringify({ messages: [] }),
+        },
+        object: undefined,
+        experimental_output: undefined,
+        steps: undefined,
+        experimental_providerMetadata: undefined,
+        toAIStream: () =>
+          Promise.resolve('').then(() => {
+            const emptyStream = new (globalThis as any).ReadableStream({
+              start(controller: any) {
+                controller.close();
+              },
+            });
+            return emptyStream;
+          }),
+        get experimental_partialOutputStream() {
+          return (async function* () {
+            // Empty async generator for partial output stream
+          })();
+        },
+        pipeDataStreamToResponse: () => Promise.resolve(),
+        pipeTextStreamToResponse: () => Promise.resolve(),
+        toDataStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+        toTextStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      };
+
+      return emptyResult;
+    }
+
+    const { experimental_output, output, runId, onFinish } = beforeResult;
+
+    const loopOptions: ModelLoopStreamArgs<any, any> = {
+      messages: beforeResult.messages as ModelMessage[],
+      runtimeContext: mergedStreamOptions.runtimeContext!,
+      runId,
+      toolChoice: mergedStreamOptions.toolChoice,
+      tools: beforeResult.tools,
+      resourceId: beforeResult.resourceId,
+      threadId: beforeResult.threadId,
+      options: {
+        onFinish: async (result: any) => {
+          if (result.finishReason === 'error') {
+            this.logger.error('Error in agent stream', {
+              error: result.error,
+              runId,
+            });
+            return;
+          }
+
+          try {
+            const outputText = result.text;
+            await after({
+              result,
+              outputText,
+            });
+          } catch (e) {
+            this.logger.error('Error saving memory on finish', {
+              error: e,
+              runId,
+            });
+          }
+          await onFinish?.({ ...result, runId } as any);
+        },
+        onStepFinish: (beforeResult as any).onStepFinish,
+      },
+    };
+
+    if (!output || experimental_output) {
+      this.logger.debug(`Starting agent ${this.name} llm stream call`, {
+        runId,
+      });
+
+      const streamResult = llmToUse.stream({
+        ...loopOptions,
+        // experimental_output,
+      });
+
+      if (mergedStreamOptions.format === 'aisdk') {
+        return streamResult.aisdk.v5;
+      }
+
+      return streamResult;
+    }
+
+    const result = llmToUse.stream({
+      ...loopOptions,
+      objectOptions: {
+        schema: output,
+        // TODO: SIMPLIFY THIS BY NOT NEEDING IT
+        output: asSchema(output).jsonSchema.type === 'array' ? 'array' : 'object',
+      },
+    });
+
+    if (mergedStreamOptions.format === 'aisdk') {
+      return result.aisdk.v5;
+    }
+
+    return result;
+  }
+
   async generate(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -2294,6 +2665,25 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions);
+
+    if (llm.getModel().specificationVersion !== 'v1') {
+      this.logger.error('V2 models are not supported for generate. Please use generate_vnext instead.', {
+        modelId: llm.getModel().modelId,
+      });
+
+      throw new MastraError({
+        id: 'AGENT_GENERATE_V2_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          modelId: llm.getModel().modelId,
+        },
+        text: 'V2 models are not supported for generate. Please use generate_vnext instead.',
+      });
+    }
+
+    let llmToUse = llm as MastraLLMV1;
+
     const beforeResult = await before();
 
     // Check for tripwire and return early if triggered
@@ -2340,7 +2730,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     }
 
     if (!output || experimental_output) {
-      const result = await llm.__text<any, EXPERIMENTAL_OUTPUT>({
+      const result = await llmToUse.__text<any, EXPERIMENTAL_OUTPUT>({
         ...llmOptions,
         experimental_output,
       });
@@ -2447,7 +2837,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         : GenerateObjectResult<OUTPUT>;
     }
 
-    const result = await llm.__textObject<NonNullable<OUTPUT>>({
+    const result = await llmToUse.__textObject<NonNullable<OUTPUT>>({
       ...llmOptions,
       structuredOutput: output as NonNullable<OUTPUT>,
     });
@@ -2578,6 +2968,23 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+
+    if (llm.getModel().specificationVersion !== 'v1') {
+      this.logger.error('V2 models are not supported for stream. Please use stream_vnext instead.', {
+        modelId: llm.getModel().modelId,
+      });
+
+      throw new MastraError({
+        id: 'AGENT_STREAM_V2_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          modelId: llm.getModel().modelId,
+        },
+        text: 'V2 models are not supported for stream. Please use stream_vnext instead.',
+      });
+    }
+
     const beforeResult = await before();
 
     // Check for tripwire and return early if triggered
@@ -2642,12 +3049,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const { onFinish, runId, output, experimental_output, ...llmOptions } = beforeResult;
 
+    let llmToUse = llm as MastraLLMV1;
+
     if (!output || experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
 
-      const streamResult = llm.__stream({
+      const streamResult = llmToUse.__stream({
         ...llmOptions,
         experimental_output,
         onFinish: async result => {
@@ -2677,7 +3086,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runId,
     });
 
-    return llm.__streamObject({
+    return llmToUse.__streamObject({
       ...llmOptions,
       onFinish: async result => {
         try {
@@ -2750,8 +3159,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         };
 
         const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+
+        if (llm.getModel().specificationVersion !== 'v1') {
+          throw new MastraError({
+            id: 'AGENT_STREAM_V2_MODEL_NOT_SUPPORTED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              modelId: llm.getModel().modelId,
+            },
+          });
+        }
+
         const { onFinish, runId, output, experimental_output, ...llmOptions } = await before();
 
+        let llmToUse = llm as MastraLLMV1;
         // Use processor overrides if provided, otherwise fall back to agent's default
         let effectiveOutputProcessors =
           mergedStreamOptions.outputProcessors ||
@@ -2772,7 +3194,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
 
         if (output) {
-          const streamResult = llm.__streamObject({
+          const streamResult = llmToUse.__streamObject({
             ...llmOptions,
             onFinish: async result => {
               try {
@@ -2840,7 +3262,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
           return Promise.resolve(streamResult.fullStream as unknown as ReadableStream<any>);
         } else {
-          const streamResult = llm.__stream({
+          const streamResult = llmToUse.__stream({
             ...llmOptions,
             experimental_output,
             onFinish: async result => {

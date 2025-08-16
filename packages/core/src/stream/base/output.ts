@@ -1,5 +1,5 @@
 import type { ReadableStream } from 'stream/web';
-import { TransformStream } from 'stream/web';
+import { TextEncoderStream, TransformStream } from 'stream/web';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
 import type { TelemetrySettings } from 'ai-v5';
@@ -14,6 +14,19 @@ import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 
+export class JsonToSseTransformStream extends TransformStream<unknown, string> {
+  constructor() {
+    super({
+      transform(part, controller) {
+        controller.enqueue(`data: ${JSON.stringify(part)}\n\n`);
+      },
+      flush(controller) {
+        controller.enqueue('data: [DONE]\n\n');
+      },
+    });
+  }
+}
+
 type MastraModelOutputOptions = {
   runId: string;
   rootSpan?: Span;
@@ -26,6 +39,7 @@ type MastraModelOutputOptions = {
 };
 export class MastraModelOutput extends MastraBase {
   #aisdkv5: AISDKV5OutputStream;
+  #error: Error | string | { message: string; stack: string } | undefined;
   #baseStream: ReadableStream<any>;
   #bufferedSteps: StepBufferItem[] = [];
   #bufferedReasoningDetails: Record<
@@ -247,6 +261,7 @@ export class MastraModelOutput extends MastraBase {
                     // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
                     content: messageList.get.response.aiV5.stepContent(),
                     request: this.request,
+                    error: self.error,
                     reasoning: this.aisdk.v5.reasoning,
                     reasoningText: !this.aisdk.v5.reasoningText ? undefined : this.aisdk.v5.reasoningText,
                     sources: this.aisdk.v5.sources,
@@ -329,6 +344,10 @@ export class MastraModelOutput extends MastraBase {
                 options.rootSpan.end();
               }
 
+              break;
+
+            case 'error':
+              self.#error = chunk.payload.error;
               break;
           }
 
@@ -439,6 +458,16 @@ export class MastraModelOutput extends MastraBase {
     return this.#request;
   }
 
+  get error() {
+    if (typeof this.#error === 'object') {
+      const error = new Error(this.#error.message);
+      error.stack = this.#error.stack;
+      return error;
+    }
+
+    return this.#error;
+  }
+
   updateUsageCount(usage: Record<string, number>) {
     if (!usage) {
       return;
@@ -461,6 +490,14 @@ export class MastraModelOutput extends MastraBase {
     }
   }
 
+  // toUIMessageStreamResponse() {
+  //   const stream = this.teeStream()
+  //     .pipeThrough(new JsonToSseTransformStream())
+  //     .pipeThrough(new TextEncoderStream())
+
+  //   return new Response(stream as BodyInit);
+  // }
+
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
     try {
       await consumeStream({
@@ -474,13 +511,16 @@ export class MastraModelOutput extends MastraBase {
         onError: options?.onError,
       });
     } catch (error) {
-      console.log('consumeStream error', error);
       options?.onError?.(error);
     }
   }
 
   async getFullOutput() {
-    await this.consumeStream();
+    await this.consumeStream({
+      onError: (error: any) => {
+        throw error;
+      },
+    });
 
     let object: any;
     if (this.#options.objectOptions) {
@@ -504,6 +544,7 @@ export class MastraModelOutput extends MastraBase {
       response: this.response,
       totalUsage: this.totalUsage,
       object,
+      error: this.error,
       // experimental_output: // TODO
     };
   }
@@ -574,11 +615,8 @@ export class MastraModelOutput extends MastraBase {
 
   get textStream() {
     const self = this;
-    if (self.#options.objectOptions) {
-      const responseFormat = getResponseFormat(self.#options.objectOptions);
-      if (responseFormat?.type === 'json') {
-        return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
-      }
+    if (self.#options.objectOptions?.output === 'array') {
+      return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
     }
 
     return this.teeStream().pipeThrough(

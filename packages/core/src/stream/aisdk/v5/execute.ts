@@ -24,6 +24,11 @@ type ExecutionProps = {
   modelSettings?: CallSettings;
   onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
   objectOptions?: ObjectOptions;
+  /**
+  Additional HTTP headers to be sent with the request.
+  Only applicable for HTTP-based providers.
+  */
+  headers?: Record<string, string | undefined>;
 };
 
 export function execute({
@@ -40,6 +45,7 @@ export function execute({
   includeRawChunks,
   modelSettings,
   objectOptions,
+  headers,
 }: ExecutionProps) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -70,7 +76,8 @@ export function execute({
           abortSignal: options?.abortSignal,
           includeRawChunks,
           responseFormat: objectOptions ? getResponseFormat(objectOptions) : undefined,
-          ...modelSettings,
+          ...(modelSettings ?? {}),
+          headers,
         });
         return stream as any;
       } catch (error) {
@@ -84,7 +91,10 @@ export function execute({
             start: async controller => {
               controller.enqueue({
                 type: 'error',
-                error,
+                error: {
+                  message: error instanceof Error ? error.message : JSON.stringify(error),
+                  stack: error instanceof Error ? error.stack : undefined,
+                },
               });
               controller.close();
             },

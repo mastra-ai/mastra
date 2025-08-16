@@ -6785,7 +6785,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let pullCalls = 0;
         let streamCalls = 0;
 
-        result = await loopFn({
+        result = loopFn({
           runId,
           messageList: new MessageList(),
           model: new MockLanguageModelV2({

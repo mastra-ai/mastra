@@ -16,16 +16,31 @@ function getOutputSchema({ schema, output }: { schema?: Parameters<typeof asSche
 
   if (output === 'array') {
     const { $schema, ...itemSchema } = jsonSchema;
-    const arrayOutputSchema: JSONSchema7 = {
-      $schema: $schema,
-      type: 'object',
-      properties: {
-        elements: { type: 'array', items: itemSchema },
-      },
-      required: ['elements'],
-      additionalProperties: false,
-    };
-    return arrayOutputSchema;
+    if (itemSchema.type === 'array') {
+      const innerElement = itemSchema.items;
+      const arrayOutputSchema: JSONSchema7 = {
+        $schema: $schema,
+        type: 'object',
+        properties: {
+          elements: { type: 'array', items: innerElement },
+        },
+        required: ['elements'],
+        additionalProperties: false,
+      };
+
+      return arrayOutputSchema;
+    } else {
+      const arrayOutputSchema: JSONSchema7 = {
+        $schema: $schema,
+        type: 'object',
+        properties: {
+          elements: { type: 'array', items: itemSchema },
+        },
+        required: ['elements'],
+        additionalProperties: false,
+      };
+      return arrayOutputSchema;
+    }
   }
 
   return jsonSchema;

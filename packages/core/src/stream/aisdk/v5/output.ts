@@ -173,6 +173,14 @@ export class AISDKV5OutputStream {
       .filter(Boolean);
   }
 
+  get text() {
+    return this.#modelOutput.text;
+  }
+
+  get objectStream() {
+    return this.#modelOutput.objectStream;
+  }
+
   get generateTextFiles() {
     return this.#modelOutput.files
       .map(file => {
@@ -229,6 +237,10 @@ export class AISDKV5OutputStream {
 
   get content() {
     return this.#messageList.get.response.aiV5.modelContent();
+  }
+
+  get textStream() {
+    return this.#modelOutput.textStream;
   }
 
   get fullStream() {
@@ -298,9 +310,14 @@ export class AISDKV5OutputStream {
       response: this.response,
       content: this.content,
       totalUsage: this.#modelOutput.totalUsage,
+      error: this.error,
       ...(object ? { object } : {}),
       // experimental_output: // TODO
     };
+  }
+
+  get error() {
+    return this.#modelOutput.error;
   }
 
   get object() {

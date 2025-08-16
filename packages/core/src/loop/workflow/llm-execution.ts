@@ -354,6 +354,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
   toolCallStreaming,
   controller,
   objectOptions,
+  headers,
 }: OuterLLMRun<Tools>) {
   return createStep({
     id: 'llm-execution',
@@ -364,8 +365,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         _internal: _internal!,
         model,
       });
-
-      console.log('Starting LLM Execution Step');
 
       let modelResult;
       let warnings: any;
@@ -386,6 +385,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
             telemetry_settings,
             includeRawChunks,
             objectOptions,
+            headers,
             onResult: ({
               warnings: warningsFromStream,
               request: requestFromStream,
@@ -489,6 +489,13 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
             },
           });
         }
+
+        controller.enqueue({
+          type: 'error',
+          runId,
+          from: 'AGENT',
+          payload: { error },
+        });
 
         runState.setState({
           hasErrored: true,

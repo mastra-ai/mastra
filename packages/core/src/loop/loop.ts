@@ -80,6 +80,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
     tools,
     modelStreamSpan,
     telemetry_settings,
+    modelSettings,
     ...rest,
   };
 

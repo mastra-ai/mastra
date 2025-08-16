@@ -1,4 +1,4 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import { Agent, type MastraLanguageModel } from '@mastra/core/agent';
 import { defaultKeywordExtractPrompt, PromptTemplate } from '../prompts';
 import type { KeywordExtractPrompt } from '../prompts';
 import type { BaseNode } from '../schema';
@@ -64,33 +64,47 @@ export class KeywordExtractor extends BaseExtractor {
 
     let keywords = '';
     try {
-      const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
-        prompt: [
+      const miniAgent = new Agent({
+        model: this.llm,
+        name: 'keyword-extractor',
+        instructions:
+          'You are a keyword extractor. You are given a node and you need to extract the keywords from the node.',
+      });
+
+      if (this.llm.specificationVersion === 'v1') {
+        const result = await miniAgent.generate([
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: this.promptTemplate.format({
-                  context: node.getContent(),
-                  maxKeywords: this.keywords.toString(),
-                }),
-              },
-            ],
+            content: this.promptTemplate.format({ context: node.getContent(), maxKeywords: this.keywords.toString() }),
           },
-        ],
-      });
-      if (typeof completion.text === 'string') {
-        keywords = completion.text.trim();
+        ]);
+        keywords = result.text;
       } else {
-        console.warn('Keyword extraction LLM output was not a string:', completion.text);
+        const result = await miniAgent.generate_vnext(
+          [
+            {
+              role: 'user',
+              content: this.promptTemplate.format({
+                context: node.getContent(),
+                maxKeywords: this.keywords.toString(),
+              }),
+            },
+          ],
+          { format: 'mastra' },
+        );
+        keywords = result.text;
       }
+
+      if (!keywords) {
+        console.warn('Keyword extraction LLM output returned empty');
+        return { excerptKeywords: '' };
+      }
+
+      return { excerptKeywords: keywords.trim() };
     } catch (err) {
       console.warn('Keyword extraction failed:', err);
+      return { excerptKeywords: '' };
     }
-    return { excerptKeywords: keywords };
   }
 
   /**

@@ -25,7 +25,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
 import { delay } from '../../utils';
 
-import type { StreamTextWithMessagesArgs } from './model.loop.types';
+import type { ModelLoopStreamArgs } from './model.loop.types';
 
 export class MastraLLMVNext extends MastraBase {
   #model: LanguageModelV2;
@@ -121,8 +121,6 @@ export class MastraLLMVNext extends MastraBase {
 
   stream<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined = undefined>({
     messages,
-    onStepFinish,
-    onFinish,
     stopWhen = stepCountIs(5),
     tools = {},
     runId,
@@ -133,8 +131,9 @@ export class MastraLLMVNext extends MastraBase {
     threadId,
     resourceId,
     objectOptions,
+    options,
     // ...rest
-  }: StreamTextWithMessagesArgs<Tools, Z>): MastraModelOutput {
+  }: ModelLoopStreamArgs<Tools, Z>): MastraModelOutput {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -164,7 +163,10 @@ export class MastraLLMVNext extends MastraBase {
     }
 
     try {
-      const messageList = new MessageList();
+      const messageList = new MessageList({
+        threadId,
+        resourceId,
+      });
       messageList.add(messages, 'input');
 
       const loopOptions: LoopOptions<Tools> = {
@@ -182,9 +184,10 @@ export class MastraLLMVNext extends MastraBase {
         },
         objectOptions,
         options: {
+          ...options,
           onStepFinish: async props => {
             try {
-              await onStepFinish?.({ ...props, runId: runId! });
+              await options?.onStepFinish?.({ ...props, runId: runId! });
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {
@@ -229,7 +232,7 @@ export class MastraLLMVNext extends MastraBase {
 
           onFinish: async props => {
             try {
-              await onFinish?.({ ...props, runId: runId! });
+              await options?.onFinish?.({ ...props, runId: runId! });
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {

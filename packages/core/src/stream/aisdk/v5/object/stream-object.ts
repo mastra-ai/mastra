@@ -38,7 +38,7 @@ export function createObjectStreamTransformer({
 
   return new TransformStream({
     async transform(chunk, controller) {
-      if (!objectOptions) {
+      if (responseFormat.type !== 'json') {
         controller.enqueue(chunk);
         return;
       }
@@ -82,7 +82,11 @@ export function createObjectStreamTransformer({
 
             textPreviousObject = currentObjectJson;
           }
-        } else if (objectOptions?.output === 'no-schema' || !objectOptions?.output) {
+        } else if (
+          objectOptions?.output === 'no-schema' ||
+          !objectOptions?.output ||
+          objectOptions?.output === 'object'
+        ) {
           textAccumulatedText += chunk.payload.text;
           const { value: currentObjectJson } = await parsePartialJson(textAccumulatedText);
 

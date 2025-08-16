@@ -7,6 +7,7 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
+import type { AISDKV5OutputStream } from '@mastra/core/stream';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
@@ -84,14 +85,17 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           }
         }
 
+        const model = llm?.getModel();
+
         return {
           id,
           name: agent.name,
           instructions,
           tools: serializedAgentTools,
           workflows: serializedAgentWorkflows,
-          provider: llm?.getProvider(),
-          modelId: llm?.getModelId(),
+          provider: model?.provider,
+          modelId: model?.modelId,
+          modelVersion: model?.specificationVersion,
           defaultGenerateOptions: defaultGenerateOptions as any,
           defaultStreamOptions: defaultStreamOptions as any,
         };
@@ -177,13 +181,16 @@ export async function getAgentByIdHandler({
     const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
     const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
+    const model = llm?.getModel();
+
     return {
       name: agent.name,
       instructions,
       tools: serializedAgentTools,
       workflows: serializedAgentWorkflows,
-      provider: llm?.getProvider(),
-      modelId: llm?.getModelId(),
+      provider: model?.provider,
+      modelId: model?.modelId,
+      modelVersion: model?.specificationVersion,
       defaultGenerateOptions: defaultGenerateOptions as any,
       defaultStreamOptions: defaultStreamOptions as any,
     };
@@ -281,6 +288,50 @@ export async function generateHandler({
   }
 }
 
+export async function vnext_generateHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'generate'> & {
+    runtimeContext?: Record<string, unknown>;
+    format: 'mastra' | 'aisdk';
+  };
+  abortSignal?: AbortSignal;
+}) {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const result = await agent.generate_vnext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      format: rest.format,
+      abortSignal,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error generating from agent');
+  }
+}
+
 export async function streamGenerateHandler({
   mastra,
   runtimeContext,
@@ -341,6 +392,91 @@ export async function streamGenerateHandler({
         });
 
     return streamResponse;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export function vnext_streamGenerateHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'stream_vnext'> & {
+    runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
+  };
+  abortSignal?: AbortSignal;
+}): ReturnType<Agent['stream_vnext']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const streamResult = agent.stream_vnext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      abortSignal,
+      format: body.format ?? 'mastra',
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export async function vnext_uiMessageHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'stream_vnext'> & {
+    runtimeContext?: string;
+  };
+  abortSignal?: AbortSignal;
+}): Promise<Response | undefined> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const streamResult = (await agent.stream_vnext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      abortSignal,
+      format: 'aisdk',
+    })) as AISDKV5OutputStream;
+
+    return streamResult.toUIMessageStreamResponse();
   } catch (error) {
     return handleError(error, 'error streaming agent response');
   }
