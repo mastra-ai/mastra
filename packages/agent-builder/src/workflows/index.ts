@@ -1357,8 +1357,8 @@ Previous iterations may have fixed some issues, so start by re-running validateC
 });
 
 // Create the complete workflow
-export const mergeTemplateWorkflow = createWorkflow({
-  id: 'merge-template',
+export const agentBuilderTemplateWorkflow = createWorkflow({
+  id: 'agent-builder-template',
   description:
     'Merges a Mastra template repository into the current project using intelligent AgentBuilder-powered merging',
   inputSchema: MergeInputSchema,
@@ -1511,7 +1511,7 @@ export const mergeTemplateWorkflow = createWorkflow({
 // Helper to merge a template by slug
 export async function mergeTemplateBySlug(slug: string, targetPath?: string) {
   const template = await getMastraTemplate(slug);
-  const run = await mergeTemplateWorkflow.createRunAsync();
+  const run = await agentBuilderTemplateWorkflow.createRunAsync();
   return await run.start({
     inputData: {
       repo: template.githubUrl,

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { fetchMastraTemplates } from '../../src/utils';
-import { mergeTemplateWorkflow } from '../../src/workflows';
+import { agentBuilderTemplateWorkflow } from '../../src/workflows';
 
 function exec(cmd: string, cwd?: string): string {
   return execSync(cmd, { stdio: 'pipe', cwd, encoding: 'utf-8' });
@@ -36,7 +36,7 @@ describe('Template Workflow Integration Tests', () => {
   beforeAll(async () => {
     mastraInstance = new Mastra({
       workflows: {
-        mergeTemplateWorkflow,
+        agentBuilderTemplateWorkflow,
       },
     });
 
@@ -92,7 +92,7 @@ describe('Template Workflow Integration Tests', () => {
 
     console.log(`Starting template merge workflow in ${targetRepo}`);
 
-    const templateWorkflow = mastraInstance.getWorkflow(`mergeTemplateWorkflow`);
+    const templateWorkflow = mastraInstance.getWorkflow(`agentBuilderTemplateWorkflow`);
 
     // Run the merge template workflow
     const workflowRun = await templateWorkflow.createRunAsync();
@@ -285,7 +285,7 @@ describe('Template Workflow Integration Tests', () => {
 
     console.log('Testing duplicate template merge...');
 
-    const templateWorkflow = mastraInstance.getWorkflow(`mergeTemplateWorkflow`);
+    const templateWorkflow = mastraInstance.getWorkflow(`agentBuilderTemplateWorkflow`);
     const workflowRun = await templateWorkflow.createRunAsync();
     const result = await workflowRun.start({
       inputData: {
