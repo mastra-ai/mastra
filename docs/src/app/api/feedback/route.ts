@@ -10,6 +10,9 @@ interface FeedbackData {
 }
 
 // Notion database ID for feedback submissions (Marketing teamspace)
+// Required environment variables:
+// - NOTION_API_KEY: Notion integration API key
+// - SLACK_WEBHOOK_URL: Slack webhook URL for notifications (optional)
 const NOTION_DATABASE_ID = "a24777b679b04a38b713d55690b96dd1";
 
 type ErrorWithMessage = {
@@ -79,7 +82,10 @@ export async function POST(request: NextRequest) {
       source: "docs",
     };
 
+    console.log({ FeedbackEntry: feedbackEntry });
+    return;
     await sendToNotion(feedbackEntry);
+    await sendToSlack(feedbackEntry);
 
     return NextResponse.json(
       {
@@ -186,4 +192,111 @@ async function sendToNotion(feedback: any) {
 
   const result = await response.json();
   return result;
+}
+
+async function sendToSlack(feedback: any) {
+  const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+
+  if (!SLACK_WEBHOOK_URL) {
+    console.warn(
+      "SLACK_WEBHOOK_URL not configured, skipping Slack notification",
+    );
+    return;
+  }
+
+  const getRatingText = (rating: number | null) => {
+    if (!rating) return "No rating";
+    switch (rating) {
+      case 3:
+        return "😊 Helpful";
+      case 2:
+        return "😐 Somewhat helpful";
+      case 1:
+        return "😕 Not helpful";
+      default:
+        return "Unknown rating";
+    }
+  };
+
+  const ratingText = getRatingText(feedback.rating);
+
+  const page = `${process.env.NEXT_PUBLIC_APP_URL}${feedback.page}`;
+
+  const slackMessage = {
+    blocks: [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "📝 New Docs Feedback Received",
+          emoji: true,
+        },
+      },
+      {
+        type: "section",
+        fields: [
+          {
+            type: "mrkdwn",
+            text: `*Feedback ID:*\n\`${feedback.id}\``,
+          },
+          {
+            type: "mrkdwn",
+            text: `*Rating:*\n${ratingText}`,
+          },
+          {
+            type: "mrkdwn",
+            text: `*Page:*\n<${page}|View Docs Page>`,
+          },
+          {
+            type: "mrkdwn",
+            text: `*Source:*\n${feedback.source}`,
+          },
+        ],
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Feedback:*\n> ${feedback.feedback}`,
+        },
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `📍 IP: ${feedback.clientIP} | 🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent.split(" ")[0]}`,
+          },
+        ],
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `💡 <https://www.notion.so/a24777b679b04a38b713d55690b96dd1|View feedback database in Notion>`,
+          },
+        ],
+      },
+    ],
+  };
+
+  try {
+    const response = await fetch(SLACK_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(slackMessage),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `Slack webhook error: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+  } catch (error) {
+    console.error("Failed to send Slack notification:", error);
+  }
 }
