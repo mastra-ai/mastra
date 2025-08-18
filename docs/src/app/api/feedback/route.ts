@@ -199,7 +199,7 @@ async function sendToSlack(feedback: any) {
       case 1:
         return "😕 Not helpful";
       default:
-        return "Unknown rating";
+        return "No rating";
     }
   };
 
