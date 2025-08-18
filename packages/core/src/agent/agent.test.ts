@@ -100,7 +100,8 @@ class MockMemory extends MastraMemory {
     return messages;
   }
   async rememberMessages() {
-    return { messages: [], messagesV2: [] };
+    const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
+    return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
   }
   async getThreadsByResourceId() {
     return [];
@@ -3101,6 +3102,8 @@ describe('Agent save message parts', () => {
     });
 
     it(`should order tool calls/results and response text properly`, async () => {
+      const mockMemory = new MockMemory();
+
       const weatherTool = createTool({
         id: 'get_weather',
         description: 'Get the weather for a given location',
@@ -3123,6 +3126,7 @@ describe('Agent save message parts', () => {
         tools: {
           get_weather: weatherTool,
         },
+        memory: mockMemory,
       });
 
       // First, ask a question that will trigger a tool call
@@ -3150,6 +3154,25 @@ describe('Agent save message parts', () => {
         }),
       ]);
       expect(firstResponse.text).toContain('65');
+
+      const secondResponse = await agent.generate_vnext('What was the tool you just used?', {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+          options: {
+            lastMessages: 10,
+          },
+        },
+      });
+
+      expect(secondResponse.request.body.input).toEqual([
+        expect.objectContaining({ role: 'system' }),
+        expect.objectContaining({ role: 'user' }),
+        expect.objectContaining({ type: 'function_call' }),
+        expect.objectContaining({ type: 'function_call_output' }),
+        expect.objectContaining({ role: 'user' }),
+      ]);
+      expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
     }, 30_000);
   });
 
