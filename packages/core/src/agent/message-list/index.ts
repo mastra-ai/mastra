@@ -415,7 +415,7 @@ export class MessageList {
               }),
             };
           }
-          return c;
+          return { ...c };
         });
       },
     },
@@ -2086,7 +2086,21 @@ export class MessageList {
   }
 
   private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    return AIV5.convertToModelMessages(this.sanitizeV5UIMessages(messages));
+    return AIV5.convertToModelMessages(this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages)));
+  }
+  private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+    for (const message of messages) {
+      if (message.role !== `assistant`) continue;
+      for (const [index, part] of message.parts.entries()) {
+        if (!AIV5.isToolUIPart(part)) continue;
+        // If we don't insert step-start between tools and other parts, AIV5.convertToModelMessages will incorrectly add extra tool parts in the wrong order
+        // ex: ui message with parts: [tool-result, text] becomes [assistant-message-with-both-parts, tool-result-message], when it should become [tool-call-message, tool-result-message, text-message]
+        if (message.parts.at(index + 1)?.type !== `step-start`) {
+          message.parts.splice(index + 1, 0, { type: 'step-start' });
+        }
+      }
+    }
+    return messages;
   }
   private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     const msgs = messages
@@ -2221,6 +2235,11 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            if (parts.at(-1)?.type !== `step-start` && parts.at(-1)?.type !== `text`) {
+              parts.push({
+                type: 'step-start',
+              });
+            }
             parts.push({
               type: 'text',
               text: part.text,

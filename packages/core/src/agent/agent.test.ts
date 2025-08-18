@@ -21,6 +21,7 @@ import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import type { MastraMessageV2 } from './types';
 import { Agent } from './index';
+import { randomUUID } from 'crypto';
 
 config();
 
@@ -3098,6 +3099,58 @@ describe('Agent save message parts', () => {
         { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
       ]);
     });
+
+    it(`should order tool calls/results and response text properly`, async () => {
+      const weatherTool = createTool({
+        id: 'get_weather',
+        description: 'Get the weather for a given location',
+        inputSchema: z.object({
+          postalCode: z.string().describe('The location to get the weather for'),
+        }),
+        execute: async ({ context: { postalCode } }) => {
+          return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+        },
+      });
+
+      const threadId = randomUUID();
+      const resourceId = 'ordering';
+
+      const agent = new Agent({
+        id: 'test',
+        name: 'test',
+        model: openai5('gpt-4o-mini'),
+        instructions: `Testing tool calls! Please respond in a pirate accent`,
+        tools: {
+          get_weather: weatherTool,
+        },
+      });
+
+      // First, ask a question that will trigger a tool call
+      const firstResponse = await agent.generate_vnext('What is the weather in London?', {
+        threadId,
+        resourceId,
+        onStepFinish: args => {
+          args;
+        },
+      });
+
+      // The response should contain the weather.
+      expect(firstResponse.response.messages).toEqual([
+        expect.objectContaining({
+          role: 'assistant',
+          content: [expect.objectContaining({ type: 'tool-call' })],
+        }),
+        expect.objectContaining({
+          role: 'tool',
+          content: [expect.objectContaining({ type: 'tool-result' })],
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: [expect.objectContaining({ type: 'text' })],
+        }),
+      ]);
+      expect(firstResponse.text).toContain('65');
+    }, 30_000);
   });
 
   describe('streamVnext', () => {
