@@ -32,7 +32,7 @@ const agent = new Agent({
 
 ### Workflows (`/workflows`)
 
-Mastra workflows are a graph-basd execution engine allowing you to chain, branch, and parallelize LLM calls. You can orchestrate complex AI tasks by combining multiple actions. Workflows handle state management, error recovery, and can include conditional logic.
+Mastra workflows are a graph-based execution engine allowing you to chain, branch, and parallelize LLM calls. You can orchestrate complex AI tasks by combining multiple actions. Workflows handle state management, error recovery, and can include conditional logic.
 
 ```typescript
 import { createWorkflow } from '@mastra/core/workflows';
