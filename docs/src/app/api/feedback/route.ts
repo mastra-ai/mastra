@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 interface FeedbackData {
   feedback: string;
   rating?: number;
-  email?: string;
   page: string;
   userAgent?: string;
   timestamp: string;
@@ -32,8 +31,6 @@ function toErrorWithMessage(maybeError: unknown): ErrorWithMessage {
   try {
     return new Error(JSON.stringify(maybeError));
   } catch {
-    // fallback in case there's an error stringifying the maybeError
-    // like with circular references for example.
     return new Error(String(maybeError));
   }
 }
@@ -65,11 +62,15 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       "unknown";
 
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const timeStr = now.toTimeString().split(" ")[0].replace(/:/g, ""); // HHMMSS
+    const randomId = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4 char random
+
     const feedbackEntry = {
-      id: `feedback_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      id: `FEEDBACK-${dateStr}-${timeStr}-${randomId}`,
       feedback: body.feedback.trim(),
       rating: body.rating || null,
-      email: body.email?.trim() || null,
       page: body.page,
       userAgent:
         body.userAgent || request.headers.get("user-agent") || "unknown",
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Internal server error", message: getErrorMessage(error) },
       { status: 500 },
@@ -106,24 +108,49 @@ async function sendToNotion(feedback: any) {
   const notionUrl = `https://api.notion.com/v1/pages`;
 
   const payload: any = {
-    parent: { database_id: NOTION_DATABASE_ID },
+    parent: {
+      type: "database_id",
+      database_id: NOTION_DATABASE_ID,
+    },
     properties: {
       "Feedback ID": {
-        title: [{ text: { content: feedback.id } }],
+        title: [
+          {
+            type: "text",
+            text: { content: feedback.id },
+          },
+        ],
       },
       "Feedback Text": {
-        rich_text: [{ text: { content: feedback.feedback } }],
+        rich_text: [
+          {
+            type: "text",
+            text: { content: feedback.feedback },
+          },
+        ],
       },
       "Page URL": {
         url: feedback.page,
       },
       "User Agent": {
-        rich_text: [{ text: { content: feedback.userAgent } }],
+        rich_text: [
+          {
+            type: "text",
+            text: { content: feedback.userAgent },
+          },
+        ],
       },
       "Client IP": {
-        rich_text: [{ text: { content: feedback.clientIP } }],
+        rich_text: [
+          {
+            type: "text",
+            text: { content: feedback.clientIP },
+          },
+        ],
       },
-      "date:Timestamp:start": feedback.timestamp,
+      Timestamp: {
+        date: { start: feedback.timestamp },
+      },
       Source: {
         select: { name: feedback.source },
       },
@@ -135,11 +162,9 @@ async function sendToNotion(feedback: any) {
 
   // Add optional properties if they exist
   if (feedback.rating) {
-    payload.properties["Rating"] = { number: feedback.rating };
-  }
-
-  if (feedback.email) {
-    payload.properties["Email"] = { email: feedback.email };
+    payload.properties["Rating"] = {
+      number: feedback.rating,
+    };
   }
 
   const response = await fetch(notionUrl, {
