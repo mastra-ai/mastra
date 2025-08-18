@@ -5,7 +5,7 @@ description: "Deploy your Mastra applications to Amazon EC2."
 
 import { Callout, Steps, Tabs } from "nextra/components";
 
-## Amazon EC2
+# Amazon EC2
 
 Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
 
@@ -16,7 +16,7 @@ Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
   refer to our [getting started guide](/docs/getting-started/installation)
 </Callout>
 
-### Prerequisites
+## Prerequisites
 
 - An AWS account with [EC2](https://aws.amazon.com/ec2/) access
 - An EC2 instance running Ubuntu 24+ or Amazon Linux
@@ -25,11 +25,11 @@ Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
 - SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
 - Node.js 18+ installed on your instance
 
-### Deployment Steps
+## Deployment Steps
 
 <Steps>
 
-#### Clone your Mastra application
+### Clone your Mastra application
 
 Connect to your EC2 instance and clone your repository:
 
@@ -57,13 +57,13 @@ Navigate to the repository directory:
 cd "<your-repository>"
 ```
 
-#### Install dependencies
+### Install dependencies
 
 ```bash copy
 npm install
 ```
 
-#### Set up environment variables
+### Set up environment variables
 
 Create a `.env` file and add your environment variables:
 
@@ -78,13 +78,13 @@ OPENAI_API_KEY=<your-openai-api-key>
 # Add other required environment variables
 ```
 
-#### Build the application
+### Build the application
 
 ```bash copy
 npm run build
 ```
 
-#### Run the application
+### Run the application
 
 ```bash copy
 node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
@@ -96,7 +96,7 @@ Your Mastra application will run on port 4111 by default. Ensure your reverse pr
 
 </Steps>
 
-### Connect to your Mastra server
+## Connect to your Mastra server
 
 You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
 

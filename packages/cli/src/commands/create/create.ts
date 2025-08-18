@@ -1,5 +1,6 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
+import type { PosthogAnalytics } from '../../analytics/index';
 
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
@@ -23,9 +24,10 @@ export const create = async (args: {
   directory?: string;
   mcpServer?: 'windsurf' | 'cursor' | 'cursor-global';
   template?: string | boolean;
+  analytics?: PosthogAnalytics;
 }) => {
   if (args.template !== undefined) {
-    await createFromTemplate(args);
+    await createFromTemplate({ ...args, injectedAnalytics: args.analytics });
     return;
   }
 
@@ -205,7 +207,12 @@ async function createFromGitHubUrl(url: string): Promise<Template> {
   };
 }
 
-async function createFromTemplate(args: { projectName?: string; template?: string | boolean; timeout?: number }) {
+async function createFromTemplate(args: {
+  projectName?: string;
+  template?: string | boolean;
+  timeout?: number;
+  injectedAnalytics?: PosthogAnalytics;
+}) {
   let selectedTemplate: Template | undefined;
 
   if (args.template === true) {
@@ -272,7 +279,7 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
 
   try {
     // Track template usage
-    const analytics = getAnalytics();
+    const analytics = args.injectedAnalytics || getAnalytics();
     if (analytics) {
       analytics.trackEvent('cli_template_used', {
         template_slug: selectedTemplate.slug,
@@ -292,7 +299,7 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
     p.note(`
       ${color.green('Mastra template installed!')}
 
-      Add the necessary environment 
+      Add the necessary environment
       variables in your ${color.cyan('.env')} file
       `);
 

@@ -1,7 +1,6 @@
 import type { Attributes, Tracer } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings } from 'ai-v5';
-import type { MessageList } from '../../agent/message-list';
 import { noopTracer } from './noop';
 
 export function getTracer({
@@ -20,6 +19,20 @@ export function getTracer({
   }
 
   return trace.getTracer('mastra');
+}
+
+export function assembleOperationName({
+  operationId,
+  telemetry,
+}: {
+  operationId: string;
+  telemetry?: TelemetrySettings;
+}) {
+  return {
+    'mastra.operationId': operationId,
+    'operation.name': `${operationId}${telemetry?.functionId != null ? ` ${telemetry.functionId}` : ''}`,
+    ...(telemetry?.functionId ? { 'resource.name': telemetry?.functionId } : {}),
+  };
 }
 
 export function getTelemetryAttributes({
@@ -64,13 +77,13 @@ export function getRootSpan({
   model,
   modelSettings,
   telemetry_settings,
-  messageList,
+  headers,
 }: {
   operationId: string;
   model: { modelId: string; provider: string };
   modelSettings?: CallSettings;
   telemetry_settings?: TelemetrySettings;
-  messageList: MessageList;
+  headers?: Record<string, string | undefined> | undefined;
 }) {
   const tracer = getTracer({
     isEnabled: telemetry_settings?.isEnabled,
@@ -86,22 +99,15 @@ export function getRootSpan({
       maxRetries: 2,
     },
     telemetry: telemetry_settings,
-    headers: modelSettings?.headers,
+    headers,
   });
 
-  const inputMessages = messageList.get.input.core();
-
-  const rootSpan = tracer.startSpan('mastra.stream').setAttributes({
+  const rootSpan = tracer.startSpan(operationId).setAttributes({
+    ...assembleOperationName({
+      operationId,
+      telemetry: telemetry_settings,
+    }),
     ...baseTelemetryAttributes,
-
-    'mastra.operationId': operationId,
-    'operation.name': `${operationId}${telemetry_settings?.functionId != null ? ` ${telemetry_settings.functionId}` : ''}`,
-    ...(telemetry_settings?.functionId ? { 'resource.name': telemetry_settings?.functionId } : {}),
-    ...(telemetry_settings?.recordOutputs !== false
-      ? {
-          'stream.prompt.messages': JSON.stringify(inputMessages),
-        }
-      : {}),
   });
 
   return {

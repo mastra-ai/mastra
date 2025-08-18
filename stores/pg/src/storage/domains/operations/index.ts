@@ -289,7 +289,7 @@ export class StoreOperationsPG extends StoreOperations {
       const values = keyEntries.map(([_, value]) => value);
 
       const result = await this.client.oneOrNone<R>(
-        `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions}`,
+        `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
         values,
       );
 
