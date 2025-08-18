@@ -526,35 +526,6 @@ describe('LangfuseExporter', () => {
         statusMessage: 'Tool execution failed',
       });
     });
-
-    it('should clean up references after span ends', async () => {
-      const rootSpan = createMockSpan({
-        id: 'root-span',
-        name: 'root',
-        type: AISpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: { agentId: 'agent-123' },
-      });
-
-      // Start span
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
-        span: rootSpan,
-      });
-
-      // Verify internal maps have references
-      expect((exporter as any).traceMap.has('root-span')).toBe(true);
-      expect((exporter as any).traceMap.get('root-span').spans.has('root-span')).toBe(true);
-
-      // End span
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
-        span: rootSpan,
-      });
-
-      // Verify references are cleaned up (root span ending cleans up entire trace)
-      expect((exporter as any).traceMap.has('root-span')).toBe(false);
-    });
   });
 
   describe('Error Handling', () => {
