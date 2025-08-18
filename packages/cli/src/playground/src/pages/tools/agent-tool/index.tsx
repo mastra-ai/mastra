@@ -27,7 +27,7 @@ const AgentTool = () => {
   const { mutateAsync: executeTool, isPending: isExecutingTool, error } = useExecuteTool();
   const [result, setResult] = useState<any>(null);
 
-  const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
 
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
