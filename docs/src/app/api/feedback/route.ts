@@ -82,8 +82,6 @@ export async function POST(request: NextRequest) {
       source: "docs",
     };
 
-    console.log({ FeedbackEntry: feedbackEntry });
-    return;
     await sendToNotion(feedbackEntry);
     await sendToSlack(feedbackEntry);
 
