@@ -8,7 +8,6 @@ interface FeedbackData {
   userAgent?: string;
   timestamp: string;
 }
-
 const NOTION_DATABASE_ID = "a24777b679b04a38b713d55690b96dd1";
 
 type ErrorWithMessage = {
