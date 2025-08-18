@@ -6,7 +6,7 @@ import { useTraces } from '@/domains/traces/hooks/use-traces';
 
 function AgentTracesPage() {
   const { agentId } = useParams();
-  const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { data: traces = [], isLoading: isTracesLoading, setEndOfListElement, error } = useTraces(agent?.name || '');
 
   return (
