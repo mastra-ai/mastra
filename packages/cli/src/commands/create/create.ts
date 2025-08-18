@@ -207,7 +207,12 @@ async function createFromGitHubUrl(url: string): Promise<Template> {
   };
 }
 
-async function createFromTemplate(args: { projectName?: string; template?: string | boolean; timeout?: number; injectedAnalytics?: PosthogAnalytics }) {
+async function createFromTemplate(args: {
+  projectName?: string;
+  template?: string | boolean;
+  timeout?: number;
+  injectedAnalytics?: PosthogAnalytics;
+}) {
   let selectedTemplate: Template | undefined;
 
   if (args.template === true) {
