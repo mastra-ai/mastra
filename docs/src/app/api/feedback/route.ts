@@ -11,7 +11,6 @@ interface FeedbackData {
 }
 
 // Notion database ID for feedback submissions (Marketing teamspace)
-// Requires NOTION_API_KEY environment variable to be set
 const NOTION_DATABASE_ID = "a24777b679b04a38b713d55690b96dd1";
 
 type ErrorWithMessage = {
