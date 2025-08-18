@@ -499,7 +499,7 @@ function ScoreDetails({
             <section className="border border-border1 rounded-lg">
               <div className="border-b border-border1 last:border-b-0 grid">
                 <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Output</h3>
-                {score.input && (
+                {score.output && (
                   <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
                     <CodeMirrorBlock value={JSON.stringify(score.output, null, 2)} />
                   </div>
