@@ -6,10 +6,10 @@
  * LLM_GENERATION spans become Langfuse generations, all others become spans.
  */
 
+import type { AITracingExporter, AITracingEvent, AnyAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
+import { AISpanType, sanitizeMetadata, omitKeys } from '@mastra/core/ai-tracing';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient } from 'langfuse';
-import type { AITracingExporter, AITracingEvent, AnyAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
-import { AISpanType } from '@mastra/core/ai-tracing';
 
 export interface LangfuseExporterConfig {
   /** Langfuse API key */
@@ -24,17 +24,18 @@ export interface LangfuseExporterConfig {
   options?: any;
 }
 
+type TraceData = {
+  trace: LangfuseTraceClient; // Langfuse trace object
+  spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
+};
+
+type LangfuseSpan = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient;
+
 export class LangfuseExporter implements AITracingExporter {
   name = 'langfuse';
   private client: Langfuse;
   private realtime: boolean;
-  private traceMap = new Map<
-    string,
-    {
-      trace: LangfuseTraceClient; // Langfuse trace object
-      spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
-    }
-  >();
+  private traceMap = new Map<string, TraceData>();
 
   constructor(config: LangfuseExporterConfig) {
     this.realtime = config.realtime ?? false;
@@ -52,10 +53,10 @@ export class LangfuseExporter implements AITracingExporter {
         await this.handleSpanStarted(event.span);
         break;
       case 'span_updated':
-        await this.handleSpanUpdated(event.span);
+        await this.handleSpanUpdateOrEnd(event.span, true);
         break;
       case 'span_ended':
-        await this.handleSpanEnded(event.span);
+        await this.handleSpanUpdateOrEnd(event.span, false);
         break;
     }
 
@@ -67,209 +68,127 @@ export class LangfuseExporter implements AITracingExporter {
 
   private async handleSpanStarted(span: AnyAISpan): Promise<void> {
     if (span.isRootSpan) {
-      const trace = this.client.trace({
-        id: span.trace.id,
-        name: span.name,
-        userId: span.metadata?.userId,
-        sessionId: span.metadata?.sessionId,
-        input: span.input,
-        metadata: {
-          ...this.sanitizeMetadata(span.attributes),
-          ...this.sanitizeMetadata(span.metadata),
-        },
-      });
-      this.traceMap.set(span.trace.id, {
-        trace,
-        spans: new Map(),
-      });
+      const trace = this.client.trace(this.buildTracePayload(span));
+      this.traceMap.set(span.trace.id, { trace, spans: new Map() });
     }
 
-    // Create appropriate Langfuse object based on span type
-    if (span.type === AISpanType.LLM_GENERATION) {
-      await this.createLangfuseGeneration(span);
-    } else {
-      await this.createLangfuseSpan(span);
-    }
-  }
-
-  private async handleSpanUpdated(span: AnyAISpan): Promise<void> {
     const traceData = this.traceMap.get(span.trace.id);
-    if (!traceData) return;
-
-    const langfuseObject = traceData.spans.get(span.id);
-    if (!langfuseObject) return;
-
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const attributes = span.attributes ? (span.attributes as LLMGenerationAttributes) : undefined;
-      if (attributes) {
-        const { usage, model, ...otherAttributes } = attributes;
-        langfuseObject.update({
-          input: span.input,
-          output: span.output,
-          usage: usage,
-          model: model,
-          metadata: {
-            ...this.sanitizeMetadata(otherAttributes),
-            ...this.sanitizeMetadata(span.metadata),
-          },
-        });
-      } else {
-        langfuseObject.update({
-          input: span.input,
-          output: span.output,
-          metadata: {
-            ...this.sanitizeMetadata(span.metadata),
-          },
-        });
-      }
-    } else {
-      langfuseObject.update({
-        input: span.input,
-        output: span.output,
-        metadata: {
-          ...this.sanitizeMetadata(span.attributes),
-          ...this.sanitizeMetadata(span.metadata),
-        },
-      });
-    }
-  }
-
-  private async handleSpanEnded(span: AnyAISpan): Promise<void> {
-    const traceData = this.traceMap.get(span.trace.id);
-    if (!traceData) return;
-
-    const langfuseObject = traceData.spans.get(span.id);
-    if (!langfuseObject) return;
-
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const attributes = span.attributes ? (span.attributes as LLMGenerationAttributes) : undefined;
-      if (attributes) {
-        const { usage, model, ...otherAttributes } = attributes;
-        langfuseObject.end({
-          output: span.output,
-          usage: usage,
-          model: model,
-          metadata: {
-            ...this.sanitizeMetadata(otherAttributes),
-            ...this.sanitizeMetadata(span.metadata),
-          },
-        });
-      } else {
-        langfuseObject.end({
-          output: span.output,
-          metadata: {
-            ...this.sanitizeMetadata(span.metadata),
-          },
-        });
-      }
-    } else {
-      langfuseObject.end({
-        output: span.output,
-        metadata: {
-          ...this.sanitizeMetadata(span.attributes),
-          ...this.sanitizeMetadata(span.metadata),
-        },
-      });
+    if (!traceData) {
+      console.log('NO TRACE');
+      // TODO: log warning
+      return;
     }
 
-    // Add error information if present
-    if (span.errorInfo) {
-      langfuseObject.update({
-        level: 'ERROR',
-        statusMessage: span.errorInfo.message,
-      });
-    }
+    const langfuseParent =
+      span.parent && traceData.spans.has(span.parent.id)
+        ? (traceData.spans.get(span.parent.id) as LangfuseSpan)
+        : traceData.trace;
 
-    if (span.isRootSpan) {
-      traceData.trace.update({ output: span.output });
-      this.traceMap.delete(span.trace.id);
-    }
-  }
+    const payload = this.buildSpanPayload(span, true);
 
-  private async createLangfuseGeneration(span: AnyAISpan): Promise<void> {
-    const traceData = this.traceMap.get(span.trace.id);
-    if (!traceData) return;
-
-    const parent =
-      span.parent && traceData.spans.has(span.parent.id) ? traceData.spans.get(span.parent.id)! : traceData.trace;
-
-    const attributes = span.attributes ? (span.attributes as LLMGenerationAttributes) : undefined;
-
-    let generation: LangfuseGenerationClient;
-
-    if (attributes) {
-      const { model, parameters, usage, ...otherAttributes } = attributes;
-
-      generation = parent.generation({
-        id: span.id,
-        name: span.name,
-        model,
-        modelParameters: parameters,
-        input: span.input,
-        output: span.output,
-        usage,
-        metadata: {
-          ...this.sanitizeMetadata(otherAttributes),
-          ...this.sanitizeMetadata(span.metadata),
-        },
-      });
-    } else {
-      generation = parent.generation({
-        id: span.id,
-        name: span.name,
-        input: span.input,
-        output: span.output,
-        metadata: {
-          ...this.sanitizeMetadata(span.metadata),
-        },
-      });
-    }
-
-    traceData.spans.set(span.id, generation);
-  }
-
-  private async createLangfuseSpan(span: AnyAISpan): Promise<void> {
-    const traceData = this.traceMap.get(span.trace.id);
-    if (!traceData) return;
-
-    const parent =
-      span.parent && traceData.spans.has(span.parent.id) ? traceData.spans.get(span.parent.id)! : traceData.trace;
-
-    const langfuseSpan = parent.span({
-      id: span.id,
-      name: span.name,
-      input: span.input,
-      output: span.output,
-      metadata: {
-        spanType: span.type,
-        ...this.sanitizeMetadata(span.attributes),
-        ...this.sanitizeMetadata(span.metadata),
-      },
-    });
+    const langfuseSpan =
+      span.type === AISpanType.LLM_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
     traceData.spans.set(span.id, langfuseSpan);
   }
 
-  private sanitizeMetadata(metadata: Record<string, any> | undefined): Record<string, any> {
-    if (!metadata) return {};
+  private async handleSpanUpdateOrEnd(span: AnyAISpan, isUpdate: boolean): Promise<void> {
+    const traceData = this.traceMap.get(span.trace.id);
+    if (!traceData) {
+      console.log('NO TRACE');
+      // TODO: log warning
+      return;
+    }
 
-    // Remove sensitive fields and ensure values are serializable
-    const sanitized: Record<string, any> = {};
-    for (const [key, value] of Object.entries(metadata)) {
-      if (this.isSerializable(value)) {
-        sanitized[key] = value;
+    const langfuseSpan = traceData.spans.get(span.id);
+    if (!langfuseSpan) {
+      console.log('NO SPAN');
+      // TODO: log warning
+      return;
+    }
+
+    if (isUpdate) {
+      langfuseSpan.update(this.buildSpanPayload(span, false));
+    } else {
+      langfuseSpan.end(this.buildSpanPayload(span, false));
+
+      if (span.isRootSpan) {
+        traceData.trace.update({ output: span.output });
+        this.traceMap.delete(span.trace.id);
       }
     }
-    return sanitized;
   }
 
-  private isSerializable(value: any): boolean {
-    try {
-      JSON.stringify(value);
-      return true;
-    } catch {
-      return false;
+  private buildTracePayload(span: AnyAISpan): Record<string, any> {
+    const payload: Record<string, any> = {
+      id: span.trace.id,
+      name: span.name,
+    };
+
+    const { userId, sessionId, ...remainingMetadata } = span.metadata ?? {};
+
+    if (userId) payload.userId = userId;
+    if (sessionId) payload.sessionId = sessionId;
+    if (span.input) payload.input = span.input;
+
+    payload.metadata = {
+      spanType: span.type,
+      ...sanitizeMetadata(span.attributes),
+      ...sanitizeMetadata(remainingMetadata),
+    };
+
+    return payload;
+  }
+
+  private buildSpanPayload(span: AnyAISpan, isCreate: boolean): Record<string, any> {
+    const payload: Record<string, any> = {};
+
+    if (isCreate) {
+      payload.id = span.id;
+      payload.name = span.name;
+      payload.startTime = span.startTime;
+      if (span.input !== undefined) payload.input = span.input;
     }
+
+    if (span.output !== undefined) payload.output = span.output;
+    if (span.endTime !== undefined) payload.endTime = span.endTime;
+
+    const attributes = (span.attributes ?? {}) as Record<string, any>;
+
+    // Strip special fields from metadata if used in top-level keys
+    const attributesToOmit: string[] = [];
+
+    if (span.type === AISpanType.LLM_GENERATION) {
+      const llmAttr = attributes as LLMGenerationAttributes;
+
+      if (llmAttr.model !== undefined) {
+        payload.model = llmAttr.model;
+        attributesToOmit.push('model');
+      }
+
+      if (llmAttr.usage !== undefined) {
+        payload.usage = llmAttr.usage;
+        attributesToOmit.push('usage');
+      }
+
+      if (llmAttr.parameters !== undefined) {
+        payload.modelParameters = llmAttr.parameters;
+        attributesToOmit.push('parameters');
+      }
+    }
+
+    payload.metadata = {
+      spanType: span.type,
+      ...sanitizeMetadata(omitKeys(attributes, attributesToOmit)),
+      ...sanitizeMetadata(span.metadata),
+    };
+
+    if (span.errorInfo) {
+      payload.level = 'ERROR';
+      payload.statusMessage = span.errorInfo.message;
+    }
+
+    return payload;
   }
 
   async shutdown(): Promise<void> {

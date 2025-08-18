@@ -8,11 +8,12 @@
  * - Langfuse-specific error handling
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AITracingEvent, AnyAISpan, LLMGenerationAttributes, ToolCallAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
-import { LangfuseExporter, type LangfuseExporterConfig } from './ai-tracing';
 import { Langfuse } from 'langfuse';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { LangfuseExporter } from './ai-tracing';
+import type { LangfuseExporterConfig } from './ai-tracing';
 
 // Mock Langfuse constructor (must be at the top level)
 vi.mock('langfuse');
@@ -101,6 +102,7 @@ describe('LangfuseExporter', () => {
         attributes: {
           agentId: 'agent-123',
           instructions: 'Test agent',
+          spanType: 'agent_run',
         },
         metadata: { userId: 'user-456', sessionId: 'session-789' },
       });
@@ -118,7 +120,11 @@ describe('LangfuseExporter', () => {
         name: 'root-agent',
         userId: 'user-456',
         sessionId: 'session-789',
-        metadata: { userId: 'user-456', sessionId: 'session-789' },
+        metadata: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
       });
     });
 
@@ -181,6 +187,7 @@ describe('LangfuseExporter', () => {
       expect(mockTrace.generation).toHaveBeenCalledWith({
         id: 'llm-span-id',
         name: 'gpt-4-call',
+        startTime: llmSpan.startTime,
         model: 'gpt-4',
         modelParameters: {
           temperature: 0.7,
@@ -197,6 +204,7 @@ describe('LangfuseExporter', () => {
         metadata: {
           provider: 'openai',
           resultType: 'response_generation',
+          spanType: 'llm_generation',
           streaming: false,
         },
       });
@@ -224,15 +232,10 @@ describe('LangfuseExporter', () => {
       expect(mockTrace.generation).toHaveBeenCalledWith({
         id: 'minimal-llm',
         name: 'simple-llm',
+        startTime: minimalLlmSpan.startTime,
         model: 'gpt-3.5-turbo',
-        modelParameters: undefined,
-        input: undefined,
-        output: undefined,
-        usage: undefined,
         metadata: {
-          provider: undefined,
-          resultType: undefined,
-          streaming: undefined,
+          spanType: 'llm_generation',
         },
       });
     });
@@ -263,13 +266,13 @@ describe('LangfuseExporter', () => {
       expect(mockTrace.span).toHaveBeenCalledWith({
         id: 'tool-span-id',
         name: 'calculator-tool',
+        startTime: toolSpan.startTime,
         input: { operation: 'add', a: 2, b: 3 },
         output: { result: 5 },
         metadata: {
           spanType: 'tool_call',
           toolId: 'calculator',
           success: true,
-          toolType: undefined,
         },
       });
     });
@@ -408,11 +411,9 @@ describe('LangfuseExporter', () => {
         metadata: expect.objectContaining({
           spanType: 'llm_generation',
         }),
-        input: undefined,
+        model: 'gpt-4',
         output: { content: 'Updated response' },
         usage: {
-          promptTokens: undefined,
-          completionTokens: undefined,
           totalTokens: 150,
         },
       });
@@ -449,7 +450,6 @@ describe('LangfuseExporter', () => {
           spanType: 'tool_call',
           success: true,
         }),
-        input: undefined,
         output: { result: 42 },
       });
     });
@@ -465,24 +465,26 @@ describe('LangfuseExporter', () => {
         attributes: {},
       });
 
-      span.endTime = new Date();
-
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
         span,
       });
+
+      span.endTime = new Date();
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
         span,
       });
 
+      console.log('BOOP');
+      console.log(span.metadata);
+
       expect(mockSpan.end).toHaveBeenCalledWith({
         endTime: span.endTime,
         metadata: expect.objectContaining({
           spanType: 'generic',
         }),
-        level: 'DEFAULT',
       });
     });
 
