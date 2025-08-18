@@ -2,9 +2,10 @@
 
 ![Mastra Cli](https://github.com/mastra-ai/mastra/blob/main/packages/cli/mastra-cli.png)
 
-Mastra is the Typescript framework for building AI agents and assistants. It’s used by some of the largest companies in the world to build internal AI automation tooling and customer-facing agents. 
+Mastra is the Typescript framework for building AI agents and assistants. It’s used by some of the largest companies in the world to build internal AI automation tooling and customer-facing agents.
 
 This is the CLI package, which allows you to:
+
 - Create a new project
 - Spin up the Mastra dev server
 - Deploy to a Hono server, or a serverless environment like Cloudflare Workers or Vercel
