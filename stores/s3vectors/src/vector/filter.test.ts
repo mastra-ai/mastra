@@ -113,7 +113,7 @@ describe('S3VectorsFilterTranslator', () => {
     it('canonicalizes implicit AND nested inside $or elements', () => {
       const filter: S3VectorsFilter = {
         $or: [
-          { status: 'active', age: { $gt: 25 } }, // 暗黙 AND
+          { status: 'active', age: { $gt: 25 } }, // implicit AND
           { score: { $lte: 100 } },
         ],
       };
