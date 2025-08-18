@@ -60,11 +60,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const clientIP =
-      request.headers.get("x-forwarded-for") ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
-
     const now = new Date();
     const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
     const timeStr = now.toTimeString().split(" ")[0].replace(/:/g, ""); // HHMMSS
@@ -77,7 +72,6 @@ export async function POST(request: NextRequest) {
       page: body.page,
       userAgent:
         body.userAgent || request.headers.get("user-agent") || "unknown",
-      clientIP,
       timestamp: body.timestamp || new Date().toISOString(),
       source: "docs",
     };
@@ -144,14 +138,7 @@ async function sendToNotion(feedback: any) {
           },
         ],
       },
-      "Client IP": {
-        rich_text: [
-          {
-            type: "text",
-            text: { content: feedback.clientIP },
-          },
-        ],
-      },
+
       Timestamp: {
         date: { start: feedback.timestamp },
       },
@@ -263,7 +250,7 @@ async function sendToSlack(feedback: any) {
         elements: [
           {
             type: "mrkdwn",
-            text: `📍 IP: ${feedback.clientIP} | 🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent.split(" ")[0]}`,
+            text: `🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent.split(" ")[0]}`,
           },
         ],
       },
