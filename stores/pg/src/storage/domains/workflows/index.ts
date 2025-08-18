@@ -131,6 +131,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const query = `
           SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
           ${whereClause}
+          ORDER BY "createdAt" DESC LIMIT 1
         `;
 
       const queryValues = values;

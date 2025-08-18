@@ -6,7 +6,7 @@ import type { ClickhouseConfig } from '.';
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: ClickhouseConfig = {
-  url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+  url: process.env.CLICKHOUSE_URL || 'http://localhost:8125',
   username: process.env.CLICKHOUSE_USERNAME || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || 'password',
   // ttl: {

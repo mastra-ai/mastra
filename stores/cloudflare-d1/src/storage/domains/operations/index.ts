@@ -366,6 +366,8 @@ export class StoreOperationsD1 extends StoreOperations {
         }
       }
 
+      query.orderBy('createdAt', 'DESC');
+
       query.limit(1);
       const { sql, params } = query.build();
 

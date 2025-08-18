@@ -97,7 +97,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
     try {
       const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC LIMIT 1`,
         args,
       });
 
