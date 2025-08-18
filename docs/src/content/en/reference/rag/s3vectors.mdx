@@ -38,7 +38,7 @@ await store.createIndex({
 
 // Upsert vectors (ids auto-generated if omitted). Date values in metadata are serialized to epoch ms.
 const ids = await store.upsert({
-  indexName: "my-index",
+  indexName: "my_index",
   vectors: [
     [0.1, 0.2 /* … */],
     [0.3, 0.4 /* … */],
