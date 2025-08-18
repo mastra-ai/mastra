@@ -143,10 +143,7 @@ async function processOutputStream({
           try {
             await tool?.onInputStart?.({
               toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model()?.map(message => ({
-                role: message.role,
-                content: message.content,
-              })) as any,
+              messages: messageList.get.input.aiV5.model(),
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
@@ -169,10 +166,7 @@ async function processOutputStream({
             await tool?.onInputDelta?.({
               inputTextDelta: chunk.payload.argsTextDelta,
               toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model()?.map(message => ({
-                role: message.role,
-                content: message.content,
-              })) as any,
+              messages: messageList.get.input.aiV5.model(),
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
@@ -483,9 +477,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
               steps: [],
             },
             messages: {
-              all: messageList.get.all.v3(),
-              user: messageList.get.input.v3(),
-              nonUser: messageList.get.response.v3(),
+              all: messageList.get.all.aiV5.model(),
+              user: messageList.get.input.aiV5.model(),
+              nonUser: messageList.get.response.aiV5.model(),
             },
           });
         }

@@ -8,7 +8,6 @@ import { MastraBase } from '../../base';
 import type { ObjectOptions } from '../../loop/types';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
-import { getResponseFormat } from '../aisdk/v5/object/schema';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '../aisdk/v5/object/stream-object';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
@@ -224,7 +223,7 @@ export class MastraModelOutput extends MastraBase {
 
                 self.#response = {
                   ...otherMetadata,
-                  messages: chunk.payload.messages?.all ?? [],
+                  messages: chunk.payload.messages?.nonUser ?? [],
                 };
               }
 
@@ -238,7 +237,6 @@ export class MastraModelOutput extends MastraBase {
 
                 let onFinishPayload: any = {};
 
-                messageList.add(chunk.payload.messages.all, 'response');
 
                 if (model.version === 'v2') {
                   onFinishPayload = {
