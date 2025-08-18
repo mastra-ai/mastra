@@ -10,6 +10,10 @@ interface FeedbackData {
   timestamp: string;
 }
 
+// Notion database ID for feedback submissions (Marketing teamspace)
+// Requires NOTION_API_KEY environment variable to be set
+const NOTION_DATABASE_ID = "a24777b679b04a38b713d55690b96dd1";
+
 type ErrorWithMessage = {
   message: string;
 };
@@ -75,7 +79,7 @@ export async function POST(request: NextRequest) {
       source: "docs",
     };
 
-    await sendToAirtable(feedbackEntry);
+    await sendToNotion(feedbackEntry);
 
     return NextResponse.json(
       {
@@ -93,44 +97,58 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function sendToAirtable(feedback: any) {
-  const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
-  const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
-  const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME || "Feedback";
+async function sendToNotion(feedback: any) {
+  const NOTION_API_KEY = process.env.NOTION_API_KEY;
 
-  if (!AIRTABLE_API_KEY || !AIRTABLE_BASE_ID) {
-    throw new Error(
-      "Airtable configuration missing: AIRTABLE_API_KEY and AIRTABLE_BASE_ID are required",
-    );
+  if (!NOTION_API_KEY) {
+    throw new Error("Notion configuration missing: NOTION_API_KEY is required");
   }
 
-  const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}`;
+  const notionUrl = `https://api.notion.com/v1/pages`;
 
-  const payload = {
-    records: [
-      {
-        fields: {
-          "Feedback ID": feedback.id,
-          "Feedback Text": feedback.feedback,
-          Rating: feedback.rating,
-          Email: feedback.email || "",
-          "Page URL": feedback.page,
-          "User Agent": feedback.userAgent,
-          "Client IP": feedback.clientIP,
-          Timestamp: feedback.timestamp.split("T")[0], // Convert to YYYY-MM-DD format
-          Source: feedback.source,
-          Status: "New",
-          "Created Date": new Date().toISOString().split("T")[0], // YYYY-MM-DD format
-        },
+  const payload: any = {
+    parent: { database_id: NOTION_DATABASE_ID },
+    properties: {
+      "Feedback ID": {
+        title: [{ text: { content: feedback.id } }],
       },
-    ],
+      "Feedback Text": {
+        rich_text: [{ text: { content: feedback.feedback } }],
+      },
+      "Page URL": {
+        url: feedback.page,
+      },
+      "User Agent": {
+        rich_text: [{ text: { content: feedback.userAgent } }],
+      },
+      "Client IP": {
+        rich_text: [{ text: { content: feedback.clientIP } }],
+      },
+      "date:Timestamp:start": feedback.timestamp,
+      Source: {
+        select: { name: feedback.source },
+      },
+      Status: {
+        select: { name: "New" },
+      },
+    },
   };
 
-  const response = await fetch(airtableUrl, {
+  // Add optional properties if they exist
+  if (feedback.rating) {
+    payload.properties["Rating"] = { number: feedback.rating };
+  }
+
+  if (feedback.email) {
+    payload.properties["Email"] = { email: feedback.email };
+  }
+
+  const response = await fetch(notionUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${AIRTABLE_API_KEY}`,
+      Authorization: `Bearer ${NOTION_API_KEY}`,
       "Content-Type": "application/json",
+      "Notion-Version": "2022-06-28",
     },
     body: JSON.stringify(payload),
   });
@@ -138,7 +156,7 @@ async function sendToAirtable(feedback: any) {
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `Airtable API error: ${response.status} ${response.statusText} - ${errorText}`,
+      `Notion API error: ${response.status} ${response.statusText} - ${errorText}`,
     );
   }
 
