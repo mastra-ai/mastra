@@ -9,10 +9,6 @@ interface FeedbackData {
   timestamp: string;
 }
 
-// Notion database ID for feedback submissions (Marketing teamspace)
-// Required environment variables:
-// - NOTION_API_KEY: Notion integration API key
-// - SLACK_WEBHOOK_URL: Slack webhook URL for notifications (optional)
 const NOTION_DATABASE_ID = "a24777b679b04a38b713d55690b96dd1";
 
 type ErrorWithMessage = {
