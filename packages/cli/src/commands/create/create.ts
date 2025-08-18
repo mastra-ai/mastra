@@ -44,7 +44,7 @@ export const create = async (args: {
     const result = await interactivePrompt();
 
     // Track model provider selection from interactive prompt
-    const analytics = getAnalytics();
+    const analytics = await getAnalytics();
     if (analytics && result?.llmProvider) {
       analytics.trackEvent('cli_model_provider_selected', {
         provider: result.llmProvider,
@@ -65,7 +65,7 @@ export const create = async (args: {
   const { components = [], llmProvider = 'openai', addExample = false, llmApiKey } = args;
 
   // Track model provider selection from CLI args
-  const analytics = getAnalytics();
+  const analytics = await getAnalytics();
   if (analytics) {
     analytics.trackEvent('cli_model_provider_selected', {
       provider: llmProvider,
@@ -272,7 +272,7 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
 
   try {
     // Track template usage
-    const analytics = getAnalytics();
+    const analytics = await getAnalytics();
     if (analytics) {
       analytics.trackEvent('cli_template_used', {
         template_slug: selectedTemplate.slug,
@@ -292,7 +292,7 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
     p.note(`
       ${color.green('Mastra template installed!')}
 
-      Add the necessary environment 
+      Add the necessary environment
       variables in your ${color.cyan('.env')} file
       `);
 
