@@ -1,5 +1,6 @@
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { CoreMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
@@ -176,6 +177,7 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 });
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
 function assertNoDuplicateParts(parts: any[]) {
   // Check for duplicate tool-invocation results by toolCallId
@@ -2982,6 +2984,119 @@ describe('Agent save message parts', () => {
       expect(saveThreadSpy).not.toHaveBeenCalled();
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err-stream' });
       expect(thread).toBeNull();
+    });
+  });
+
+  describe(`stream_vnext (ai v5)`, () => {
+    it(`should stream from LLM`, async () => {
+      const agent = new Agent({
+        id: 'test',
+        name: 'test',
+        model: openai5('gpt-4o-mini'),
+        instructions: `test!`,
+      });
+
+      const result = await agent.stream_vnext(`hello!`);
+
+      const parts: any[] = [];
+      for await (const part of result.fullStream) {
+        parts.push(part);
+      }
+      expect(result.request.body.input).toEqual([
+        {
+          role: 'system',
+          content: 'test!',
+        },
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hello!' }],
+        },
+      ]);
+    });
+    it(`should show correct request input for multi-turn inputs`, async () => {
+      const agent = new Agent({
+        id: 'test',
+        name: 'test',
+        model: openai5('gpt-4o-mini'),
+        instructions: `test!`,
+      });
+
+      const result = await agent.stream_vnext([
+        { role: `user`, content: `hello!` },
+        { role: 'assistant', content: 'hi, how are you?' },
+        { role: 'user', content: "I'm good, how are you?" },
+      ]);
+
+      const parts: any[] = [];
+      for await (const part of result.fullStream) {
+        parts.push(part);
+      }
+      expect(result.request.body.input).toEqual([
+        {
+          role: 'system',
+          content: 'test!',
+        },
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hello!' }],
+        },
+        { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
+        { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
+      ]);
+    });
+
+    it(`should show correct request input for multi-turn inputs with memory`, async () => {
+      const mockMemory = new MockMemory();
+      const threadId = '1';
+      const resourceId = '2';
+      // @ts-ignore
+      mockMemory.rememberMessages = async function rememberMessages() {
+        const list = new MessageList({ threadId, resourceId }).add(
+          [
+            { role: `user`, content: `hello!`, threadId, resourceId },
+            { role: 'assistant', content: 'hi, how are you?', threadId, resourceId },
+          ],
+          `memory`,
+        );
+        return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.v2() };
+      };
+
+      mockMemory.getThreadById = async function getThreadById() {
+        return { id: '1', createdAt: new Date(), resourceId: '2', updatedAt: new Date() } satisfies StorageThreadType;
+      };
+
+      const agent = new Agent({
+        id: 'test',
+        name: 'test',
+        model: openai5('gpt-4o-mini'),
+        instructions: `test!`,
+        memory: mockMemory,
+      });
+
+      const result = await agent.stream_vnext([{ role: 'user', content: "I'm good, how are you?" }], {
+        memory: {
+          thread: '1',
+          resource: '2',
+          options: {
+            lastMessages: 10,
+          },
+        },
+      });
+
+      for await (const _part of result.fullStream) {
+      }
+      expect(result.request.body.input).toEqual([
+        {
+          role: 'system',
+          content: 'test!',
+        },
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hello!' }],
+        },
+        { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
+        { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
+      ]);
     });
   });
 
