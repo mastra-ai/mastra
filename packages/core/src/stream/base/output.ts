@@ -1,13 +1,29 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import type { Span } from '@opentelemetry/api';
+import { consumeStream } from 'ai-v5';
 import type { TelemetrySettings } from 'ai-v5';
 import type { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
+import type { ObjectOptions } from '../../loop/types';
+import { DelayedPromise } from '../aisdk/v5/compat';
+import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { getResponseFormat } from '../aisdk/v5/object/schema';
+import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '../aisdk/v5/object/stream-object';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
-import { reasoningDetailsFromMessages, transformResponse, transformSteps } from '../aisdk/v5/output-helpers';
+import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 
+type MastraModelOutputOptions = {
+  runId: string;
+  rootSpan?: Span;
+  telemetry_settings?: TelemetrySettings;
+  toolCallStreaming?: boolean;
+  onFinish?: (event: any) => Promise<void> | void;
+  onStepFinish?: (event: any) => Promise<void> | void;
+  includeRawChunks?: boolean;
+  objectOptions?: ObjectOptions;
+};
 export class MastraModelOutput extends MastraBase {
   #aisdkv5: AISDKV5OutputStream;
   #baseStream: ReadableStream<any>;
@@ -44,8 +60,9 @@ export class MastraModelOutput extends MastraBase {
   #response: any | undefined;
   #request: any | undefined;
   #usageCount: Record<string, number> = {};
+  #objectPromise: DelayedPromise<any> = new DelayedPromise();
   public runId: string;
-  #options: { includeRawChunks?: boolean };
+  #options: MastraModelOutputOptions;
 
   constructor({
     stream,
@@ -60,15 +77,7 @@ export class MastraModelOutput extends MastraBase {
     };
     stream: ReadableStream<ChunkType>;
     messageList: MessageList;
-    options: {
-      runId: string;
-      rootSpan?: Span;
-      telemetry_settings?: TelemetrySettings;
-      toolCallStreaming?: boolean;
-      onFinish?: (event: any) => Promise<void> | void;
-      onStepFinish?: (event: any) => Promise<void> | void;
-      includeRawChunks?: boolean;
-    };
+    options: MastraModelOutputOptions;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
@@ -182,6 +191,8 @@ export class MastraModelOutput extends MastraBase {
                 response: { ...otherMetadata, messages: chunk.payload.messages.nonUser },
                 request: request,
                 usage: chunk.payload.output.usage,
+                // TODO: need to be able to pass a step id into this fn to get the content for a specific step id
+                content: messageList.get.response.aiV5.stepContent(),
               };
 
               await options?.onStepFinish?.(stepResult);
@@ -212,7 +223,7 @@ export class MastraModelOutput extends MastraBase {
 
                 self.#response = {
                   ...otherMetadata,
-                  messages: chunk.payload.messages.all,
+                  messages: chunk.payload.messages?.all ?? [],
                 };
               }
 
@@ -233,22 +244,15 @@ export class MastraModelOutput extends MastraBase {
                     text: baseFinishStep.text,
                     warnings: baseFinishStep.warnings ?? [],
                     finishReason: chunk.payload.stepResult.reason,
-                    content: transformResponse({
-                      response: { ...this.response, messages: messageList.get.response.v2() },
-                      isMessages: true,
-                      runId: chunk.runId,
-                    }),
+                    // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
+                    content: messageList.get.response.aiV5.stepContent(),
                     request: this.request,
                     reasoning: this.aisdk.v5.reasoning,
                     reasoningText: !this.aisdk.v5.reasoningText ? undefined : this.aisdk.v5.reasoningText,
                     sources: this.aisdk.v5.sources,
                     files: this.aisdk.v5.files,
-                    steps: transformSteps({ steps: this.#bufferedSteps, runId: chunk.runId }),
-                    response: transformResponse({
-                      response: { ...this.response, messages: messageList.get.response.v2() },
-                      isMessages: true,
-                      runId: chunk.runId,
-                    }),
+                    steps: transformSteps({ steps: this.#bufferedSteps }),
+                    response: { ...this.response, messages: messageList.get.response.aiV5.model() },
                     usage: chunk.payload.output.usage,
                     totalUsage: self.totalUsage,
                     toolCalls: this.aisdk.v5.toolCalls,
@@ -311,8 +315,10 @@ export class MastraModelOutput extends MastraBase {
                         'stream.response.toolCalls': JSON.stringify(
                           baseFinishStep?.toolCalls?.map(chunk => {
                             return {
-                              type: chunk.type,
-                              ...chunk.payload,
+                              type: 'tool-call',
+                              toolCallId: chunk.payload.toolCallId,
+                              args: chunk.payload.args,
+                              toolName: chunk.payload.toolName,
                             };
                           }),
                         ),
@@ -336,6 +342,7 @@ export class MastraModelOutput extends MastraBase {
       messageList,
       options: {
         toolCallStreaming: options?.toolCallStreaming,
+        objectOptions: options?.objectOptions,
       },
     });
   }
@@ -377,29 +384,27 @@ export class MastraModelOutput extends MastraBase {
   get fullStream() {
     const self = this;
 
-    return this.teeStream().pipeThrough(
-      new TransformStream<ChunkType, ChunkType>({
-        transform(chunk, controller) {
-          if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
-            return;
-          }
+    let fullStream = this.teeStream();
 
-          controller.enqueue(chunk);
-        },
-      }),
-    );
-  }
+    return fullStream
+      .pipeThrough(
+        createObjectStreamTransformer({
+          objectOptions: self.#options.objectOptions!,
+          onFinish: data => self.#objectPromise.resolve(data),
+          onError: error => self.#objectPromise.reject(error),
+        }),
+      )
+      .pipeThrough(
+        new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
+              return;
+            }
 
-  get textStream() {
-    return this.teeStream().pipeThrough(
-      new TransformStream<ChunkType, string>({
-        transform(chunk, controller) {
-          if (chunk.type === 'text-delta') {
-            controller.enqueue(chunk.payload.text);
-          }
-        },
-      }),
-    );
+            controller.enqueue(chunk);
+          },
+        }),
+      );
   }
 
   get finishReason() {
@@ -456,6 +461,53 @@ export class MastraModelOutput extends MastraBase {
     }
   }
 
+  async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
+    try {
+      await consumeStream({
+        stream: this.fullStream.pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              controller.enqueue(chunk);
+            },
+          }),
+        ) as any,
+        onError: options?.onError,
+      });
+    } catch (error) {
+      console.log('consumeStream error', error);
+      options?.onError?.(error);
+    }
+  }
+
+  async getFullOutput() {
+    await this.consumeStream();
+
+    let object: any;
+    if (this.#options.objectOptions) {
+      object = await this.object;
+    }
+
+    return {
+      text: this.text,
+      usage: this.usage,
+      steps: this.steps,
+      finishReason: this.finishReason,
+      warnings: this.warnings,
+      providerMetadata: this.providerMetadata,
+      request: this.request,
+      reasoning: this.reasoning,
+      reasoningText: this.reasoningText,
+      toolCalls: this.toolCalls,
+      toolResults: this.toolResults,
+      sources: this.sources,
+      files: this.files,
+      response: this.response,
+      totalUsage: this.totalUsage,
+      object,
+      // experimental_output: // TODO
+    };
+  }
+
   get totalUsage() {
     let total = 0;
     for (const [key, value] of Object.entries(this.#usageCount)) {
@@ -473,5 +525,74 @@ export class MastraModelOutput extends MastraBase {
     return {
       v5: this.#aisdkv5,
     };
+  }
+
+  get objectStream() {
+    const self = this;
+    if (!self.#options.objectOptions) {
+      throw new Error('objectStream requires objectOptions');
+    }
+
+    return this.fullStream.pipeThrough(
+      new TransformStream<ChunkType | any, ChunkType>({
+        transform(chunk, controller) {
+          if (chunk.type === 'object') {
+            controller.enqueue(chunk.object);
+          }
+        },
+      }),
+    );
+  }
+
+  get elementStream() {
+    let publishedElements = 0;
+    const self = this;
+    if (!self.#options.objectOptions) {
+      throw new Error('elementStream requires objectOptions');
+    }
+
+    return this.fullStream.pipeThrough(
+      new TransformStream({
+        transform(chunk, controller) {
+          switch (chunk.type) {
+            case 'object': {
+              const array = (chunk as any).object;
+              // Only process arrays - stream individual elements as they become available
+              if (Array.isArray(array)) {
+                // Publish new elements one by one
+                for (; publishedElements < array.length; publishedElements++) {
+                  controller.enqueue(array[publishedElements]);
+                }
+              }
+              break;
+            }
+          }
+        },
+      }),
+    );
+  }
+
+  get textStream() {
+    const self = this;
+    if (self.#options.objectOptions) {
+      const responseFormat = getResponseFormat(self.#options.objectOptions);
+      if (responseFormat?.type === 'json') {
+        return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
+      }
+    }
+
+    return this.teeStream().pipeThrough(
+      new TransformStream<ChunkType, string>({
+        transform(chunk, controller) {
+          if (chunk.type === 'text-delta') {
+            controller.enqueue(chunk.payload.text);
+          }
+        },
+      }),
+    );
+  }
+
+  get object() {
+    return this.#objectPromise.promise;
   }
 }
