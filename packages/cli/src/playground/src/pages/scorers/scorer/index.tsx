@@ -11,7 +11,6 @@ import type { ScoreRowData } from '@mastra/core/scores';
 
 import * as Dialog from '@radix-ui/react-dialog';
 
-import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 
@@ -371,8 +370,6 @@ function ScoreItem({
     return onClick && onClick(score);
   };
 
-  console.log('ScoreItem', score);
-
   const isTodayDate = isToday(new Date(score.createdAt));
   const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
   const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
@@ -452,7 +449,7 @@ function ScoreDetails({
             'fixed top-0 bottom-0 right-0 border-l border-border1 w-[70rem] max-w-[calc(100vw-15rem)] z-[100] bg-surface4 px-[1rem] overflow-y-scroll',
           )}
         >
-          <div className="bg-surface4 border-b-2 border-border1 flex items-center py-[1.5rem] px-[1rem] top-0 sticky z-[100]">
+          <div className="bg-surface4 border-b border-border1 flex items-center py-[1.5rem] px-[1rem] top-0 sticky z-[100]">
             <h2 className=" w-full text-[0.875rem] !text-icon5 !font-normal flex items-center gap-[1rem]">
               <span>{score.id}</span>|<span>{format(new Date(score.createdAt), 'LLL do yyyy, hh:mm:ss bb')}</span>
             </h2>
@@ -479,11 +476,9 @@ function ScoreDetails({
           <div className="grid gap-[2rem] px-[1rem] py-[2rem] pb-[4rem] ">
             <section className="border border-border1 rounded-lg">
               <div className="border-b border-border1 last:border-b-0 grid">
-                <div className="flex justify-between items-center  w-full border-b border-border1">
-                  <h3 className="p-[1rem] px-[1.5rem] ">
-                    Score: <b>{typeof score.score === 'number' ? score.score : 'n/a'}</b>
-                  </h3>
-                </div>
+                <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">
+                  Score: <b>{typeof score.score === 'number' ? score.score : 'n/a'}</b>
+                </h3>
                 <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
                   {<pre className="text-wrap">{score?.reason}</pre>}
                 </div>
