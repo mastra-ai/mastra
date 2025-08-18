@@ -40,6 +40,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
         ...rest,
       });
 
+      console.log('rest.objectOptions', rest.objectOptions)
+
       const mainWorkflow = createWorkflow({
         id: 'agentic-loop',
         inputSchema: llmIterationOutputSchema,

@@ -12,6 +12,8 @@ import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import { RuntimeContext } from '../../runtime-context';
+import { ProcessorState } from '../../processors/runner';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -404,6 +406,9 @@ export class MastraModelOutput extends MastraBase {
 
     let fullStream = this.teeStream();
 
+    const processorStates = new Map<string, ProcessorState>();
+
+
     return fullStream
       .pipeThrough(
         createObjectStreamTransformer({
@@ -422,7 +427,29 @@ export class MastraModelOutput extends MastraBase {
             controller.enqueue(chunk);
           },
         }),
-      );
+      ).pipeThrough(new TransformStream({
+        async transform(chunk, controller) {  
+              // Process all stream parts through output processors
+          const { part: processedPart, blocked, reason } = await this.processPart(chunk, processorStates);
+
+          if (blocked) {
+            // Log that part was blocked
+            // void this.logger.debug(`[Agent:${this.agentName}] - Stream part blocked by output processor`, {
+            //   reason,
+            //   originalPart: value,
+            // });
+
+            // Send tripwire part and close stream for abort
+            controller.enqueue({
+              type: 'tripwire',
+              tripwireReason: reason || 'Output processor blocked content',
+            });
+            controller.terminate();
+          }
+
+          controller.enqueue(processedPart);
+        },
+      }));
   }
 
   get finishReason() {

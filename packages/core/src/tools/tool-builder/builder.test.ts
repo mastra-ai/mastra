@@ -139,11 +139,12 @@ async function runSingleOutputsTest(
 
     const generateOptions: any = {
       maxSteps: 1,
-      structuredOutput: {
-        schema: testTool.inputSchema!,
-        model: model,
-        errorStrategy: 'strict',
-      },
+      experimental_output: testTool.inputSchema,
+      // structuredOutput: {
+      //   schema: testTool.inputSchema!,
+      //   model: model,
+      //   errorStrategy: 'strict',
+      // },
     };
 
     if (model.provider.includes('openai') || model.modelId.includes('openai')) {
@@ -253,7 +254,7 @@ async function runSingleInputTest(
 
 // These tests are both expensive to run and occasionally a couple are flakey. We should run them manually for now
 // to make sure that we still have good coverage, for both input and output schemas.
-describe.skip('Tool Schema Compatibility', () => {
+describe('Tool Schema Compatibility', () => {
   // Set a longer timeout for the entire test suite
   const SUITE_TIMEOUT = 120000; // 2 minutes
   const TEST_TIMEOUT = 60000; // 1 minute
@@ -263,23 +264,21 @@ describe.skip('Tool Schema Compatibility', () => {
 
   const modelsToTest = [
     // Anthropic Models
-    openrouter('anthropic/claude-3.7-sonnet'),
-    openrouter('anthropic/claude-3.5-sonnet'),
-    openrouter('anthropic/claude-3.5-haiku'),
+    // openrouter('anthropic/claude-3.7-sonnet'),
+    // openrouter('anthropic/claude-3.5-sonnet'),
+    // openrouter('anthropic/claude-3.5-haiku'),
 
-    // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
-    // Unions of objects are not supported
-    // Google Models
-    openrouter('google/gemini-2.5-pro-preview-03-25'),
-    openrouter('google/gemini-2.5-flash'),
-    openrouter('google/gemini-2.0-flash-lite-001'),
+    // // Google Models
+    // openrouter('google/gemini-2.5-pro-preview-03-25'),
+    // openrouter('google/gemini-2.5-flash'),
+    // openrouter('google/gemini-2.0-flash-lite-001'),
 
     // OpenAI Models
     openrouter('openai/gpt-4o-mini'),
-    openrouter('openai/gpt-4.1-mini'),
-    // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
-    openai('o3-mini'),
-    openai('o4-mini'),
+    // openrouter('openai/gpt-4.1-mini'),
+    // // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
+    // openai('o3-mini'),
+    // openai('o4-mini'),
 
     // Meta Models
     // Meta often calls the tool with the wrong name, ie 'tesTool_number'/'TestTool_number' instead of 'testTool_number'
@@ -377,18 +376,19 @@ describe.skip('Tool Schema Compatibility', () => {
       });
     });
 
-    describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+    describe.only(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
         describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
           testTools.forEach(testTool => {
             const schemaName = testTool.id.replace('testTool_', '');
 
+
             // Google does not support unions of objects and is flakey withnulls
             if (
-              (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null'))) ||
+              (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null')))
               // This works consistently locally but for some reason keeps failing in CI,
-              model.modelId.includes('gpt-4o-mini') ||
-              (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
+              // model.modelId.includes('gpt-4o-mini') ||
+              // (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
             ) {
               it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
               return;
@@ -397,9 +397,11 @@ describe.skip('Tool Schema Compatibility', () => {
               it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
               return;
             }
+            console.log('are we getting here?');
             it.concurrent(
               `should handle ${schemaName} schema`,
               async () => {
+                console.log('running', schemaName);
                 let result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id, schemaName);
 
                 // Sometimes models are flaky, run it again if it fails

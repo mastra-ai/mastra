@@ -58,6 +58,8 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
           return message;
         }
 
+        console.log('textContent', textContent)
+
         try {
           // Use structuring agent to extract structured data from the unstructured text
           const structuredResult = await this.structuringAgent.generate(
@@ -86,6 +88,8 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
 
             return message;
           }
+
+          console.log('structuredResult', structuredResult.object)
 
           // Store both original text and structured data in a way the agent can use
           // The agent expects text but we need both text and object for experimental_output

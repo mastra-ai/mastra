@@ -2052,6 +2052,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   }
 
   async #execute(options: InnerAgentExecutionOptions) {
+
+    console.log('options', options)
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -2370,6 +2372,26 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         const streamResult = llm.stream(inputData);
 
+        const outputProcessors =
+        options.outputProcessors ||
+        (this.#outputProcessors
+          ? typeof this.#outputProcessors === 'function'
+            ? await this.#outputProcessors({
+              runtimeContext: inputData.runtimeContext || new RuntimeContext(),
+            })
+            : this.#outputProcessors
+          : []);
+
+        // If output processors are configured, transform the stream to process text chunks for structured output too
+        if (outputProcessors?.length) {
+          console.log('running output processors')
+          const runner = await this.getProcessorRunner({
+            runtimeContext: inputData.runtimeContext || new RuntimeContext(),
+            outputProcessorOverrides: outputProcessors,
+          });
+          return runner.runOutputProcessorsForStream(streamResult.aisdk.v5)
+        }
+
         if (options.format === 'aisdk') {
           return streamResult.aisdk.v5;
         }
@@ -2383,12 +2405,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       inputSchema: z.any(),
       outputSchema: z.any(),
       execute: async ({ inputData }) => {
+        console.log('inputData', inputData)
         const result = llm.stream({
           ...inputData,
-          objectOptions: {
-            schema: inputData.output,
-            output: asSchema(inputData.output).jsonSchema.type === 'array' ? 'array' : 'object',
-          },
+          // objectOptions: {
+          //   schema: inputData.structuredOutput?.schema || inputData.output,
+          //   output: 'object',
+          // },
         });
 
         if (options.format === 'aisdk') {
@@ -2512,6 +2535,26 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           return bail(emptyResult);
         }
 
+        let effectiveOutputProcessors =
+        options.outputProcessors ||
+        (this.#outputProcessors
+          ? typeof this.#outputProcessors === 'function'
+            ? await this.#outputProcessors({
+              runtimeContext: result.runtimeContext!,
+            })
+            : this.#outputProcessors
+          : []);
+
+          // Handle structuredOutput option by creating an StructuredOutputProcessor
+          if (options.structuredOutput) {
+            const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
+            effectiveOutputProcessors = effectiveOutputProcessors
+              ? [...effectiveOutputProcessors, structuredProcessor]
+              : [structuredProcessor];
+          }
+
+          console.log('inputDatainExecute', inputData)
+
         const loopOptions: ModelLoopStreamArgs<any, any> = {
           messages: result.messages as ModelMessage[],
           runtimeContext: result.runtimeContext!,
@@ -2529,9 +2572,38 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 });
                 return;
               }
+              
+              const processedResult = await this.__runOutputProcessors({
+                runtimeContext: result.runtimeContext!,
+                outputProcessorOverrides: effectiveOutputProcessors,
+                messageList: new MessageList({
+                  threadId: result.threadId,
+                  resourceId,
+                }).add(
+                  {
+                    role: 'assistant',
+                    content: [{ type: 'text', text: JSON.stringify(payload) }],
+                  },
+                  'response',
+                ),
+              });
 
               try {
-                const outputText = payload.text;
+                const outputText = processedResult.messageList.get.all.core().map(m => m.content).join('\n');
+                payload.text = outputText;
+
+                const messages = processedResult.messageList.get.response.v2();
+                const messagesWithStructuredData = messages.filter(
+                  msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                );
+
+                if (
+                  messagesWithStructuredData[0] &&
+                  messagesWithStructuredData[0].content.metadata?.structuredOutput
+                ) {
+                  payload.object = messagesWithStructuredData[0].content.metadata.structuredOutput;
+                }
+            
                 await this.#executeOnFinish({
                   result: payload,
                   outputText,
@@ -2557,6 +2629,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             },
             onStepFinish: result.onStepFinish,
           },
+          objectOptions: {
+            schema: options.structuredOutput?.schema || options.output,
+            output: 'object',
+          }
         };
 
         return loopOptions as any;
@@ -3209,6 +3285,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         text: 'V1 models are not supported for stream_vnext. Please use stream instead.',
       });
     }
+
+    console.log('mergedStreamOptions', mergedStreamOptions)
 
     const result = await this.#execute({
       ...mergedStreamOptions,
