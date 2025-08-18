@@ -7,6 +7,7 @@ describe('checkConfigExport Babel plugin', () => {
     const result = { hasValidConfig: false };
     transformSync(code, {
       filename: 'testfile.ts',
+      presets: ['@babel/preset-typescript'],
       plugins: [checkConfigExport(result)],
       configFile: false,
       babelrc: false,
@@ -62,5 +63,10 @@ describe('checkConfigExport Babel plugin', () => {
   it('does not match export default new Mastra()', () => {
     const code = 'export default new Mastra()';
     expect(runPlugin(code)).toBe(false);
+  });
+
+  it('works with the babel-typescript preset', () => {
+    const code = 'type A = any; const foo: A = 123; export const mastra = new Mastra()';
+    expect(runPlugin(code)).toBe(true);
   });
 });

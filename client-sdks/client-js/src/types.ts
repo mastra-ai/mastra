@@ -89,6 +89,11 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
+export type UpdateModelParams = {
+  modelId: string;
+  provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+};
+
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
   instructions: string;

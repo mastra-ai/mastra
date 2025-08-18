@@ -1,4 +1,9 @@
-import type { Agent, MastraLanguageModel } from '@mastra/core/agent';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
+import { groq } from '@ai-sdk/groq';
+import { openai } from '@ai-sdk/openai';
+import { xai } from '@ai-sdk/xai';
+import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -524,7 +529,8 @@ export function updateAgentModelHandler({
 }: Context & {
   agentId: string;
   body: {
-    model: MastraLanguageModel;
+    modelId: string;
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
   };
 }): { message: string } {
   try {
@@ -534,7 +540,17 @@ export function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { model } = body;
+    const { modelId, provider } = body;
+
+    const providerMap = {
+      openai: openai(modelId),
+      anthropic: anthropic(modelId),
+      groq: groq(modelId),
+      xai: xai(modelId),
+      google: google(modelId),
+    };
+
+    let model = providerMap[provider];
 
     agent.__updateModel({ model });
 
