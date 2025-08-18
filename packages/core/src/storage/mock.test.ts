@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
+import { MessageList } from '../agent';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
-import { MessageList } from '../agent';
 import { InMemoryStore } from './mock';
 
 describe('InMemoryStore - Thread Sorting', () => {
