@@ -8,6 +8,7 @@ import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
+import type { MastraError } from '../error';
 import { RegisteredLogger } from '../logger';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
@@ -488,7 +489,7 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
-      error: Error;
+      error: MastraError;
     }
   | {
       status: 'suspended';
