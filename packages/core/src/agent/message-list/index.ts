@@ -2268,8 +2268,7 @@ export class MessageList {
 
           case 'tool-call':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'input-available',
               toolCallId: part.toolCallId,
               input: part.input,
@@ -2278,8 +2277,7 @@ export class MessageList {
 
           case 'tool-result':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'output-available',
               toolCallId: part.toolCallId,
               output:
