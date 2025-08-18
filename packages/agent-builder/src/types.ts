@@ -98,7 +98,7 @@ export const TemplateManifestSchema = z.object({
   units: z.array(TemplateUnitSchema),
 });
 
-export const MergeInputSchema = z.object({
+export const AgentBuilderInputSchema = z.object({
   repo: z.string().describe('Git URL or local path of the template repo'),
   ref: z.string().optional().describe('Tag/branch/commit to checkout (defaults to main/master)'),
   slug: z.string().optional().describe('Slug for branch/scripts; defaults to inferred from repo'),
@@ -112,9 +112,168 @@ export const MergePlanSchema = z.object({
   units: z.array(TemplateUnitSchema),
 });
 
+// File copy schemas and types
+export const CopiedFileSchema = z.object({
+  source: z.string(),
+  destination: z.string(),
+  unit: z.object({
+    kind: z.string(),
+    id: z.string(),
+  }),
+});
+
+export const ConflictSchema = z.object({
+  unit: z.object({
+    kind: z.string(),
+    id: z.string(),
+  }),
+  issue: z.string(),
+  sourceFile: z.string(),
+  targetFile: z.string(),
+});
+
+export const FileCopyInputSchema = z.object({
+  orderedUnits: z.array(TemplateUnitSchema),
+  templateDir: z.string(),
+  commitSha: z.string(),
+  slug: z.string(),
+  targetPath: z.string().optional(),
+});
+
+export const FileCopyResultSchema = z.object({
+  success: z.boolean(),
+  copiedFiles: z.array(CopiedFileSchema),
+  conflicts: z.array(ConflictSchema),
+  message: z.string(),
+  error: z.string().optional(),
+});
+
+// Intelligent merge schemas and types
+export const ConflictResolutionSchema = z.object({
+  unit: z.object({
+    kind: z.string(),
+    id: z.string(),
+  }),
+  issue: z.string(),
+  resolution: z.string(),
+});
+
+export const IntelligentMergeInputSchema = z.object({
+  conflicts: z.array(ConflictSchema),
+  copiedFiles: z.array(CopiedFileSchema),
+  templateDir: z.string(),
+  commitSha: z.string(),
+  slug: z.string(),
+  targetPath: z.string().optional(),
+});
+
+export const IntelligentMergeResultSchema = z.object({
+  success: z.boolean(),
+  applied: z.boolean(),
+  message: z.string(),
+  conflictsResolved: z.array(ConflictResolutionSchema),
+  error: z.string().optional(),
+  branchName: z.string().optional(),
+});
+
+// Validation schemas and types
+export const ValidationResultsSchema = z.object({
+  valid: z.boolean(),
+  errorsFixed: z.number(),
+  remainingErrors: z.number(),
+});
+
+export const ValidationFixInputSchema = z.object({
+  commitSha: z.string(),
+  slug: z.string(),
+  targetPath: z.string().optional(),
+  templateDir: z.string(),
+  orderedUnits: z.array(TemplateUnitSchema),
+  copiedFiles: z.array(CopiedFileSchema),
+  conflictsResolved: z.array(ConflictResolutionSchema).optional(),
+  maxIterations: z.number().optional().default(5),
+});
+
+export const ValidationFixResultSchema = z.object({
+  success: z.boolean(),
+  applied: z.boolean(),
+  message: z.string(),
+  validationResults: ValidationResultsSchema,
+  error: z.string().optional(),
+});
+
+// Final workflow result schema
 export const ApplyResultSchema = z.object({
   success: z.boolean(),
   applied: z.boolean(),
   branchName: z.string().optional(),
+  message: z.string(),
+  validationResults: ValidationResultsSchema.optional(),
   error: z.string().optional(),
+  errors: z.array(z.string()).optional(),
+  stepResults: z
+    .object({
+      copySuccess: z.boolean(),
+      mergeSuccess: z.boolean(),
+      validationSuccess: z.boolean(),
+      filesCopied: z.number(),
+      conflictsSkipped: z.number(),
+      conflictsResolved: z.number(),
+    })
+    .optional(),
+});
+
+export const CloneTemplateResultSchema = z.object({
+  templateDir: z.string(),
+  commitSha: z.string(),
+  slug: z.string(),
+});
+
+// Package analysis schemas and types
+export const PackageAnalysisSchema = z.object({
+  dependencies: z.record(z.string()).optional(),
+  devDependencies: z.record(z.string()).optional(),
+  peerDependencies: z.record(z.string()).optional(),
+  scripts: z.record(z.string()).optional(),
+  packageInfo: z.object({
+    name: z.string().optional(),
+    version: z.string().optional(),
+    description: z.string().optional(),
+  }),
+});
+
+// Discovery step schemas and types
+export const DiscoveryResultSchema = z.object({
+  units: z.array(TemplateUnitSchema),
+});
+
+// Unit ordering schemas and types
+export const OrderedUnitsSchema = z.object({
+  orderedUnits: z.array(TemplateUnitSchema),
+});
+
+// Package merge schemas and types
+export const PackageMergeInputSchema = z.object({
+  commitSha: z.string(),
+  slug: z.string(),
+  targetPath: z.string().optional(),
+  packageInfo: PackageAnalysisSchema,
+});
+
+export const PackageMergeResultSchema = z.object({
+  success: z.boolean(),
+  applied: z.boolean(),
+  message: z.string(),
+  error: z.string().optional(),
+});
+
+// Flat install schemas and types
+export const FlatInstallInputSchema = z.object({
+  targetPath: z.string().describe('Path to the project to install packages in'),
+});
+
+export const FlatInstallResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  details: z.string().optional(),
 });

@@ -4,13 +4,31 @@ import { tmpdir } from 'os';
 import { join, dirname, resolve, extname, basename } from 'path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { AgentBuilder } from '..';
 import { AgentBuilderDefaults } from '../defaults';
 import type { TemplateUnit } from '../types';
-import { ApplyResultSchema, MergeInputSchema, TemplateUnitSchema } from '../types';
+import {
+  ApplyResultSchema,
+  AgentBuilderInputSchema,
+  CloneTemplateResultSchema,
+  PackageAnalysisSchema,
+  DiscoveryResultSchema,
+  OrderedUnitsSchema,
+  PackageMergeInputSchema,
+  PackageMergeResultSchema,
+  FlatInstallInputSchema,
+  FlatInstallResultSchema,
+  FileCopyInputSchema,
+  FileCopyResultSchema,
+  IntelligentMergeInputSchema,
+  IntelligentMergeResultSchema,
+  ValidationFixInputSchema,
+  ValidationFixResultSchema,
+} from '../types';
 import {
   exec,
   getMastraTemplate,
@@ -21,16 +39,34 @@ import {
   renameAndCopyFile,
 } from '../utils';
 
+// Helper function to resolve the model to use
+const resolveModel = (runtimeContext: any): MastraLanguageModel => {
+  const modelFromContext = runtimeContext.get('model');
+  if (modelFromContext) {
+    // Type check to ensure it's a MastraLanguageModel
+    if (isValidMastraLanguageModel(modelFromContext)) {
+      return modelFromContext;
+    }
+    throw new Error(
+      'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
+    );
+  }
+  return openai('gpt-4o-mini'); // Default model
+};
+
+// Type guard to check if object is a valid MastraLanguageModel
+const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
+  return (
+    model && typeof model === 'object' && typeof model.modelId === 'string' && typeof model.generate === 'function'
+  );
+};
+
 // Step 1: Clone template to temp directory
 const cloneTemplateStep = createStep({
   id: 'clone-template',
   description: 'Clone the template repository to a temporary directory at the specified ref',
-  inputSchema: MergeInputSchema,
-  outputSchema: z.object({
-    templateDir: z.string(),
-    commitSha: z.string(),
-    slug: z.string(),
-  }),
+  inputSchema: AgentBuilderInputSchema,
+  outputSchema: CloneTemplateResultSchema,
   execute: async ({ inputData }) => {
     const { repo, ref = 'main', slug } = inputData;
 
@@ -82,22 +118,8 @@ const cloneTemplateStep = createStep({
 const analyzePackageStep = createStep({
   id: 'analyze-package',
   description: 'Analyze the template package.json to extract dependency information',
-  inputSchema: z.object({
-    templateDir: z.string(),
-    commitSha: z.string(),
-    slug: z.string(),
-  }),
-  outputSchema: z.object({
-    dependencies: z.record(z.string()).optional(),
-    devDependencies: z.record(z.string()).optional(),
-    peerDependencies: z.record(z.string()).optional(),
-    scripts: z.record(z.string()).optional(),
-    packageInfo: z.object({
-      name: z.string().optional(),
-      version: z.string().optional(),
-      description: z.string().optional(),
-    }),
-  }),
+  inputSchema: CloneTemplateResultSchema,
+  outputSchema: PackageAnalysisSchema,
   execute: async ({ inputData }) => {
     console.log('Analyzing template package.json...');
     const { templateDir } = inputData;
@@ -137,21 +159,15 @@ const analyzePackageStep = createStep({
 const discoverUnitsStep = createStep({
   id: 'discover-units',
   description: 'Discover template units by analyzing the templates directory structure',
-  inputSchema: z.object({
-    templateDir: z.string(),
-    commitSha: z.string(),
-    slug: z.string(),
-  }),
-  outputSchema: z.object({
-    units: z.array(TemplateUnitSchema),
-  }),
-  execute: async ({ inputData }) => {
+  inputSchema: CloneTemplateResultSchema,
+  outputSchema: DiscoveryResultSchema,
+  execute: async ({ inputData, runtimeContext }) => {
     const { templateDir } = inputData;
 
     const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
     const agent = new Agent({
-      model: openai('gpt-4o-mini'),
+      model: resolveModel(runtimeContext),
       instructions: `You are an expert at analyzing Mastra projects.
 
 Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
@@ -258,12 +274,8 @@ Return the actual exported names of the units, as well as the file names.`,
 const orderUnitsStep = createStep({
   id: 'order-units',
   description: 'Sort units in topological order based on kind weights',
-  inputSchema: z.object({
-    units: z.array(TemplateUnitSchema),
-  }),
-  outputSchema: z.object({
-    orderedUnits: z.array(TemplateUnitSchema),
-  }),
+  inputSchema: DiscoveryResultSchema,
+  outputSchema: OrderedUnitsSchema,
   execute: async ({ inputData }) => {
     const { units } = inputData;
 
@@ -282,28 +294,8 @@ const orderUnitsStep = createStep({
 const packageMergeStep = createStep({
   id: 'package-merge',
   description: 'Merge template package.json dependencies into target project and install',
-  inputSchema: z.object({
-    commitSha: z.string(),
-    slug: z.string(),
-    targetPath: z.string().optional(),
-    packageInfo: z.object({
-      dependencies: z.record(z.string()).optional(),
-      devDependencies: z.record(z.string()).optional(),
-      peerDependencies: z.record(z.string()).optional(),
-      scripts: z.record(z.string()).optional(),
-      packageInfo: z.object({
-        name: z.string().optional(),
-        version: z.string().optional(),
-        description: z.string().optional(),
-      }),
-    }),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    applied: z.boolean(),
-    message: z.string(),
-    error: z.string().optional(),
-  }),
+  inputSchema: PackageMergeInputSchema,
+  outputSchema: PackageMergeResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Package merge step starting...');
     const { slug, packageInfo } = inputData;
@@ -344,7 +336,7 @@ Target has: {"@mastra/core": "latest", "zod": "^3.25.0"}
 Result should have: {"@mastra/core": "latest", "zod": "^3.25.0", "@mastra/libsql": "latest"}
 
 Be systematic and thorough. Always read the existing package.json first, then merge, then write.`,
-        model: openai('gpt-4o-mini'),
+        model: resolveModel(runtimeContext),
         tools: {
           readFile: allTools.readFile,
           writeFile: allTools.writeFile,
@@ -397,14 +389,8 @@ Be systematic and thorough. Always read the existing package.json first, then me
 const flatInstallStep = createStep({
   id: 'flat-install',
   description: 'Run a flat install command without specifying packages',
-  inputSchema: z.object({
-    targetPath: z.string().describe('Path to the project to install packages in'),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    message: z.string(),
-    details: z.string().optional(),
-  }),
+  inputSchema: FlatInstallInputSchema,
+  outputSchema: FlatInstallResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Running flat install...');
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
@@ -432,45 +418,8 @@ const flatInstallStep = createStep({
 const programmaticFileCopyStep = createStep({
   id: 'programmatic-file-copy',
   description: 'Programmatically copy template files to target project based on ordered units',
-  inputSchema: z.object({
-    orderedUnits: z.array(
-      z.object({
-        kind: z.string(),
-        id: z.string(),
-        file: z.string(),
-      }),
-    ),
-    templateDir: z.string(),
-    commitSha: z.string(),
-    slug: z.string(),
-    targetPath: z.string().optional(),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    copiedFiles: z.array(
-      z.object({
-        source: z.string(),
-        destination: z.string(),
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-      }),
-    ),
-    conflicts: z.array(
-      z.object({
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-        issue: z.string(),
-        sourceFile: z.string(),
-        targetFile: z.string(),
-      }),
-    ),
-    message: z.string(),
-    error: z.string().optional(),
-  }),
+  inputSchema: FileCopyInputSchema,
+  outputSchema: FileCopyResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Programmatic file copy step starting...');
     const { orderedUnits, templateDir, commitSha, slug } = inputData;
@@ -740,50 +689,8 @@ const programmaticFileCopyStep = createStep({
 const intelligentMergeStep = createStep({
   id: 'intelligent-merge',
   description: 'Use AgentBuilder to intelligently merge template files',
-  inputSchema: z.object({
-    conflicts: z.array(
-      z.object({
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-        issue: z.string(),
-        sourceFile: z.string(),
-        targetFile: z.string(),
-      }),
-    ),
-    copiedFiles: z.array(
-      z.object({
-        source: z.string(),
-        destination: z.string(),
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-      }),
-    ),
-    templateDir: z.string(),
-    commitSha: z.string(),
-    slug: z.string(),
-    targetPath: z.string().optional(),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    applied: z.boolean(),
-    message: z.string(),
-    conflictsResolved: z.array(
-      z.object({
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-        issue: z.string(),
-        resolution: z.string(),
-      }),
-    ),
-    error: z.string().optional(),
-    branchName: z.string().optional(),
-  }),
+  inputSchema: IntelligentMergeInputSchema,
+  outputSchema: IntelligentMergeResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Intelligent merge step starting...');
     const { conflicts, copiedFiles, commitSha, slug, templateDir } = inputData;
@@ -863,7 +770,7 @@ const intelligentMergeStep = createStep({
       const agentBuilder = new AgentBuilder({
         projectPath: targetPath,
         mode: 'template',
-        model: openai('gpt-4o-mini'),
+        model: resolveModel(runtimeContext),
         instructions: `
 You are an expert at integrating Mastra template components into existing projects.
 
@@ -1103,53 +1010,8 @@ Start by listing your tasks and work through them systematically!
 const validationAndFixStep = createStep({
   id: 'validation-and-fix',
   description: 'Validate the merged template code and fix any validation errors using a specialized agent',
-  inputSchema: z.object({
-    commitSha: z.string(),
-    slug: z.string(),
-    targetPath: z.string().optional(),
-    templateDir: z.string(),
-    orderedUnits: z.array(
-      z.object({
-        kind: z.string(),
-        id: z.string(),
-        file: z.string(),
-      }),
-    ),
-    copiedFiles: z.array(
-      z.object({
-        source: z.string(),
-        destination: z.string(),
-        unit: z.object({
-          kind: z.string(),
-          id: z.string(),
-        }),
-      }),
-    ),
-    conflictsResolved: z
-      .array(
-        z.object({
-          unit: z.object({
-            kind: z.string(),
-            id: z.string(),
-          }),
-          issue: z.string(),
-          resolution: z.string(),
-        }),
-      )
-      .optional(),
-    maxIterations: z.number().optional().default(5),
-  }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    applied: z.boolean(),
-    message: z.string(),
-    validationResults: z.object({
-      valid: z.boolean(),
-      errorsFixed: z.number(),
-      remainingErrors: z.number(),
-    }),
-    error: z.string().optional(),
-  }),
+  inputSchema: ValidationFixInputSchema,
+  outputSchema: ValidationFixResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Validation and fix step starting...');
     const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 5 } = inputData;
@@ -1228,7 +1090,7 @@ INTEGRATED UNITS:
 ${JSON.stringify(orderedUnits, null, 2)}
 
 Be thorough and methodical. Always use listDirectory to verify actual file existence before fixing imports.`,
-        model: openai('gpt-4o-mini'),
+        model: resolveModel(runtimeContext),
         tools: {
           validateCode: allTools.validateCode,
           readFile: allTools.readFile,
@@ -1361,7 +1223,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   id: 'agent-builder-template',
   description:
     'Merges a Mastra template repository into the current project using intelligent AgentBuilder-powered merging',
-  inputSchema: MergeInputSchema,
+  inputSchema: AgentBuilderInputSchema,
   outputSchema: ApplyResultSchema,
   steps: [
     cloneTemplateStep,
