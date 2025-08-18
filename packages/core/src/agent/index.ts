@@ -63,7 +63,6 @@ import type {
   AgentMemoryOption,
   AgentAISpanProperties,
 } from './types';
-import { aG } from 'vitest/dist/chunks/reporters.d.BFLkQcL6.js';
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
@@ -2124,7 +2123,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string } & TripwireProperties & AgentAISpanProperties
+      > & { runId: string } & TripwireProperties &
+        AgentAISpanProperties
     >;
     after: (args: {
       result: GenerateReturn<any, Output, ExperimentalOutput>;
@@ -2151,7 +2151,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string } & TripwireProperties & AgentAISpanProperties
+      > & { runId: string } & TripwireProperties &
+        AgentAISpanProperties
     >;
     after: (args: {
       result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
@@ -2181,7 +2182,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   experimental_output?: never;
                 },
             'runId'
-          > & { runId: string } & TripwireProperties & AgentAISpanProperties
+          > & { runId: string } & TripwireProperties &
+            AgentAISpanProperties
         >)
       | (() => Promise<
           Omit<
@@ -2192,7 +2194,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   experimental_output?: never;
                 },
             'runId'
-          > & { runId: string } & TripwireProperties & AgentAISpanProperties
+          > & { runId: string } & TripwireProperties &
+            AgentAISpanProperties
         >);
     after:
       | ((args: {
@@ -2772,6 +2775,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
       const streamResult = llm.__stream({
         ...llmOptions,
+        agentAISpan,
         experimental_output,
         onFinish: async result => {
           try {
@@ -2803,6 +2807,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     return llm.__streamObject({
       ...llmOptions,
+      agentAISpan,
       onFinish: async result => {
         try {
           const outputText = JSON.stringify(result.object);

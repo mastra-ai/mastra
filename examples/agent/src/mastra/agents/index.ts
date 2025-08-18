@@ -79,9 +79,9 @@ export const dynamicAgent = new Agent({
       cookingTool,
     };
 
-    if (runtimeContext.get('foo')) {
-      tools['web_search_preview'] = openai.tools.webSearchPreview();
-    }
+    // if (runtimeContext.get('foo')) {
+    //   tools['web_search_preview'] = openai.tools.webSearchPreview();
+    // }
 
     return tools;
   },
