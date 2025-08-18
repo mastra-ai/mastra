@@ -2189,15 +2189,6 @@ importers:
 
   packages/memory/integration-tests-v5:
     dependencies:
-      '@ai-sdk/google':
-        specifier: ^2.0.6
-        version: 2.0.6(zod@3.25.76)
-      '@ai-sdk/openai':
-        specifier: ^2.0.15
-        version: 2.0.15(zod@3.25.76)
-      '@ai-sdk/react':
-        specifier: ^2.0.15
-        version: 2.0.15(react@19.1.1)(zod@3.25.76)
       '@mastra/fastembed':
         specifier: workspace:*
         version: link:../../fastembed
@@ -2223,6 +2214,15 @@ importers:
         specifier: ^3.24.3
         version: 3.25.76
     devDependencies:
+      '@ai-sdk/google':
+        specifier: ^2.0.6
+        version: 2.0.6(zod@3.25.76)
+      '@ai-sdk/openai':
+        specifier: ^2.0.15
+        version: 2.0.15(zod@3.25.76)
+      '@ai-sdk/react':
+        specifier: ^2.0.15
+        version: 2.0.15(react@19.1.1)(zod@3.25.76)
       '@faker-js/faker':
         specifier: ^9.6.0
         version: 9.8.0
@@ -2239,8 +2239,8 @@ importers:
         specifier: ^20.17.57
         version: 20.19.9
       ai:
-        specifier: ^4.2.2
-        version: 4.3.19(react@19.1.1)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.15(zod@3.25.76)
       jsdom:
         specifier: ^26.0.0
         version: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
