@@ -635,10 +635,13 @@ export class MessageList {
       }
       return uiMessage;
     } else if (m.role === `assistant`) {
+      const isSingleTextContentArray =
+        Array.isArray(m.content.content) && m.content.content.length === 1 && m.content.content[0].type === `text`;
+
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: m.content.content || contentString,
+        content: isSingleTextContentArray ? contentString : m.content.content || contentString,
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
@@ -1162,6 +1165,19 @@ export class MessageList {
     const experimentalAttachments: AIV4Type.UIMessage['experimental_attachments'] = [];
     const toolInvocations: AIV4Type.ToolInvocation[] = [];
 
+    const isSingleTextContent =
+      messageSource === `response` &&
+      Array.isArray(coreMessage.content) &&
+      coreMessage.content.length === 1 &&
+      coreMessage.content[0] &&
+      coreMessage.content[0].type === `text` &&
+      `text` in coreMessage.content[0] &&
+      coreMessage.content[0].text;
+
+    if (isSingleTextContent && messageSource === `response`) {
+      coreMessage.content = isSingleTextContent;
+    }
+
     if (typeof coreMessage.content === 'string') {
       parts.push({ type: 'step-start' });
       parts.push({
@@ -1172,6 +1188,9 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            if (parts.at(-1)?.type !== `text` && parts.at(-1)?.type !== `step-start`) {
+              parts.push({ type: 'step-start' });
+            }
             parts.push({
               type: 'text',
               text: part.text,
