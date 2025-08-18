@@ -125,7 +125,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       resourceId: thread.resourceId,
       title: thread.title || `Thread ${thread.id}`,
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
-      updatedAt: now.toISOString(),
+      updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
     };
 
