@@ -2723,6 +2723,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
+      '@mastra/agent-builder':
+        specifier: workspace:*
+        version: link:../agent-builder
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
