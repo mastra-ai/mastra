@@ -31,6 +31,7 @@ import type {
   WatchEvent,
   WorkflowRunState,
 } from './types';
+import type { AnyAISpan } from '../ai-tracing';
 
 export type DefaultEngineType = {};
 
@@ -1181,6 +1182,7 @@ export class Workflow<
     abort,
     abortSignal,
     runCount,
+    parentAISpan,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1201,12 +1203,12 @@ export class Workflow<
     bail: (result: any) => any;
     abort: () => any;
     runCount?: number;
+    parentAISpan?: AnyAISpan;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    const run = resume?.steps?.length
-      ? await this.createRunAsync({ runId: resume.runId })
-      : await this.createRunAsync();
+    const isResume = !!(resume?.steps && resume.steps.length > 0);
+    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync();
     const nestedAbortCb = () => {
       abort();
     };
@@ -1227,14 +1229,9 @@ export class Workflow<
       runtimeContext.set('__mastraWorflowInputData', inputData);
     }
 
-    const res = resume?.steps?.length
-      ? await run.resume({
-          resumeData,
-          step: resume.steps as any,
-          runtimeContext,
-          runCount,
-        })
-      : await run.start({ inputData, runtimeContext });
+    const res = isResume
+      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, parentAISpan })
+      : await run.start({ inputData, runtimeContext, parentAISpan });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1436,10 +1433,12 @@ export class Run<
     inputData,
     runtimeContext,
     writableStream,
+    parentAISpan,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    parentAISpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1465,6 +1464,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
+      parentAISpan,
     });
 
     if (result.status !== 'suspended') {
@@ -1696,6 +1696,7 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
+    parentAISpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1813,6 +1814,7 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
+        parentAISpan: params.parentAISpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {

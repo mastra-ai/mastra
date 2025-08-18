@@ -11,6 +11,7 @@ import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
 import type { Emitter, StepFailure, StepResult, StepSuccess } from './types';
 import type { DefaultEngineType, SerializedStepFlowEntry, StepFlowEntry } from './workflow';
+import { AISpanType, getSelectedAITracing, type AISpan, type AnyAISpan, type AITracingContext } from '../ai-tracing';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -22,6 +23,7 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
+  aiSpan?: AISpan<AISpanType.WORKFLOW_RUN>;
 };
 
 /**
@@ -159,23 +161,56 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
+    parentAISpan?: AnyAISpan;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, parentAISpan } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
     //clear runCounts
     this.runCounts.clear();
 
+    let aiSpan: AISpan<AISpanType.WORKFLOW_RUN> | undefined;
+    if (parentAISpan) {
+      aiSpan = parentAISpan.createChildSpan({
+        type: AISpanType.WORKFLOW_RUN,
+        name: `workflow run: '${workflowId}'`,
+        input,
+        attributes: {
+          workflowId,
+        },
+      });
+    } else {
+      const aiTracing = getSelectedAITracing({
+        runtimeContext: runtimeContext,
+      });
+      if (aiTracing) {
+        aiSpan = aiTracing.startSpan({
+          type: AISpanType.WORKFLOW_RUN,
+          name: `workflow run: '${workflowId}'`,
+          input,
+          attributes: {
+            workflowId,
+          },
+          startOptions: {
+            runtimeContext,
+          },
+        });
+      }
+    }
+
     if (steps.length === 0) {
-      throw new MastraError({
+      const empty_graph_error = new MastraError({
         id: 'WORKFLOW_EXECUTE_EMPTY_GRAPH',
         text: 'Workflow must have at least one step',
         domain: ErrorDomain.MASTRA_WORKFLOW,
         category: ErrorCategory.USER,
       });
+
+      aiSpan?.error({ error: empty_graph_error });
+      throw empty_graph_error;
     }
 
     const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
@@ -209,6 +244,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
+            aiSpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -216,6 +252,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           writableStream: params.writableStream,
         });
 
+        // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
           if (lastOutput.result.status === 'bailed') {
             lastOutput.result.status = 'success';
@@ -238,8 +275,26 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             error: result.error,
             runtimeContext: params.runtimeContext,
           });
+
+          if (result.error) {
+            aiSpan?.error({
+              error: result.error,
+              attributes: {
+                status: result.status,
+              },
+            });
+          } else {
+            aiSpan?.end({
+              output: result.result,
+              attributes: {
+                status: result.status,
+              },
+            });
+          }
           return result;
         }
+
+        // if error occurred during step execution, stop and return
       } catch (e) {
         const error =
           e instanceof MastraError
@@ -274,10 +329,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           error: result.error,
           runtimeContext: params.runtimeContext,
         });
+
+        aiSpan?.error({
+          error,
+          attributes: {
+            status: result.status,
+          },
+        });
+
         return result;
       }
     }
 
+    // after all steps are successful, return result
     const result = (await this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
       workflowId,
@@ -290,6 +354,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       error: result.error,
       runtimeContext: params.runtimeContext,
     });
+
+    aiSpan?.end({
+      output: result.result,
+      attributes: {
+        status: result.status,
+      },
+    });
+
     return result;
   }
 
@@ -560,6 +632,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     };
 
+    const stepAISpan = executionContext.aiSpan?.createChildSpan({
+      name: `workflow step: '${step.id}'`,
+      type: AISpanType.WORKFLOW_STEP,
+      input: prevOutput,
+      attributes: {
+        stepId: step.id,
+      },
+    });
+
     if (!skipEmits) {
       await emitter.emit('watch', {
         type: 'watch',
@@ -597,17 +678,26 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
+        const aiTracingContext: AITracingContext = {
+          currentAISpan: stepAISpan,
+        };
+
+        const enhancedData = {
+          ...data,
+          aiTracingContext,
+        };
+
         const telemetry = this.mastra?.getTelemetry();
         const span = executionContext.executionSpan;
         if (!telemetry || !span) {
-          return step.execute(data);
+          return step.execute(enhancedData);
         }
 
         return otlpContext.with(trace.setSpan(otlpContext.active(), span), async () => {
           return telemetry.traceMethod(step.execute.bind(step), {
             spanName,
             attributes,
-          })(data);
+          })(enhancedData);
         });
       };
     };
@@ -711,6 +801,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               );
         this.logger.trackException(error);
         this.logger.error(`Error executing step ${step.id}: ` + error?.stack);
+
+        stepAISpan?.error({
+          error,
+          attributes: {
+            status: 'failed',
+          },
+        });
+
         execResults = {
           status: 'failed',
           error: error?.stack,
@@ -773,6 +871,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
       }
+    }
+
+    if (execResults.status != 'failed') {
+      stepAISpan?.end({
+        output: execResults.output,
+        attributes: {
+          status: execResults.status,
+        },
+      });
     }
 
     return { ...stepInfo, ...execResults };

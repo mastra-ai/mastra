@@ -13,6 +13,7 @@ import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
+import type { AnyAISpan } from './ai-tracing';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -226,6 +227,7 @@ export interface ToolOptions {
   agentName?: string;
   model?: LanguageModelV1;
   writableStream?: WritableStream<ChunkType>;
+  agentAISpan?: AnyAISpan;
 }
 
 /**

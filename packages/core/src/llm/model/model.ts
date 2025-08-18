@@ -7,7 +7,14 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
+import type {
+  CoreMessage,
+  LanguageModel,
+  Schema,
+  StreamObjectOnFinishCallback,
+  StreamTextOnFinishCallback,
+  ToolExecutionOptions,
+} from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -37,6 +44,10 @@ import type {
   StreamReturn,
 } from './base.types';
 import type { inferOutput } from './shared.types';
+import { AISpanType } from '../../ai-tracing';
+import type { AISpan, AnyAISpan } from '../../ai-tracing';
+import type { CoreTool } from '../../tools';
+
 
 export class MastraLLMV1 extends MastraBase {
   #model: LanguageModel;
@@ -109,6 +120,167 @@ export class MastraLLMV1 extends MastraBase {
     });
   }
 
+  // private _wrapTool(tool: CoreTool, aiSpan?: AnyAISpan): CoreTool {
+  //   console.log('Wrapping tool: %s : %s with aiSpan: %s', tool.id, tool.description, aiSpan ? 'exists' : 'false');
+  //   if (!aiSpan || !tool.execute) {
+  //     return tool;
+  //   }
+
+  //   const wrappedExecute = async (params: any, options: ToolExecutionOptions) => {
+  //     console.log('EXECUTING TOOL: %s : %s', tool.id, tool.description);
+
+  //     aiSpan?.createChildSpan({
+  //       type: AISpanType.TOOL_CALL,
+
+  //     })
+
+  //     const metadata: ToolCallMetadata = {
+  //       input: params,
+  //     };
+
+  //     const toolSpan = aiSpan.createChildSpan({ name: `tool-${tool.id}`, type: SpanType.TOOL_CALL, metadata });
+  //     const result = await tool.execute?.(params, options);
+  //     toolSpan.end({ output: result });
+  //     return result;
+  //   };
+
+  //   return {
+  //     ...tool,
+  //     execute: wrappedExecute,
+  //   };
+  // }
+
+  private _wrapModel(model: LanguageModel, agentAISpan?: AnyAISpan): LanguageModel {
+    if (!agentAISpan) {
+      return model;
+    }
+
+    const wrappedDoGenerate = async (options: any) => {
+      const llmSpan = agentAISpan?.createChildSpan({
+        name: `llm generate: '${model.modelId}'`,
+        type: AISpanType.LLM_GENERATION,
+        input: options.prompt,
+        attributes: {
+          model: model.modelId,
+          provider: model.provider,
+          parameters: {
+            temperature: options.temperature,
+            maxTokens: options.maxTokens,
+            topP: options.topP,
+            frequencyPenalty: options.frequencyPenalty,
+            presencePenalty: options.presencePenalty,
+            stop: options.stop,
+          },
+          streaming: false,
+        },
+        metadata: {
+          headers: options.headers ? options.headers : undefined,
+          mode: options.mode,
+        },
+      });
+
+      try {
+        const result = await model.doGenerate(options);
+
+        llmSpan.end({
+          output: result.response,
+          attributes: {
+            usage: result.usage
+              ? {
+                  promptTokens: result.usage.promptTokens,
+                  completionTokens: result.usage.completionTokens,
+                }
+              : undefined,
+          },
+        });
+        return result;
+      } catch (error) {
+        llmSpan.error({ error: error as Error });
+        throw error;
+      }
+    };
+
+    const wrappedDoStream = async (options: any) => {
+      const llmSpan = agentAISpan?.createChildSpan({
+        name: `llm stream: '${model.modelId}'`,
+        type: AISpanType.LLM_GENERATION,
+        input: options.prompt,
+        attributes: {
+          model: model.modelId,
+          provider: model.provider,
+          parameters: {
+            temperature: options.temperature,
+            maxTokens: options.maxTokens,
+            topP: options.topP,
+            frequencyPenalty: options.frequencyPenalty,
+            presencePenalty: options.presencePenalty,
+            stop: options.stop,
+          },
+          streaming: true,
+        },
+        metadata: {
+          headers: options.headers ? options.headers : undefined,
+          mode: options.mode,
+        },
+      });
+
+      try {
+        const result = await model.doStream(options);
+
+        // Create a wrapped stream that tracks the final result
+        const originalStream = result.stream;
+        let finalResponse: any = null;
+        let finalUsage: any = null;
+
+        const wrappedStream = originalStream.pipeThrough(
+          new TransformStream({
+            // this gets called on each chunk output
+            transform(chunk, controller) {
+              //TODO: Would be great to export chunks as events on the span
+              //TODO: Figure out how to get the final usage
+              // if (chunk.type === 'response-metadata' && chunk.usage) {
+              //   finalUsage = chunk.usage;
+              // }
+              if (chunk.type === 'finish') {
+                finalResponse = chunk;
+              }
+              controller.enqueue(chunk);
+            },
+            // this gets called at the end of the stream
+            flush() {
+              llmSpan.end({
+                output: finalResponse,
+                attributes: {
+                  usage: finalUsage
+                    ? {
+                        promptTokens: finalUsage.promptTokens,
+                        completionTokens: finalUsage.completionTokens,
+                        totalTokens: finalUsage.totalTokens,
+                      }
+                    : undefined,
+                },
+              });
+            },
+          }),
+        );
+
+        return {
+          ...result,
+          stream: wrappedStream,
+        };
+      } catch (error) {
+        llmSpan.error({ error: error as Error });
+        throw error;
+      }
+    };
+
+    return {
+      ...model,
+      doGenerate: wrappedDoGenerate,
+      doStream: wrappedDoStream,
+    };
+  }
+
   async __text<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
     messages,
@@ -122,6 +294,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
+    agentAISpan,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
@@ -154,7 +327,7 @@ export class MastraLLMV1 extends MastraBase {
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
       ...rest,
       messages,
-      model,
+      model: this._wrapModel(model, agentAISpan),
       temperature,
       tools: {
         ...(tools as Tools),
@@ -187,7 +360,7 @@ export class MastraLLMV1 extends MastraBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Step Change:', {
+        this.logger.debug('[LLM] - Text Step Change:', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -251,6 +424,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
+    agentAISpan,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
     const model = this.#model;
@@ -269,7 +443,7 @@ export class MastraLLMV1 extends MastraBase {
       const argsForExecute: OriginalGenerateObjectOptions<Z> = {
         ...rest,
         messages,
-        model,
+        model: this._wrapModel(model, agentAISpan),
         // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
@@ -338,6 +512,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
+    agentAISpan,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
     const model = this.#model;
@@ -366,7 +541,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
-      model,
+      model: this._wrapModel(model, agentAISpan),
       temperature,
       tools: {
         ...(tools as Tools),
@@ -499,6 +674,7 @@ export class MastraLLMV1 extends MastraBase {
     onFinish,
     structuredOutput,
     telemetry,
+    agentAISpan,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
     const model = this.#model;
@@ -518,10 +694,10 @@ export class MastraLLMV1 extends MastraBase {
 
       const argsForExecute: OriginalStreamObjectOptions<T> = {
         ...rest,
-        model,
+        model: this._wrapModel(model, agentAISpan),
         onFinish: async props => {
           try {
-            // @ts-expect-error - onFinish is not infered correctly
+            // @ts-expect-error - onFinish is not inferred correctly
             await onFinish?.({ ...props, runId: runId! });
           } catch (e: unknown) {
             const mastraError = new MastraError(
@@ -547,7 +723,7 @@ export class MastraLLMV1 extends MastraBase {
             throw mastraError;
           }
 
-          this.logger.debug('[LLM] - Stream Finished:', {
+          this.logger.debug('[LLM] - Object Stream Finished:', {
             usage: props?.usage,
             runId,
             threadId,
