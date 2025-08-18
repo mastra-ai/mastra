@@ -69,7 +69,12 @@ export const FeedbackForm = ({
     setErrorMessage("");
 
     try {
-      const response = await fetch("/api/feedback", {
+      const url =
+        process.env.NODE_ENV === "production"
+          ? "/docs/api/feedback"
+          : "/api/feedback";
+
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
