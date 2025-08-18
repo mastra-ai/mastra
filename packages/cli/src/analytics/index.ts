@@ -4,7 +4,6 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { PostHog } from 'posthog-node';
-import { DepsService } from '../services/service.deps';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,21 +20,8 @@ export type CLI_ORIGIN = 'mastra-cloud' | 'oss';
 
 let analyticsInstance: PosthogAnalytics | null = null;
 
-export async function getAnalytics() {
-  if (analyticsInstance) {
-    return analyticsInstance;
-  }
-
-  const depsService = new DepsService();
-  const version = await depsService.getPackageVersion();
-  const analytics = new PosthogAnalytics({
-    apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
-    host: 'https://us.posthog.com',
-    version: version!,
-  });
-
-  setAnalytics(analytics);
-  return analytics;
+export function getAnalytics(): PosthogAnalytics | null {
+  return analyticsInstance;
 }
 
 export function setAnalytics(instance: PosthogAnalytics): void {
