@@ -1,6 +1,6 @@
 {
   "name": "@mastra/s3vectors",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "Amazon S3 Vectors store provider for Mastra",
   "type": "module",
   "files": [
