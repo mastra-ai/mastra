@@ -2,8 +2,9 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Move all colors to :root and unify dark mode */
 /* TODO: use :root and .dark class to make theming easier */
+/* Move all colors to :root and unify dark mode */
+/* Use one color format*/
 :root {
   --border: hsla(0, 0%, 80%, 1);
   --color-text-icon-5: hsla(0, 0%, 8%, 1);
@@ -12,6 +13,7 @@
   --color-green-accent-2: hsla(125, 66%, 50%, 1);
   --border-2: hsla(0, 0%, 72%, 1);
   --border-radius-lg: 0.5rem;
+  --diff-color: #2ea04326;
 }
 
 .dark {
@@ -419,10 +421,6 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
   }
 }
 
-.nextra-code {
-  white-space: nowrap;
-}
-
 .nextra-code > span {
   white-space-collapse: preserve;
 }
@@ -593,23 +591,11 @@ aside > div:nth-child(1) button {
   }
 }
 
-.nextra-toc div > p {
+.nextra-toc div {
   position: relative;
   color: var(--color-el-3);
   font-weight: 500;
-  padding-inline-start: 2.24rem;
-
-  &::before {
-    content: "";
-    position: absolute;
-    left: 12px;
-    bottom: 1;
-    width: 1rem;
-    height: 1rem;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-image: url("icons/on-this-page.svg");
-  }
+  --nextra-navbar-height: 20px;
 }
 
 .nextra-toc ul a {
@@ -703,10 +689,40 @@ table td code.nextra-code:not([class*="twoslash-"]) {
   width: fit-content;
 }
 
-/* Reposition theme switcher*/
-
 @media screen and (min-width: 1024px) {
   button[title="Change theme"] {
     display: none;
+  }
+}
+
+.diff.remove {
+  background: oklch(0.65 0.22 16.44 / 0.16);
+  --content-color: var(--light-color-text-4);
+
+  &:is(html[class~="dark"] *) {
+    --content-color: white;
+  }
+
+  &::after {
+    content: "-";
+    position: absolute;
+    left: 2.6rem;
+    color: var(--content-color);
+  }
+}
+
+.diff.add {
+  background: var(--diff-color);
+  --content-color: var(--light-color-text-4);
+
+  &:is(html[class~="dark"] *) {
+    --content-color: white;
+  }
+
+  &::after {
+    content: "+";
+    position: absolute;
+    left: 2.6rem;
+    color: var(--content-color);
   }
 }

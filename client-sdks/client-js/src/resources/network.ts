@@ -28,9 +28,10 @@ export class Network extends BaseResource {
    * @param params - Generation parameters including prompt
    * @returns Promise containing the generated response
    */
-  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
-    params: GenerateParams<T>,
-  ): Promise<GenerateReturn<T>> {
+  generate<
+    Output extends JSONSchema7 | ZodSchema | undefined = undefined,
+    StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
+  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
       output: zodToJsonSchema(params.output),

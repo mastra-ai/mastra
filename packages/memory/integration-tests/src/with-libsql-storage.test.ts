@@ -42,5 +42,8 @@ describe('Memory with LibSQL Integration', () => {
     storageTypeForWorker: StorageType.LibSQL,
     storageConfigForWorker: { url: 'file:libsql-test.db' },
     memoryOptionsForWorker: memoryOptions,
+    vectorConfigForWorker: {
+      connectionUrl: 'file:libsql-test.db',
+    },
   });
 });

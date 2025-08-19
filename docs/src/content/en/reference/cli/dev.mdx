@@ -61,6 +61,12 @@ mastra dev [options]
       isOptional: true,
     },
     {
+      name: "--custom-args",
+      type: "string",
+      description: "Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types",
+      isOptional: true,
+    },
+    {
       name: "--help",
       type: "boolean",
       description: "display help for command",
@@ -123,6 +129,7 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 - **GET `/api/memory/threads`**: Get all threads.
 - **GET `/api/memory/threads/:threadId`**: Get thread by ID.
 - **GET `/api/memory/threads/:threadId/messages`**: Get messages for a thread.
+- **GET `/api/memory/threads/:threadId/messages/paginated`**: Get paginated messages for a thread.
 - **POST `/api/memory/threads`**: Create a new thread.
 - **PATCH `/api/memory/threads/:threadId`**: Update a thread.
 - **DELETE `/api/memory/threads/:threadId`**: Delete a thread.

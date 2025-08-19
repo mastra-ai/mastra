@@ -6,17 +6,20 @@
   "main": "index.js",
   "version": "0.0.1",
   "dependencies": {
+    "@ai-sdk/google": "latest",
     "@ai-sdk/openai": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
-    "@mastra/libsql": "latest",
     "ai": "^4.3.16",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
+    "typescript": "^5.8.3",
     "zod": "^3.25.67"
   },
   "pnpm": {
@@ -28,6 +31,7 @@
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/evals": "link:../../packages/evals",
       "mastra": "link:../../packages/cli"
     }
   },

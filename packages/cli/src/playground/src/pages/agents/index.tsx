@@ -1,12 +1,10 @@
 import { Header, HeaderTitle, MainContentLayout, MainContentContent } from '@mastra/playground-ui';
 
 import { useAgents } from '@/hooks/use-agents';
-import { useNavigate } from 'react-router';
 import { AgentsTable } from '@mastra/playground-ui';
 
 function Agents() {
-  const navigate = useNavigate();
-  const { agents, isLoading } = useAgents();
+  const { data: agents, isLoading } = useAgents();
 
   return (
     <MainContentLayout>
@@ -14,12 +12,8 @@ function Agents() {
         <HeaderTitle>Agents</HeaderTitle>
       </Header>
 
-      <MainContentContent>
-        <AgentsTable
-          agents={agents}
-          isLoading={isLoading}
-          onClickRow={agentId => navigate(`/agents/${agentId}/chat/new`)}
-        />
+      <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
+        <AgentsTable agents={agents} isLoading={isLoading} computeLink={agentId => `/agents/${agentId}/chat/new`} />
       </MainContentContent>
     </MainContentLayout>
   );

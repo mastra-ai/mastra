@@ -12,15 +12,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { WorkflowTableData } from './types';
 import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowTableProps {
   workflows?: Record<string, GetWorkflowResponse>;
   legacyWorkflows?: Record<string, GetLegacyWorkflowResponse>;
   isLoading: boolean;
-  onClickRow: (agentId: string) => void;
+  computeLink: (agentId: string) => string;
 }
 
-export function WorkflowTable({ workflows, legacyWorkflows, isLoading, onClickRow }: WorkflowTableProps) {
+export function WorkflowTable({ workflows, legacyWorkflows, isLoading, computeLink }: WorkflowTableProps) {
+  const { navigate } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
     const _workflowsData = Object.keys(workflows ?? {}).map(key => {
       const workflow = workflows?.[key];
@@ -30,7 +32,7 @@ export function WorkflowTable({ workflows, legacyWorkflows, isLoading, onClickRo
         name: workflow?.name || 'N/A',
         stepsCount: Object.keys(workflow?.steps ?? {})?.length,
         isLegacy: false,
-        link: `/workflows/${key}/graph`,
+        link: computeLink(key),
       };
     });
 
@@ -42,7 +44,7 @@ export function WorkflowTable({ workflows, legacyWorkflows, isLoading, onClickRo
         name: workflow?.name || 'N/A',
         stepsCount: Object.keys(workflow?.steps ?? {})?.length,
         isLegacy: true,
-        link: `/workflows/legacy/${key}/graph`,
+        link: computeLink(key),
       };
     });
 
@@ -76,7 +78,7 @@ export function WorkflowTable({ workflows, legacyWorkflows, isLoading, onClickRo
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => onClickRow(row.original.id)}>
+            <Row key={row.id} onClick={() => navigate(row.original.link)}>
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

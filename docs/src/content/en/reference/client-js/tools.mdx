@@ -7,20 +7,12 @@ description: Learn how to interact with and execute tools available in the Mastr
 
 The Tools API provides methods to interact with and execute tools available in the Mastra platform.
 
-## Initialize Mastra Client
-
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
 ## Getting All Tools
 
 Retrieve a list of all available tools:
 
 ```typescript
-const tools = await client.getTools();
+const tools = await mastraClient.getTools();
 ```
 
 ## Working with a Specific Tool
@@ -28,7 +20,7 @@ const tools = await client.getTools();
 Get an instance of a specific tool:
 
 ```typescript
-const tool = client.getTool("tool-id");
+const tool = mastraClient.getTool("tool-id");
 ```
 
 ## Tool Methods

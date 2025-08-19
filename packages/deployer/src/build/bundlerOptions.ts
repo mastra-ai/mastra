@@ -2,10 +2,12 @@ import * as babel from '@babel/core';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import commonjs from '@rollup/plugin-commonjs';
+import json from '@rollup/plugin-json';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { removeAllOptionsExceptBundler } from './babel/remove-all-options-bundler';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 import type { Config } from '@mastra/core';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 
 export function getBundlerOptionsBundler(
   entryFile: string,
@@ -27,12 +29,14 @@ export function getBundlerOptionsBundler(
         platform: 'node',
         minify: false,
       }),
+      optimizeLodashImports(),
       commonjs({
         extensions: ['.js', '.ts'],
         strictRequires: 'strict',
         transformMixedEsModules: true,
         ignoreTryCatch: false,
       }),
+      json(),
       {
         name: 'get-bundler-config',
         transform(code, id) {

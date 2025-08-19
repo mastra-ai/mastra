@@ -91,4 +91,12 @@ export class RuntimeContext<Values extends Record<string, any> | unknown = unkno
   public forEach<T = any>(callbackfn: (value: T, key: string, map: Map<string, any>) => void): void {
     this.registry.forEach(callbackfn as any);
   }
+
+  /**
+   * Custom JSON serialization method
+   * Converts the internal Map to a plain object for proper JSON serialization
+   */
+  public toJSON(): Record<string, any> {
+    return Object.fromEntries(this.registry);
+  }
 }

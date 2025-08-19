@@ -548,7 +548,7 @@ For detailed configuration options and advanced features, check out [Speech to S
   The tab shows how to set up real-time voice communication with event handling for audio responses.
   This enables conversational AI experiences with continuous audio streaming.
 */}
-<Tabs items={["OpenAI"]}>
+<Tabs items={["OpenAI", "Google Gemini Live"]}>
   <Tabs.Tab>
 ```typescript
 import { Agent } from '@mastra/core/agent';
@@ -579,6 +579,53 @@ await voiceAgent.voice.send(micStream);
 Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
 
   </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new GeminiLiveVoice({
+    // Live API mode
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: 'gemini-2.0-flash-exp',
+    speaker: 'Puck',
+    debug: true,
+    // Vertex AI alternative:
+    // vertexAI: true,
+    // project: 'your-gcp-project',
+    // location: 'us-central1',
+    // serviceAccountKeyFile: '/path/to/service-account.json',
+  }),
+});
+
+// Connect before using speak/send
+await voiceAgent.voice.connect();
+
+// Listen for agent audio responses
+voiceAgent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio);
+});
+
+// Listen for text responses and transcriptions
+voiceAgent.voice.on('writing', ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+// Initiate the conversation
+await voiceAgent.voice.speak('How can I help you today?');
+
+// Send continuous audio from the microphone
+const micStream = getMicrophoneStream();
+await voiceAgent.voice.send(micStream);
+```
+
+  </Tabs.Tab>
 </Tabs>
 
 ## Voice Configuration
@@ -592,7 +639,7 @@ The tabs help users understand the full configuration capabilities of each provi
 Each tab shows both speech and listening model configurations where applicable.
 */}
 
-<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf", "OpenAI Realtime"]}>
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf", "OpenAI Realtime", "Google Gemini Live"]}>
   <Tabs.Tab>
 ```typescript
 // OpenAI Voice Configuration
@@ -614,6 +661,38 @@ const voice = new OpenAIVoice({
 ```
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Google Gemini Live Voice Configuration
+import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
+
+const voice = new GeminiLiveVoice({
+  // Live API
+  apiKey: process.env.GOOGLE_API_KEY,
+  model: 'gemini-2.0-flash-exp',
+  speaker: 'Puck',
+  debug: true,
+  // Vertex AI alternative:
+  // vertexAI: true,
+  // project: 'your-gcp-project',
+  // location: 'us-central1',
+  // serviceAccountKeyFile: '/path/to/service-account.json',
+  // sessionConfig: {
+  //   vad: { enabled: true, sensitivity: 0.5, silenceDurationMs: 1000 },
+  //   interrupts: { enabled: true, allowUserInterruption: true },
+  //   contextCompression: false,
+  // }
+});
+
+// Per-turn overrides
+await voice.speak('Hello', {
+  languageCode: 'en-US',
+  responseModalities: ['AUDIO'] as any,
+  speaker: 'Puck',
+});
+```
 
   </Tabs.Tab>
   <Tabs.Tab>

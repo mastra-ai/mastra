@@ -17,28 +17,32 @@ const EMAIL = process.env.EMAIL;
 
 const PROVIDERS = {
   openai: {
-    model: 'gpt-4o',
+    model: 'gpt-4.1',
     package: '@ai-sdk/openai',
     apiKey: 'OPENAI_API_KEY',
     name: 'OpenAI',
+    url: 'https://platform.openai.com/api-keys',
   },
   anthropic: {
     model: 'claude-3-5-sonnet-20240620',
     package: '@ai-sdk/anthropic',
     apiKey: 'ANTHROPIC_API_KEY',
     name: 'Anthropic',
+    url: 'https://console.anthropic.com/settings/keys',
   },
   google: {
     model: 'gemini-2.5-pro',
     package: '@ai-sdk/google',
     apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
     name: 'Google',
+    url: 'https://console.cloud.google.com/apis/credentials',
   },
   groq: {
     model: 'llama-3.3-70b-versatile',
     package: '@ai-sdk/groq',
     apiKey: 'GROQ_API_KEY',
     name: 'Groq',
+    url: 'https://console.groq.com/keys',
   },
 };
 
@@ -58,8 +62,11 @@ async function main() {
 
     // Process each template
     for (const templateName of templateDirs) {
-      //pick description text from description.txt
-      const description = fs.readFileSync(path.join(TEMPLATES_DIR, templateName, 'description.txt'), 'utf-8');
+      //pick description text from package.json
+      const packageJsonFile = fs.readFileSync(path.join(TEMPLATES_DIR, templateName, 'package.json'), 'utf-8');
+      const packageJson = JSON.parse(packageJsonFile);
+      const description = packageJson.description || '';
+      console.log(`Description for ${templateName}: ${description}`);
       await processTemplate(templateName, description);
     }
   } catch (error) {
@@ -77,7 +84,7 @@ async function processTemplate(templateName, description) {
 
     if (repoExists) {
       console.log(`Repository ${templateName} exists, updating...`);
-      await updateExistingRepo(templateName);
+      await updateExistingRepo(templateName, description);
     } else {
       console.log(`Repository ${templateName} does not exist, creating...`);
       await createNewRepo(templateName, description);
@@ -118,7 +125,20 @@ async function createNewRepo(repoName, description) {
   await pushToRepo(repoName);
 }
 
-async function updateExistingRepo(repoName) {
+async function updateExistingRepo(repoName, description) {
+  try {
+    console.log(`Updating ${repoName} description`);
+    // Update existing repo description
+    await octokit.repos.update({
+      owner: ORGANIZATION,
+      repo: repoName,
+      description: description || `Template repository for ${repoName}`,
+    });
+
+    console.log(`Updated ${repoName} description`);
+  } catch (error) {
+    console.error(`Error updating ${repoName} description:`, error);
+  }
   // Push updated template code to the existing repository
   await pushToRepo(repoName);
 }
@@ -126,46 +146,182 @@ async function updateExistingRepo(repoName) {
 async function pushToRepo(repoName) {
   console.log(`Pushing to new repo: ${repoName}`);
   const templatePath = path.join(TEMPLATES_DIR, repoName);
-  const tempDir = path.join(process.cwd(), '.temp', repoName);
+  const tempRoot = path.join(process.cwd(), '.temp');
+  const tempDir = path.join(tempRoot, repoName);
 
   try {
     // Create temp directory
-    console.log(`Creating temp directory: ${tempDir}`);
-    fsExtra.ensureDirSync(tempDir);
+    console.log(`Creating temp directory: ${tempRoot}`);
+    fsExtra.ensureDirSync(tempRoot);
+
+    console.log(`Cloning repo into temp directory: ${tempRoot}`);
+    execSync(
+      ` 
+      git config --global user.name "${USERNAME}" &&
+      git config --global user.email "${EMAIL}" && 
+      git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git &&
+      cd ${repoName} &&
+      git fetch origin
+      `,
+      {
+        stdio: 'inherit',
+        cwd: tempRoot,
+      },
+    );
+
+    try {
+      console.log(`Check out to main branch in local`);
+      execSync(
+        ` 
+      git checkout main &&
+      git pull origin main
+      `,
+        {
+          stdio: 'inherit',
+          cwd: tempDir,
+        },
+      );
+    } catch (error) {
+      console.log(`No main branch found in local, creating new main branch`);
+      execSync(
+        `
+        git checkout -b main &&
+        git branch -M main
+      `,
+        { stdio: 'inherit', cwd: tempDir },
+      );
+    }
+
+    // remove everything in the temp directory except .git
+    console.log(`Removing everything (except .git) in the temp directory: ${tempDir}`);
+
+    // get all files and directories in the temp directory
+    const filesAndDirs = fs.readdirSync(tempDir);
+    console.log(`Found ${filesAndDirs.length} files and directories in the temp directory: ${tempDir}`);
+    // remove all files and directories in the temp directory except .git
+    for (const fileOrDir of filesAndDirs) {
+      if (fileOrDir !== '.git') {
+        console.log(`Removing ${fileOrDir} in the temp directory: ${tempDir}`);
+        fsExtra.removeSync(path.join(tempDir, fileOrDir));
+      }
+    }
+
+    const filesAndDirsPostDelete = fs.readdirSync(tempDir);
+    console.log(`Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')}`);
 
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
     fsExtra.copySync(templatePath, tempDir);
 
     // Initialize git and push to repo
-    console.log(`Initializing git and pushing to repo: ${repoName}`);
-    execSync(
-      `
-      git init &&
-      git config user.name "${USERNAME}" &&
-      git config user.email "${EMAIL}" &&
+    console.log(`Pushing to main branch`);
+    try {
+      execSync(
+        `
       git add . &&
       git commit -m "Update template from monorepo" &&
-      git branch -M main &&
-      git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git  &&
-      git push -u origin main --force
+      git push origin main
     `,
-      { stdio: 'inherit', cwd: tempDir },
-    );
+        { stdio: 'inherit', cwd: tempDir },
+      );
+    } catch (error) {
+      console.log(`No changes to push to main branch, skipping`);
+    }
 
     // setup different branches
     // TODO make more dynamic
     for (const [
       provider,
-      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName },
+      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
     ] of Object.entries(PROVIDERS)) {
-      const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
+      console.log(`Setting up ${provider} branch`);
       // move to new branch
-      execSync(`git checkout main && git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
+      execSync(`git checkout main && git pull origin main`, {
+        stdio: 'inherit',
+        cwd: tempDir,
+      });
 
-      //update llm provider in workflows and agents
-      for (const file of files) {
-        const filePath = path.join(tempDir, file);
+      try {
+        execSync(`git checkout -b ${provider}`, {
+          stdio: 'inherit',
+          cwd: tempDir,
+        });
+
+        try {
+          execSync(`git pull origin ${provider} --rebase=false`, {
+            stdio: 'inherit',
+            cwd: tempDir,
+          });
+        } catch (error) {
+          console.log(`No ${provider} branch found in origin, skipping`);
+        }
+      } catch (error) {
+        console.log(`${provider} branch already exists in local`);
+        execSync(`git checkout ${provider} && git pull origin ${provider} --rebase=false`, {
+          stdio: 'inherit',
+          cwd: tempDir,
+        });
+      }
+      // remove everything in the temp directory except .git
+      console.log(`Removing everything in the temp directory: ${tempDir} for ${provider} branch`);
+      // get all files and directories in the temp directory
+      const filesAndDirs = fs.readdirSync(tempDir);
+      console.log(
+        `Found ${filesAndDirs.length} files and directories in the temp directory: ${tempDir} for ${provider} branch`,
+      );
+      // remove all files and directories in the temp directory except .git
+      for (const fileOrDir of filesAndDirs) {
+        if (fileOrDir !== '.git') {
+          console.log(`Removing ${fileOrDir} in the temp directory: ${tempDir}`);
+          fsExtra.removeSync(path.join(tempDir, fileOrDir));
+        }
+      }
+
+      const filesAndDirsPostDelete = fs.readdirSync(tempDir);
+      console.log(
+        `Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')} for ${provider} branch`,
+      );
+
+      //commit deletion
+      execSync(`git add . && git commit -m "Delete everything in the temp directory for ${provider} branch"`, {
+        stdio: 'inherit',
+        cwd: tempDir,
+      });
+
+      // Copy template content to temp directory
+      console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
+      fsExtra.copySync(templatePath, tempDir);
+
+      //update llm provider agent files and workflow files
+      let agentDir = '';
+      let agentFiles = [];
+      try {
+        agentDir = path.join(tempDir, 'src/mastra/agents');
+        agentFiles = fs.readdirSync(agentDir);
+      } catch (error) {
+        console.log(`No agents directory found in ${tempDir}`);
+      }
+      const agentFilesToUpdate = agentFiles
+        .filter(file => file.endsWith('.ts'))
+        ?.map(file => path.join(agentDir, file));
+      let workflowDir = '';
+      let workflowFiles = [];
+      try {
+        workflowDir = path.join(tempDir, 'src/mastra/workflows');
+        workflowFiles = fs.readdirSync(workflowDir);
+      } catch (error) {
+        console.log(`No workflows directory found in ${tempDir}`);
+      }
+      const workflowFilesToUpdate = workflowFiles
+        .filter(file => file.endsWith('.ts'))
+        ?.map(file => path.join(workflowDir, file));
+      console.log(
+        `Updating ${workflowFilesToUpdate.length} workflow files and ${agentFilesToUpdate.length} agent files`,
+      );
+      const filePaths = [...workflowFilesToUpdate, ...agentFilesToUpdate];
+
+      //update llm provider in and agents
+      for (const filePath of filePaths) {
         if (fs.existsSync(filePath)) {
           console.log(`Updating ${filePath}`);
           let content = await readFile(filePath, 'utf-8');
@@ -173,7 +329,10 @@ async function pushToRepo(repoName) {
             `import { openai } from '@ai-sdk/openai';`,
             `import { ${provider} } from '${providerPackage}';`,
           );
-          content = content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? "${defaultModel}")`);
+          content = content.replaceAll(
+            /openai\((['"])[^'"]*(['"])\)/g,
+            `${provider}(process.env.MODEL ?? "${defaultModel}")`,
+          );
           await writeFile(filePath, content);
         } else {
           console.log(`${filePath} does not exist`);
@@ -190,30 +349,48 @@ async function pushToRepo(repoName) {
       packageJson.dependencies[providerPackage] = `^${latestVersion}`;
       await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 
-      //update llm provider in .env.example
       console.log(`Updating .env.example for ${provider}`);
       const envExamplePath = path.join(tempDir, '.env.example');
-      let envExample = await readFile(envExamplePath, 'utf-8');
-      envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
-      envExample = envExample + `\nMODEL=${defaultModel}`;
-      await writeFile(envExamplePath, envExample);
+      if (fs.existsSync(envExamplePath)) {
+        //update llm provider in .env.example
+        let envExample = await readFile(envExamplePath, 'utf-8');
+        envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
+        envExample = envExample.replaceAll('https://platform.openai.com/api-keys', providerUrl);
+        if (!envExample.includes('MODEL')) {
+          envExample = envExample + `\nMODEL=${defaultModel}`;
+        }
+        await writeFile(envExamplePath, envExample);
+      } else {
+        console.log(`${envExamplePath} does not exist, skipping`);
+      }
 
       //update llm provider in README.md
       console.log(`Updating README.md for ${provider}`);
       const readmePath = path.join(tempDir, 'README.md');
-      let readme = await readFile(readmePath, 'utf-8');
-      readme = readme.replace('OpenAI', providerName);
-      await writeFile(readmePath, readme);
+      if (fs.existsSync(readmePath)) {
+        let readme = await readFile(readmePath, 'utf-8');
+        readme = readme.replaceAll('OpenAI', providerName);
+        readme = readme.replaceAll('OPENAI_API_KEY', providerApiKey);
+        readme = readme.replaceAll('@ai-sdk/openai', providerPackage);
+        readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
+        await writeFile(readmePath, readme);
+      } else {
+        console.log(`${readmePath} does not exist, skipping`);
+      }
 
-      // push branch
-      execSync(
-        `
+      try {
+        // push branch
+        execSync(
+          `
         git add . &&
         git commit -m "Update llm provider to ${provider}" &&
-        git push -u origin ${provider} --force
+        git push origin ${provider}
     `,
-        { stdio: 'inherit', cwd: tempDir },
-      );
+          { stdio: 'inherit', cwd: tempDir },
+        );
+      } catch (error) {
+        console.log(`No changes to push to ${provider} branch, skipping`);
+      }
     }
 
     console.log(`Successfully pushed template to ${repoName}`);

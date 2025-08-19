@@ -1,16 +1,16 @@
 ---
-title: "Reference: Workflow.foreach() | Building Workflows | Mastra Docs"
-description: Documentation for the `.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
+title: "Reference: Workflow.foreach() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
 ---
 
 # Workflow.foreach()
 
 The `.foreach()` method creates a loop that executes a step for each item in an array.
 
-## Usage
+## Usage example
 
-```typescript
-workflow.foreach(stepOne, { concurrency: 2 });
+```typescript copy
+workflow.foreach(step1, { concurrency: 2 });
 ```
 
 ## Parameters
@@ -57,4 +57,4 @@ workflow.foreach(stepOne, { concurrency: 2 });
 
 ## Related
 
-- [For each](../../docs/workflows/control-flow.mdx#foreach)
+- [For each](../../docs/workflows/control-flow.mdx)

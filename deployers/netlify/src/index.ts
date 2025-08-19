@@ -32,7 +32,7 @@ export class NetlifyDeployer extends Deployer {
     await super.prepare(outputDirectory);
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
@@ -63,7 +63,8 @@ export class NetlifyDeployer extends Deployer {
     return `
     import { handle } from 'hono/netlify'
     import { mastra } from '#mastra';
-    import { createHonoServer } from '#server';
+    import { createHonoServer, getToolExports } from '#server';
+    import { tools } from '#tools';
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
@@ -107,13 +108,13 @@ export class NetlifyDeployer extends Deployer {
       }
     });
 
-    const app = await createHonoServer(mastra);
+    const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
 
     export default handle(app)
 `;
   }
 
-  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
     // Lint for netlify support

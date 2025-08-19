@@ -1,12 +1,17 @@
 import type { z } from 'zod';
-import type { Emitter, Mastra } from '..';
-import type { RuntimeContext } from '../di';
+import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
+import type { MastraScorers } from '../scores';
+import type { ChunkType } from '../stream/types';
+import type { ToolStream } from '../tools/stream';
+import type { DynamicArgument } from '../types';
 import type { EMITTER_SYMBOL } from './constants';
+import type { Emitter } from './types';
 import type { Workflow } from './workflow';
 
-// Define a type for the execute function
-export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (params: {
+export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
+  workflowId: string;
   mastra: Mastra;
   runtimeContext: RuntimeContext;
   inputData: TStepInput;
@@ -30,7 +35,12 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   [EMITTER_SYMBOL]: Emitter;
   engine: EngineType;
   abortSignal: AbortSignal;
-}) => Promise<TStepOutput>;
+  writer: ToolStream<ChunkType>;
+};
+
+export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+) => Promise<TStepOutput>;
 
 // Define a Step interface
 export interface Step<
@@ -54,5 +64,6 @@ export interface Step<
     z.infer<TSuspendSchema>,
     TEngineType
   >;
+  scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
 }

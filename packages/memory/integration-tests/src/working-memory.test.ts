@@ -132,12 +132,12 @@ describe('Working Memory Tests', () => {
     });
 
     it('should initialize with default working memory template', async () => {
-      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
-      expect(workingMemory).not.toBeNull();
-      if (workingMemory) {
+      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id });
+      expect(systemInstruction).not.toBeNull();
+      if (systemInstruction) {
         // Should match our Markdown template
-        expect(workingMemory).toContain('# User Information');
-        expect(workingMemory).toContain('First Name');
+        expect(systemInstruction).toContain('# User Information');
+        expect(systemInstruction).toContain('First Name');
       }
     });
 
@@ -474,10 +474,7 @@ describe('Working Memory Tests', () => {
       thread = await memory.saveThread({
         thread: createTestThread('Working Memory Test Thread'),
       });
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
-      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
-      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-      expect(extractUserData(wmObj)).toMatchObject({});
+      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
       agent = new Agent({
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
@@ -560,10 +557,7 @@ describe('Working Memory Tests', () => {
           thread: createTestThread('Working Memory Test Thread'),
         });
 
-        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
-        const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
-        const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-        expect(extractUserData(wmObj)).toMatchObject({});
+        expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
 
         agent = new Agent({
           name: 'Memory Test Agent',
@@ -735,10 +729,7 @@ describe('Working Memory Tests', () => {
       });
 
       // Verify initial working memory is empty
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
-      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
-      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-      expect(extractUserData(wmObj)).toMatchObject({});
+      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
 
       agent = new Agent({
         name: 'JSONSchema Memory Test Agent',

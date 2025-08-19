@@ -1,5 +1,430 @@
 # @mastra/core
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- c30bca8: Fix do while resume-suspend in simple workflow losing data
+
+## 0.13.2
+
+### Patch Changes
+
+- d5330bf: Allow agent model to be updated after the agent is created
+- 2e74797: Fix tool arguments being lost when tool-result messages arrive separately from tool-call messages or when messages are restored from database. Tool invocations now correctly preserve their arguments in all scenarios.
+- 8388649: Allow array of messages in vnext agent network
+- a239d41: Updated A2A syntax to v0.3.0
+- dd94a26: Dont rely on the full language model for schema compat
+- 3ba6772: MastraModelInput
+- b5cf2a3: make system message always available during agent calls
+- 2fff911: Fix vnext working memory tool schema when model is incompatible with schema
+- b32c50d: Filter scores by source
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+- 121a3f8: Fixed an issue where telemetry logs were displaying promise statuses when `agent.stream` is called
+- ec510e7: Tool input validation now returns errors as tool results instead of throwing, allowing agents to understand validation failures and retry with corrected parameters.
+- Updated dependencies [dd94a26]
+- Updated dependencies [2fff911]
+- Updated dependencies [ae2eb63]
+  - @mastra/schema-compat@0.10.7
+
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- d5330bf: Allow agent model to be updated after the agent is created
+- a239d41: Updated A2A syntax to v0.3.0
+- b32c50d: Filter scores by source
+- 121a3f8: Fixed an issue where telemetry logs were displaying promise statuses when `agent.stream` is called
+- ec510e7: Tool input validation now returns errors as tool results instead of throwing, allowing agents to understand validation failures and retry with corrected parameters.
+- Updated dependencies [ae2eb63]
+  - @mastra/schema-compat@0.10.7-alpha.1
+
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- 2e74797: Fix tool arguments being lost when tool-result messages arrive separately from tool-call messages or when messages are restored from database. Tool invocations now correctly preserve their arguments in all scenarios.
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- 8388649: Allow array of messages in vnext agent network
+- dd94a26: Dont rely on the full language model for schema compat
+- 3ba6772: MastraModelInput
+- 2fff911: Fix vnext working memory tool schema when model is incompatible with schema
+- Updated dependencies [dd94a26]
+- Updated dependencies [2fff911]
+  - @mastra/schema-compat@0.10.7-alpha.0
+
+## 0.13.1
+
+### Patch Changes
+
+- cd0042e: Fix tool call history not being accessible in agent conversations
+
+  When converting v2 messages (with combined tool calls and text) to v1 format for memory storage, split messages were all keeping the same ID. This caused later messages to replace earlier ones when added back to MessageList, losing tool history.
+
+  The fix adds ID deduplication by appending `__split-N` suffixes to split messages and prevents double-suffixing when messages are re-converted between formats.
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- cd0042e: Fix tool call history not being accessible in agent conversations
+
+  When converting v2 messages (with combined tool calls and text) to v1 format for memory storage, split messages were all keeping the same ID. This caused later messages to replace earlier ones when added back to MessageList, losing tool history.
+
+  The fix adds ID deduplication by appending `__split-N` suffixes to split messages and prevents double-suffixing when messages are re-converted between formats.
+
+## 0.13.0
+
+### Minor Changes
+
+- ea0c5f2: Update scorer api
+
+### Patch Changes
+
+- cb36de0: dependencies updates:
+  - Updated dependency [`hono@^4.8.11` ↗︎](https://www.npmjs.com/package/hono/v/4.8.11) (from `^4.8.9`, in `dependencies`)
+- d0496e6: dependencies updates:
+  - Updated dependency [`hono@^4.8.12` ↗︎](https://www.npmjs.com/package/hono/v/4.8.12) (from `^4.8.11`, in `dependencies`)
+- a82b851: Exclude getVoice, getScorers from agent trace
+- 41a0a0e: fixed a minor bug where ID generator wasn't being properly bound to instances of MessageList
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 94f4812: lazy initialize Run's `AbortController`
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- e00f6a0: Fixed an issue where converting from v2->v1 messages would not properly split text and tool call parts into multiple messages
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- b0e43c1: Fixed an issue where branching workflow steps maintained "suspended" status even after they've been successfully resumed and executed.
+- 5d377e5: Fix tracing of runtimeContext values"
+- 1fb812e: Fixed a bug in parallel workflow execution where resuming only one of multiple suspended parallel steps incorrectly completed the entire parallel block. The fix ensures proper execution and state management when resuming from suspension in parallel workflows.
+- 35c5798: Add support for transpilePackages option
+- Updated dependencies [4a406ec]
+  - @mastra/schema-compat@0.10.6
+
+## 0.13.0-alpha.3
+
+### Patch Changes
+
+- d0496e6: dependencies updates:
+  - Updated dependency [`hono@^4.8.12` ↗︎](https://www.npmjs.com/package/hono/v/4.8.12) (from `^4.8.11`, in `dependencies`)
+
+## 0.13.0-alpha.2
+
+### Patch Changes
+
+- cb36de0: dependencies updates:
+  - Updated dependency [`hono@^4.8.11` ↗︎](https://www.npmjs.com/package/hono/v/4.8.11) (from `^4.8.9`, in `dependencies`)
+- a82b851: Exclude getVoice, getScorers from agent trace
+- 41a0a0e: fixed a minor bug where ID generator wasn't being properly bound to instances of MessageList
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- 5d377e5: Fix tracing of runtimeContext values"
+- Updated dependencies [4a406ec]
+  - @mastra/schema-compat@0.10.6-alpha.0
+
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- ea0c5f2: Update scorer api
+
+### Patch Changes
+
+- b0e43c1: Fixed an issue where branching workflow steps maintained "suspended" status even after they've been successfully resumed and executed.
+- 1fb812e: Fixed a bug in parallel workflow execution where resuming only one of multiple suspended parallel steps incorrectly completed the entire parallel block. The fix ensures proper execution and state management when resuming from suspension in parallel workflows.
+- 35c5798: Add support for transpilePackages option
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- 94f4812: lazy initialize Run's `AbortController`
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- e00f6a0: Fixed an issue where converting from v2->v1 messages would not properly split text and tool call parts into multiple messages
+
+## 0.12.1
+
+### Patch Changes
+
+- 33dcb07: dependencies updates:
+  - Updated dependency [`@opentelemetry/auto-instrumentations-node@^0.62.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/auto-instrumentations-node/v/0.62.0) (from `^0.59.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-grpc@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-grpc/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-http@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-http/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/otlp-exporter-base@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/otlp-exporter-base/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/otlp-transformer@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/otlp-transformer/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/sdk-node@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/sdk-node/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/semantic-conventions@^1.36.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/semantic-conventions/v/1.36.0) (from `^1.34.0`, in `dependencies`)
+- d0d9500: Fixed an issue where AWS Bedrock is expecting a user message at the beginning of the message list
+- d30b1a0: Remove js-tiktoken as it's unused
+- bff87f7: fix issue where v1 messages from db wouldn't properly show tool calls in llm context window from historry
+- b4a8df0: Fixed an issue where memory instances were not being registered with Mastra and custom ID generators weren't being used
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- d0d9500: Fixed an issue where AWS Bedrock is expecting a user message at the beginning of the message list
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- 33dcb07: dependencies updates:
+  - Updated dependency [`@opentelemetry/auto-instrumentations-node@^0.62.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/auto-instrumentations-node/v/0.62.0) (from `^0.59.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-grpc@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-grpc/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-http@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-http/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/otlp-exporter-base@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/otlp-exporter-base/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/otlp-transformer@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/otlp-transformer/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/sdk-node@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/sdk-node/v/0.203.0) (from `^0.201.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/semantic-conventions@^1.36.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/semantic-conventions/v/1.36.0) (from `^1.34.0`, in `dependencies`)
+- d30b1a0: Remove js-tiktoken as it's unused
+- bff87f7: fix issue where v1 messages from db wouldn't properly show tool calls in llm context window from historry
+- b4a8df0: Fixed an issue where memory instances were not being registered with Mastra and custom ID generators weren't being used
+
+## 0.12.0
+
+### Minor Changes
+
+- 2ecf658: Added the option to provide a custom ID generator when creating an instance of Mastra. If the generator is not provided, a fallback of using UUID is used to generate IDs instead.
+
+### Patch Changes
+
+- 510e2c8: dependencies updates:
+  - Updated dependency [`radash@^12.1.1` ↗︎](https://www.npmjs.com/package/radash/v/12.1.1) (from `^12.1.0`, in `dependencies`)
+- 2f72fb2: dependencies updates:
+  - Updated dependency [`xstate@^5.20.1` ↗︎](https://www.npmjs.com/package/xstate/v/5.20.1) (from `^5.19.4`, in `dependencies`)
+- 27cc97a: dependencies updates:
+  - Updated dependency [`hono@^4.8.9` ↗︎](https://www.npmjs.com/package/hono/v/4.8.9) (from `^4.8.4`, in `dependencies`)
+- 3f89307: improve registerApiRoute validation
+- 9eda7d4: Move createMockModel to test scope. This prevents test dependencies from leaking into production code.
+- 9d49408: Fix conditional branch execution after nested workflow resume. Now conditional branches properly re-evaluate their conditions during resume, ensuring only the correct branches execute.
+- 41daa63: Threads are no longer created until message generation is complete to avoid leaving orphaned empty threads in storage on failure
+- ad0a58b: Enhancements for premade input processors
+- 254a36b: Expose mastra instance on dynamic agent arguments
+- 7a7754f: Fast follow scorers fixing input types, improve llm scorer reliability, fix ui to display scores that are 0
+- fc92d80: fix: GenerateReturn type
+- e0f73c6: Make input optional for scorer run
+- 0b89602: Fix workflow feedback loop crashes by preventing resume data reuse
+
+  Fixes an issue where workflows with loops (dountil/dowhile) containing suspended steps would incorrectly reuse resume data across iterations. This caused human-in-the-loop workflows to crash or skip suspend points after resuming.
+
+  The fix ensures resume data is cleared after a step completes (non-suspended status), allowing subsequent loop iterations to properly suspend for new input.
+
+  Fixes #6014
+
+- 4d37822: Fix workflow input property preservation after resume from snapshot
+
+  Ensure that when resuming a workflow from a snapshot, the input property is correctly set from the snapshot's context input rather than from resume data. This prevents the loss of original workflow input data during suspend/resume cycles.
+
+- 23a6a7c: improve error message for missing memory ids
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- a77c823: include PATCH method in default CORS configuration
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- 09bca64: Log warning when telemetry is enabled but not loaded
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- 71466e7: Adds traceId and resourceId to telemetry spans for agent invocations
+- 0c99fbe: [Feature] Add ability to include input processors to Agent primitive in order to add guardrails to incoming messages.
+
+## 0.12.0-alpha.5
+
+## 0.12.0-alpha.4
+
+### Patch Changes
+
+- ad0a58b: Enhancements for premade input processors
+
+## 0.12.0-alpha.3
+
+## 0.12.0-alpha.2
+
+### Patch Changes
+
+- 27cc97a: dependencies updates:
+  - Updated dependency [`hono@^4.8.9` ↗︎](https://www.npmjs.com/package/hono/v/4.8.9) (from `^4.8.4`, in `dependencies`)
+- 41daa63: Threads are no longer created until message generation is complete to avoid leaving orphaned empty threads in storage on failure
+- 254a36b: Expose mastra instance on dynamic agent arguments
+- 0b89602: Fix workflow feedback loop crashes by preventing resume data reuse
+
+  Fixes an issue where workflows with loops (dountil/dowhile) containing suspended steps would incorrectly reuse resume data across iterations. This caused human-in-the-loop workflows to crash or skip suspend points after resuming.
+
+  The fix ensures resume data is cleared after a step completes (non-suspended status), allowing subsequent loop iterations to properly suspend for new input.
+
+  Fixes #6014
+
+- 4d37822: Fix workflow input property preservation after resume from snapshot
+
+  Ensure that when resuming a workflow from a snapshot, the input property is correctly set from the snapshot's context input rather than from resume data. This prevents the loss of original workflow input data during suspend/resume cycles.
+
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- 71466e7: Adds traceId and resourceId to telemetry spans for agent invocations
+- 0c99fbe: [Feature] Add ability to include input processors to Agent primitive in order to add guardrails to incoming messages.
+
+## 0.12.0-alpha.1
+
+### Patch Changes
+
+- e0f73c6: Make input optional for scorer run
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- a77c823: include PATCH method in default CORS configuration
+
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- 2ecf658: Added the option to provide a custom ID generator when creating an instance of Mastra. If the generator is not provided, a fallback of using UUID is used to generate IDs instead.
+
+### Patch Changes
+
+- 510e2c8: dependencies updates:
+  - Updated dependency [`radash@^12.1.1` ↗︎](https://www.npmjs.com/package/radash/v/12.1.1) (from `^12.1.0`, in `dependencies`)
+- 2f72fb2: dependencies updates:
+  - Updated dependency [`xstate@^5.20.1` ↗︎](https://www.npmjs.com/package/xstate/v/5.20.1) (from `^5.19.4`, in `dependencies`)
+- 3f89307: improve registerApiRoute validation
+- 9eda7d4: Move createMockModel to test scope. This prevents test dependencies from leaking into production code.
+- 9d49408: Fix conditional branch execution after nested workflow resume. Now conditional branches properly re-evaluate their conditions during resume, ensuring only the correct branches execute.
+- 7a7754f: Fast follow scorers fixing input types, improve llm scorer reliability, fix ui to display scores that are 0
+- fc92d80: fix: GenerateReturn type
+- 23a6a7c: improve error message for missing memory ids
+- 09bca64: Log warning when telemetry is enabled but not loaded
+
+## 0.11.1
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 66e13e3: Add methods to fetch workflow/agent by its true id
+- edd9482: Fix "workflow run was not suspended" error when attempting to resume a workflow with consecutive nested workflows.
+- 18344d7: Code and llm scorers
+- 9d372c2: Fix streamVNext error handling
+- 40c2525: Fix agent.generate error with experimental_output and clientTool
+- e473f27: Implement off the shelf Scorers
+- 032cb66: ClientJS
+- 703ac71: scores schema
+- a723d69: Pass workflowId through
+- 7827943: Handle streaming large data
+- 5889a31: Export storage domain types
+- bf1e7e7: Configure agent memory using runtimeContext
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 4933192: Update Message List to ensure correct order of message parts
+- d1c77a4: Scorer interface
+- bea9dd1: Refactor Agent class to consolidate LLM generate and stream methods and improve type safety. This includes
+  extracting common logic into prepareLLMOptions(), enhancing type definitions, and fixing test annotations.
+
+  This changeset entry follows the established format in your project:
+  - Targets the @mastra/core package with a patch version bump
+  - Provides a concise description of the refactoring and type safety improvements
+  - Mentions the key changes without being too verbose
+
+- dcd4802: scores mastra server
+- cbddd18: Remove erroneous reassignment of `Mastra.prototype.#vectors`
+- 7ba91fa: Add scorer abstract methods for base storage
+
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 66e13e3: Add methods to fetch workflow/agent by its true id
+- edd9482: Fix "workflow run was not suspended" error when attempting to resume a workflow with consecutive nested workflows.
+- 18344d7: Code and llm scorers
+- 9d372c2: Fix streamVNext error handling
+- 40c2525: Fix agent.generate error with experimental_output and clientTool
+- e473f27: Implement off the shelf Scorers
+- 032cb66: ClientJS
+- 703ac71: scores schema
+- a723d69: Pass workflowId through
+- 5889a31: Export storage domain types
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 4933192: Update Message List to ensure correct order of message parts
+- d1c77a4: Scorer interface
+- bea9dd1: Refactor Agent class to consolidate LLM generate and stream methods and improve type safety. This includes
+  extracting common logic into prepareLLMOptions(), enhancing type definitions, and fixing test annotations.
+
+  This changeset entry follows the established format in your project:
+  - Targets the @mastra/core package with a patch version bump
+  - Provides a concise description of the refactoring and type safety improvements
+  - Mentions the key changes without being too verbose
+
+- dcd4802: scores mastra server
+- 7ba91fa: Add scorer abstract methods for base storage
+
+## 0.11.0-alpha.1
+
+## 0.11.0-alpha.0
+
+### Patch Changes
+
+- 7827943: Handle streaming large data
+- bf1e7e7: Configure agent memory using runtimeContext
+- cbddd18: Remove erroneous reassignment of `Mastra.prototype.#vectors`
+
+## 0.10.15
+
+### Patch Changes
+
+- 0b56518: Ensure removed runtimeContext values are not saved in snapshot
+- db5cc15: Create thread if it does not exist yet in agent network stream, generate and loopStream
+- 2ba5b76: Allow passing jsonSchema into workingMemory schema
+- 5237998: Fix foreach output
+- c3a30de: added new experimental vnext working memory
+- 37c1acd: Format semantic recall messages grouped by dates and labeled by if they're from a different thread or not, to improve longmemeval scores
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 89ec9d4: remove cohere-ai client dependency and just make a fetch call
+- cf3a184: Add warning log when memory is not configured but threadId/resourceId are passed to agent
+- d6bfd60: Simplify Message-List Merge Logic and Updates
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- c22a91f: Fix nested workflow resume in loop workflow breaking
+- f7403ab: Only change workflow status to success after all steps are successful
+- 6c89d7f: Save runtimeContext in snapshot
+- Updated dependencies [4da943f]
+  - @mastra/schema-compat@0.10.5
+
+## 0.10.15-alpha.1
+
+### Patch Changes
+
+- 0b56518: Ensure removed runtimeContext values are not saved in snapshot
+- 2ba5b76: Allow passing jsonSchema into workingMemory schema
+- c3a30de: added new experimental vnext working memory
+- cf3a184: Add warning log when memory is not configured but threadId/resourceId are passed to agent
+- d6bfd60: Simplify Message-List Merge Logic and Updates
+- Updated dependencies [4da943f]
+  - @mastra/schema-compat@0.10.5-alpha.0
+
 ## 0.10.15-alpha.0
 
 ### Patch Changes

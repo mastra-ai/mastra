@@ -7,12 +7,16 @@ import type {
   WorkflowRuns,
   WorkflowRun,
   LegacyWorkflowRuns,
+  StorageGetMessagesArg,
+  PaginationInfo,
+  MastraMessageV2,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
+import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput, UIMessageWithMetadata } from '@mastra/core/agent';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { MastraScorer, MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,
@@ -66,7 +70,7 @@ export interface GetAgentResponse {
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[];
+  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -76,7 +80,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
 >;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[];
+  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -84,6 +88,11 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
 } & WithoutMethods<
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
+
+export type UpdateModelParams = {
+  modelId: string;
+  provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+};
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -194,16 +203,16 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: MastraMessageV1[];
+  messages: (MastraMessageV1 | MastraMessageV2)[];
   agentId: string;
 }
 
 export interface SaveNetworkMessageToMemoryParams {
-  messages: MastraMessageV1[];
+  messages: (MastraMessageV1 | MastraMessageV2)[];
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = MastraMessageV1[];
+export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -248,10 +257,16 @@ export interface GetMemoryThreadMessagesParams {
   limit?: number;
 }
 
+export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
+
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
   uiMessages: AiMessageType[];
 }
+
+export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
+  messages: MastraMessageV1[] | MastraMessageV2[];
+};
 
 export interface GetLogsParams {
   transportId: string;
@@ -404,7 +419,17 @@ export interface LoopStreamVNextNetworkParams {
 export interface LoopVNextNetworkResponse {
   status: 'success';
   result: {
-    text: string;
+    task: string;
+    resourceId: string;
+    resourceType: 'agent' | 'workflow' | 'none' | 'tool';
+    result: string;
+    iteration: number;
+    isOneOff: boolean;
+    prompt: string;
+    threadId?: string | undefined;
+    threadResourceId?: string | undefined;
+    isComplete?: boolean | undefined;
+    completionReason?: string | undefined;
   };
   steps: WorkflowResult<any, any>['steps'];
 }
@@ -425,4 +450,58 @@ export interface McpToolInfo {
 
 export interface McpServerToolListResponse {
   tools: McpToolInfo[];
+}
+
+export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
+// Scores-related types
+export interface GetScoresByRunIdParams {
+  runId: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresByScorerIdParams {
+  scorerId: string;
+  entityId?: string;
+  entityType?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresByEntityIdParams {
+  entityId: string;
+  entityType: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface SaveScoreParams {
+  score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
+}
+
+export interface GetScoresResponse {
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  };
+  scores: ClientScoreRowData[];
+}
+
+export interface SaveScoreResponse {
+  score: ClientScoreRowData;
+}
+
+export type GetScorerResponse = MastraScorerEntry & {
+  agentIds: string[];
+  workflowIds: string[];
+};
+
+export interface GetScorersResponse {
+  scorers: Array<GetScorerResponse>;
 }

@@ -9,7 +9,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { useLinkComponent } from '@/lib/framework';
@@ -61,49 +61,51 @@ export const RuntimeContext = () => {
   };
 
   return (
-    <div>
-      <div className="flex items-center justify-between pb-2">
-        <Txt as="label" variant="ui-md" className="text-icon3">
-          Runtime Context (JSON)
-        </Txt>
+    <TooltipProvider>
+      <div>
+        <div className="flex items-center justify-between pb-2">
+          <Txt as="label" variant="ui-md" className="text-icon3">
+            Runtime Context (JSON)
+          </Txt>
 
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={formatRuntimeContext} className={buttonClass}>
-                <Icon>
-                  <Braces />
-                </Icon>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Format the Runtime Context JSON</TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={formatRuntimeContext} className={buttonClass}>
+                  <Icon>
+                    <Braces />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Format the Runtime Context JSON</TooltipContent>
+            </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={handleCopy} className={buttonClass}>
-                <Icon>
-                  <CopyIcon />
-                </Icon>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy Runtime Context</TooltipContent>
-          </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={handleCopy} className={buttonClass}>
+                  <Icon>
+                    <CopyIcon />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Copy Runtime Context</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+
+        <CodeMirror
+          value={runtimeContextValue}
+          onChange={setRuntimeContextValue}
+          theme={theme}
+          extensions={[jsonLanguage]}
+          className="h-[400px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
+        />
+
+        <div className="flex justify-end pt-2">
+          <Button onClick={handleSaveRuntimeContext}>Save</Button>
         </div>
       </div>
-
-      <CodeMirror
-        value={runtimeContextValue}
-        onChange={setRuntimeContextValue}
-        theme={theme}
-        extensions={[jsonLanguage]}
-        className="h-[400px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
-      />
-
-      <div className="flex justify-end pt-2">
-        <Button onClick={handleSaveRuntimeContext}>Save</Button>
-      </div>
-    </div>
+    </TooltipProvider>
   );
 };
 

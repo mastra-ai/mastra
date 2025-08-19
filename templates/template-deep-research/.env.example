@@ -1,0 +1,2 @@
+OPENAI_API_KEY=""
+EXA_API_KEY=""

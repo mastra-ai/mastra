@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { registerCopilotKit } from '@mastra/agui';
+import { registerCopilotKit } from '@ag-ui/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { weatherAgent } from './agents';
 import { myNetwork } from './network';

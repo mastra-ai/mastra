@@ -1,5 +1,173 @@
 # @mastra/lance
 
+## 0.2.5
+
+### Patch Changes
+
+- cc9035c: dependencies updates:
+  - Updated dependency [`@lancedb/lancedb@^0.21.2` ↗︎](https://www.npmjs.com/package/@lancedb/lancedb/v/0.21.2) (from `^0.18.2`, in `dependencies`)
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- cc9035c: dependencies updates:
+  - Updated dependency [`@lancedb/lancedb@^0.21.2` ↗︎](https://www.npmjs.com/package/@lancedb/lancedb/v/0.21.2) (from `^0.18.2`, in `dependencies`)
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
+## 0.2.4
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
+## 0.2.3
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.2.2
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
+## 0.2.1
+
+### Patch Changes
+
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- 5889a31: implement scorers api for lance db
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- 5889a31: implement scorers api for lance db
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+
 ## 0.2.0
 
 ### Minor Changes

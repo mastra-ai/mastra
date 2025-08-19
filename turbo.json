@@ -14,6 +14,11 @@
     },
     "//#generate:root": {
       "cache": false
+    },
+    "dev:playground": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
     }
   }
 }

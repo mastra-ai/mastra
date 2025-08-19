@@ -1,0 +1,82 @@
+[
+  {
+    "question_id": "test-001",
+    "question": "What is my favorite color?",
+    "answer": "Blue",
+    "question_type": "single-session-user",
+    "question_date": "2024-01-15",
+    "haystack_session_ids": ["session-001"],
+    "haystack_dates": ["2024-01-10"],
+    "haystack_sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hi! My name is Alice and my favorite color is blue.",
+          "has_answer": true
+        },
+        {
+          "role": "assistant",
+          "content": "Hello Alice! It's nice to meet you. I'll remember that your favorite color is blue."
+        }
+      ]
+    ],
+    "answer_session_ids": ["session-001"]
+  },
+  {
+    "question_id": "test-002",
+    "question": "What pet do I have?",
+    "answer": "A golden retriever named Max",
+    "question_type": "multi-session",
+    "question_date": "2024-01-20",
+    "haystack_session_ids": ["session-002", "session-003"],
+    "haystack_dates": ["2024-01-12", "2024-01-18"],
+    "haystack_sessions": [
+      [
+        {
+          "role": "user",
+          "content": "I'm thinking about getting a pet.",
+          "has_answer": false
+        },
+        {
+          "role": "assistant",
+          "content": "That's exciting! What kind of pet are you considering?"
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I got a golden retriever! His name is Max.",
+          "has_answer": true
+        },
+        {
+          "role": "assistant",
+          "content": "Congratulations on your new golden retriever! Max is a great name."
+        }
+      ]
+    ],
+    "answer_session_ids": ["session-003"]
+  },
+  {
+    "question_id": "test-003",
+    "question": "What is my favorite food?",
+    "answer": "The user has not mentioned their favorite food in the conversation history.",
+    "question_type": "single-session-user",
+    "question_date": "2024-01-25",
+    "haystack_session_ids": ["session-004"],
+    "haystack_dates": ["2024-01-22"],
+    "haystack_sessions": [
+      [
+        {
+          "role": "user",
+          "content": "I love cooking but I haven't decided on a favorite dish yet.",
+          "has_answer": false
+        },
+        {
+          "role": "assistant",
+          "content": "Cooking is a wonderful hobby! What types of cuisine do you enjoy preparing?"
+        }
+      ]
+    ],
+    "answer_session_ids": []
+  }
+]

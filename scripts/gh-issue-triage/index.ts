@@ -103,11 +103,13 @@ async function main() {
     labels: [result.product_area, 'status: needs triage'],
   });
 
+  const userName = result.github_username.startsWith('@') ? result.github_username.slice(1) : result.github_username;
+
   await octokit.rest.issues.addAssignees({
     owner: OWNER,
     repo: REPO,
     issue_number: Number(ISSUE_NUMBER),
-    assignees: [result.github_username],
+    assignees: [userName],
   });
 
   console.log(`Assigned ${result.github_username} to issue #${ISSUE_NUMBER}`);
@@ -116,7 +118,7 @@ async function main() {
     owner: OWNER,
     repo: REPO,
     issue_number: Number(ISSUE_NUMBER),
-    body: `Thank you for reporting this issue! We have assigned it to @${result.github_username} and will look into it as soon as possible.`,
+    body: `Thank you for reporting this issue! We have assigned it to @${userName} and will look into it as soon as possible.`,
   });
 
   console.log(`Commented on issue #${ISSUE_NUMBER}`);
@@ -125,7 +127,7 @@ async function main() {
     context: {
       channel_id: CHANNEL_ID,
       text: `
-                New issue assigned to <@${mappings[result.github_username]}>
+                New issue assigned to <@${mappings[userName]}>
                 * Title: ${issue.data.title}
                 * Link: https://github.com/${OWNER}/${REPO}/issues/${ISSUE_NUMBER}
             `,

@@ -18,11 +18,15 @@ Mastra also supports other LLM providers. For a full list of supported models an
 - Node.js `v20.0` or higher
 - An API key from a supported [Model Provider](/docs/getting-started/model-providers)
 
+## Install using the `create mastra` CLI
+
+Our CLI is the fastest way to get started with Mastra. You can run `create mastra` anywhere on your machine.
+
 <Steps>
 
-## Install using the `create-mastra` CLI
+## Start the CLI wizard
 
-Our CLI is the fastest way to get started with Mastra. Run the following command to start the interactive setup:
+Run the following command to start the interactive setup:
 
 {/*
 LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
@@ -68,6 +72,22 @@ You can also run the Mastra CLI in non-interactive mode by passing all required 
 npx create-mastra@latest --project-name hello-mastra --example --components tools,agents,workflows --llm openai
 ```
 
+**Install with a template**
+
+Start with a pre-built template that demonstrates specific use cases:
+
+```bash copy
+npx create-mastra@latest --template template-name
+```
+
+> Browse available templates and learn more in [Templates](/docs/getting-started/templates).
+
+For example, to create a text-to-SQL application:
+
+```bash copy
+npx create-mastra@latest --template text-to-sql
+```
+
 > See the [create-mastra](/reference/cli/create-mastra) documentation for a full list of available CLI options.
 
 ### Add your API key
@@ -79,7 +99,44 @@ OPENAI_API_KEY=<your-api-key>
 ```
 > This example uses OpenAI. Each LLM provider uses a unique name. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
 
+### Launch the Mastra Development Server
+
 You can now launch the [Mastra Development Server](/docs/server-db/local-dev-playground) and test your agent using the Mastra Playground.
+
+{/*
+LLM CONTEXT: This Tabs component shows different package manager commands for starting Mastra's development server.
+Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
+This helps users choose their preferred package manager.
+All commands achieve the same result - starting Mastra's development server.
+*/}
+
+<Tabs items={["npm", "yarn", "pnpm", "bun", "Mastra CLI"]}>
+  <Tab>
+    ```bash copy
+    npm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun run dev
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    mastra dev
+    ```
+  </Tab>
+</Tabs>
 
 </Steps>
 
@@ -319,6 +376,3 @@ To install Mastra in an existing project, use the `mastra init` command.
 
 - [Local Development](/docs/server-db/local-dev-playground)
 - [Deploy to Mastra Cloud](/docs/deployment/overview)
-
-
-/docs/server-db/local-dev-playground

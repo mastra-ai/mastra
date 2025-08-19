@@ -12,14 +12,16 @@ import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { AgentTableData } from './types';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
-  onClickRow: (agentId: string) => void;
+  computeLink: (agentId: string) => string;
 }
 
-export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps) {
+export function AgentsTable({ agents, isLoading, computeLink }: AgentsTableProps) {
+  const { navigate } = useLinkComponent();
   const projectData: AgentTableData[] = useMemo(
     () =>
       Object.keys(agents).map(key => {
@@ -35,7 +37,7 @@ export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps)
           repoUrl: undefined,
           tools: agent.tools,
           modelId: agent.modelId,
-          link: `/agents/${key}/chat/new`,
+          link: computeLink(key),
         };
       }),
     [agents],
@@ -68,7 +70,7 @@ export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps)
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => onClickRow(row.original.id)}>
+            <Row key={row.id} onClick={() => navigate(row.original.link)}>
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
