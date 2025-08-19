@@ -1,6 +1,6 @@
 const meta = {
   "calling-agents": "Calling Agents",
-  "system-prompt": "Agent System Prompt",
+  "system-prompt": "Changing the System Prompt",
   "using-a-tool": "Agents with Tools",
   "hierarchical-multi-agent": "Hierarchical Multi-Agent System",
   "image-analysis": "Image Analysis Agent",
