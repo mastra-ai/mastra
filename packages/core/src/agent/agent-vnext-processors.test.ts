@@ -6,6 +6,7 @@ import type { Processor } from '../processors/index';
 import { RuntimeContext } from '../runtime-context';
 import type { MastraMessageV2 } from './types';
 import { Agent } from './index';
+import { openai } from '@ai-sdk/openai-v5';
 
 // Helper function to create a MastraMessageV2
 const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
@@ -94,7 +95,7 @@ describe('Input and Output Processors with VNext Methods', () => {
   });
 
   describe('Input Processors with generate_vnext', () => {
-    it.only('should run input processors before generation', async () => {
+    it('should run input processors before generation', async () => {
       const processor = {
         name: 'test-processor',
         processInput: async ({ messages }) => {
@@ -112,12 +113,10 @@ describe('Input and Output Processors with VNext Methods', () => {
 
       const result = await agentWithProcessor.generate_vnext('Hello world');
 
-      console.log('result', JSON.stringify(result, null, 2));
-
       // The processor should have added a message
       expect((result.response.messages[0].content[0] as any).text).toContain('processed:');
       expect((result.response.messages[0].content[0] as any).text).toContain('Processor was here!');
-    });
+    }, 50000);
 
     it('should run multiple processors in order', async () => {
       const processor1 = {

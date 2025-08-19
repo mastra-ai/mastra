@@ -563,12 +563,13 @@ export class MastraModelOutput extends MastraBase {
   async getFullOutput() {
     await this.consumeStream({
       onError: (error: any) => {
+        console.error(error);
         throw error;
       },
     });
 
     let object: any;
-    if (this.#options.objectOptions) {
+    if (this.#options.objectOptions?.schema) {
       object = await this.object;
     }
 

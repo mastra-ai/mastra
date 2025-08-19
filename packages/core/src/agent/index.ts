@@ -2500,7 +2500,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               },
             }),
             text: Promise.resolve(''),
-            usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
+            usage: Promise.resolve({ inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
             finishReason: Promise.resolve('other'),
             tripwire: true,
             tripwireReason: result.tripwireReason,
@@ -2520,24 +2520,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             experimental_output: undefined,
             steps: undefined,
             experimental_providerMetadata: undefined,
-            toAIStream: () =>
-              Promise.resolve('').then(() => {
-                const emptyStream = new (globalThis as any).ReadableStream({
-                  start(controller: any) {
-                    controller.close();
-                  },
-                });
-                return emptyStream;
-              }),
-            get experimental_partialOutputStream() {
-              return (async function* () {
-                // Empty async generator for partial output stream
-              })();
-            },
-            pipeDataStreamToResponse: () => Promise.resolve(),
-            pipeTextStreamToResponse: () => Promise.resolve(),
-            toDataStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
-            toTextStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
           };
 
           return bail(emptyResult);
@@ -3109,137 +3091,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
   async generate_vnext<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    generateOptions?: {
-      // @TODO: NEED TO SUPPORT
-      savePerStep?: boolean;
-      onStepFinish?: LoopConfig['onStepFinish'];
-      runtimeContext?: RuntimeContext;
-      format?: 'mastra' | 'aisdk';
-      output?: OUTPUT;
-      resourceId?: string;
-      threadId?: string;
-      memory?: AgentMemoryOption;
-      experimental_output?: EXPERIMENTAL_OUTPUT;
-      abortSignal?: AbortSignal;
-      toolChoice?: ToolChoice<any>;
-      stopWhen?: StopCondition<any>;
-      clientTools?: ToolsInput;
-    },
-  ) {
-    let runtimeContext = generateOptions?.runtimeContext || new RuntimeContext();
-    const defaultGenerateOptions = await this.getDefaultGenerateOptions({
-      runtimeContext,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    FORMAT extends 'aisdk' | 'mastra' = 'mastra',
+  >(messages: MessageListInput, options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>) {
+    const result = await this.stream_vnext(messages, {
+      ...options,
     });
 
-    const mergedGenerateOptions = {
-      ...defaultGenerateOptions,
-      ...generateOptions,
-      resourceId: generateOptions?.resourceId!,
-      threadId: generateOptions?.threadId!,
-    };
-
-    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions);
-
-    if (llm.getModel().specificationVersion !== 'v2') {
-      throw new MastraError({
-        id: 'AGENT_GENERATE_VNEXT_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'V1 models are not supported for generate_vnext. Please use generate instead.',
-      });
+    if (result.tripwire) {
+      return result;
     }
 
-    let llmToUse = llm as MastraLLMVNext;
-
-    const beforeResult = await before();
-
-    // Check for tripwire and return early if triggered
-    if (beforeResult.tripwire) {
-      const tripwireResult = {
-        text: '',
-        object: undefined,
-        usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
-        finishReason: 'other',
-        response: {
-          id: randomUUID(),
-          timestamp: new Date(),
-          modelId: 'tripwire',
-          messages: [],
-        },
-        responseMessages: [],
-        toolCalls: [],
-        toolResults: [],
-        warnings: undefined,
-        request: {
-          body: JSON.stringify({ messages: [] }),
-        },
-        experimental_output: undefined,
-        steps: undefined,
-        experimental_providerMetadata: undefined,
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
-      };
-
-      return tripwireResult as unknown as OUTPUT extends undefined
-        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
-        : GenerateObjectResult<OUTPUT>;
-    }
-
-    const loopOptions: ModelLoopStreamArgs<any, any> = {
-      messages: beforeResult.messages as ModelMessage[],
-      runtimeContext,
-      toolChoice: mergedGenerateOptions.toolChoice,
-      tools: beforeResult.tools,
-      stopWhen: mergedGenerateOptions.stopWhen,
-      resourceId: beforeResult.resourceId,
-      threadId: beforeResult.threadId,
-      options: {
-        onStepFinish: (beforeResult as any).onStepFinish,
-      },
-    };
-
-    const { experimental_output, output } = beforeResult;
-
-    if (!output || experimental_output) {
-      const result = llmToUse.stream({
-        ...loopOptions,
-      });
-
-      let fullOutput = await (mergedGenerateOptions.format === 'aisdk'
-        ? result.aisdk.v5.getFullOutput()
-        : result.getFullOutput());
-
-      const error = fullOutput.error;
-
-      if (fullOutput.finishReason === 'error' && error) {
-        throw error;
-      }
-
-      await after({
-        result: fullOutput as unknown as OUTPUT extends undefined
-          ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
-          : GenerateObjectResult<OUTPUT>,
-        outputText: result.text,
-      });
-
-      return fullOutput as unknown as OUTPUT extends undefined
-        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
-        : GenerateObjectResult<OUTPUT>;
-    }
-
-    const result = llmToUse.stream({
-      ...loopOptions,
-      objectOptions: {
-        schema: output,
-      },
-    });
-
-    let fullOutput = await (mergedGenerateOptions.format === 'aisdk'
-      ? result.aisdk.v5.getFullOutput()
-      : result.getFullOutput());
+    let fullOutput = await (options?.format === 'aisdk' ? result.aisdk.v5.getFullOutput() : result.getFullOutput());
 
     const error = fullOutput.error;
 
@@ -3247,16 +3110,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       throw error;
     }
 
-    await after({
-      result: fullOutput as unknown as OUTPUT extends undefined
-        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
-        : GenerateObjectResult<OUTPUT>,
-      outputText: result.text,
-    });
-
-    return fullOutput as unknown as OUTPUT extends undefined
-      ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
-      : GenerateObjectResult<OUTPUT>;
+    return fullOutput;
   }
 
   async stream_vnext<
@@ -3283,8 +3137,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         text: 'V1 models are not supported for stream_vnext. Please use stream instead.',
       });
     }
-
-    console.log('mergedStreamOptions', mergedStreamOptions);
 
     const result = await this.#execute({
       ...mergedStreamOptions,
