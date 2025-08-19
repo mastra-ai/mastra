@@ -51,6 +51,7 @@ export default defineConfig({
     'src/network/vNext/index.ts',
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
+    'src/telemetry/coralogix/index.ts',
     'src/test-utils/llm-mock.ts',
     'src/agent/input-processor/processors/index.ts',
   ],
