@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.22-alpha.1
+
+### Patch Changes
+
+- 8f8409a: Inject analytics instance into create cmd
+- 6313063: Implement model switcher in playground
+
 ## 0.10.22-alpha.0
 
 ### Patch Changes
