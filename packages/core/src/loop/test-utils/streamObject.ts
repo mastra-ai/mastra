@@ -179,27 +179,24 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]
           `);
 
-          // TODO: responseFormat is not set in the stream call
-          // expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "description": undefined,
-          //     "name": undefined,
-          //     "schema": {
-          //       "$schema": "http://json-schema.org/draft-07/schema#",
-          //       "additionalProperties": false,xw
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+          expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
 
         it('should use name and description', async () => {
@@ -243,27 +240,25 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               },
             ]
           `);
-          // TODO: responseFormat is not set in the stream call
-          // expect(model.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
-          //   {
-          //     "description": "test description",
-          //     "name": "test-name",
-          //     "schema": {
-          //       "$schema": "http://json-schema.org/draft-07/schema#",
-          //       "additionalProperties": false,
-          //       "properties": {
-          //         "content": {
-          //           "type": "string",
-          //         },
-          //       },
-          //       "required": [
-          //         "content",
-          //       ],
-          //       "type": "object",
-          //     },
-          //     "type": "json",
-          //   }
-          // `);
+
+          expect(model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+            {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "content",
+                ],
+                "type": "object",
+              },
+              "type": "json",
+            }
+          `);
         });
 
         it('should suppress error in partialObjectStream', async () => {
