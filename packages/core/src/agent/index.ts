@@ -2569,27 +2569,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
               messageList.add(payload.response.messages, 'response');
 
-              const processedResult = await this.__runOutputProcessors({
-                runtimeContext: result.runtimeContext!,
-                outputProcessorOverrides: effectiveOutputProcessors,
-                messageList: messageList,
-              });
-
               try {
-                const outputText = processedResult.messageList.get.all
+                const outputText = messageList.get.all
                   .core()
                   .map(m => m.content)
                   .join('\n');
-                payload.text = outputText;
-
-                const messages = processedResult.messageList.get.response.v2();
-                const messagesWithStructuredData = messages.filter(
-                  msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                );
-
-                if (messagesWithStructuredData[0] && messagesWithStructuredData[0].content.metadata?.structuredOutput) {
-                  payload.object = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                }
 
                 await this.#executeOnFinish({
                   result: payload,

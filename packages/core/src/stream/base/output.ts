@@ -16,6 +16,7 @@ import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import { TripWire } from '../../agent';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -446,11 +447,18 @@ export class MastraModelOutput extends MastraBase {
                 reason,
               } = await self.processorRunner.processPart(chunk as any, processorStates);
 
+              console.log('processedPart', processedPart);
+              console.log('blocked', blocked);
+              console.log('reason', reason);
+              console.log('SUHHHHHH, YOOO');
+
               if (blocked) {
                 // Send tripwire part and close stream for abort
                 controller.enqueue({
                   type: 'tripwire',
-                  tripwireReason: reason || 'Output processor blocked content',
+                  payload: {
+                    tripwireReason: reason || 'Output processor blocked content',
+                  },
                 });
                 controller.terminate();
                 return;
@@ -594,14 +602,27 @@ export class MastraModelOutput extends MastraBase {
       totalUsage: this.totalUsage,
       object,
       error: this.error,
+      tripwire: false,
+      tripwireReason: '',
       // experimental_output: // TODO
     };
 
-    const processedResult = await this.processorRunner?.runOutputProcessors(this.messageList);
+    let processedResult;
+    try {
+      processedResult = await this.processorRunner?.runOutputProcessors(this.messageList);
+    } catch (error) {
+      if (error instanceof TripWire) {
+        fullOutput.tripwire = true;
+        fullOutput.tripwireReason = error.message;
+        fullOutput.finishReason = 'other';
+      }
+    }
 
     if (!processedResult) {
       return fullOutput;
     }
+
+    fullOutput.response.messages = this.messageList.get.response.aiV5.model();
 
     const outputText = this.messageList.get.response.aiV4
       .core()

@@ -12,6 +12,7 @@ import { getResponseFormat } from './object/schema';
 import { transformSteps } from './output-helpers';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
+import { TripWire } from '../../../agent';
 
 type AISDKV5OutputStreamOptions = {
   toolCallStreaming?: boolean;
@@ -305,7 +306,7 @@ export class AISDKV5OutputStream {
     await this.consumeStream();
 
     let object: any;
-    if (this.#options.objectOptions) {
+    if (this.#options.objectOptions?.schema) {
       object = await this.object;
     }
 
@@ -327,15 +328,28 @@ export class AISDKV5OutputStream {
       content: this.content,
       totalUsage: this.#modelOutput.totalUsage,
       error: this.error,
+      tripwire: false,
+      tripwireReason: '',
       ...(object ? { object } : {}),
       // experimental_output: // TODO
     };
 
-    const processedResult = await this.#modelOutput.processorRunner?.runOutputProcessors(this.#messageList);
+    let processedResult;
+    try {
+      processedResult = await this.#modelOutput.processorRunner?.runOutputProcessors(this.#modelOutput.messageList);
+    } catch (error) {
+      if (error instanceof TripWire) {
+        fullOutput.tripwire = true;
+        fullOutput.tripwireReason = error.message;
+        fullOutput.finishReason = 'other';
+      }
+    }
 
     if (!processedResult) {
       return fullOutput;
     }
+
+    fullOutput.response.messages = this.#modelOutput.messageList.get.response.aiV5.model();
 
     const outputText = this.#modelOutput.messageList.get.response.aiV4
       .core()
