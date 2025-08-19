@@ -2565,19 +2565,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 return;
               }
 
+              const messageList = inputData['prepare-memory-step'].messageList as MessageList;
+
+              messageList.add(payload.response.messages, 'response');
+
               const processedResult = await this.__runOutputProcessors({
                 runtimeContext: result.runtimeContext!,
                 outputProcessorOverrides: effectiveOutputProcessors,
-                messageList: new MessageList({
-                  threadId: result.threadId,
-                  resourceId,
-                }).add(
-                  {
-                    role: 'assistant',
-                    content: [{ type: 'text', text: JSON.stringify(payload) }],
-                  },
-                  'response',
-                ),
+                messageList: messageList,
               });
 
               try {
@@ -2606,7 +2601,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   memoryConfig,
                   runtimeContext,
                   runId,
-                  messageList: inputData['prepare-memory-step'].messageList,
+                  messageList,
                   threadExists: inputData['prepare-memory-step'].threadExists,
                   structuredOutput: !!options.output,
                   saveQueueManager,
@@ -2689,15 +2684,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       resourceId,
     });
 
-    const messageListResponses = new MessageList({
-      threadId,
-      resourceId,
-      generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
-      // @ts-ignore Flag for agent network messages
-      _agentNetworkAppend: this._agentNetworkAppend,
-    })
-      .add(result.response.messages, 'response')
-      .get.all.core();
+    const messageListResponses = messageList.get.response.aiV4.core();
 
     const usedWorkingMemory = messageListResponses?.some(
       m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
@@ -3102,7 +3089,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       return result;
     }
 
-    let fullOutput = await (options?.format === 'aisdk' ? result.aisdk.v5.getFullOutput() : result.getFullOutput());
+    let fullOutput = await result.getFullOutput();
 
     const error = fullOutput.error;
 

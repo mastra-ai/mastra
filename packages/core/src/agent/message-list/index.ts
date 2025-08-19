@@ -1418,7 +1418,7 @@ export class MessageList {
     return key;
   }
 
-  private static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
+  static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
     if (typeof content === `string`) return content;
 
     return content.reduce((p, c) => {

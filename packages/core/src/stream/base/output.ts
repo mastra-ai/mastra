@@ -3,7 +3,7 @@ import { TransformStream } from 'stream/web';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
 import type { TelemetrySettings } from 'ai-v5';
-import type { MessageList } from '../../agent/message-list';
+import { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import type { ObjectOptions } from '../../loop/types';
 import type { OutputProcessor } from '../../processors';
@@ -81,7 +81,8 @@ export class MastraModelOutput extends MastraBase {
   #objectPromise: DelayedPromise<any> = new DelayedPromise();
   public runId: string;
   #options: MastraModelOutputOptions;
-  #processorRunner?: ProcessorRunner;
+  public processorRunner?: ProcessorRunner;
+  public messageList: MessageList;
 
   constructor({
     stream,
@@ -105,13 +106,15 @@ export class MastraModelOutput extends MastraBase {
 
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
-      this.#processorRunner = new ProcessorRunner({
+      this.processorRunner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors: options.outputProcessors,
         logger: this.logger,
         agentName: 'MastraModelOutput',
       });
     }
+
+    this.messageList = messageList;
 
     const self = this;
 
@@ -422,13 +425,6 @@ export class MastraModelOutput extends MastraBase {
 
     return fullStream
       .pipeThrough(
-        createObjectStreamTransformer({
-          objectOptions: self.#options.objectOptions!,
-          onFinish: data => self.#objectPromise.resolve(data),
-          onError: error => self.#objectPromise.reject(error),
-        }),
-      )
-      .pipeThrough(
         new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
             if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
@@ -443,12 +439,12 @@ export class MastraModelOutput extends MastraBase {
         new TransformStream({
           async transform(chunk, controller) {
             // Process all stream parts through output processors
-            if (self.#processorRunner) {
+            if (self.processorRunner) {
               const {
                 part: processedPart,
                 blocked,
                 reason,
-              } = await self.#processorRunner.processPart(chunk as any, processorStates);
+              } = await self.processorRunner.processPart(chunk as any, processorStates);
 
               if (blocked) {
                 // Send tripwire part and close stream for abort
@@ -467,6 +463,13 @@ export class MastraModelOutput extends MastraBase {
               controller.enqueue(chunk);
             }
           },
+        }),
+      )
+      .pipeThrough(
+        createObjectStreamTransformer({
+          objectOptions: self.#options.objectOptions!,
+          onFinish: data => self.#objectPromise.resolve(data),
+          onError: error => self.#objectPromise.reject(error),
         }),
       );
   }
@@ -573,7 +576,7 @@ export class MastraModelOutput extends MastraBase {
       object = await this.object;
     }
 
-    return {
+    const fullOutput = {
       text: this.text,
       usage: this.usage,
       steps: this.steps,
@@ -593,6 +596,38 @@ export class MastraModelOutput extends MastraBase {
       error: this.error,
       // experimental_output: // TODO
     };
+
+    const processedResult = await this.processorRunner?.runOutputProcessors(this.messageList);
+
+    if (!processedResult) {
+      return fullOutput;
+    }
+
+    const outputText = this.messageList.get.response.aiV4
+      .core()
+      .map(m => MessageList.coreContentToString(m.content))
+      .join('\n');
+
+    fullOutput.text = outputText;
+
+    const messages = this.messageList.get.response.v2();
+    const messagesWithStructuredData = messages.filter(
+      msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+    );
+
+    if (fullOutput.object) {
+      try {
+        fullOutput.object = JSON.parse(outputText);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    if (messagesWithStructuredData[0] && messagesWithStructuredData[0].content.metadata?.structuredOutput) {
+      fullOutput.object = messagesWithStructuredData[0].content.metadata.structuredOutput;
+    }
+
+    return fullOutput;
   }
 
   get totalUsage() {

@@ -2,7 +2,7 @@ import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
-import type { MessageList } from '../../../agent/message-list';
+import { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
 import type { ChunkType } from '../../types';
@@ -309,7 +309,7 @@ export class AISDKV5OutputStream {
       object = await this.object;
     }
 
-    return {
+    const fullOutput = {
       text: this.#modelOutput.text,
       usage: this.#modelOutput.usage,
       steps: this.generateTextSteps,
@@ -330,6 +330,38 @@ export class AISDKV5OutputStream {
       ...(object ? { object } : {}),
       // experimental_output: // TODO
     };
+
+    const processedResult = await this.#modelOutput.processorRunner?.runOutputProcessors(this.#messageList);
+
+    if (!processedResult) {
+      return fullOutput;
+    }
+
+    const outputText = this.#modelOutput.messageList.get.response.aiV4
+      .core()
+      .map(m => MessageList.coreContentToString(m.content))
+      .join('\n');
+
+    fullOutput.text = outputText;
+
+    const messages = this.#modelOutput.messageList.get.response.v2();
+    const messagesWithStructuredData = messages.filter(
+      msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+    );
+
+    if (fullOutput.object) {
+      try {
+        fullOutput.object = JSON.parse(outputText);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    if (messagesWithStructuredData[0] && messagesWithStructuredData[0].content.metadata?.structuredOutput) {
+      fullOutput.object = messagesWithStructuredData[0].content.metadata.structuredOutput;
+    }
+
+    return fullOutput;
   }
 
   get error() {
