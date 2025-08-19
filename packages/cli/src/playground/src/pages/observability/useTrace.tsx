@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { trace } from './data';
 
 // Type definitions for better type safety
-interface Observation {
+type Observation = {
   id: string;
   traceId: string;
   projectId: string;
@@ -38,11 +38,16 @@ interface Observation {
   inputUsage: number;
   outputUsage: number;
   totalUsage: number;
-}
+};
 
-interface OrganizedSpan extends Observation {
+type OrganizedSpan = Observation & {
   spans: OrganizedSpan[];
-}
+};
+
+type OrganizedSpanIds = {
+  id: string;
+  spans: OrganizedSpanIds[];
+};
 
 // Helper function to organize observations into a tree structure
 function organizeObservationsIntoTree(observations: Observation[]): OrganizedSpan[] {
@@ -77,13 +82,54 @@ function organizeObservationsIntoTree(observations: Observation[]): OrganizedSpa
     }
   });
 
-  return rootObservations;
+  // Sort all spans by startTime from earlier to later
+  const sortSpansByStartTime = (spans: OrganizedSpan[]): OrganizedSpan[] => {
+    return spans.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  };
+
+  // Sort root observations
+  const sortedRootObservations = sortSpansByStartTime(rootObservations);
+
+  // Sort all nested spans recursively
+  const sortNestedSpans = (spans: OrganizedSpan[]): void => {
+    spans.forEach(span => {
+      if (span.spans.length > 0) {
+        span.spans = sortSpansByStartTime(span.spans);
+        sortNestedSpans(span.spans);
+      }
+    });
+  };
+
+  sortNestedSpans(sortedRootObservations);
+
+  return sortedRootObservations;
+}
+
+// Helper function to flatten nested spans into array of IDs ordered by parent and startTime
+function flattenNestedSpansToIds(nestedSpans: OrganizedSpan[]): string[] {
+  const flattenedIds: string[] = [];
+
+  const traverseAndCollect = (spans: OrganizedSpan[]): void => {
+    spans.forEach(span => {
+      // Add current span ID
+      flattenedIds.push(span.id);
+
+      // Recursively traverse child spans
+      if (span.spans.length > 0) {
+        traverseAndCollect(span.spans);
+      }
+    });
+  };
+
+  traverseAndCollect(nestedSpans);
+  return flattenedIds;
 }
 
 export function useTrace() {
   const [spans, setSpans] = useState<Observation[] | null>(null);
   const [nestedSpans, setNestedSpans] = useState<OrganizedSpan[] | null>(null);
-  const [spansIdByStartTime, setSpansIdByStartTime] = useState<Record<string, string>>({});
+  const [spansIdsByStartTime, setSpansIdsByStartTime] = useState<Observation[]>([]);
+  const [spanIds, setSpanIds] = useState<string[]>([]);
 
   useEffect(() => {
     // Simulate fetching trace data
@@ -91,13 +137,25 @@ export function useTrace() {
     setSpans(observations);
 
     // Organize observations into tree structure
-    const organized = organizeObservationsIntoTree(observations);
-    setNestedSpans(organized);
+    const nested = organizeObservationsIntoTree(observations);
+    setNestedSpans(nested);
+
+    // Flatten nested spans to array of IDs ordered by parent and startTime
+    const spanIds = flattenNestedSpansToIds(nested);
+    setSpanIds(spanIds);
+
+    // Set array of observations as spansIdsByStartTime, ordered by startTime from earlier to later
+    const sortedObservations = [...observations].sort(
+      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    );
+    setSpansIdsByStartTime(sortedObservations);
   }, []);
 
   return {
     trace,
     spans,
     nestedSpans,
+    spansIdsByStartTime,
+    spanIds,
   };
 }

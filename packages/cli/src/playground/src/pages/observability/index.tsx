@@ -15,15 +15,12 @@ import { useTrace } from './useTrace';
 import { TraceDialog } from './TraceDialog';
 
 export default function observability() {
-  const { trace, nestedSpans } = useTrace();
+  const { trace, nestedSpans, spans, spanIds } = useTrace();
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedEntity, setSelectedEntity] = useState<number | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents, isLoading: agentsLoading } = useAgents();
   // const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
-
-  console.log('trace', trace);
-  console.log('organizedSpans', nestedSpans);
 
   const entities = [
     ...(Object.entries(agents) || []).map(([key, value]) => ({ id: key, name: value.name, type: 'agent' })),
@@ -97,6 +94,8 @@ export default function observability() {
   ];
 
   const handleOnListItem = (id: string) => {
+    console.log('handleOnListItem', id, selectedEvent?.id);
+
     if (id === selectedEvent?.id) {
       setSelectedEvent(null);
     } else {
@@ -160,7 +159,9 @@ export default function observability() {
         onNext={toNextItem(selectedEvent)}
         onPrevious={toPreviousItem(selectedEvent)}
         trace={trace}
-        spans={nestedSpans}
+        spans={spans || []}
+        nestedSpans={nestedSpans}
+        spanIds={spanIds}
       />
     </>
   );
