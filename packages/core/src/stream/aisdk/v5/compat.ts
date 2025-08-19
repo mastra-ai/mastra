@@ -412,7 +412,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
  * but not accessed.
  */
 export class DelayedPromise<T> {
-  private status: { type: 'pending' } | { type: 'resolved'; value: T } | { type: 'rejected'; error: unknown } = {
+  public status: { type: 'pending' } | { type: 'resolved'; value: T } | { type: 'rejected'; error: unknown } = {
     type: 'pending',
   };
   private _promise: Promise<T> | undefined;

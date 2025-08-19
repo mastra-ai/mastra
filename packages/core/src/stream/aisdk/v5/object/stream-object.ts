@@ -17,7 +17,6 @@ import { getOutputSchema, getResponseFormat } from './schema';
 export function createObjectStreamTransformer({
   objectOptions,
   onFinish,
-  onError,
 }: {
   objectOptions: ObjectOptions;
   /**
@@ -25,11 +24,6 @@ export function createObjectStreamTransformer({
    * @param data The final parsed object / array
    */
   onFinish: (data: any) => void;
-  /**
-   * Callback to be called when the stream finishes with an error.
-   * @param error The error that occurred (incorrect schema / no object generated etc)
-   */
-  onError: (error: any) => void;
 }) {
   let textAccumulatedText = '';
   let textPreviousObject: any = undefined;
@@ -106,12 +100,15 @@ export function createObjectStreamTransformer({
       controller.enqueue(chunk);
     },
 
-    async flush() {
+    async flush(controller) {
       if (responseFormat.type === 'json') {
         const finalValue = outputSchema?.outputFormat === 'array' ? textPreviousFilteredArray : textPreviousObject;
         // Check if we have a value at all
         if (!finalValue) {
-          onError(new Error('No object generated: could not parse the response.'));
+          controller.enqueue({
+            type: 'error',
+            payload: { error: new Error('No object generated: could not parse the response.') },
+          });
           return;
         }
 
@@ -124,7 +121,10 @@ export function createObjectStreamTransformer({
             if (outputSchema?.outputFormat === 'array') {
               const result = await safeValidateTypes({ value: finalValue, schema });
               if (!result.success) {
-                onError(result.error ?? new Error('Validation failed'));
+                controller.enqueue({
+                  type: 'error',
+                  payload: { error: result.error ?? new Error('Validation failed') },
+                });
                 return;
               }
               onFinish(result.value);
@@ -132,13 +132,19 @@ export function createObjectStreamTransformer({
               // For objects and no-schema, validate the entire object
               const result = await safeValidateTypes({ value: finalValue, schema });
               if (!result.success) {
-                onError(result.error ?? new Error('Validation failed'));
+                controller.enqueue({
+                  type: 'error',
+                  payload: { error: result.error ?? new Error('Validation failed') },
+                });
                 return;
               }
               onFinish(result.value);
             }
           } catch (error) {
-            onError(error);
+            controller.enqueue({
+              type: 'error',
+              payload: { error },
+            });
             return;
           }
         } else {

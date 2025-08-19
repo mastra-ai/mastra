@@ -167,7 +167,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         });
 
         expect(modelWithSources.doGenerateCalls).toMatchSnapshot();
-        expect(result.text).toStrictEqual('Hello, world!');
+        expect(await result.text).toStrictEqual('Hello, world!');
       });
     });
 
@@ -191,7 +191,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: new MessageList(),
         });
 
-        expect(result.sources).toMatchSnapshot();
+        expect(await result.sources).toMatchSnapshot();
       });
     });
 
@@ -202,7 +202,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: new MessageList(),
         });
 
-        expect(result.files).toMatchSnapshot();
+        expect(await result.files).toMatchSnapshot();
       });
     });
 
@@ -298,7 +298,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           },
         });
 
-        expect(result.steps).toMatchSnapshot();
+        expect(await result.steps).toMatchSnapshot();
       });
 
       it.todo('should contain sources', async () => {
@@ -310,7 +310,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             currentDate: () => new Date(0),
           },
         });
-        expect(result.steps).toMatchSnapshot();
+        expect(await result.steps).toMatchSnapshot();
       });
 
       // TODO: include `files` in step result
@@ -326,7 +326,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           },
         });
 
-        expect(result.steps).toMatchSnapshot();
+        expect(await result.steps).toMatchSnapshot();
       });
     });
 
@@ -414,7 +414,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           assertType<string>(result.toolCalls[0].input.value);
         }
 
-        expect(result.toolCalls).toMatchInlineSnapshot(`
+        expect(await result.toolCalls).toMatchInlineSnapshot(`
         [
           {
             "input": {
@@ -501,7 +501,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           assertType<string>(result.toolResults[0].output);
         }
 
-        expect(result.toolResults).toMatchInlineSnapshot(`
+        expect(await result.toolResults).toMatchInlineSnapshot(`
         [
           {
             "dynamic": false,
@@ -544,7 +544,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList,
         });
 
-        expect(result.providerMetadata).toStrictEqual({
+        expect(await result.providerMetadata).toStrictEqual({
           exampleProvider: {
             a: 10,
             b: 20,
@@ -661,7 +661,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: new MessageList(),
         });
 
-        expect(result.request).toStrictEqual({
+        expect(await result.request).toStrictEqual({
           body: 'test body',
         });
       });
@@ -694,7 +694,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         });
 
         expect(result.steps?.[0]?.response).toMatchSnapshot();
-        expect(result.response).toMatchSnapshot();
+        expect(await result.response).toMatchSnapshot();
       });
     });
 

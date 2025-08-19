@@ -75,11 +75,32 @@ export class MastraModelOutput extends MastraBase {
   #toolResults: any[] = [];
   #warnings: any[] = [];
   #finishReason: string | undefined;
-  #providerMetadata: Record<string, any> | undefined;
-  #response: any | undefined;
   #request: any | undefined;
   #usageCount: Record<string, number> = {};
-  #objectPromise: DelayedPromise<any> = new DelayedPromise();
+
+  #delayedPromises = {
+    object: new DelayedPromise<any>(),
+    finishReason: new DelayedPromise<string | undefined>(),
+    usage: new DelayedPromise<Record<string, number>>(),
+    warnings: new DelayedPromise<any[]>(),
+    providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
+    response: new DelayedPromise<any>(),
+    request: new DelayedPromise<any>(),
+    text: new DelayedPromise<string>(),
+    reasoning: new DelayedPromise<string>(),
+    reasoningText: new DelayedPromise<string | undefined>(),
+    sources: new DelayedPromise<any[]>(),
+    files: new DelayedPromise<any[]>(),
+    toolCalls: new DelayedPromise<any[]>(),
+    toolResults: new DelayedPromise<any[]>(),
+    steps: new DelayedPromise<StepBufferItem[]>(),
+    totalUsage: new DelayedPromise<Record<string, number>>(),
+    content: new DelayedPromise<any>(),
+    reasoningDetails: new DelayedPromise<any[]>(),
+  };
+
+  #streamConsumed = false;
+
   public runId: string;
   #options: MastraModelOutputOptions;
   public processorRunner?: ProcessorRunner;
@@ -88,7 +109,7 @@ export class MastraModelOutput extends MastraBase {
   constructor({
     stream,
     options,
-    model,
+    model: _model,
     messageList,
   }: {
     model: {
@@ -214,7 +235,7 @@ export class MastraModelOutput extends MastraBase {
                 files: self.#bufferedByStep.files,
                 toolCalls: self.#bufferedByStep.toolCalls,
                 toolResults: self.#bufferedByStep.toolResults,
-                warnings: self.warnings,
+                warnings: self.#warnings,
                 reasoningDetails: reasoningDetails,
                 providerMetadata: providerMetadata,
                 experimental_providerMetadata: providerMetadata,
@@ -249,56 +270,76 @@ export class MastraModelOutput extends MastraBase {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
+              let response = {};
               if (chunk.payload.metadata) {
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-                self.#providerMetadata = chunk.payload.metadata.providerMetadata;
-
-                self.#response = {
+                response = {
                   ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser ?? [],
                 };
               }
 
               this.populateUsageCount(chunk.payload.output.usage);
-              chunk.payload.output.usage = self.totalUsage;
+
+              chunk.payload.output.usage = self.#usageCount;
+
+              // Resolve all delayed promises with final values
+              self.#delayedPromises.finishReason.resolve(self.#finishReason);
+              self.#delayedPromises.usage.resolve(self.#usageCount);
+              self.#delayedPromises.warnings.resolve(self.#warnings);
+              self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
+              self.#delayedPromises.response.resolve(response);
+              self.#delayedPromises.request.resolve(self.#request);
+              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+              self.#delayedPromises.reasoning.resolve(self.#bufferedReasoning.join(''));
+              const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
+              self.#delayedPromises.reasoningText.resolve(reasoningText);
+              self.#delayedPromises.sources.resolve(self.#bufferedSources);
+              self.#delayedPromises.files.resolve(self.#bufferedFiles);
+              self.#delayedPromises.toolCalls.resolve(self.#toolCalls);
+              self.#delayedPromises.toolResults.resolve(self.#toolResults);
+              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
+              self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
+              self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
+              self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
               if (baseFinishStep) {
                 const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
 
-                let onFinishPayload: any = {};
-
-                if (model.version === 'v2') {
-                  onFinishPayload = {
-                    text: baseFinishStep.text,
-                    warnings: baseFinishStep.warnings ?? [],
-                    finishReason: chunk.payload.stepResult.reason,
-                    // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
-                    content: messageList.get.response.aiV5.stepContent(),
-                    request: this.request,
-                    error: self.error,
-                    reasoning: this.aisdk.v5.reasoning,
-                    reasoningText: !this.aisdk.v5.reasoningText ? undefined : this.aisdk.v5.reasoningText,
-                    sources: this.aisdk.v5.sources,
-                    files: this.aisdk.v5.files,
-                    steps: transformSteps({ steps: this.#bufferedSteps }),
-                    response: { ...this.response, messages: messageList.get.response.aiV5.model() },
-                    usage: chunk.payload.output.usage,
-                    totalUsage: self.totalUsage,
-                    toolCalls: this.aisdk.v5.toolCalls,
-                    toolResults: this.aisdk.v5.toolResults,
-                    staticToolCalls: this.aisdk.v5.toolCalls.filter((toolCall: any) => toolCall.dynamic === false),
-                    staticToolResults: this.aisdk.v5.toolResults.filter(
-                      (toolResult: any) => toolResult.dynamic === false,
-                    ),
-                    dynamicToolCalls: this.aisdk.v5.toolCalls.filter((toolCall: any) => toolCall.dynamic === true),
-                    dynamicToolResults: this.aisdk.v5.toolResults.filter(
-                      (toolResult: any) => toolResult.dynamic === true,
-                    ),
-                  };
-                }
+                const onFinishPayload = {
+                  text: baseFinishStep.text,
+                  warnings: baseFinishStep.warnings ?? [],
+                  finishReason: chunk.payload.stepResult.reason,
+                  // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
+                  content: messageList.get.response.aiV5.stepContent(),
+                  request: await self.request,
+                  error: self.error,
+                  reasoning: await self.aisdk.v5.reasoning,
+                  reasoningText: await self.aisdk.v5.reasoningText,
+                  sources: await self.aisdk.v5.sources,
+                  files: await self.aisdk.v5.files,
+                  steps: transformSteps({ steps: self.#bufferedSteps }),
+                  response: { ...(await self.response), messages: messageList.get.response.aiV5.model() },
+                  usage: chunk.payload.output.usage,
+                  totalUsage: self.#getTotalUsage(),
+                  toolCalls: await self.aisdk.v5.toolCalls,
+                  toolResults: await self.aisdk.v5.toolResults,
+                  staticToolCalls: (await self.aisdk.v5.toolCalls).filter(
+                    (toolCall: any) => toolCall.dynamic === false,
+                  ),
+                  staticToolResults: (await self.aisdk.v5.toolResults).filter(
+                    (toolResult: any) => toolResult.dynamic === false,
+                  ),
+                  dynamicToolCalls: (await self.aisdk.v5.toolCalls).filter(
+                    (toolCall: any) => toolCall.dynamic === true,
+                  ),
+                  dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
+                    (toolResult: any) => toolResult.dynamic === true,
+                  ),
+                };
 
                 await options?.onFinish?.(onFinishPayload);
               }
@@ -365,6 +406,13 @@ export class MastraModelOutput extends MastraBase {
 
             case 'error':
               self.#error = chunk.payload.error;
+
+              // Reject all delayed promises on error
+              const error =
+                typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
+
+              Object.values(self.#delayedPromises).forEach(promise => promise.reject(error));
+
               break;
           }
 
@@ -383,32 +431,39 @@ export class MastraModelOutput extends MastraBase {
     });
   }
 
+  private getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return promise.promise;
+  }
+
   get text() {
-    return this.#bufferedText.join('');
+    return this.getDelayedPromise(this.#delayedPromises.text);
   }
 
   get reasoning() {
-    return this.#bufferedReasoning.join('');
+    return this.getDelayedPromise(this.#delayedPromises.reasoning);
   }
 
   get reasoningText() {
-    return this.reasoning;
+    return this.getDelayedPromise(this.#delayedPromises.reasoningText);
   }
 
   get reasoningDetails() {
-    return Object.values(this.#bufferedReasoningDetails || {});
+    return this.getDelayedPromise(this.#delayedPromises.reasoningDetails);
   }
 
   get sources() {
-    return this.#bufferedSources;
+    return this.getDelayedPromise(this.#delayedPromises.sources);
   }
 
   get files() {
-    return this.#bufferedFiles;
+    return this.getDelayedPromise(this.#delayedPromises.files);
   }
 
   get steps() {
-    return this.#bufferedSteps;
+    return this.getDelayedPromise(this.#delayedPromises.steps);
   }
 
   teeStream() {
@@ -425,17 +480,6 @@ export class MastraModelOutput extends MastraBase {
     const processorStates = new Map<string, ProcessorState>();
 
     return fullStream
-      .pipeThrough(
-        new TransformStream<ChunkType, ChunkType>({
-          transform(chunk, controller) {
-            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
-              return;
-            }
-
-            controller.enqueue(chunk);
-          },
-        }),
-      )
       .pipeThrough(
         new TransformStream({
           async transform(chunk, controller) {
@@ -471,42 +515,63 @@ export class MastraModelOutput extends MastraBase {
       .pipeThrough(
         createObjectStreamTransformer({
           objectOptions: self.#options.objectOptions!,
-          onFinish: data => self.#objectPromise.resolve(data),
-          onError: error => self.#objectPromise.reject(error),
+          onFinish: data => self.#delayedPromises.object.resolve(data),
+        }),
+      )
+      .pipeThrough(
+        new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
+              return;
+            }
+
+            controller.enqueue(chunk);
+          },
+          flush: () => {
+            // If stream ends without proper finish/error chunks, reject unresolved promises
+            // This must be in the final transformer in the fullStream pipeline
+            // to ensure all of the delayed promises had a chance to resolve or reject already
+            // Avoids promises hanging forever
+            Object.values(self.#delayedPromises).forEach(promise => {
+              if (promise.status.type === 'pending') {
+                promise.reject(new Error('Stream terminated unexpectedly'));
+              }
+            });
+          },
         }),
       );
   }
 
   get finishReason() {
-    return this.#finishReason;
+    return this.getDelayedPromise(this.#delayedPromises.finishReason);
   }
 
   get toolCalls() {
-    return this.#toolCalls;
+    return this.getDelayedPromise(this.#delayedPromises.toolCalls);
   }
 
   get toolResults() {
-    return this.#toolResults;
+    return this.getDelayedPromise(this.#delayedPromises.toolResults);
   }
 
   get usage() {
-    return this.#usageCount;
+    return this.getDelayedPromise(this.#delayedPromises.usage);
   }
 
   get warnings() {
-    return this.#warnings;
+    return this.getDelayedPromise(this.#delayedPromises.warnings);
   }
 
   get providerMetadata() {
-    return this.#providerMetadata;
+    return this.getDelayedPromise(this.#delayedPromises.providerMetadata);
   }
 
   get response() {
-    return this.#response;
+    return this.getDelayedPromise(this.#delayedPromises.response);
   }
 
   get request() {
-    return this.#request;
+    return this.getDelayedPromise(this.#delayedPromises.request);
   }
 
   get error() {
@@ -550,6 +615,7 @@ export class MastraModelOutput extends MastraBase {
   // }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
+    this.#streamConsumed = true;
     try {
       await consumeStream({
         stream: this.fullStream.pipeThrough(
@@ -575,43 +641,31 @@ export class MastraModelOutput extends MastraBase {
     });
 
     let object: any;
-
-    console.log('objectOptions', this.#options.objectOptions);
-
     if (this.#options.objectOptions?.schema) {
       object = await this.object;
     }
 
     const fullOutput = {
-      text: this.text,
-      usage: this.usage,
-      steps: this.steps,
-      finishReason: this.finishReason,
-      warnings: this.warnings,
-      providerMetadata: this.providerMetadata,
-      request: this.request,
-      reasoning: this.reasoning,
-      reasoningText: this.reasoningText,
-      toolCalls: this.toolCalls,
-      toolResults: this.toolResults,
-      sources: this.sources,
-      files: this.files,
-      response: this.response,
-      totalUsage: this.totalUsage,
+      text: await this.text,
+      usage: await this.usage,
+      steps: await this.steps,
+      finishReason: await this.finishReason,
+      warnings: await this.warnings,
+      providerMetadata: await this.providerMetadata,
+      request: await this.request,
+      reasoning: await this.reasoning,
+      reasoningText: await this.reasoningText,
+      toolCalls: await this.toolCalls,
+      toolResults: await this.toolResults,
+      sources: await this.sources,
+      files: await this.files,
+      response: await this.response,
+      totalUsage: await this.totalUsage,
       object,
       error: this.error,
       tripwire: false,
       tripwireReason: '',
-      // experimental_output: // TODO
     };
-
-    console.log(
-      'BEFORE',
-      this.messageList.get.response.aiV4
-        .core()
-        .map(m => MessageList.coreContentToString(m.content))
-        .join('\n'),
-    );
 
     let processedResult;
     try {
@@ -638,8 +692,6 @@ export class MastraModelOutput extends MastraBase {
       .map(m => MessageList.coreContentToString(m.content))
       .join('\n');
 
-    console.log('AFTER ZZZ', outputText);
-
     fullOutput.text = outputText;
 
     const messages = this.messageList.get.response.v2();
@@ -663,16 +715,11 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get totalUsage() {
-    let total = 0;
-    for (const [key, value] of Object.entries(this.#usageCount)) {
-      if (key !== 'totalTokens' && value && !key.startsWith('cached')) {
-        total += value;
-      }
-    }
-    return {
-      ...this.#usageCount,
-      totalTokens: total,
-    };
+    return this.getDelayedPromise(this.#delayedPromises.totalUsage);
+  }
+
+  get content() {
+    return this.getDelayedPromise(this.#delayedPromises.content);
   }
 
   get aisdk() {
@@ -745,6 +792,49 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get object() {
-    return this.#objectPromise.promise;
+    if (!this.#options.objectOptions?.schema) {
+      this.#delayedPromises.object.reject(new Error('output schema is required to get object'));
+      return this.#delayedPromises.object.promise;
+    }
+    return this.getDelayedPromise(this.#delayedPromises.object);
+  }
+
+  // Internal methods for immediate values - used internally by Mastra (llm-execution.ts bailing on errors/abort signals with current state)
+  // These are not part of the public API
+  _getImmediateToolCalls() {
+    return this.#toolCalls;
+  }
+
+  _getImmediateToolResults() {
+    return this.#toolResults;
+  }
+
+  _getImmediateText() {
+    return this.#bufferedText.join('');
+  }
+
+  _getImmediateUsage() {
+    return this.#usageCount;
+  }
+
+  _getImmediateWarnings() {
+    return this.#warnings;
+  }
+
+  _getImmediateFinishReason() {
+    return this.#finishReason;
+  }
+
+  #getTotalUsage() {
+    let total = 0;
+    for (const [key, value] of Object.entries(this.#usageCount)) {
+      if (key !== 'totalTokens' && value && !key.startsWith('cached')) {
+        total += value;
+      }
+    }
+    return {
+      ...this.#usageCount,
+      totalTokens: total,
+    };
   }
 }
