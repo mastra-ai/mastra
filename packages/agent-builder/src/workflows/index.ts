@@ -308,76 +308,75 @@ const packageMergeStep = createStep({
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
-      const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath);
+      const targetPkgPath = join(targetPath, 'package.json');
 
-      const packageMergeAgent = new Agent({
-        name: 'package-merger',
-        description: 'Specialized agent for merging package.json dependencies',
-        instructions: `You are a package.json merge specialist. Your job is to:
+      let targetPkgRaw = '{}';
+      try {
+        targetPkgRaw = await readFile(targetPkgPath, 'utf-8');
+      } catch (e) {
+        console.warn(`No existing package.json at ${targetPkgPath}, creating a new one`);
+      }
 
-1. **Read the target project's package.json** using readFile tool
-2. **Merge template dependencies** into the target package.json following these rules:
-   - For dependencies: Add ALL NEW ones with template versions, KEEP EXISTING versions for conflicts
-   - For devDependencies: Add ALL NEW ones with template versions, KEEP EXISTING versions for conflicts  
-   - For peerDependencies: Add ALL NEW ones with template versions, KEEP EXISTING versions for conflicts
-   - For scripts: Add new scripts with "template:${slug}:" prefix, don't overwrite existing ones
-   - Maintain existing package.json structure and formatting
-3. **Write the updated package.json** using writeFile tool
+      let targetPkg: any;
+      try {
+        targetPkg = JSON.parse(targetPkgRaw || '{}');
+      } catch (e) {
+        throw new Error(
+          `Failed to parse existing package.json at ${targetPkgPath}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
 
-Template Dependencies to Merge:
-- Dependencies: ${JSON.stringify(packageInfo.dependencies || {}, null, 2)}
-- Dev Dependencies: ${JSON.stringify(packageInfo.devDependencies || {}, null, 2)}
-- Peer Dependencies: ${JSON.stringify(packageInfo.peerDependencies || {}, null, 2)}
-- Scripts: ${JSON.stringify(packageInfo.scripts || {}, null, 2)}
+      const ensureObj = (o: any) => (o && typeof o === 'object' ? o : {});
 
-CRITICAL MERGE RULES:
-1. For each dependency in template dependencies, if it does NOT exist in target, ADD it with template version
-2. For each dependency in template dependencies, if it ALREADY exists in target, KEEP target version
-3. You MUST add ALL template dependencies that don't conflict - do not skip any
-4. Be explicit about what you're adding vs keeping
+      targetPkg.dependencies = ensureObj(targetPkg.dependencies);
+      targetPkg.devDependencies = ensureObj(targetPkg.devDependencies);
+      targetPkg.peerDependencies = ensureObj(targetPkg.peerDependencies);
+      targetPkg.scripts = ensureObj(targetPkg.scripts);
 
-EXAMPLE:
-Template has: {"@mastra/libsql": "latest", "@mastra/core": "latest", "zod": "^3.25.67"}
-Target has: {"@mastra/core": "latest", "zod": "^3.25.0"}
-Result should have: {"@mastra/core": "latest", "zod": "^3.25.0", "@mastra/libsql": "latest"}
+      const tplDeps = ensureObj(packageInfo.dependencies);
+      const tplDevDeps = ensureObj(packageInfo.devDependencies);
+      const tplPeerDeps = ensureObj(packageInfo.peerDependencies);
+      const tplScripts = ensureObj(packageInfo.scripts);
 
-Be systematic and thorough. Always read the existing package.json first, then merge, then write.`,
-        model: resolveModel(runtimeContext),
-        tools: {
-          readFile: allTools.readFile,
-          writeFile: allTools.writeFile,
-          listDirectory: allTools.listDirectory,
-        },
-      });
+      const existsAnywhere = (name: string) =>
+        name in targetPkg.dependencies || name in targetPkg.devDependencies || name in targetPkg.peerDependencies;
 
-      console.log('Starting package merge agent...');
-      console.log('Template dependencies to merge:', JSON.stringify(packageInfo.dependencies, null, 2));
-      console.log('Template devDependencies to merge:', JSON.stringify(packageInfo.devDependencies, null, 2));
-
-      const result = await packageMergeAgent.stream(
-        `Please merge the template dependencies into the target project's package.json at ${targetPath}/package.json.`,
-        { experimental_output: z.object({ success: z.boolean() }) },
-      );
-
-      let buffer: string[] = [];
-      for await (const chunk of result.fullStream) {
-        if (chunk.type === 'text-delta') {
-          buffer.push(chunk.textDelta);
-          if (buffer.length > 20) {
-            console.log(buffer.join(''));
-            buffer = [];
-          }
+      // Merge dependencies: add only if missing everywhere
+      for (const [name, ver] of Object.entries(tplDeps)) {
+        if (!existsAnywhere(name)) {
+          (targetPkg.dependencies as Record<string, string>)[name] = String(ver);
         }
       }
 
-      if (buffer.length > 0) {
-        console.log(buffer.join(''));
+      // Merge devDependencies
+      for (const [name, ver] of Object.entries(tplDevDeps)) {
+        if (!existsAnywhere(name)) {
+          (targetPkg.devDependencies as Record<string, string>)[name] = String(ver);
+        }
       }
+
+      // Merge peerDependencies
+      for (const [name, ver] of Object.entries(tplPeerDeps)) {
+        if (!(name in targetPkg.peerDependencies)) {
+          (targetPkg.peerDependencies as Record<string, string>)[name] = String(ver);
+        }
+      }
+
+      // Merge scripts with prefixed keys to avoid collisions
+      const prefix = `template:${slug}:`;
+      for (const [name, cmd] of Object.entries(tplScripts)) {
+        const newKey = `${prefix}${name}`;
+        if (!(newKey in targetPkg.scripts)) {
+          (targetPkg.scripts as Record<string, string>)[newKey] = String(cmd);
+        }
+      }
+
+      await writeFile(targetPkgPath, JSON.stringify(targetPkg, null, 2), 'utf-8');
 
       return {
         success: true,
         applied: true,
-        message: `Successfully merged template dependencies and installed packages for ${slug}`,
+        message: `Successfully merged template dependencies for ${slug}`,
       };
     } catch (error) {
       console.error('Package merge failed:', error);
