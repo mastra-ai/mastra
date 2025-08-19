@@ -8,7 +8,6 @@ interface FeedbackData {
   userAgent?: string;
   timestamp: string;
 }
-const NOTION_DATABASE_ID = "a24777b679b04a38b713d55690b96dd1";
 
 type ErrorWithMessage = {
   message: string;
@@ -93,6 +92,13 @@ export async function POST(request: NextRequest) {
 
 async function sendToNotion(feedback: any) {
   const NOTION_API_KEY = process.env.NOTION_API_KEY;
+  const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
+
+  if (!NOTION_DATABASE_ID) {
+    throw new Error(
+      "Notion configuration missing: NOTION_DATABASE_ID is required",
+    );
+  }
 
   if (!NOTION_API_KEY) {
     throw new Error("Notion configuration missing: NOTION_API_KEY is required");
