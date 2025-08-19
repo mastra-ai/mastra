@@ -16,7 +16,6 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
-    "@mastra/langfuse": "latest",
     "ai": "^4.3.16",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
@@ -33,7 +32,6 @@
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/evals": "link:../../packages/evals",
-      "@mastra/langfuse": "link:../../observability/langfuse",
       "mastra": "link:../../packages/cli"
     }
   },

@@ -13,7 +13,6 @@ overrides:
   '@mastra/mcp': link:../../packages/mcp
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/evals': link:../../packages/evals
-  '@mastra/langfuse': link:../../observability/langfuse
   mastra: link:../../packages/cli
 
 importers:
@@ -35,9 +34,6 @@ importers:
       '@mastra/evals':
         specifier: link:../../packages/evals
         version: link:../../packages/evals
-      '@mastra/langfuse':
-        specifier: link:../../observability/langfuse
-        version: link:../../observability/langfuse
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
