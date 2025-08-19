@@ -393,26 +393,6 @@ export const mastra = new Mastra({
 });
 \`\`\`
 
-### MCPClient
-\`\`\`
-// ./src/mcp/client.ts
-
-import { MCPClient } from '@mastra/mcp-client';
-
-// leverage existing MCP servers, or create your own
-export const mcpClient = new MCPClient({
-  id: 'example-mcp-client',
-  servers: {
-    some-mcp-server: {
-      command: 'npx',
-      args: ["some-mcp-server"],
-    },
-  },
-});
-
-export const tools = await mcpClient.getTools();
-\`\`\`
-
 </examples>`;
 
   static DEFAULT_MEMORY_CONFIG = {
@@ -428,30 +408,7 @@ export const tools = await mcpClient.getTools();
   };
 
   static DEFAULT_TOOLS = async (projectPath?: string, mode: 'template' | 'code-editor' = 'code-editor') => {
-    // const { MCPClient } = await import('@mastra/mcp');
-
-    // const mcpClient = new MCPClient({
-    //   id: 'agent-builder-mcp-client',
-    //   servers: {
-    //     docs: {
-    //       command: 'npx',
-    //       args: ['-y', '@mastra/mcp-docs-server'],
-    //     },
-    //   },
-    // });
-
-    // const tools = await mcpClient.getTools();
-    const filteredTools: Record<string, any> = {};
-
-    // Object.keys(tools).forEach(key => {
-    //   if (!key.includes('MastraCourse')) {
-    //     filteredTools[key] = tools[key];
-    //   }
-    // });
-
     const agentBuilderTools = {
-      ...filteredTools,
-
       readFile: createTool({
         id: 'read-file',
         description: 'Read contents of a file with optional line range selection.',
