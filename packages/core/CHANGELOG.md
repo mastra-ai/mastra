@@ -1,5 +1,22 @@
 # @mastra/core
 
+## 0.14.0-alpha.1
+
+### Minor Changes
+
+- 3b5fec7: Added AIV5 support to internal MessageList, precursor to full AIV5 support in latest Mastra
+
+### Patch Changes
+
+- 6faaee5: Reworks agent Processor API to include output processors. Adds structuredOutput property in agent.streamVNext and agent.generate to replace experimental_output. Move imports for processors to @mastra/core/processors. Adds 6 new output processors, BatchParts, StructuredOutputProcessor, TokenLimiter, SystemPromptScrubber, ModerationProcessor, PiiDetectorProcessor.
+- 4232b14: Fix provider metadata preservation during V5 message conversions
+
+  Provider metadata (providerMetadata and callProviderMetadata) is now properly preserved when converting messages between AI SDK V5 and internal V2 formats. This ensures provider-specific information isn't lost during message transformations.
+
+- a89de7e: Adding a new agentic loop and streaming workflow system while working towards AI SDK v5 support.
+- cf4f357: When using the Cloudflare deployer you might see a `[duplicate-case]` warning. The internal cause for this was fixed.
+- a722c0b: Added a patch to filter out system messages that were stored in the db via an old memory bug that was patched long ago (see issue 6689). Users upgrading from the old version that still had the bug would see errors when the memory messages were retrieved from the db
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes

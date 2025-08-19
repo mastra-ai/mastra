@@ -1,5 +1,18 @@
 # @mastra/mcp
 
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- 895d3b2: Update the MCP SDK version and update elicitation to match new spec (reject becomes decline)
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+
 ## 0.10.11
 
 ### Patch Changes

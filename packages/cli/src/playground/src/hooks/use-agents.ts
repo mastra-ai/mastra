@@ -1,60 +1,43 @@
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { GetAgentResponse } from '@mastra/client-js';
 import { client } from '@/lib/client';
+import { UpdateModelParams } from '@mastra/client-js';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export const useAgents = () => {
-  const [agents, setAgents] = useState<Record<string, GetAgentResponse>>({});
-  const [isLoading, setIsLoading] = useState(true);
+  const query = useQuery({
+    queryKey: ['agents'],
+    queryFn: () => client.getAgents(),
+  });
 
-  useEffect(() => {
-    const fetchAgents = async () => {
-      setIsLoading(true);
-      try {
-        const res = await client.getAgents();
-        setAgents(res);
-      } catch (error) {
-        setAgents({});
-        console.error('Error fetching agents', error);
-        toast.error('Error fetching agents');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAgents();
-  }, []);
-
-  return { agents, isLoading };
+  return {
+    ...query,
+    data: query.data ?? {},
+  };
 };
 
 export const useAgent = (agentId: string) => {
-  const [agent, setAgent] = useState<GetAgentResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  return useQuery({
+    queryKey: ['agent', agentId],
+    queryFn: () => client.getAgent(agentId).details(),
+    enabled: !!agentId,
+  });
+};
 
-  useEffect(() => {
-    const fetchAgent = async () => {
-      setIsLoading(true);
-      try {
-        if (!agentId) {
-          setAgent(null);
-          setIsLoading(false);
-          return;
-        }
-        const res = await client.getAgent(agentId).details();
+export const useModelProviders = () => {
+  return useQuery({
+    queryKey: ['model-providers'],
+    queryFn: () => client.getModelProviders(),
+  });
+};
 
-        setAgent(res);
-      } catch (error) {
-        setAgent(null);
-        console.error('Error fetching agent', error);
-        toast.error('Error fetching agent');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAgent();
-  }, [agentId]);
-
-  return { agent, isLoading };
+export const useUpdateAgentModel = (agentId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: UpdateModelParams) => client.getAgent(agentId).updateModel(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+    onError: err => {
+      console.error('Error updating model', err);
+    },
+  });
 };

@@ -294,12 +294,17 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
             schema: {
               type: 'object',
               properties: {
-                model: {
-                  type: 'object',
-                  description: 'The model to update the agent to',
+                modelId: {
+                  type: 'string',
+                  description: 'The modelId to update the agent to',
+                },
+                provider: {
+                  type: 'string',
+                  enum: ['openai', 'anthropic', 'groq', 'xai', 'google'],
+                  description: 'The provider of the model to update the agent to',
                 },
               },
-              required: ['model'],
+              required: ['modelId', 'provider'],
             },
           },
         },

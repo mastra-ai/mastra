@@ -21,7 +21,7 @@ import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
   const { scorer, isLoading: scorerLoading } = useScorer(scorerId!);
-  const { agents, isLoading: agentsLoading } = useAgents();
+  const { data: agents, isLoading: agentsLoading } = useAgents();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const isLoading = scorerLoading || agentsLoading || workflowsLoading;
 
