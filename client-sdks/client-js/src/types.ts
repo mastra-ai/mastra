@@ -505,3 +505,38 @@ export type GetScorerResponse = MastraScorerEntry & {
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
 }
+
+// Template installation types
+export interface TemplateInstallationRequest {
+  repo: string;
+  ref?: string;
+  slug?: string;
+  targetPath?: string;
+  variables?: Record<string, string>;
+}
+
+export interface TemplateInstallationResult {
+  success: boolean;
+  applied: boolean;
+  branchName?: string;
+  message: string;
+  // Optional error message from workflow
+  error?: string;
+  // Optional validation result details
+  validationResults?: {
+    valid: boolean;
+    errorsFixed: number;
+    remainingErrors: number;
+  };
+  // Optional array of errors from different steps
+  errors?: string[];
+  // Optional detailed step results
+  stepResults?: {
+    copySuccess: boolean;
+    mergeSuccess: boolean;
+    validationSuccess: boolean;
+    filesCopied: number;
+    conflictsSkipped: number;
+    conflictsResolved: number;
+  };
+}
