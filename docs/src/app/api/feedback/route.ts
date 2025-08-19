@@ -251,7 +251,7 @@ async function sendToSlack(feedback: any) {
         elements: [
           {
             type: "mrkdwn",
-            text: `🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent.split(" ")[0]}`,
+            text: `🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent.split(" ")[0] ?? "Unknown"}`,
           },
         ],
       },
