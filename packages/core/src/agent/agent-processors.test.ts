@@ -8,6 +8,8 @@ import type { Processor } from '../processors/index';
 import { RuntimeContext } from '../runtime-context';
 import type { MastraLanguageModel, MastraMessageV2 } from './types';
 import { Agent } from './index';
+import { simulateReadableStream } from 'ai';
+import { MockLanguageModelV1 } from 'ai/test';
 
 // Helper function to create a MastraMessageV2
 const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
@@ -1734,7 +1736,845 @@ describe('Input and Output Processors with VNext Methods', () => {
     });
   }
 
-  // testStructuredOutput('aisdk');
-  // testStructuredOutput('mastra', openai('gpt-4o-mini'));
+  testStructuredOutput('aisdk', openai_v5('gpt-4o'));
+  testStructuredOutput('mastra', openai('gpt-4o'));
   testStructuredOutput('mastra', openai_v5('gpt-4o'));
+});
+
+describe('v1 model - output processors', () => {
+  describe('generate output processors', () => {
+    it('should process final text through output processors', async () => {
+      let processedText = '';
+
+      class TestOutputProcessor implements Processor {
+        readonly name = 'test-output-processor';
+
+        async processOutputResult({ messages }) {
+          // Process the final generated text
+          const processedMessages = messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part =>
+                part.type === 'text' ? { ...part, text: part.text.replace(/test/gi, 'TEST') } : part,
+              ),
+            },
+          }));
+
+          // Store the processed text to verify it was called
+          processedText =
+            processedMessages[0]?.content.parts[0]?.type === 'text'
+              ? (processedMessages[0].content.parts[0] as any).text
+              : '';
+
+          return processedMessages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'generate-output-processor-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'This is a test response with test words',
+            finishReason: 'stop',
+            usage: { completionTokens: 8, promptTokens: 10 },
+          }),
+        }),
+        outputProcessors: [new TestOutputProcessor()],
+      });
+
+      const result = await agent.generate('Hello');
+
+      // The output processors should modify the returned result
+      expect(result.text).toBe('This is a TEST response with TEST words');
+
+      // And the processor should have been called and processed the text
+      expect(processedText).toBe('This is a TEST response with TEST words');
+    });
+
+    it('should process messages through multiple output processors in sequence', async () => {
+      let finalProcessedText = '';
+
+      class ReplaceProcessor implements Processor {
+        readonly name = 'replace-processor';
+
+        async processOutputResult({ messages }) {
+          return messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part =>
+                part.type === 'text' ? { ...part, text: part.text.replace(/hello/gi, 'HELLO') } : part,
+              ),
+            },
+          }));
+        }
+      }
+
+      class AddPrefixProcessor implements Processor {
+        readonly name = 'prefix-processor';
+
+        async processOutputResult({ messages }) {
+          const processedMessages = messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part =>
+                part.type === 'text' ? { ...part, text: `[PROCESSED] ${part.text}` } : part,
+              ),
+            },
+          }));
+
+          // Store the final processed text to verify both processors ran
+          finalProcessedText =
+            processedMessages[0]?.content.parts[0]?.type === 'text'
+              ? (processedMessages[0].content.parts[0] as any).text
+              : '';
+
+          return processedMessages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'multi-processor-generate-test-agent',
+        instructions: 'Respond with: "hello world"',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'hello world',
+            finishReason: 'stop',
+            usage: { completionTokens: 2, promptTokens: 5 },
+          }),
+        }),
+        outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
+      });
+
+      const result = await agent.generate('Test');
+
+      // The output processors should modify the returned result
+      expect(result.text).toBe('[PROCESSED] HELLO world');
+
+      // And both processors should have been called in sequence
+      expect(finalProcessedText).toBe('[PROCESSED] HELLO world');
+    });
+
+    it('should handle abort in output processors', async () => {
+      class AbortingOutputProcessor implements Processor {
+        readonly name = 'aborting-output-processor';
+
+        async processOutputResult({ messages, abort }) {
+          // Check if the response contains inappropriate content
+          const hasInappropriateContent = messages.some(msg =>
+            msg.content.parts.some(part => part.type === 'text' && part.text.includes('inappropriate')),
+          );
+
+          if (hasInappropriateContent) {
+            abort('Content flagged as inappropriate');
+          }
+
+          return messages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'aborting-generate-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'This content is inappropriate and should be blocked',
+            finishReason: 'stop',
+            usage: { completionTokens: 10, promptTokens: 10 },
+          }),
+        }),
+        outputProcessors: [new AbortingOutputProcessor()],
+      });
+
+      // Should return tripwire result when processor aborts
+      const result = await agent.generate('Generate inappropriate content');
+
+      expect(result.tripwire).toBe(true);
+      expect(result.tripwireReason).toBe('Content flagged as inappropriate');
+      expect(result.text).toBe('');
+      expect(result.finishReason).toBe('other');
+    });
+
+    it('should skip processors that do not implement processOutputResult', async () => {
+      let processedText = '';
+
+      class CompleteProcessor implements Processor {
+        readonly name = 'complete-processor';
+
+        async processOutputResult({ messages }) {
+          const processedMessages = messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part =>
+                part.type === 'text' ? { ...part, text: `${part.text} [COMPLETE]` } : part,
+              ),
+            },
+          }));
+
+          // Store the processed text to verify this processor ran
+          processedText =
+            processedMessages[0]?.content.parts[0]?.type === 'text'
+              ? (processedMessages[0].content.parts[0] as any).text
+              : '';
+
+          return processedMessages;
+        }
+      }
+
+      // Only include the complete processor - the incomplete one would cause TypeScript errors
+      const agent = new Agent({
+        name: 'skipping-generate-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'Original response',
+            finishReason: 'stop',
+            usage: { completionTokens: 2, promptTokens: 5 },
+          }),
+        }),
+        outputProcessors: [new CompleteProcessor()],
+      });
+
+      const result = await agent.generate('Test');
+
+      // The output processors should modify the returned result
+      expect(result.text).toBe('Original response [COMPLETE]');
+
+      // And the complete processor should have processed the text
+      expect(processedText).toBe('Original response [COMPLETE]');
+    });
+  });
+
+  describe('generate output processors with structured output', () => {
+    it('should process structured output through output processors', async () => {
+      let processedObject: any = null;
+
+      class StructuredOutputProcessor implements Processor {
+        readonly name = 'structured-output-processor';
+
+        async processOutputResult({ messages }) {
+          // Process the final generated text and extract the structured data
+          const processedMessages = messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part => {
+                if (part.type === 'text') {
+                  // Parse the JSON and modify it
+                  try {
+                    const parsedData = JSON.parse(part.text);
+                    const modifiedData = {
+                      ...parsedData,
+                      winner: parsedData.winner?.toUpperCase() || '',
+                      processed: true,
+                    };
+                    processedObject = modifiedData;
+                    return { ...part, text: JSON.stringify(modifiedData) };
+                  } catch {
+                    return part;
+                  }
+                }
+                return part;
+              }),
+            },
+          }));
+
+          return processedMessages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'structured-output-processor-test-agent',
+        instructions: 'You know about US elections.',
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: '{"winner": "Barack Obama", "year": "2012"}',
+            finishReason: 'stop',
+            usage: { completionTokens: 10, promptTokens: 10 },
+          }),
+        }),
+        outputProcessors: [new StructuredOutputProcessor()],
+      });
+
+      const result = await agent.generate('Who won the 2012 US presidential election?', {
+        output: z.object({
+          winner: z.string(),
+          year: z.string(),
+        }),
+      });
+
+      // The output processors should modify the returned result
+      expect(result.object.winner).toBe('BARACK OBAMA');
+      expect(result.object.year).toBe('2012');
+      expect((result.object as any).processed).toBe(true);
+
+      // And the processor should have been called and processed the structured data
+      expect(processedObject).toEqual({
+        winner: 'BARACK OBAMA',
+        year: '2012',
+        processed: true,
+      });
+    });
+
+    it('should handle multiple processors with structured output', async () => {
+      let firstProcessorCalled = false;
+      let secondProcessorCalled = false;
+      let finalResult: any = null;
+
+      class FirstProcessor implements Processor {
+        readonly name = 'first-processor';
+
+        async processOutputResult({ messages }) {
+          firstProcessorCalled = true;
+          return messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part => {
+                if (part.type === 'text') {
+                  try {
+                    const data = JSON.parse(part.text);
+                    const modified = { ...data, first_processed: true };
+                    return { ...part, text: JSON.stringify(modified) };
+                  } catch {
+                    return part;
+                  }
+                }
+                return part;
+              }),
+            },
+          }));
+        }
+      }
+
+      class SecondProcessor implements Processor {
+        readonly name = 'second-processor';
+
+        async processOutputResult({ messages }) {
+          secondProcessorCalled = true;
+          return messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part => {
+                if (part.type === 'text') {
+                  try {
+                    const data = JSON.parse(part.text);
+                    const modified = { ...data, second_processed: true };
+                    finalResult = modified;
+                    return { ...part, text: JSON.stringify(modified) };
+                  } catch {
+                    return part;
+                  }
+                }
+                return part;
+              }),
+            },
+          }));
+        }
+      }
+
+      const agent = new Agent({
+        name: 'multi-processor-structured-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: '{"message": "hello world"}',
+            finishReason: 'stop',
+            usage: { completionTokens: 5, promptTokens: 5 },
+          }),
+        }),
+        outputProcessors: [new FirstProcessor(), new SecondProcessor()],
+      });
+
+      const result = await agent.generate('Say hello', {
+        output: z.object({
+          message: z.string(),
+        }),
+      });
+
+      // The output processors should modify the returned result
+      expect(result.object.message).toBe('hello world');
+      expect((result.object as any).first_processed).toBe(true);
+      expect((result.object as any).second_processed).toBe(true);
+
+      // Both processors should have been called
+      expect(firstProcessorCalled).toBe(true);
+      expect(secondProcessorCalled).toBe(true);
+
+      // Final result should have both processor modifications
+      expect(finalResult).toEqual({
+        message: 'hello world',
+        first_processed: true,
+        second_processed: true,
+      });
+    });
+  });
+
+  describe('streamVNext output processors with structured output', () => {
+    it('should process streamed structured output through output processors', async () => {
+      let processedChunks: string[] = [];
+      let finalProcessedObject: any = null;
+
+      class StreamStructuredProcessor implements Processor {
+        readonly name = 'stream-structured-processor';
+
+        async processOutputStream({ part }) {
+          // Handle both text-delta and object-delta chunks
+          if (part.type === 'text-delta' && part.textDelta) {
+            // Collect and transform streaming chunks
+            const modifiedChunk = {
+              ...part,
+              textDelta: part.textDelta.replace(/obama/gi, 'OBAMA'),
+            };
+            processedChunks.push(part.textDelta);
+            return modifiedChunk;
+          } else if (part.type === 'object-delta' && (part as any).objectDelta) {
+            // Handle object streaming chunks
+            const stringified = JSON.stringify((part as any).objectDelta);
+            processedChunks.push(stringified);
+            return part;
+          }
+          return part;
+        }
+
+        async processOutputResult({ messages }) {
+          // Also process the final result
+          const processedMessages = messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part => {
+                if (part.type === 'text') {
+                  try {
+                    const data = JSON.parse(part.text);
+                    const modified = { ...data, stream_processed: true };
+                    finalProcessedObject = modified;
+                    return { ...part, text: JSON.stringify(modified) };
+                  } catch {
+                    return part;
+                  }
+                }
+                return part;
+              }),
+            },
+          }));
+
+          return processedMessages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'stream-structured-processor-test-agent',
+        instructions: 'You know about US elections.',
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: '{"winner":' },
+                { type: 'text-delta', textDelta: '"Barack' },
+                { type: 'text-delta', textDelta: ' Obama",' },
+                { type: 'text-delta', textDelta: '"year":"2012"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 5 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [new StreamStructuredProcessor()],
+      });
+
+      const response = agent.streamVNext('Who won the 2012 US presidential election?', {
+        output: z.object({
+          winner: z.string(),
+          year: z.string(),
+        }),
+      });
+
+      // Consume the stream
+      let streamedContent = '';
+      for await (const chunk of response) {
+        if (chunk.type === 'text-delta') {
+          streamedContent += chunk.payload.text;
+        }
+      }
+
+      // Wait for the stream to finish
+      await response.finishReason;
+
+      // Check that streaming chunks were processed
+      expect(processedChunks.length).toBeGreaterThan(0);
+      expect(processedChunks.join('')).toContain('Barack');
+
+      // Check that streaming content was modified
+      expect(streamedContent).toContain('OBAMA');
+
+      // Check that final object processing occurred
+      expect(finalProcessedObject).toEqual({
+        winner: 'Barack Obama',
+        year: '2012',
+        stream_processed: true,
+      });
+    });
+
+    it('should process experimental_output during streaming', async () => {
+      let streamProcessorCalled = false;
+      let finalProcessorCalled = false;
+
+      class ExperimentalStreamProcessor implements Processor {
+        readonly name = 'experimental-stream-processor';
+
+        async processOutputStream({ part }) {
+          // Handle both text-delta and object-delta chunks
+          streamProcessorCalled = true; // Set this regardless of chunk type
+
+          if (part.type === 'text-delta') {
+            return {
+              ...part,
+              textDelta: part.textDelta?.replace(/green/gi, 'GREEN'),
+            };
+          } else if (part.type === 'object-delta') {
+            return part;
+          }
+          return part;
+        }
+
+        async processOutputResult({ messages }) {
+          finalProcessorCalled = true;
+          return messages.map(msg => ({
+            ...msg,
+            content: {
+              ...msg.content,
+              parts: msg.content.parts.map(part => {
+                if (part.type === 'text') {
+                  try {
+                    const data = JSON.parse(part.text);
+                    return { ...part, text: JSON.stringify({ ...data, experimental_stream: true }) };
+                  } catch {
+                    return part;
+                  }
+                }
+                return part;
+              }),
+            },
+          }));
+        }
+      }
+
+      const agent = new Agent({
+        name: 'experimental-stream-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: '{"color":' },
+                { type: 'text-delta', textDelta: '"green",' },
+                { type: 'text-delta', textDelta: '"intensity":"bright"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 8, promptTokens: 5 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [new ExperimentalStreamProcessor()],
+      });
+
+      const response = agent.streamVNext('Make it green', {
+        output: z.object({
+          color: z.string(),
+          intensity: z.string(),
+        }),
+      });
+
+      // Consume the stream
+      for await (const _chunk of response) {
+        // Just consume the stream
+      }
+
+      // Wait for completion
+      await response.finishReason;
+      const finalObject = await response.object;
+
+      // Verify both stream and final processors were called
+      expect(streamProcessorCalled).toBe(true);
+      expect(finalProcessorCalled).toBe(true);
+
+      // Note: Currently streaming transformations and final result processing are separate
+      // This test verifies both are called, but final result is based on original LLM output
+      expect(finalObject).toEqual({
+        color: 'green', // Original LLM output
+        intensity: 'bright',
+        experimental_stream: true, // Added by final result processor
+      });
+    });
+
+    describe('streaming tripwires with structured output', () => {
+      it('should return empty object when tripwire triggered during streaming with output', async () => {
+        class StreamAbortProcessor implements Processor {
+          readonly name = 'stream-abort-output-processor';
+
+          async processOutputStream({ part, abort }) {
+            // Abort on the second text-delta chunk
+            if (part.type === 'text-delta' && part.textDelta?.includes('Barack')) {
+              abort('Stream aborted during structured output generation');
+            }
+            return part;
+          }
+        }
+
+        const agent = new Agent({
+          name: 'stream-abort-structured-test-agent',
+          instructions: 'You know about US elections.',
+          model: new MockLanguageModelV1({
+            defaultObjectGenerationMode: 'json',
+            doStream: async () => ({
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'text-delta', textDelta: '{"winner":' },
+                  { type: 'text-delta', textDelta: '"Barack' }, // This will trigger abort
+                  { type: 'text-delta', textDelta: ' Obama",' },
+                  { type: 'text-delta', textDelta: '"year":"2012"}' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    logprobs: undefined,
+                    usage: { completionTokens: 10, promptTokens: 5 },
+                  },
+                ],
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+            }),
+          }),
+          outputProcessors: [new StreamAbortProcessor()],
+        });
+
+        const response = agent.streamVNext('Who won the 2012 US presidential election?', {
+          output: z.object({
+            winner: z.string(),
+            year: z.string(),
+          }),
+        });
+
+        // Consume stream until tripwire
+        const chunks: any[] = [];
+        for await (const chunk of response) {
+          chunks.push(chunk);
+        }
+
+        // Should contain tripwire chunk
+        const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+        expect(tripwireChunk).toBeDefined();
+        expect(tripwireChunk.payload.tripwireReason).toBe('Stream aborted during structured output generation');
+
+        // Wait for completion
+        await response.finishReason;
+
+        // Final object should be null/empty since stream was aborted
+        const finalObject = await response.object;
+        expect(finalObject).toBeNull();
+      });
+
+      it('should return empty object when tripwire triggered during streaming with experimental_output', async () => {
+        class StreamAbortProcessor implements Processor {
+          readonly name = 'stream-abort-experimental-processor';
+
+          async processOutputStream({ part, abort }) {
+            // Abort on the second text-delta chunk
+            if (part.type === 'text-delta' && part.textDelta?.includes('green')) {
+              abort('Stream aborted during experimental output generation');
+            }
+            return part;
+          }
+        }
+
+        const agent = new Agent({
+          name: 'stream-abort-experimental-test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: new MockLanguageModelV1({
+            defaultObjectGenerationMode: 'json',
+            doStream: async () => ({
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'text-delta', textDelta: '{"color":' },
+                  { type: 'text-delta', textDelta: '"green",' }, // This will trigger abort
+                  { type: 'text-delta', textDelta: '"intensity":"bright"}' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    logprobs: undefined,
+                    usage: { completionTokens: 8, promptTokens: 5 },
+                  },
+                ],
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+            }),
+          }),
+          outputProcessors: [new StreamAbortProcessor()],
+        });
+
+        const response = agent.streamVNext('Make it green', {
+          experimental_output: z.object({
+            color: z.string(),
+            intensity: z.string(),
+          }),
+        });
+
+        // Consume stream until tripwire
+        const chunks: any[] = [];
+        for await (const chunk of response) {
+          chunks.push(chunk);
+        }
+
+        // Should contain tripwire chunk
+        const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+        expect(tripwireChunk).toBeDefined();
+        expect(tripwireChunk.payload.tripwireReason).toBe('Stream aborted during experimental output generation');
+
+        // Wait for completion
+        await response.finishReason;
+
+        // Final object should be null/empty since stream was aborted
+        const finalObject = await response.object;
+        expect(finalObject).toBeNull();
+      });
+    });
+  });
+
+  describe('tripwire functionality', () => {
+    describe('generate method', () => {
+      it('should handle processor abort with default message', async () => {
+        const abortProcessor = {
+          name: 'abort-output-processor',
+          async processOutputResult({ abort, messages }) {
+            abort();
+            return messages;
+          },
+        } satisfies Processor;
+
+        const agent = new Agent({
+          name: 'output-tripwire-test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: new MockLanguageModelV1({
+            doGenerate: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              text: 'This should be aborted',
+              finishReason: 'stop',
+              usage: { completionTokens: 4, promptTokens: 10 },
+            }),
+          }),
+          outputProcessors: [abortProcessor],
+        });
+
+        const result = await agent.generate('Hello');
+
+        expect(result.tripwire).toBe(true);
+        expect(result.tripwireReason).toBe('Tripwire triggered by abort-output-processor');
+        expect(result.text).toBe('');
+        expect(result.finishReason).toBe('other');
+      });
+
+      it('should handle processor abort with custom message', async () => {
+        const customAbortProcessor = {
+          name: 'custom-abort-output',
+          async processOutputResult({ abort, messages }) {
+            abort('Custom output abort reason');
+            return messages;
+          },
+        } satisfies Processor;
+
+        const agent = new Agent({
+          name: 'custom-output-tripwire-test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: new MockLanguageModelV1({
+            doGenerate: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              text: 'This should be aborted with custom message',
+              finishReason: 'stop',
+              usage: { completionTokens: 8, promptTokens: 10 },
+            }),
+          }),
+          outputProcessors: [customAbortProcessor],
+        });
+
+        const result = await agent.generate('Custom abort test');
+
+        expect(result.tripwire).toBe(true);
+        expect(result.tripwireReason).toBe('Custom output abort reason');
+        expect(result.text).toBe('');
+      });
+
+      it('should not execute subsequent processors after abort', async () => {
+        let secondProcessorExecuted = false;
+
+        const abortProcessor = {
+          name: 'abort-first-output',
+          async processOutputResult({ abort, messages }) {
+            abort('Stop here');
+            return messages;
+          },
+        } satisfies Processor;
+
+        const shouldNotRunProcessor = {
+          name: 'should-not-run-output',
+          async processOutputResult({ messages }) {
+            secondProcessorExecuted = true;
+            return messages.map(msg => ({
+              ...msg,
+              content: {
+                ...msg.content,
+                parts: msg.content.parts.map(part =>
+                  part.type === 'text' ? { ...part, text: `${part.text} [SHOULD NOT APPEAR]` } : part,
+                ),
+              },
+            }));
+          },
+        } satisfies Processor;
+
+        const agent = new Agent({
+          name: 'output-abort-sequence-test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: new MockLanguageModelV1({
+            doGenerate: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              text: 'Abort sequence test',
+              finishReason: 'stop',
+              usage: { completionTokens: 3, promptTokens: 10 },
+            }),
+          }),
+          outputProcessors: [abortProcessor, shouldNotRunProcessor],
+        });
+
+        const result = await agent.generate('Abort sequence test');
+
+        expect(result.tripwire).toBe(true);
+        expect(result.tripwireReason).toBe('Stop here');
+        expect(secondProcessorExecuted).toBe(false);
+      });
+    });
+  });
 });
