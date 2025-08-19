@@ -1,2 +1,2 @@
-export * from './observability-event-dialog';
-export * from './observability-events-tools';
+export * from './observability-trace-dialog';
+export * from './observability-traces-tools';

@@ -4,21 +4,27 @@ import {
   Header,
   MainContentLayout,
   EntryList,
-  ObservabilityEventDialog,
-  ObservabilityEventsTools,
+  ObservabilityTracesTools,
   PageHeader,
 } from '@mastra/playground-ui';
 import { useState } from 'react';
 // import { useWorkflows } from '@/hooks/use-workflows';
 import { useAgents } from '@/hooks/use-agents';
-import { Eye, EyeIcon } from 'lucide-react';
+import { EyeIcon } from 'lucide-react';
+import { useTrace } from './useTrace';
+import { TraceDialog } from './TraceDialog';
 
 export default function observability() {
+  const { trace, nestedSpans } = useTrace();
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedEntity, setSelectedEntity] = useState<number | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const { agents, isLoading: agentsLoading } = useAgents();
+  const { data: agents, isLoading: agentsLoading } = useAgents();
   // const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
+
+  console.log('trace', trace);
+  console.log('organizedSpans', nestedSpans);
+
   const entities = [
     ...(Object.entries(agents) || []).map(([key, value]) => ({ id: key, name: value.name, type: 'agent' })),
     // ...(workflows || []).map(workflow => ({ id: workflow.id, name: workflow.name, type: 'workflow' })),
@@ -82,10 +88,8 @@ export default function observability() {
     return true;
   });
 
-  console.log('Filtering event:', filteredEvents);
-
   const listColumns = [
-    { name: 'id', label: 'ID', size: '4rem' },
+    { name: 'id', label: 'ID', size: '5rem' },
     { name: 'date', label: 'Date', size: '5rem' },
     { name: 'time', label: 'Time', size: '5rem' },
     { name: 'entityName', label: 'Entity', size: '8rem' },
@@ -134,7 +138,7 @@ export default function observability() {
         <div className={cn(`h-full overflow-y-scroll `)}>
           <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid gap-[2rem]')}>
             <PageHeader title="Observability" description="View and manage observability events." icon={<EyeIcon />} />
-            <ObservabilityEventsTools
+            <ObservabilityTracesTools
               onEntityChange={handleEntityChange}
               onReset={handleReset}
               selectedEntity={selectedEntity?.toString() || ''}
@@ -150,12 +154,13 @@ export default function observability() {
           </div>
         </div>
       </MainContentLayout>
-      <ObservabilityEventDialog
+      <TraceDialog
         isOpen={dialogIsOpen}
-        event={selectedEvent}
         onClose={() => setDialogIsOpen(false)}
         onNext={toNextItem(selectedEvent)}
         onPrevious={toPreviousItem(selectedEvent)}
+        trace={trace}
+        spans={nestedSpans}
       />
     </>
   );

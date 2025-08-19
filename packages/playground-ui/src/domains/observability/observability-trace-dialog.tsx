@@ -9,7 +9,7 @@ import { FileInputIcon, FileOutputIcon } from 'lucide-react';
 
 import { useState } from 'react';
 
-type ObservabilityEventDialogProps = {
+type ObservabilityTraceDialogProps = {
   event?: {
     id?: string;
     input?: string;
@@ -23,13 +23,13 @@ type ObservabilityEventDialogProps = {
   onPrevious?: (() => void) | null;
 };
 
-export function ObservabilityEventDialog({
+export function ObservabilityTraceDialog({
   event,
   isOpen,
   onClose,
   onNext,
   onPrevious,
-}: ObservabilityEventDialogProps) {
+}: ObservabilityTraceDialogProps) {
   const [confirmationIsOpen, setConfirmationIsOpen] = useState<boolean>(false);
 
   return (

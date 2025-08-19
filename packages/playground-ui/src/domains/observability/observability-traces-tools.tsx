@@ -2,19 +2,19 @@ import { Button } from '@/components/ui/elements/buttons';
 import { Select } from '@/components/ui/elements/select';
 import { XIcon } from 'lucide-react';
 
-type ObservabilityEventsToolsProps = {
+type ObservabilityTracesToolsProps = {
   onEntityChange: (val: string) => void;
   selectedEntity?: string;
   entityOptions?: string[];
   onReset?: () => void;
 };
 
-export function ObservabilityEventsTools({
+export function ObservabilityTracesTools({
   onEntityChange,
   onReset,
   selectedEntity,
   entityOptions,
-}: ObservabilityEventsToolsProps) {
+}: ObservabilityTracesToolsProps) {
   return (
     <div className="grid grid-cols-[1fr_auto] gap-[3rem] items-center">
       <div className="items-center gap-4 max-w-[40rem] flex">
