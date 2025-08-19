@@ -167,7 +167,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      const messages = result.aisdk.v5.response.messages;
+      const messages = (await result.aisdk.v5.response).messages;
 
       expect(messages).toMatchInlineSnapshot(`
             [
