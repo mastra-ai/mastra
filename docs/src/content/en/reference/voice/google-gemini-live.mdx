@@ -56,7 +56,7 @@ await voice.connect();
 // Set up event listeners
 voice.on("speaker", (audioStream) => {
   // Handle audio stream (NodeJS.ReadableStream)
-  audioStream.pipe(playbackDevice);
+  playAudio(audioStream);
 });
 
 voice.on("writing", ({ text, role }) => {
@@ -598,6 +598,8 @@ const voice = new GeminiLiveVoice({
 Enable the model to call functions during conversations:
 
 ```typescript
+import { z } from 'zod';
+
 voice.addTools({
   weather: {
     description: "Get weather information",
