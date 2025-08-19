@@ -103,6 +103,12 @@ export const researchAgent = new Agent({
 
 ### Create the Vector Store
 
+In the root of your project, grab the absolute path with the `pwd` command. The path might be similar to this:
+
+```bash
+/Users/your-name/guides/research-assistant
+```
+
 In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
 
 ```ts copy filename="src/mastra/index.ts" {2, 4-6, 9}
@@ -110,7 +116,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
-  connectionUrl: "file:../vector.db"
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db"
 })
 
 export const mastra = new Mastra({
@@ -118,9 +124,11 @@ export const mastra = new Mastra({
 });
 ```
 
+For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
+
 ### Register the Agent with Mastra
 
-In the same `src/mastra/index.ts` file, add the agent to Mastra:
+In the `src/mastra/index.ts` file, add the agent to Mastra:
 
 ```ts copy filename="src/mastra/index.ts" {3, 10}
 import { Mastra } from "@mastra/core/mastra";
@@ -128,7 +136,7 @@ import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
 
 const libSqlVector = new LibSQLVector({
-  connectionUrl: "file:../vector.db"
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db"
 })
 
 export const mastra = new Mastra({
