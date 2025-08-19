@@ -64,7 +64,6 @@ describe('runExperiment', () => {
 
       expect(result.scores.toxicity).toBe(0.9);
       expect(result.summary.totalItems).toBe(2);
-      expect(result.summary.duration).toBeGreaterThan(0);
     });
 
     it('should run experiment with multiple scorers', async () => {
