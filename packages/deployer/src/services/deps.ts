@@ -139,7 +139,7 @@ export class Deps extends MastraBase {
         runCommand = `${this.packageManager} install`;
         break;
       case 'npm':
-        runCommand = `${this.packageManager} install`;
+        runCommand = `${this.packageManager} install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
         if (architecture) {
           args = this.getNpmArgs(architecture);
         }
@@ -163,7 +163,7 @@ export class Deps extends MastraBase {
   public async installPackages(packages: string[]) {
     let runCommand = this.packageManager;
     if (this.packageManager === 'npm') {
-      runCommand = `${this.packageManager} i`;
+      runCommand = `${this.packageManager} install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
     } else {
       runCommand = `${this.packageManager} add`;
     }

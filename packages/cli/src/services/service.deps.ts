@@ -46,7 +46,7 @@ export class DepsService {
   public async installPackages(packages: string[]) {
     let runCommand = this.packageManager;
     if (this.packageManager === 'npm') {
-      runCommand = `${this.packageManager} i`;
+      runCommand = `${this.packageManager} install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
     } else {
       runCommand = `${this.packageManager} add`;
     }

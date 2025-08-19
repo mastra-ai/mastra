@@ -30,7 +30,7 @@ export function getPackageManager(): string {
 export function getPackageManagerInstallCommand(pm: string): string {
   switch (pm) {
     case 'npm':
-      return 'install';
+      return 'install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false';
     case 'yarn':
       return 'add';
     case 'pnpm':
