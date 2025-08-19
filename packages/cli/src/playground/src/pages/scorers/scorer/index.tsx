@@ -267,13 +267,12 @@ function ScoreListHeader({
 
       <div
         className={cn(
-          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]  border-t border-border1',
+          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]  border-t border-border1',
         )}
       >
         <span>Date</span>
         <span>Time</span>
         <span>Input</span>
-        <span>Output</span>
         <span>Entity</span>
         <span>Score</span>
       </div>
@@ -374,7 +373,6 @@ function ScoreItem({
   const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
   const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
   const inputPrev = score?.input?.inputMessages?.[0]?.content || '';
-  const outputPrev = score?.output?.[0]?.content || '';
   const scorePrev = score?.score ? Math.round(score?.score * 100) / 100 : '0';
   const entityIcon = score?.entityType === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />;
 
@@ -388,13 +386,12 @@ function ScoreItem({
       <button
         onClick={handleClick}
         className={cn(
-          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] ',
+          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_10rem_3rem] ',
         )}
       >
         <span className="text-icon4">{isTodayDate ? 'Today' : dateStr}</span>
         <span className="text-icon4">{timeStr}</span>
         <span className="truncate pr-[1rem]">{inputPrev}</span>
-        <span className="truncate pr-[1rem]">{outputPrev}</span>
         <span className="pr-[1rem] flex gap-[0.5rem] items-center [&>svg]:shrink-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3 text-[0.875rem]">
           {entityIcon} <span className="truncate">{score.entityId}</span>
         </span>
@@ -420,6 +417,8 @@ function ScoreDetails({
   if (!score) {
     return null;
   }
+
+  console.log({ score });
 
   const handleOnNext = () => {
     if (onNext) {
@@ -490,7 +489,7 @@ function ScoreDetails({
                 <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
                 {score.input && (
                   <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
-                    <CodeMirrorBlock value={JSON.stringify(score.input, null, 2)} />
+                    <CodeMirrorBlock value={JSON.stringify(score.input || {}, null, 2)} />
                   </div>
                 )}
               </div>
@@ -501,7 +500,7 @@ function ScoreDetails({
                 <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Output</h3>
                 {score.output && (
                   <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
-                    <CodeMirrorBlock value={JSON.stringify(score.output, null, 2)} />
+                    <CodeMirrorBlock value={JSON.stringify(score.output || {}, null, 2)} />
                   </div>
                 )}
               </div>
