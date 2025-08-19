@@ -12,6 +12,7 @@ import { MockStore } from '../../storage/mock';
 import type { StreamEvent, WatchEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 
 const testStorage = new MockStore();
 
@@ -50,6 +51,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const runId = 'test-run-id';
@@ -232,6 +234,7 @@ describe('Workflow', () => {
       new Mastra({
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await promptEvalWorkflow.createRunAsync();
@@ -370,6 +373,7 @@ describe('Workflow', () => {
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const agentStep1 = createStep(agent);
@@ -625,6 +629,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const runId = 'test-run-id';
@@ -792,6 +797,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const runId = 'test-run-id';
@@ -947,6 +953,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -1050,7 +1057,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1087,7 +1094,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1132,7 +1139,7 @@ describe('Workflow', () => {
 
       workflow.parallel([step1, step2]).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1181,7 +1188,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1224,7 +1231,11 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
@@ -1295,7 +1306,11 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputValue: 'test-input' } });
@@ -1348,7 +1363,11 @@ describe('Workflow', () => {
 
         workflow.then(step1).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
 
         const run = await workflow.createRunAsync();
         await run.start({ inputData: { inputData: 'test-input' } });
@@ -1392,7 +1411,11 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1449,6 +1472,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -1516,6 +1540,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const runtimeContext = new RuntimeContext<{ life: number }>();
@@ -1600,6 +1625,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -1711,6 +1737,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -1766,6 +1793,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -1830,6 +1858,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -1902,6 +1931,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -1965,6 +1995,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -2061,6 +2092,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -2111,6 +2143,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -2194,6 +2227,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -2263,6 +2297,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = await workflow.createRunAsync();
@@ -2319,6 +2354,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2441,6 +2477,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2508,6 +2545,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2569,6 +2607,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2625,6 +2664,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2694,6 +2734,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2810,6 +2851,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2877,6 +2919,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -2951,6 +2994,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'main-workflow': mainWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await mainWorkflow.createRunAsync();
@@ -3054,6 +3098,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -3210,6 +3255,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await counterWorkflow.createRunAsync();
@@ -3269,6 +3315,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await counterWorkflow.createRunAsync();
@@ -3343,6 +3390,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await counterWorkflow.createRunAsync();
@@ -3419,6 +3467,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await counterWorkflow.createRunAsync();
@@ -3555,6 +3604,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await counterWorkflow.createRunAsync();
@@ -3674,6 +3724,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await counterWorkflow.createRunAsync();
@@ -3811,6 +3862,7 @@ describe('Workflow', () => {
           'test-workflow': workflow,
         },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -3864,6 +3916,7 @@ describe('Workflow', () => {
           'test-workflow': workflow,
         },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       workflow.then(step1).then(step2).commit();
@@ -3923,6 +3976,7 @@ describe('Workflow', () => {
         workflows: {
           'test-workflow': workflow,
         },
+        pubsub: new EventEmitterPubSub(),
       });
 
       workflow.then(step1).then(step2).commit();
@@ -3987,6 +4041,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -4042,6 +4097,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       let watchData: WatchEvent[] = [];
@@ -4163,6 +4219,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       let watchData: WatchEvent[] = [];
@@ -4284,6 +4341,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const onTransition = vi.fn();
@@ -4353,6 +4411,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
@@ -4563,6 +4622,7 @@ describe('Workflow', () => {
         logger: false,
         storage: initialStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await promptEvalWorkflow.createRunAsync();
@@ -4711,6 +4771,7 @@ describe('Workflow', () => {
         logger: false,
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -4905,6 +4966,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -5074,6 +5136,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await promptEvalWorkflow.createRunAsync();
@@ -5289,6 +5352,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await promptEvalWorkflow.createRunAsync();
@@ -5357,6 +5421,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await promptEvalWorkflow.createRunAsync();
@@ -5446,6 +5511,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         workflows: { 'dowhile-workflow': dowhileWorkflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await dowhileWorkflow.createRunAsync();
@@ -5515,6 +5581,7 @@ describe('Workflow', () => {
         },
         logger: false,
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       // Create a few runs
@@ -5559,6 +5626,7 @@ describe('Workflow', () => {
         workflows: {
           'test-workflow': workflow,
         },
+        pubsub: new EventEmitterPubSub(),
       });
 
       // Create a few runs
@@ -5601,6 +5669,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       // Access new instance properties directly - should work without warning
@@ -5685,6 +5754,7 @@ describe('Workflow', () => {
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         logger: false,
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
@@ -5821,6 +5891,7 @@ describe('Workflow', () => {
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const nestedWorkflow1 = createWorkflow({
@@ -5955,6 +6026,7 @@ describe('Workflow', () => {
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        pubsub: new EventEmitterPubSub(),
       });
 
       workflow
@@ -6063,6 +6135,7 @@ describe('Workflow', () => {
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const agentStep = createStep({
@@ -6229,6 +6302,7 @@ describe('Workflow', () => {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = counterWorkflow.createRun();
@@ -6334,6 +6408,7 @@ describe('Workflow', () => {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = counterWorkflow.createRun();
@@ -6446,6 +6521,7 @@ describe('Workflow', () => {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = counterWorkflow.createRun();
@@ -6578,6 +6654,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = counterWorkflow.createRun();
@@ -6715,6 +6792,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = counterWorkflow.createRun();
@@ -6855,6 +6933,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = counterWorkflow.createRun();
@@ -7033,6 +7112,7 @@ describe('Workflow', () => {
         new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = counterWorkflow.createRun();
@@ -7171,6 +7251,7 @@ describe('Workflow', () => {
           logger: false,
           storage: testStorage,
           workflows: { 'counter-workflow': counterWorkflow },
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = counterWorkflow.createRun();
@@ -7290,6 +7371,7 @@ describe('Workflow', () => {
             'counter-workflow': counterWorkflow,
           },
           storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
         const run = counterWorkflow.createRun();
@@ -7449,6 +7531,7 @@ describe('Workflow', () => {
         logger: false,
         storage: testStorage,
         workflows: { 'counter-workflow': counterWorkflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = counterWorkflow.createRun();
@@ -7510,6 +7593,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = workflow.createRun();
@@ -7552,6 +7636,7 @@ describe('Workflow', () => {
         logger: false,
         storage: initialStorage,
         workflows: { 'test-workflow': workflow },
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = workflow.createRun();
@@ -7658,6 +7743,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'consecutive-parallel-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = workflow.createRun();
@@ -7726,6 +7812,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const result = await workflow.createRun().start({ inputData: {} });
@@ -7771,6 +7858,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = await workflow.createRunAsync();
@@ -7805,6 +7893,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
       });
 
       const run = workflow.createRun();

@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { PubSub } from '../events/pubsub';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -47,6 +48,7 @@ export interface Config<
   server?: ServerConfig;
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
+  pubsub?: PubSub;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -97,6 +99,7 @@ export class Mastra<
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
+  #pubsub?: PubSub;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -117,6 +120,10 @@ export class Mastra<
    */
   get memory() {
     return this.#memory;
+  }
+
+  get pubsub() {
+    return this.#pubsub;
   }
 
   public getIdGenerator() {
@@ -168,6 +175,13 @@ export class Mastra<
         handler: m.handler,
         path: m.path || '/api/*',
       }));
+    }
+
+    /*
+    Events
+    */
+    if (config?.pubsub) {
+      this.#pubsub = config.pubsub;
     }
 
     /*
