@@ -1,7 +1,8 @@
 import { TransformStream } from 'stream/web';
-import { isDeepEqualData, parsePartialJson } from 'ai-v5';
+import { asSchema, isDeepEqualData, parsePartialJson } from 'ai-v5';
 import type { ObjectOptions } from '../../../../loop/types';
-import { getResponseFormat } from './schema';
+import { safeValidateTypes } from '../compat';
+import { getOutputSchema, getResponseFormat } from './schema';
 
 /**
  * Transforms raw text-delta chunks into structured object chunks for JSON mode streaming.
@@ -35,6 +36,7 @@ export function createObjectStreamTransformer({
   let textPreviousFilteredArray: any[];
 
   const responseFormat = getResponseFormat(objectOptions);
+  const outputSchema = getOutputSchema({ schema: objectOptions?.schema });
 
   return new TransformStream({
     async transform(chunk, controller) {
@@ -43,8 +45,23 @@ export function createObjectStreamTransformer({
         return;
       }
 
-      if (responseFormat.type === 'json' && chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
-        if (objectOptions?.output === 'array') {
+      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
+        if (outputSchema?.outputFormat === 'object') {
+          textAccumulatedText += chunk.payload.text;
+          const { value: currentObjectJson } = await parsePartialJson(textAccumulatedText);
+
+          if (
+            currentObjectJson !== undefined &&
+            typeof currentObjectJson === 'object' &&
+            !isDeepEqualData(textPreviousObject, currentObjectJson)
+          ) {
+            textPreviousObject = currentObjectJson;
+            controller.enqueue({
+              type: 'object',
+              object: currentObjectJson,
+            });
+          }
+        } else if (outputSchema?.outputFormat === 'array') {
           textAccumulatedText += chunk.payload.text;
           const { value: currentObjectJson, state: parseState } = await parsePartialJson(textAccumulatedText);
 
@@ -82,25 +99,6 @@ export function createObjectStreamTransformer({
 
             textPreviousObject = currentObjectJson;
           }
-        } else if (
-          objectOptions?.output === 'no-schema' ||
-          !objectOptions?.output ||
-          objectOptions?.output === 'object'
-        ) {
-          textAccumulatedText += chunk.payload.text;
-          const { value: currentObjectJson } = await parsePartialJson(textAccumulatedText);
-
-          if (
-            currentObjectJson !== undefined &&
-            typeof currentObjectJson === 'object' &&
-            !isDeepEqualData(textPreviousObject, currentObjectJson)
-          ) {
-            textPreviousObject = currentObjectJson;
-            controller.enqueue({
-              type: 'object',
-              object: currentObjectJson,
-            });
-          }
         }
       }
 
@@ -108,19 +106,44 @@ export function createObjectStreamTransformer({
       controller.enqueue(chunk);
     },
 
-    // TODO: validate against the provided schema,
-    // TODO: then call onFinish(data) if valid or call onError(err) if invalid
-    // TODO: so that the object promise can be resolved/rejected
-    flush() {
+    async flush() {
       if (responseFormat.type === 'json') {
-        if (objectOptions?.output === 'array') {
-          onFinish(textPreviousFilteredArray);
-        } else {
-          onFinish(textPreviousObject);
+        const finalValue = outputSchema?.outputFormat === 'array' ? textPreviousFilteredArray : textPreviousObject;
+        // Check if we have a value at all
+        if (!finalValue) {
+          onError(new Error('No object generated: could not parse the response.'));
+          return;
         }
 
-        if (!textPreviousObject && !textPreviousFilteredArray) {
-          onError('No object generated: could not parse the response.');
+        // Validate the final object against the schema if provided
+        if (objectOptions?.schema) {
+          try {
+            const schema = asSchema(objectOptions.schema);
+
+            // For arrays, validate against the original array schema
+            if (outputSchema?.outputFormat === 'array') {
+              const result = await safeValidateTypes({ value: finalValue, schema });
+              if (!result.success) {
+                onError(result.error ?? new Error('Validation failed'));
+                return;
+              }
+              onFinish(result.value);
+            } else {
+              // For objects and no-schema, validate the entire object
+              const result = await safeValidateTypes({ value: finalValue, schema });
+              if (!result.success) {
+                onError(result.error ?? new Error('Validation failed'));
+                return;
+              }
+              onFinish(result.value);
+            }
+          } catch (error) {
+            onError(error);
+            return;
+          }
+        } else {
+          // No schema provided, just pass through the value
+          onFinish(finalValue);
         }
       }
     },
@@ -137,6 +160,8 @@ export function createObjectStreamTransformer({
 export function createJsonTextStreamTransformer(objectOptions: ObjectOptions) {
   let previousArrayLength = 0;
   let hasStartedArray = false;
+  let chunkCount = 0;
+  const outputSchema = getOutputSchema({ schema: objectOptions?.schema });
 
   return new TransformStream<any, string>({
     transform(chunk, controller) {
@@ -144,12 +169,27 @@ export function createJsonTextStreamTransformer(objectOptions: ObjectOptions) {
         return;
       }
 
-      if (objectOptions?.output === 'array') {
+      if (outputSchema?.outputFormat === 'array') {
+        chunkCount++;
+
+        // If this is the first chunk, decide between complete vs incremental streaming
+        if (chunkCount === 1) {
+          // If the first chunk already has multiple elements or is complete,
+          // emit as single JSON string
+          if (chunk.object.length > 0) {
+            controller.enqueue(JSON.stringify(chunk.object));
+            previousArrayLength = chunk.object.length;
+            hasStartedArray = true;
+            return;
+          }
+        }
+
+        // Incremental streaming mode (multiple chunks)
         if (!hasStartedArray) {
-          // Emit opening bracket if this is the first object in an array
           controller.enqueue('[');
           hasStartedArray = true;
         }
+
         // Emit new elements that were added
         for (let i = previousArrayLength; i < chunk.object.length; i++) {
           const elementJson = JSON.stringify(chunk.object[i]);
@@ -166,8 +206,8 @@ export function createJsonTextStreamTransformer(objectOptions: ObjectOptions) {
       }
     },
     flush(controller) {
-      // Close the array when the stream ends
-      if (hasStartedArray && objectOptions?.output === 'array') {
+      // Close the array when the stream ends (only for incremental streaming)
+      if (hasStartedArray && outputSchema?.outputFormat === 'array' && chunkCount > 1) {
         controller.enqueue(']');
       }
     },

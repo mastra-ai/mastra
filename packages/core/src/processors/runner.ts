@@ -3,12 +3,13 @@ import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { StreamTextResult } from '../llm';
 import type { IMastraLogger } from '../logger';
+import type { AISDKV5OutputStream } from '../stream';
 import type { Processor } from './index';
 
 /**
  * Implementation of processor state management
  */
-class ProcessorState {
+export class ProcessorState {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
   public streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [];
@@ -162,7 +163,7 @@ export class ProcessorRunner {
   }
 
   async runOutputProcessorsForStream(
-    streamResult: StreamObjectResult<any, any, any> | StreamTextResult<any, any>,
+    streamResult: StreamObjectResult<any, any, any> | StreamTextResult<any, any> | AISDKV5OutputStream,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
@@ -211,6 +212,8 @@ export class ProcessorRunner {
   async runInputProcessors(messageList: MessageList, telemetry?: any): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
 
+    console.log('userMessages', userMessages);
+
     let processableMessages: MastraMessageV2[] = [...userMessages];
 
     const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
@@ -254,6 +257,8 @@ export class ProcessorRunner {
         )();
       }
     }
+
+    console.log('processableMessages', processableMessages);
 
     if (processableMessages.length > 0) {
       messageList.add(processableMessages, 'user');

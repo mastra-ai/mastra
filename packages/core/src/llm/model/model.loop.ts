@@ -132,6 +132,7 @@ export class MastraLLMVNext extends MastraBase {
     resourceId,
     objectOptions,
     options,
+    outputProcessors,
     // ...rest
   }: ModelLoopStreamArgs<Tools, Z>): MastraModelOutput {
     const model = this.#model;
@@ -143,7 +144,7 @@ export class MastraLLMVNext extends MastraBase {
       tools: Object.keys(tools || {}),
     });
 
-    console.log('objectOptionsStream', objectOptions)
+    console.log('objectOptionsStream', objectOptions);
 
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
     if (experimental_output) {
@@ -185,6 +186,7 @@ export class MastraLLMVNext extends MastraBase {
           ...telemetry,
         },
         objectOptions,
+        outputProcessors,
         options: {
           ...options,
           onStepFinish: async props => {

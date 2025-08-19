@@ -18,6 +18,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
 }: LoopRun<Tools>) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
+      const writer = new WritableStream<ChunkType>({
+        write: chunk => {
+          controller.enqueue(chunk);
+        },
+      });
+
       const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
       modelStreamSpan.setAttributes({
@@ -37,10 +43,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
         toolChoice,
         modelStreamSpan,
         controller,
+        writer,
         ...rest,
       });
 
-      console.log('rest.objectOptions', rest.objectOptions)
+      console.log('rest.objectOptions', rest.objectOptions);
 
       const mainWorkflow = createWorkflow({
         id: 'agentic-loop',
@@ -104,7 +111,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
           return inputData.stepResult.isContinued;
         })
         .map(({ inputData }) => {
-          const toolCalls = rest.messageList.get.response.v3().filter((message: any) => message.role === 'tool');
+          const toolCalls = rest.messageList.get.response.aiV5.model().filter(message => message.role === 'tool');
           inputData.output.toolCalls = toolCalls;
 
           return inputData;
@@ -137,7 +144,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
         inputData: {
           messageId: messageId!,
           messages: {
-            all: rest.messageList.get.input.aiV5.model(),
+            all: rest.messageList.get.all.aiV5.model(),
             user: rest.messageList.get.input.aiV5.model(),
             nonUser: [],
           },

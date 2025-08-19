@@ -415,7 +415,7 @@ export class MessageList {
               }),
             };
           }
-          return c;
+          return { ...c };
         });
       },
     },
@@ -635,10 +635,13 @@ export class MessageList {
       }
       return uiMessage;
     } else if (m.role === `assistant`) {
+      const isSingleTextContentArray =
+        Array.isArray(m.content.content) && m.content.content.length === 1 && m.content.content[0].type === `text`;
+
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: m.content.content || contentString,
+        content: isSingleTextContentArray ? contentString : m.content.content || contentString,
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
@@ -1162,6 +1165,19 @@ export class MessageList {
     const experimentalAttachments: AIV4Type.UIMessage['experimental_attachments'] = [];
     const toolInvocations: AIV4Type.ToolInvocation[] = [];
 
+    const isSingleTextContent =
+      messageSource === `response` &&
+      Array.isArray(coreMessage.content) &&
+      coreMessage.content.length === 1 &&
+      coreMessage.content[0] &&
+      coreMessage.content[0].type === `text` &&
+      `text` in coreMessage.content[0] &&
+      coreMessage.content[0].text;
+
+    if (isSingleTextContent && messageSource === `response`) {
+      coreMessage.content = isSingleTextContent;
+    }
+
     if (typeof coreMessage.content === 'string') {
       parts.push({ type: 'step-start' });
       parts.push({
@@ -1172,6 +1188,9 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            if (parts.at(-1)?.type !== `text` && parts.at(-1)?.type !== `step-start`) {
+              parts.push({ type: 'step-start' });
+            }
             parts.push({
               type: 'text',
               text: part.text,
@@ -2086,7 +2105,21 @@ export class MessageList {
   }
 
   private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    return AIV5.convertToModelMessages(this.sanitizeV5UIMessages(messages));
+    return AIV5.convertToModelMessages(this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages)));
+  }
+  private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+    for (const message of messages) {
+      if (message.role !== `assistant`) continue;
+      for (const [index, part] of message.parts.entries()) {
+        if (!AIV5.isToolUIPart(part)) continue;
+        // If we don't insert step-start between tools and other parts, AIV5.convertToModelMessages will incorrectly add extra tool parts in the wrong order
+        // ex: ui message with parts: [tool-result, text] becomes [assistant-message-with-both-parts, tool-result-message], when it should become [tool-call-message, tool-result-message, text-message]
+        if (message.parts.at(index + 1)?.type !== `step-start`) {
+          message.parts.splice(index + 1, 0, { type: 'step-start' });
+        }
+      }
+    }
+    return messages;
   }
   private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     const msgs = messages
@@ -2221,6 +2254,11 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            if (parts.at(-1)?.type !== `step-start` && parts.at(-1)?.type !== `text`) {
+              parts.push({
+                type: 'step-start',
+              });
+            }
             parts.push({
               type: 'text',
               text: part.text,
@@ -2230,8 +2268,7 @@ export class MessageList {
 
           case 'tool-call':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'input-available',
               toolCallId: part.toolCallId,
               input: part.input,
@@ -2240,8 +2277,7 @@ export class MessageList {
 
           case 'tool-result':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'output-available',
               toolCallId: part.toolCallId,
               output:

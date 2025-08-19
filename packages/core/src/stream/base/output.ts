@@ -6,14 +6,16 @@ import type { TelemetrySettings } from 'ai-v5';
 import type { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import type { ObjectOptions } from '../../loop/types';
+import type { OutputProcessor } from '../../processors';
+import type { ProcessorState } from '../../processors/runner';
+import { ProcessorRunner } from '../../processors/runner';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { getOutputSchema } from '../aisdk/v5/object/schema';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '../aisdk/v5/object/stream-object';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
-import { RuntimeContext } from '../../runtime-context';
-import { ProcessorState } from '../../processors/runner';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -37,6 +39,7 @@ type MastraModelOutputOptions = {
   onStepFinish?: (event: any) => Promise<void> | void;
   includeRawChunks?: boolean;
   objectOptions?: ObjectOptions;
+  outputProcessors?: OutputProcessor[];
 };
 export class MastraModelOutput extends MastraBase {
   #aisdkv5: AISDKV5OutputStream;
@@ -78,6 +81,7 @@ export class MastraModelOutput extends MastraBase {
   #objectPromise: DelayedPromise<any> = new DelayedPromise();
   public runId: string;
   #options: MastraModelOutputOptions;
+  #processorRunner?: ProcessorRunner;
 
   constructor({
     stream,
@@ -98,6 +102,16 @@ export class MastraModelOutput extends MastraBase {
     this.#options = options;
 
     this.runId = options.runId;
+
+    // Create processor runner if outputProcessors are provided
+    if (options.outputProcessors?.length) {
+      this.#processorRunner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: options.outputProcessors,
+        logger: this.logger,
+        agentName: 'MastraModelOutput',
+      });
+    }
 
     const self = this;
 
@@ -238,7 +252,7 @@ export class MastraModelOutput extends MastraBase {
 
                 self.#response = {
                   ...otherMetadata,
-                  messages: chunk.payload.messages?.all ?? [],
+                  messages: chunk.payload.messages?.nonUser ?? [],
                 };
               }
 
@@ -251,8 +265,6 @@ export class MastraModelOutput extends MastraBase {
                 const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
 
                 let onFinishPayload: any = {};
-
-                messageList.add(chunk.payload.messages.all, 'response');
 
                 if (model.version === 'v2') {
                   onFinishPayload = {
@@ -408,7 +420,6 @@ export class MastraModelOutput extends MastraBase {
 
     const processorStates = new Map<string, ProcessorState>();
 
-
     return fullStream
       .pipeThrough(
         createObjectStreamTransformer({
@@ -427,29 +438,37 @@ export class MastraModelOutput extends MastraBase {
             controller.enqueue(chunk);
           },
         }),
-      ).pipeThrough(new TransformStream({
-        async transform(chunk, controller) {  
-              // Process all stream parts through output processors
-          const { part: processedPart, blocked, reason } = await this.processPart(chunk, processorStates);
+      )
+      .pipeThrough(
+        new TransformStream({
+          async transform(chunk, controller) {
+            // Process all stream parts through output processors
+            if (self.#processorRunner) {
+              const {
+                part: processedPart,
+                blocked,
+                reason,
+              } = await self.#processorRunner.processPart(chunk as any, processorStates);
 
-          if (blocked) {
-            // Log that part was blocked
-            // void this.logger.debug(`[Agent:${this.agentName}] - Stream part blocked by output processor`, {
-            //   reason,
-            //   originalPart: value,
-            // });
+              if (blocked) {
+                // Send tripwire part and close stream for abort
+                controller.enqueue({
+                  type: 'tripwire',
+                  tripwireReason: reason || 'Output processor blocked content',
+                });
+                controller.terminate();
+                return;
+              }
 
-            // Send tripwire part and close stream for abort
-            controller.enqueue({
-              type: 'tripwire',
-              tripwireReason: reason || 'Output processor blocked content',
-            });
-            controller.terminate();
-          }
-
-          controller.enqueue(processedPart);
-        },
-      }));
+              if (processedPart) {
+                controller.enqueue(processedPart);
+              }
+            } else {
+              controller.enqueue(chunk);
+            }
+          },
+        }),
+      );
   }
 
   get finishReason() {
@@ -641,7 +660,8 @@ export class MastraModelOutput extends MastraBase {
 
   get textStream() {
     const self = this;
-    if (self.#options.objectOptions?.output === 'array') {
+    const outputSchema = getOutputSchema({ schema: self.#options.objectOptions?.schema });
+    if (outputSchema?.outputFormat === 'array') {
       return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
     }
 

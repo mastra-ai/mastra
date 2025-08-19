@@ -141,7 +141,7 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.writableStream,
+              options.writableStream || (execOptions as any).writableStream,
             ),
           },
           execOptions as ToolExecutionOptions & ToolCallOptions,

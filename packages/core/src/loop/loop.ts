@@ -18,6 +18,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
   tools,
   _internal,
   mode = 'stream',
+  outputProcessors,
   ...rest
 }: LoopOptions<Tools>) {
   let loggerToUse =
@@ -82,6 +83,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
     modelStreamSpan,
     telemetry_settings,
     modelSettings,
+    outputProcessors,
     ...rest,
   };
 
@@ -104,6 +106,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
       objectOptions: rest.objectOptions,
+      outputProcessors,
     },
   });
 }

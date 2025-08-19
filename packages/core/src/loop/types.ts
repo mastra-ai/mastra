@@ -3,6 +3,7 @@ import type { Span } from '@opentelemetry/api';
 import type { asSchema, CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
+import type { OutputProcessor } from '../processors';
 import type { ChunkType } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
@@ -42,23 +43,14 @@ export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   _internal?: StreamInternal;
   objectOptions?: ObjectOptions;
+  outputProcessors?: OutputProcessor[];
 };
 
 export type ObjectOptions =
   | {
-      /**
-       * Defaults to 'object' output if 'schema' is provided without 'output'
-       */
-      output?: 'object' | 'array';
-      schema: Parameters<typeof asSchema>[0];
+      schema?: Parameters<typeof asSchema>[0];
       schemaName?: string;
       schemaDescription?: string;
-    }
-  | {
-      output: 'no-schema';
-      schema?: never;
-      schemaName?: never;
-      schemaDescription?: never;
     }
   | undefined;
 
@@ -72,4 +64,5 @@ export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
 export type OuterLLMRun<Tools extends ToolSet = ToolSet> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
+  writer: WritableStream<ChunkType>;
 } & LoopRun<Tools>;

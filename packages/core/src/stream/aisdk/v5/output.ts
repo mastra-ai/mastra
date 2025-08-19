@@ -243,6 +243,10 @@ export class AISDKV5OutputStream {
     return this.#modelOutput.textStream;
   }
 
+  get elementStream() {
+    return this.#modelOutput.elementStream;
+  }
+
   get fullStream() {
     let startEvent: OutputChunkType;
     let hasStarted: boolean = false;

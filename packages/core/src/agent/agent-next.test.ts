@@ -2,7 +2,8 @@ import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
-import type { CoreMessage, LanguageModelV1, ToolInvocation } from 'ai';
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
+import type { CoreMessage, LanguageModelV1 } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { stepCountIs } from 'ai-v5';
@@ -16,13 +17,13 @@ import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
+import { delay } from '../utils';
 import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts, MockMemory } from './test-utils';
 import { Agent } from './index';
-import { delay } from '../utils';
-import { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 
 config();
 
@@ -47,7 +48,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
   let electionModel: MockLanguageModelV1 | MockLanguageModelV2;
   let obamaObjectModel: MockLanguageModelV1 | MockLanguageModelV2;
-  let obamaObjectModel2: MockLanguageModelV1 | MockLanguageModelV2;
   let openaiModel: LanguageModelV1 | LanguageModelV2;
 
   beforeEach(() => {
@@ -117,16 +117,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             ],
           }),
           rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-
-      obamaObjectModel2 = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `{"elements":[{"winner":"Barack Obama","year":"2012"},{"winner":"Donald Trump","year":"2016"}]}`,
         }),
       });
 
@@ -223,29 +213,79 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }),
       });
 
-      obamaObjectModel2 = new MockLanguageModelV2({
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            {
-              type: 'text-delta',
-              id: '1',
-              delta: '{"elements":[{"winner":"Barack Obama","year":"2012"},{"winner":"Donald Trump","year":"2016"}]}',
-            },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-
       openaiModel = openai_v5('gpt-4o');
     }
   });
+
+  if (version === 'v2') {
+    describe('Writable Stream from Tool', () => {
+      it('should get a text response from the agent', async () => {
+        const tool = createTool({
+          description: 'A tool that returns the winner of the 2016 US presidential election',
+          id: 'election-tool',
+          inputSchema: z.object({
+            year: z.number(),
+          }),
+          execute: async props => {
+            props?.writer.write({
+              type: 'election-data',
+              args: {
+                year: props.year,
+              },
+              status: 'pending',
+            });
+
+            await delay(1000);
+
+            props?.writer.write({
+              type: 'election-data',
+              args: {
+                year: props.year,
+              },
+              result: {
+                winner: 'Donald Trump',
+              },
+              status: 'success',
+            });
+
+            return { winner: 'Donald Trump' };
+          },
+        });
+
+        const electionAgent = new Agent({
+          name: 'US Election agent',
+          instructions: 'You know about the past US elections',
+          model: openaiModel,
+          tools: {
+            electionTool: tool,
+          },
+        });
+
+        let stream = await electionAgent.stream_vnext('Call the election-tool and tell me what it says.');
+
+        let chunks: ChunkType[] = [];
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+
+        expect(chunks.find(chunk => chunk.type === 'tool-output')).toBeDefined();
+
+        chunks = [];
+
+        stream = await electionAgent.stream_vnext('Call the election-tool and tell me what it says.', {
+          format: 'aisdk',
+        });
+
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+
+        const toolOutputChunk = chunks.find(chunk => chunk.type === 'tool-output');
+
+        expect(toolOutputChunk).toBeDefined();
+      });
+    }, 50000);
+  }
 
   describe(`${version} - agent`, () => {
     it('should get a text response from the agent', async () => {
@@ -434,6 +474,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let previousPartialObject = {} as { winner: string };
         for await (const partialObject of objectStream) {
+          console.log(partialObject, 'SUHHHHH');
           previousPartialObject = partialObject! as { winner: string };
           expect(partialObject).toBeDefined();
         }
