@@ -1,4 +1,4 @@
-# @mastra/deployer
+# @mastra/server
 
 ## 0.13.3-alpha.0
 
