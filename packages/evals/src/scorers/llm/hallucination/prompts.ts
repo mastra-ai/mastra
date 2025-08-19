@@ -186,14 +186,10 @@ export function createHallucinationReasonPrompt({
   - For mixed cases, explain the balance
   - Base explanation only on the verified statements, not prior knowledge
   Format:
-  {
-      "reason": "The score is {score} because {explanation of hallucination}"
-  }
+  "The score is {score} because {explanation of hallucination}"
+
   Example Responses:
-  {
-      "reason": "The score is 0.0 because none of the statements from the context were contradicted by the output"
-  }
-  {
-      "reason": "The score is 0.5 because half of the statements from the context were directly contradicted by claims in the output"
-  }`;
+  "The score is 0.0 because none of the statements from the context were contradicted by the output"
+  "The score is 0.5 because half of the statements from the context were directly contradicted by claims in the output"
+  `;
 }

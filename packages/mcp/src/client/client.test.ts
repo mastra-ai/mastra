@@ -356,7 +356,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   it('should handle elicitation request with reject response', async () => {
     const mockHandler = vi.fn(async (request) => {
       expect(request.message).toBe('Please provide sensitive information');
-      return { action: 'reject' as const };
+      return { action: 'decline' as const };
     });
 
     client = new InternalMastraMCPClient({
@@ -383,7 +383,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(result.content[0].type).toBe('text');
     
     const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('reject');
+    expect(elicitationResult.action).toBe('decline');
   });
 
   it('should handle elicitation request with cancel response', async () => {

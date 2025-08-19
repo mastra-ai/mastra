@@ -17,7 +17,7 @@ import type { Message } from '@/types';
 function Agent() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const [chatInputValue, setChatInputValue] = useState('');
