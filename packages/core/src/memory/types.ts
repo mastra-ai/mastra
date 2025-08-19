@@ -1,3 +1,4 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -8,7 +9,6 @@ import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 
 export type { Message as AiMessageType } from 'ai';
 export type { MastraLanguageModel };

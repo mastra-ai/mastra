@@ -5,6 +5,7 @@ import { openai } from '@ai-sdk/openai';
 import { xai } from '@ai-sdk/xai';
 import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { AISDKV5OutputStream } from '@mastra/core/stream';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -12,7 +13,6 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
-import type { AISDKV5OutputStream } from '@mastra/core/stream';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
