@@ -1,4 +1,5 @@
 import type { Mastra, SerializedStepFlowEntry } from '..';
+import type { AnyAISpan } from '../ai-tracing';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -49,6 +50,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
+    parentAISpan?: AnyAISpan;
     retryConfig?: {
       attempts?: number;
       delay?: number;

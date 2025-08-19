@@ -177,7 +177,7 @@ export function createJsonTextStreamTransformer(objectOptions: ObjectOptions) {
 
       if (outputSchema?.outputFormat === 'array') {
         chunkCount++;
-        
+
         // If this is the first chunk, decide between complete vs incremental streaming
         if (chunkCount === 1) {
           // If the first chunk already has multiple elements or is complete,
@@ -189,13 +189,13 @@ export function createJsonTextStreamTransformer(objectOptions: ObjectOptions) {
             return;
           }
         }
-        
+
         // Incremental streaming mode (multiple chunks)
         if (!hasStartedArray) {
           controller.enqueue('[');
           hasStartedArray = true;
         }
-        
+
         // Emit new elements that were added
         for (let i = previousArrayLength; i < chunk.object.length; i++) {
           const elementJson = JSON.stringify(chunk.object[i]);

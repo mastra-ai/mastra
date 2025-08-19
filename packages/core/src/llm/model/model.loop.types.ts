@@ -12,10 +12,10 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { LoopConfig, LoopOptions, ObjectOptions } from '../../loop/types';
+import type { StructuredOutputOptions } from '../../processors';
 import type { RuntimeContext } from '../../runtime-context';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../../tools';
 import type { inferOutput, TripwireProperties } from './shared.types';
-import type { StructuredOutputOptions } from '../../processors';
 
 type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
@@ -21,10 +22,10 @@ import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import type { MastraMessageV2 } from './types';
 import { Agent } from './index';
-import { randomUUID } from 'crypto';
 
 config();
 
+// @ts-expect-error mock doesn't need to properly implement everything (for now)
 class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
   messages: Map<string, MastraMessageV1 | MastraMessageV2> = new Map();
@@ -5000,10 +5001,8 @@ describe('output processors', () => {
           }));
 
           // Store the processed text to verify it was called
-          processedText =
-            processedMessages[0]?.content.parts[0]?.type === 'text'
-              ? (processedMessages[0].content.parts[0] as any).text
-              : '';
+          const textPart = processedMessages[0]?.content?.parts?.find((p: any) => p.type === 'text');
+          processedText = textPart ? textPart.text : '';
 
           return processedMessages;
         }
@@ -5066,10 +5065,8 @@ describe('output processors', () => {
           }));
 
           // Store the final processed text to verify both processors ran
-          finalProcessedText =
-            processedMessages[0]?.content.parts[0]?.type === 'text'
-              ? (processedMessages[0].content.parts[0] as any).text
-              : '';
+          const textPart = processedMessages[0]?.content?.parts?.find((p: any) => p.type === 'text');
+          finalProcessedText = textPart ? textPart.text : '';
 
           return processedMessages;
         }
@@ -5157,10 +5154,8 @@ describe('output processors', () => {
           }));
 
           // Store the processed text to verify this processor ran
-          processedText =
-            processedMessages[0]?.content.parts[0]?.type === 'text'
-              ? (processedMessages[0].content.parts[0] as any).text
-              : '';
+          const textPart = processedMessages[0]?.content?.parts?.find((p: any) => p.type === 'text');
+          processedText = textPart ? textPart.text : '';
 
           return processedMessages;
         }

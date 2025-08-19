@@ -279,7 +279,7 @@ export async function safeValidateTypes<OBJECT>({
     }
 
     const result = await schema.validate(value);
-    
+
     if (!result.success) {
       return {
         success: false,

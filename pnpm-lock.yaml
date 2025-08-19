@@ -2232,12 +2232,6 @@ importers:
       '@mastra/memory':
         specifier: workspace:*
         version: link:..
-      '@mastra/pg':
-        specifier: workspace:*
-        version: link:../../../stores/pg
-      '@mastra/upstash':
-        specifier: workspace:*
-        version: link:../../../stores/upstash
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1

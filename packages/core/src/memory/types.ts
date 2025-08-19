@@ -8,6 +8,7 @@ import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 
 export type { Message as AiMessageType } from 'ai';
 export type { MastraLanguageModel };
@@ -97,7 +98,7 @@ export type SharedMemoryConfig = {
   options?: MemoryConfig;
 
   vector?: MastraVector | false;
-  embedder?: EmbeddingModel<string>;
+  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
 
   processors?: MemoryProcessor[];
 };

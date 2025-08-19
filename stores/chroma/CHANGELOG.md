@@ -1,5 +1,18 @@
 # @mastra/chroma
 
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- 8660c1b: Updating Chroma integration and adding support for Chroma Cloud
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+
 ## 0.11.3
 
 ### Patch Changes

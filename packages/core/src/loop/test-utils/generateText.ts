@@ -6,8 +6,8 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
-import { createTestModel, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
 import { MockTracer } from './mockTracer';
+import { createTestModel, modelWithFiles, modelWithReasoning, modelWithSources, testUsage } from './utils';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
