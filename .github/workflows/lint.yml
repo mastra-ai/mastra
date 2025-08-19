@@ -39,7 +39,7 @@ jobs:
       - name: Lint
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./integrations/**/*" --filter "!@mastra/playground" lint
       - name: Format
-        run: pnpm prettier --check .
+        run: pnpm list-prettier-files | xargs prettier --check
 
   prebuild:
     name: Prebuild
