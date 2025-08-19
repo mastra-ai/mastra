@@ -376,12 +376,11 @@ describe('Tool Schema Compatibility', () => {
       });
     });
 
-    describe.only(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+    describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
         describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
           testTools.forEach(testTool => {
             const schemaName = testTool.id.replace('testTool_', '');
-
 
             // Google does not support unions of objects and is flakey withnulls
             if (
