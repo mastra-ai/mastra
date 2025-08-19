@@ -2684,6 +2684,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           threadId: result.threadId,
           output: result.output,
           structuredOutput: result.structuredOutput,
+          stopWhen: result.stopWhen,
           options: {
             onFinish: async (payload: any) => {
               if (payload.finishReason === 'error') {
@@ -3244,7 +3245,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk',
   >(messages: MessageListInput, streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>) {
-    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions?.runtimeContext });
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+      runtimeContext: streamOptions?.runtimeContext,
+    });
 
     const mergedStreamOptions = {
       ...defaultStreamOptions,

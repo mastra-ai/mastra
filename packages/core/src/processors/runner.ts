@@ -212,8 +212,6 @@ export class ProcessorRunner {
   async runInputProcessors(messageList: MessageList, telemetry?: any): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
 
-    console.log('userMessages', userMessages);
-
     let processableMessages: MastraMessageV2[] = [...userMessages];
 
     const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
@@ -257,8 +255,6 @@ export class ProcessorRunner {
         )();
       }
     }
-
-    console.log('processableMessages', processableMessages);
 
     if (processableMessages.length > 0) {
       messageList.add(processableMessages, 'user');
