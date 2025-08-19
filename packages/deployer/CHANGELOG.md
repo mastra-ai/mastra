@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.14.0-alpha.2
+
+### Patch Changes
+
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+  - @mastra/core@0.14.0-alpha.2
+  - @mastra/server@0.14.0-alpha.2
+
 ## 0.14.0-alpha.1
 
 ### Patch Changes

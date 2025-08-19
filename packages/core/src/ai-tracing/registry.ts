@@ -194,7 +194,9 @@ export function hasAITracing(name: string): boolean {
 /**
  * Type guard to check if an object is a MastraAITracing instance
  */
-function isAITracingInstance(obj: AITracingInstanceConfig | MastraAITracing): obj is MastraAITracing {
+function isAITracingInstance(
+  obj: Omit<AITracingInstanceConfig, 'instanceName'> | MastraAITracing,
+): obj is MastraAITracing {
   return obj instanceof MastraAITracing;
 }
 
