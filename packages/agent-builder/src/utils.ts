@@ -32,6 +32,26 @@ export function spawn(command: string, args: string[], options: any) {
   });
 }
 
+// --- Git environment probes ---
+export async function isGitInstalled(): Promise<boolean> {
+  try {
+    await spawnWithOutput('git', ['--version'], {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function isInsideGitRepo(cwd: string): Promise<boolean> {
+  try {
+    if (!(await isGitInstalled())) return false;
+    const { stdout } = await spawnWithOutput('git', ['rev-parse', '--is-inside-work-tree'], { cwd });
+    return stdout.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
 // Variant of spawn that captures stdout and stderr
 export function spawnWithOutput(
   command: string,
@@ -135,6 +155,8 @@ export async function getMastraTemplate(slug: string) {
 // Git commit tracking utility
 export async function logGitState(targetPath: string, label: string): Promise<void> {
   try {
+    // Skip if not a git repo
+    if (!(await isInsideGitRepo(targetPath))) return;
     const gitStatusResult = await git(targetPath, 'status', '--porcelain');
     const gitLogResult = await git(targetPath, 'log', '--oneline', '-3');
     const gitCountResult = await git(targetPath, 'rev-list', '--count', 'HEAD');
@@ -160,24 +182,29 @@ export async function gitClone(repo: string, destDir: string, cwd?: string) {
 }
 
 export async function gitCheckoutRef(cwd: string, ref: string) {
+  if (!(await isInsideGitRepo(cwd))) return;
   await git(cwd, 'checkout', ref);
 }
 
 export async function gitRevParse(cwd: string, rev: string): Promise<string> {
+  if (!(await isInsideGitRepo(cwd))) return '';
   const { stdout } = await git(cwd, 'rev-parse', rev);
   return stdout.trim();
 }
 
 export async function gitAddFiles(cwd: string, files: string[]) {
   if (!files || files.length === 0) return;
+  if (!(await isInsideGitRepo(cwd))) return;
   await git(cwd, 'add', ...files);
 }
 
 export async function gitAddAll(cwd: string) {
+  if (!(await isInsideGitRepo(cwd))) return;
   await git(cwd, 'add', '.');
 }
 
 export async function gitHasStagedChanges(cwd: string): Promise<boolean> {
+  if (!(await isInsideGitRepo(cwd))) return false;
   const { stdout } = await git(cwd, 'diff', '--cached', '--name-only');
   return stdout.trim().length > 0;
 }
@@ -188,6 +215,7 @@ export async function gitCommit(
   opts?: { allowEmpty?: boolean; skipIfNoStaged?: boolean },
 ): Promise<boolean> {
   try {
+    if (!(await isInsideGitRepo(cwd))) return false;
     if (opts?.skipIfNoStaged) {
       const has = await gitHasStagedChanges(cwd);
       if (!has) return false;
@@ -211,6 +239,7 @@ export async function gitAddAndCommit(
   files?: string[],
   opts?: { allowEmpty?: boolean; skipIfNoStaged?: boolean },
 ): Promise<boolean> {
+  if (!(await isInsideGitRepo(cwd))) return false;
   if (files && files.length > 0) {
     await gitAddFiles(cwd, files);
   } else {
@@ -221,6 +250,7 @@ export async function gitAddAndCommit(
 
 export async function gitCheckoutBranch(branchName: string, baseBranchName: string, targetPath: string) {
   try {
+    if (!(await isInsideGitRepo(targetPath))) return;
     // Try to create new branch using centralized git runner
     await git(targetPath, 'checkout', '-b', branchName);
     console.log(`Created new branch: ${branchName}`);
