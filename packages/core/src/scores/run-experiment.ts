@@ -50,7 +50,6 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
   concurrency?: number;
   onItemComplete?: RunExperimentOnItemComplete<TScorer>;
 }): Promise<RunExperimentResult<TScorer[number]['name']>> => {
-  const startTime = Date.now();
   let totalItems = 0;
   const scoreAccumulators: Record<string, number[]> = {};
 
