@@ -13,16 +13,53 @@ Mastra integrates with Express, making it easy to:
 - Maintain full control over your server logic and routing
 - Scale your backend independently of your frontend
 
-Use this guide to scaffold and integrate Mastra with your Express project.
+Express can invoke Mastra directly so you don't need to run a Mastra server alongside your Express server.
 
-<Callout type="warning">
-This setup is compatible with the following package versions:
-- `express`: 4.x
-- `@types/express`: 4.x
+In this guide you'll learn how to install the necessary Mastra dependencies, create an example agent, and invoke Mastra from an Express API route.
 
-Type compatibility in 5.x can be inconsistent while `express` and `@types/express` evolve toward alignment.
+## Prerequisites
 
-</Callout>
+- An existing Express app set up with TypeScript
+- Node.js `v20.0` or higher
+- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+
+## TODO
+
+```bash copy
+npm install mastra@latest @mastra/core@latest @mastra/libsql@latest zod@^3.0.0 @ai-sdk/openai@^1.0.0
+```
+
+```bash copy
+npx create-mastra@latest --project-name express-with-mastra --example --components tools,agents --llm openai
+```
+
+```bash
+cd express-with-mastra
+```
+
+```bash copy
+npm install express
+```
+
+```bash copy
+npm install -D @types/express
+```
+
+```json
+{
+  "scripts": {
+    "dev": "npx tsx --watch src/server.ts --watch-dir src",
+    "mastra:dev": "mastra dev"
+  },
+}
+```
+
+
+
+
+
+
+
 
 <Steps>
 ## Install Mastra
