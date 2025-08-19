@@ -237,7 +237,6 @@ export class MastraModelOutput extends MastraBase {
 
                 let onFinishPayload: any = {};
 
-
                 if (model.version === 'v2') {
                   onFinishPayload = {
                     text: baseFinishStep.text,
