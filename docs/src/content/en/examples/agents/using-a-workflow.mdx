@@ -1,6 +1,6 @@
 ---
 title: "Example: Adding Workflows to Agents | Agents | Mastra Docs"
-description: Example of creating an AI agent in Mastra that uses a dedicated workflow to provide weather information.
+description: Example of creating an AI agent in Mastra that uses a dedicated workflow to provide soccer fixture information.
 ---
 
 #  Adding a workflow
@@ -19,7 +19,7 @@ OPENAI_API_KEY=<your-api-key>
 
 This workflow retrieves English Premier League fixtures for a given date. Clear input and output schemas keep the data predictable and easy for the agent to use.
 
-```typescript filename="src/mastra/tools/soccer-workflow.ts" showLineNumbers copy
+```typescript filename="src/mastra/workflows/example-soccer-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -62,7 +62,7 @@ export const soccerWorkflow = createWorkflow({
 
 This agent uses `soccerWorkflow` to answer fixture questions. The instructions tell it to compute the date, pass it in `YYYY-MM-DD` format, and return team names, match times, and dates.
 
-```typescript filename="src/mastra/agents/soccer-agent.ts" showLineNumbers copy
+```typescript filename="src/mastra/agents/example-soccer-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 

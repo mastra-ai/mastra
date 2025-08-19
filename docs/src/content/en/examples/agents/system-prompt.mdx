@@ -61,6 +61,8 @@ Use `getAgent()` to retrieve the agent and call `generate()` with a prompt. As d
 ```typescript filename="src/test-harry-potter-agent.ts" showLineNumbers copy
 import "dotenv/config";
 
+import { mastra } from "./mastra";
+
 const agent = mastra.getAgent("harryPotterAgent");
 
 const response = await agent.generate("What is your favorite room in Hogwarts?");
@@ -74,6 +76,8 @@ By providing a different system prompt at runtime, the agent’s voice can be sw
 
 ```typescript {8} filename="src/test-harry-potter-agent.ts" showLineNumbers copy
 import "dotenv/config";
+
+import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("harryPotterAgent");
 
