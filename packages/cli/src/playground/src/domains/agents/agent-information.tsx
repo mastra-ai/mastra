@@ -83,7 +83,7 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
           </TabContent>
           <TabContent value="model-settings">
             {isLoading && <Skeleton className="h-full" />}
-            {agent && <AgentSettings />}
+            {agent && <AgentSettings modelVersion={agent.modelVersion} />}
           </TabContent>
           <TabContent value="memory">
             {isLoading ? (

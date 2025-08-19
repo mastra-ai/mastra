@@ -12,6 +12,20 @@ import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import { getOutputSchema } from '../aisdk/v5/object/schema';
+
+export class JsonToSseTransformStream extends TransformStream<unknown, string> {
+  constructor() {
+    super({
+      transform(part, controller) {
+        controller.enqueue(`data: ${JSON.stringify(part)}\n\n`);
+      },
+      flush(controller) {
+        controller.enqueue('data: [DONE]\n\n');
+      },
+    });
+  }
+}
 
 type MastraModelOutputOptions = {
   runId: string;
@@ -245,6 +259,7 @@ export class MastraModelOutput extends MastraBase {
                     // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
                     content: messageList.get.response.aiV5.stepContent(),
                     request: this.request,
+                    error: self.error,
                     reasoning: this.aisdk.v5.reasoning,
                     reasoningText: !this.aisdk.v5.reasoningText ? undefined : this.aisdk.v5.reasoningText,
                     sources: this.aisdk.v5.sources,
@@ -330,7 +345,6 @@ export class MastraModelOutput extends MastraBase {
               break;
 
             case 'error':
-              console.log('RECEIVED ERROR IN FULLSTREAM', JSON.stringify(chunk, null, 2));
               self.#error = chunk.payload.error;
               break;
           }
@@ -474,6 +488,14 @@ export class MastraModelOutput extends MastraBase {
     }
   }
 
+  // toUIMessageStreamResponse() {
+  //   const stream = this.teeStream()
+  //     .pipeThrough(new JsonToSseTransformStream())
+  //     .pipeThrough(new TextEncoderStream())
+
+  //   return new Response(stream as BodyInit);
+  // }
+
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
     try {
       await consumeStream({
@@ -591,7 +613,8 @@ export class MastraModelOutput extends MastraBase {
 
   get textStream() {
     const self = this;
-    if (self.#options.objectOptions?.output === 'array') {
+    const outputSchema = getOutputSchema({ schema: self.#options.objectOptions?.schema });
+    if (outputSchema?.outputFormat === 'array') {
       return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
     }
 

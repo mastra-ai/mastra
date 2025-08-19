@@ -166,8 +166,10 @@ export async function vnext_streamGenerateHandler(c: Context): Promise<Response 
 
           let chunkResult;
           while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
           }
+
+          await stream.write('data: [DONE]\n\n');
         } catch (err) {
           logger.error('Error in streamVNext generate: ' + ((err as Error)?.message ?? 'Unknown error'));
         }

@@ -738,7 +738,7 @@ export class Workflow<
             | DynamicMapping<TPrevSchema, z.ZodType<any>>;
         }
       | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
-  ) {
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, any> {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       // @ts-ignore

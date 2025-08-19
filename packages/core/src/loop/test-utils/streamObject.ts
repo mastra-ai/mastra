@@ -5,13 +5,14 @@ import {
   convertReadableStreamToArray,
 } from '@ai-sdk/provider-utils-v5/test';
 import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { jsonSchema, NoObjectGeneratedError } from 'ai-v5';
+import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai-v5';
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai-v5';
 import { MockLanguageModelV2 } from 'ai-v5/test';
-import { assert, describe, expect, it } from 'vitest';
+import { assert, beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
+import { createMockServerResponse } from './mock-server-response';
 import { testUsage } from './utils';
 
 function createTestModel({
@@ -243,20 +244,88 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
 
-      // describe('result.fullStream', () => {
-      //   it('should send full stream data', async () => {
-      //     const result = loopFn({
-      //       runId,
-      //       model: createTestModel(),
-      //       objectOptions: {
-      //         schema: z.object({ content: z.string() }),
-      //       },
-      //       messageList: new MessageList(),
-      //     });
+      // TODO: aisdkv5 streamObject result.fullStream does not have start events, and for some reason has slightly different formats for text deltas
+      // TODO: should we support this?
+      describe('result.fullStream', () => {
+        it.todo('should send full stream data', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel(),
+            objectOptions: {
+              schema: z.object({ content: z.string() }),
+            },
+            messageList: new MessageList(),
+          });
 
-      //     expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchSnapshot();
-      //   });
-      // });
+          const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+
+          expect(data).toMatchInlineSnapshot(`[
+  {
+    "object": {},
+    "type": "object",
+  },
+  {
+    "textDelta": "{ ",
+    "type": "text-delta",
+  },
+  {
+    "object": {
+      "content": "Hello, ",
+    },
+    "type": "object",
+  },
+  {
+    "textDelta": ""content": "Hello, ",
+    "type": "text-delta",
+  },
+  {
+    "object": {
+      "content": "Hello, world",
+    },
+    "type": "object",
+  },
+  {
+    "textDelta": "world",
+    "type": "text-delta",
+  },
+  {
+    "object": {
+      "content": "Hello, world!",
+    },
+    "type": "object",
+  },
+  {
+    "textDelta": "!"",
+    "type": "text-delta",
+  },
+  {
+    "textDelta": " }",
+    "type": "text-delta",
+  },
+  {
+    "finishReason": "stop",
+    "logprobs": [
+      {
+        "logprob": 1,
+        "token": "-",
+        "topLogprobs": [],
+      },
+    ],
+    "response": {
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish",
+    "usage": {
+      "completionTokens": 10,
+      "promptTokens": 2,
+      "totalTokens": 12,
+    },
+  },
+]`);
+        });
+      });
 
       describe('result.textStream', () => {
         it('should send text stream', async () => {
@@ -318,41 +387,46 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
 
-      // describe.todo('result.pipeTextStreamToResponse', async () => {
-      //   it('should write text deltas to a Node.js response-like object', async () => {
-      //     const mockResponse = createMockServerResponse();
+      describe('result.pipeTextStreamToResponse', async () => {
+        it('should write text deltas to a Node.js response-like object', async () => {
+          const mockResponse = createMockServerResponse();
 
-      //     const result = loopFn({
-      //       model: createTestModel(),
-      //       objectOptions: {
-      //         schema: z.object({ content: z.string() }),
-      //       },
-      //       messageList: new MessageList(),
-      //     });
+          const result = loopFn({
+            model: createTestModel(),
+            objectOptions: {
+              schema: z.object({ content: z.string() }),
+            },
+            messageList: new MessageList(),
+          });
 
-      //     result.pipeTextStreamToResponse(mockResponse);
+          pipeTextStreamToResponse({
+            response: mockResponse,
+            // @ts-expect-error -- stream types thing
+            textStream: result.textStream,
+          });
 
-      //     await mockResponse.waitForEnd();
+          await mockResponse.waitForEnd();
 
-      //     expect(mockResponse.statusCode).toBe(200);
-      //     expect(mockResponse.headers).toMatchInlineSnapshot(`
-      //     {
-      //       "content-type": "text/plain; charset=utf-8",
-      //     }
-      //   `);
-      //     expect(mockResponse.getDecodedChunks()).toMatchInlineSnapshot(`
-      //     [
-      //       "{ ",
-      //       ""content": "Hello, ",
-      //       "world",
-      //       "!"",
-      //       " }",
-      //     ]
-      //   `);
-      //   });
-      // });
+          expect(mockResponse.statusCode).toBe(200);
+          expect(mockResponse.headers).toMatchInlineSnapshot(`
+          {
+            "content-type": "text/plain; charset=utf-8",
+          }
+        `);
+          expect(mockResponse.getDecodedChunks()).toMatchInlineSnapshot(`
+            [
+              "{ ",
+              ""content": ",
+              ""Hello, ",
+              "world",
+              "!"",
+              " }",
+            ]
+          `);
+        });
+      });
 
-      describe.todo('result.usage', () => {
+      describe('result.usage', () => {
         it('should resolve with token usage', async () => {
           const result = loopFn({
             model: createTestModel({
@@ -384,12 +458,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         `;
 
           // consume stream (runs in parallel)
-          void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
+          // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          // expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          expect(result.usage).toMatchInlineSnapshot(expectedOutput);
         });
       });
 
-      describe.todo('result.providerMetadata', () => {
+      describe('result.providerMetadata', () => {
         it('should resolve with provider metadata', async () => {
           const result = loopFn({
             model: createTestModel({
@@ -418,15 +494,18 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
 
           // consume stream (runs in parallel)
-          void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-          expect(await result.providerMetadata).toStrictEqual({
+          // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          // expect(await result.providerMetadata).toStrictEqual({
+          //   testProvider: { testKey: 'testValue' },
+          // });
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          expect(result.providerMetadata).toStrictEqual({
             testProvider: { testKey: 'testValue' },
           });
         });
       });
 
-      describe.todo('result.response', () => {
+      describe('result.response', () => {
         it('should resolve with response information', async () => {
           const result = loopFn({
             model: createTestModel({
@@ -459,18 +538,42 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
 
           // consume stream (runs in parallel)
-          void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          // expect(await result.response).toStrictEqual({
+          //   id: 'id-0',
+          //   modelId: 'mock-model-id',
+          //   timestamp: new Date(0),
+          //   headers: { call: '2' },
+          // });
 
-          expect(await result.response).toStrictEqual({
+          const expectedResponse = {
             id: 'id-0',
             modelId: 'mock-model-id',
             timestamp: new Date(0),
             headers: { call: '2' },
-          });
+            // TODO: result.response contains messages array but didnt in v5
+            messages: [
+              {
+                content: [
+                  {
+                    text: '{"content": "Hello, world!"}',
+                    type: 'text',
+                  },
+                ],
+                role: 'assistant',
+              },
+            ],
+          };
+
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          expect(await result.aisdk.v5.response).toStrictEqual(expectedResponse);
+
+          await convertAsyncIterableToArray(result.objectStream);
+          expect(await result.response).toStrictEqual(expectedResponse);
         });
       });
 
-      describe.todo('result.request', () => {
+      describe('result.request', () => {
         it('should contain request information', async () => {
           const result = loopFn({
             model: new MockLanguageModelV2({
@@ -505,12 +608,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
 
           // TODO: This shouldn't need to be awaited if result.request is a delayed promise
-          // await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           // consume stream (runs in parallel)
-          void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          expect(
-            await result.request, // currently not a delayed promise
-          ).toStrictEqual({
+          // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          // currently not a delayed promise
+          expect(result.request).toStrictEqual({
             body: 'test body',
           });
         });
@@ -546,7 +648,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
 
           // consume stream (runs in parallel)
-          await convertAsyncIterableToArray(result.objectStream);
+          void convertAsyncIterableToArray(result.objectStream);
 
           assert.deepStrictEqual(await result.object, {
             content: 'Hello, world!',
@@ -583,10 +685,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           // consume stream (runs in parallel)
           void convertAsyncIterableToArray(result.objectStream);
-          const data = await result.object;
-          console.log('data22', data);
-
-          // expect(result.aisdk.v5.object).rejects.toThrow(NoObjectGeneratedError);
+          // Expect the promise to be rejected with a validation error
+          await expect(result.object).rejects.toThrow('Validation failed');
         });
 
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
@@ -661,98 +761,288 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
 
-      // describe('options.onFinish', () => {
-      // it('should be called when a valid object is generated', async () => {
-      //   let result: any;
-      //   const { objectStream } = loopFn({
-      //     model: new MockLanguageModelV2({
-      //       doStream: async () => ({
-      //         stream: convertArrayToReadableStream([
-      //           {
-      //             type: 'response-metadata',
-      //             id: 'id-0',
-      //             modelId: 'mock-model-id',
-      //             timestamp: new Date(0),
-      //           },
-      //           { type: 'text-start', id: '1' },
-      //           {
-      //             type: 'text-delta',
-      //             id: '1',
-      //             delta: '{ "content": "Hello, world!" }',
-      //           },
-      //           { type: 'text-end', id: '1' },
-      //           {
-      //             type: 'finish',
-      //             finishReason: 'stop',
-      //             usage: testUsage,
-      //             providerMetadata: {
-      //               testProvider: { testKey: 'testValue' },
-      //             },
-      //           },
-      //         ]),
-      //       }),
-      //     }),
-      //     objectOptions: {
-      //       schema: z.object({ content: z.string() }),
-      //     },
-      //     options: {
-      //       onFinish: async event => {
-      //         result = event;
-      //       },
-      //     },
-      //     messageList: new MessageList(),
-      //   });
-      //   // consume stream
-      //   await convertAsyncIterableToArray(objectStream);
-      //   expect(result!).toMatchSnapshot();
-      // });
-      // TODO: need to handle object schema validation
-      // it.todo("should be called when object doesn't match the schema", async () => {
-      //   let result: any;
-      //   const { objectStream, object } = loopFn({
-      //     model: new MockLanguageModelV2({
-      //       doStream: async () => ({
-      //         stream: convertArrayToReadableStream([
-      //           {
-      //             type: 'response-metadata',
-      //             id: 'id-0',
-      //             modelId: 'mock-model-id',
-      //             timestamp: new Date(0),
-      //           },
-      //           { type: 'text-start', id: '1' },
-      //           { type: 'text-delta', id: '1', delta: '{ ' },
-      //           { type: 'text-delta', id: '1', delta: '"invalid": ' },
-      //           { type: 'text-delta', id: '1', delta: `"Hello, ` },
-      //           { type: 'text-delta', id: '1', delta: `world` },
-      //           { type: 'text-delta', id: '1', delta: `!"` },
-      //           { type: 'text-delta', id: '1', delta: ' }' },
-      //           { type: 'text-end', id: '1' },
-      //           {
-      //             type: 'finish',
-      //             finishReason: 'stop',
-      //             usage: testUsage,
-      //           },
-      //         ]),
-      //       }),
-      //     }),
-      //     objectOptions: {
-      //       schema: z.object({ content: z.string() }),
-      //     },
-      //     options: {
-      //       onFinish: async event => {
-      //         result = event;
-      //       },
-      //     },
-      //     messageList: new MessageList(),
-      //   });
-      //   // consume stream
-      //   await convertAsyncIterableToArray(objectStream);
-      //   // consume expected error rejection
-      //   await object.catch(() => {});
-      //   console.log('result22', result);
-      //   expect(result!).toMatchSnapshot();
-      // });
-      // });
+      describe('options.onFinish', () => {
+        it('should be called when a valid object is generated', async () => {
+          let result: any;
+          const { objectStream } = loopFn({
+            model: new MockLanguageModelV2({
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: '1' },
+                  {
+                    type: 'text-delta',
+                    id: '1',
+                    delta: '{ "content": "Hello, world!" }',
+                  },
+                  { type: 'text-end', id: '1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsage,
+                    providerMetadata: {
+                      testProvider: { testKey: 'testValue' },
+                    },
+                  },
+                ]),
+              }),
+            }),
+            objectOptions: {
+              schema: z.object({ content: z.string() }),
+            },
+            options: {
+              onFinish: async event => {
+                result = event;
+              },
+            },
+            messageList: new MessageList(),
+          });
+          // consume stream
+          await convertAsyncIterableToArray(objectStream);
+          expect(result!).toMatchInlineSnapshot(`
+            {
+              "content": [
+                {
+                  "text": "{ "content": "Hello, world!" }",
+                  "type": "text",
+                },
+              ],
+              "dynamicToolCalls": [],
+              "dynamicToolResults": [],
+              "error": undefined,
+              "files": [],
+              "finishReason": "stop",
+              "reasoning": [],
+              "reasoningText": undefined,
+              "request": {},
+              "response": {
+                "headers": undefined,
+                "id": "id-0",
+                "messages": [
+                  {
+                    "content": [
+                      {
+                        "text": "{ "content": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
+                "modelId": "mock-model-id",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "sources": [],
+              "staticToolCalls": [],
+              "staticToolResults": [],
+              "steps": [
+                DefaultStepResult {
+                  "content": [
+                    {
+                      "text": "{ "content": "Hello, world!" }",
+                      "type": "text",
+                    },
+                  ],
+                  "finishReason": "stop",
+                  "providerMetadata": {
+                    "testProvider": {
+                      "testKey": "testValue",
+                    },
+                  },
+                  "request": {},
+                  "response": {
+                    "headers": undefined,
+                    "id": "id-0",
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "text": "{ "content": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
+                    "modelId": "mock-model-id",
+                    "timestamp": 1970-01-01T00:00:00.000Z,
+                  },
+                  "usage": {
+                    "cachedInputTokens": undefined,
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "reasoningTokens": undefined,
+                    "totalTokens": 13,
+                  },
+                  "warnings": [],
+                },
+              ],
+              "text": "{ "content": "Hello, world!" }",
+              "toolCalls": [],
+              "toolResults": [],
+              "totalUsage": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
+              "usage": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
+              "warnings": [],
+            }
+          `);
+        });
+
+        it("should be called when object doesn't match the schema", async () => {
+          let result: any;
+          const { objectStream, object } = loopFn({
+            model: new MockLanguageModelV2({
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: '1' },
+                  { type: 'text-delta', id: '1', delta: '{ ' },
+                  { type: 'text-delta', id: '1', delta: '"invalid": ' },
+                  { type: 'text-delta', id: '1', delta: `"Hello, ` },
+                  { type: 'text-delta', id: '1', delta: `world` },
+                  { type: 'text-delta', id: '1', delta: `!"` },
+                  { type: 'text-delta', id: '1', delta: ' }' },
+                  { type: 'text-end', id: '1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsage,
+                  },
+                ]),
+              }),
+            }),
+            objectOptions: {
+              schema: z.object({ content: z.string() }),
+            },
+            options: {
+              onFinish: async event => {
+                result = event;
+              },
+            },
+            messageList: new MessageList(),
+          });
+          // consume stream
+          await convertAsyncIterableToArray(objectStream);
+          // consume expected error rejection
+          await object.catch(() => {});
+
+          expect(result!).toMatchInlineSnapshot(`
+            {
+              "content": [
+                {
+                  "text": "{ "invalid": "Hello, world!" }",
+                  "type": "text",
+                },
+              ],
+              "dynamicToolCalls": [],
+              "dynamicToolResults": [],
+              "error": undefined,
+              "files": [],
+              "finishReason": "stop",
+              "reasoning": [],
+              "reasoningText": undefined,
+              "request": {},
+              "response": {
+                "headers": undefined,
+                "id": "id-0",
+                "messages": [
+                  {
+                    "content": [
+                      {
+                        "text": "{ "invalid": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
+                "modelId": "mock-model-id",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "sources": [],
+              "staticToolCalls": [],
+              "staticToolResults": [],
+              "steps": [
+                DefaultStepResult {
+                  "content": [
+                    {
+                      "text": "{ "invalid": "Hello, world!" }",
+                      "type": "text",
+                    },
+                  ],
+                  "finishReason": "stop",
+                  "providerMetadata": undefined,
+                  "request": {},
+                  "response": {
+                    "headers": undefined,
+                    "id": "id-0",
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "text": "{ "invalid": "Hello, world!" }",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
+                    "modelId": "mock-model-id",
+                    "timestamp": 1970-01-01T00:00:00.000Z,
+                  },
+                  "usage": {
+                    "cachedInputTokens": undefined,
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "reasoningTokens": undefined,
+                    "totalTokens": 13,
+                  },
+                  "warnings": [],
+                },
+              ],
+              "text": "{ "invalid": "Hello, world!" }",
+              "toolCalls": [],
+              "toolResults": [],
+              "totalUsage": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
+              "usage": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
+              "warnings": [],
+            }
+          `);
+        });
+      });
 
       describe('options.headers', () => {
         it('should pass headers to model', async () => {
@@ -903,6 +1193,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
 
+      // TODO: throw mastra error instead
       describe.todo('error handling', () => {
         it('should throw NoObjectGeneratedError when schema validation fails', async () => {
           const result = loopFn({
@@ -1043,5 +1334,650 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
     });
+
+    describe('output = "array"', () => {
+      describe('array with 3 elements', () => {
+        let result: any;
+
+        let onFinishResult: any;
+        // let onFinishResult: Parameters<Required<Parameters<typeof streamObjectv5>[0]>['onFinish']>[0];
+
+        beforeEach(async () => {
+          result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                // first element:
+                { type: 'text-delta', id: '1', delta: '{' },
+                { type: 'text-delta', id: '1', delta: '"content":' },
+                { type: 'text-delta', id: '1', delta: `"element 1"` },
+                { type: 'text-delta', id: '1', delta: '},' },
+                // second element:
+                { type: 'text-delta', id: '1', delta: '{ ' },
+                { type: 'text-delta', id: '1', delta: '"content": ' },
+                { type: 'text-delta', id: '1', delta: `"element 2"` },
+                { type: 'text-delta', id: '1', delta: '},' },
+                // third element:
+                { type: 'text-delta', id: '1', delta: '{' },
+                { type: 'text-delta', id: '1', delta: '"content":' },
+                { type: 'text-delta', id: '1', delta: `"element 3"` },
+                { type: 'text-delta', id: '1', delta: '}' },
+                // end of array
+                { type: 'text-delta', id: '1', delta: ']' },
+                { type: 'text-delta', id: '1', delta: '}' },
+                { type: 'text-end', id: '1' },
+                // finish
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            objectOptions: {
+              schema: z.array(z.object({ content: z.string() })),
+            },
+            options: {
+              onFinish: async event => {
+                console.log('calling onFinishResult2', event);
+                onFinishResult = event as unknown as typeof onFinishResult;
+              },
+            },
+            messageList: new MessageList(),
+          });
+        });
+
+        it('should stream only complete objects in partialObjectStream', async () => {
+          assert.deepStrictEqual(await convertAsyncIterableToArray(result.aisdk.v5.objectStream), [
+            [],
+            [{ content: 'element 1' }],
+            [{ content: 'element 1' }, { content: 'element 2' }],
+            [{ content: 'element 1' }, { content: 'element 2' }, { content: 'element 3' }],
+          ]);
+        });
+
+        it('should stream only complete objects in textStream', async () => {
+          const data = await convertAsyncIterableToArray(result.aisdk.v5.textStream);
+
+          assert.deepStrictEqual(data, [
+            '[',
+            '{"content":"element 1"}',
+            ',{"content":"element 2"}',
+            ',{"content":"element 3"}',
+            ']',
+          ]);
+        });
+
+        it('should have the correct object result', async () => {
+          // consume stream
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+
+          expect(await result.aisdk.v5.object).toStrictEqual([
+            { content: 'element 1' },
+            { content: 'element 2' },
+            { content: 'element 3' },
+          ]);
+        });
+
+        // TODO: `object` is not passed to onFinish yet
+        it.todo('should call onFinish callback with full array', async () => {
+          console.log('onFinishResult2', onFinishResult);
+          expect(onFinishResult.object).toStrictEqual([
+            { content: 'element 1' },
+            { content: 'element 2' },
+            { content: 'element 3' },
+          ]);
+        });
+
+        it('should stream elements individually in elementStream', async () => {
+          const arr = await convertAsyncIterableToArray(result.aisdk.v5.elementStream);
+          console.log('arr22', arr);
+          assert.deepStrictEqual(arr, [{ content: 'element 1' }, { content: 'element 2' }, { content: 'element 3' }]);
+        });
+      });
+
+      describe('array with 2 elements streamed in 1 chunk', () => {
+        let result: any;
+        // let result: StreamObjectResult<
+        //   { content: string }[],
+        //   { content: string }[],
+        //   AsyncIterableStream<{ content: string }>
+        // >;
+
+        let onFinishResult: any;
+
+        beforeEach(async () => {
+          result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'text-start',
+                  id: '1',
+                },
+                {
+                  type: 'text-delta',
+                  id: '1',
+                  delta: '{"elements":[{"content":"element 1"},{"content":"element 2"}]}',
+                },
+                {
+                  type: 'text-end',
+                  id: '1',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            objectOptions: {
+              schema: z.array(z.object({ content: z.string() })),
+            },
+            options: {
+              // schema: z.object({ content: z.string() }),
+              // output: 'array',
+              onFinish: async event => {
+                onFinishResult = event as unknown as typeof onFinishResult;
+              },
+            },
+            messageList: new MessageList(),
+          });
+        });
+
+        it('should stream only complete objects in partialObjectStream', async () => {
+          assert.deepStrictEqual(await convertAsyncIterableToArray(result.aisdk.v5.objectStream), [
+            [{ content: 'element 1' }, { content: 'element 2' }],
+          ]);
+        });
+
+        it('should stream only complete objects in textStream', async () => {
+          assert.deepStrictEqual(await convertAsyncIterableToArray(result.textStream), [
+            '[{"content":"element 1"},{"content":"element 2"}]',
+          ]);
+        });
+
+        it('should have the correct object result', async () => {
+          // consume stream
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+
+          expect(await result.aisdk.v5.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
+        });
+
+        // TODO: `object` is not passed to onFinish yet
+        it.todo('should call onFinish callback with full array', async () => {
+          // consume stream to trigger onFinish callback
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+
+          expect(onFinishResult.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
+        });
+
+        it('should stream elements individually in elementStream', async () => {
+          assert.deepStrictEqual(await convertAsyncIterableToArray(result.aisdk.v5.elementStream), [
+            { content: 'element 1' },
+            { content: 'element 2' },
+          ]);
+        });
+      });
+
+      // TODO: enqueue error for partial array schema validation
+      describe('error handling', () => {
+        it('should reject object promise when the streamed object does not match the schema', async () => {
+          const result = loopFn({
+            runId,
+            model: createTestModel({
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                // first element:
+                { type: 'text-delta', id: '1', delta: '{' },
+                { type: 'text-delta', id: '1', delta: '"invalid":' },
+                { type: 'text-delta', id: '1', delta: `"element 1"` },
+                { type: 'text-delta', id: '1', delta: '},' },
+                // second element:
+                { type: 'text-delta', id: '1', delta: '{ ' },
+                { type: 'text-delta', id: '1', delta: '"invalid": ' },
+                { type: 'text-delta', id: '1', delta: `"element 2"` },
+                { type: 'text-delta', id: '1', delta: '},' },
+                // third element:
+                { type: 'text-delta', id: '1', delta: '{' },
+                { type: 'text-delta', id: '1', delta: '"invalid":' },
+                { type: 'text-delta', id: '1', delta: `"element 3"` },
+                { type: 'text-delta', id: '1', delta: '}' },
+                // end of array
+                { type: 'text-delta', id: '1', delta: ']' },
+                { type: 'text-delta', id: '1', delta: '}' },
+                { type: 'text-end', id: '1' },
+                // finish
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+            objectOptions: {
+              schema: z.array(z.object({ content: z.string() })),
+            },
+
+            messageList: new MessageList(),
+          });
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          await expect(result.aisdk.v5.object).rejects.toThrow('Validation failed');
+        });
+      });
+    });
+
+    // TODO: enum output
+    // TODO:
+
+    // describe('output = "enum"', () => {
+    //   it.only('should stream an enum value', async () => {
+    //     const mockModel = createTestModel({
+    //       stream: convertArrayToReadableStream([
+    //         { type: 'text-start', id: '1' },
+    //         { type: 'text-delta', id: '1', delta: '{ ' },
+    //         { type: 'text-delta', id: '1', delta: '"result": ' },
+    //         { type: 'text-delta', id: '1', delta: `"su` },
+    //         { type: 'text-delta', id: '1', delta: `nny` },
+    //         { type: 'text-delta', id: '1', delta: `"` },
+    //         { type: 'text-delta', id: '1', delta: ' }' },
+    //         { type: 'text-end', id: '1' },
+    //         { type: 'finish', finishReason: 'stop', usage: testUsage },
+    //       ]),
+    //     });
+
+    //     const result = loopFn({
+    //       runId,
+    //       model: mockModel,
+    //       objectOptions: {
+    //         schema: z.enum(['sunny', 'rainy', 'snowy']),
+    //       },
+    //       messageList: new MessageList(),
+    //       // options: {
+    //       // output: 'enum',
+    //       // enum: ['sunny', 'rainy', 'snowy'],
+    //       // },
+    //       // prompt: 'prompt',
+    //     });
+
+    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+    //       [
+    //         "sunny",
+    //       ]
+    //     `);
+
+    //     // initial-loop-fn-pt4
+    //     // TODO: responseFormat is not set in the stream call
+    //     //   expect(mockModel.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
+    //     //   {
+    //     //     "description": undefined,
+    //     //     "name": undefined,
+    //     //     "schema": {
+    //     //       "$schema": "http://json-schema.org/draft-07/schema#",
+    //     //       "additionalProperties": false,
+    //     //       "properties": {
+    //     //         "result": {
+    //     //           "enum": [
+    //     //             "sunny",
+    //     //             "rainy",
+    //     //             "snowy",
+    //     //           ],
+    //     //           "type": "string",
+    //     //         },
+    //     //       },
+    //     //       "required": [
+    //     //         "result",
+    //     //       ],
+    //     //       "type": "object",
+    //     //     },
+    //     //     "type": "json",
+    //     //   }
+    //     // `);
+    //   });
+
+    //   it('should not stream incorrect values', async () => {
+    //     const mockModel = new MockLanguageModelV2({
+    //       doStream: {
+    //         stream: convertArrayToReadableStream([
+    //           { type: 'text-start', id: '1' },
+    //           { type: 'text-delta', id: '1', delta: '{ ' },
+    //           { type: 'text-delta', id: '1', delta: '"result": ' },
+    //           { type: 'text-delta', id: '1', delta: `"foo` },
+    //           { type: 'text-delta', id: '1', delta: `bar` },
+    //           { type: 'text-delta', id: '1', delta: `"` },
+    //           { type: 'text-delta', id: '1', delta: ' }' },
+    //           { type: 'text-end', id: '1' },
+    //           {
+    //             type: 'finish',
+    //             finishReason: 'stop',
+    //             usage: testUsage,
+    //           },
+    //         ]),
+    //       },
+    //     });
+
+    //     const result = loopFn({
+    //       runId,
+    //       model: mockModel,
+    //       options: {
+    //         output: 'enum',
+    //         enum: ['sunny', 'rainy', 'snowy'],
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`[]`);
+    //   });
+
+    //   it('should handle ambiguous values', async () => {
+    //     const mockModel = createTestModel({
+    //       stream: convertArrayToReadableStream([
+    //         { type: 'text-start', id: '1' },
+    //         { type: 'text-delta', id: '1', delta: '{ ' },
+    //         { type: 'text-delta', id: '1', delta: '"result": ' },
+    //         { type: 'text-delta', id: '1', delta: `"foo` },
+    //         { type: 'text-delta', id: '1', delta: `bar` },
+    //         { type: 'text-delta', id: '1', delta: `"` },
+    //         { type: 'text-delta', id: '1', delta: ' }' },
+    //         {
+    //           type: 'finish',
+    //           finishReason: 'stop',
+    //           usage: testUsage,
+    //         },
+    //       ]),
+    //     });
+
+    //     const result = loopFn({
+    //       runId,
+    //       model: mockModel,
+    //       options: {
+    //         output: 'enum',
+    //         enum: ['foobar', 'foobar2'],
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+    //     [
+    //       "foo",
+    //       "foobar",
+    //     ]
+    //   `);
+    //   });
+
+    //   it('should handle non-ambiguous values', async () => {
+    //     const mockModel = createTestModel({
+    //       stream: convertArrayToReadableStream([
+    //         { type: 'text-start', id: '1' },
+    //         { type: 'text-delta', id: '1', delta: '{ ' },
+    //         { type: 'text-delta', id: '1', delta: '"result": ' },
+    //         { type: 'text-delta', id: '1', delta: `"foo` },
+    //         { type: 'text-delta', id: '1', delta: `bar` },
+    //         { type: 'text-delta', id: '1', delta: `"` },
+    //         { type: 'text-delta', id: '1', delta: ' }' },
+    //         { type: 'text-end', id: '1' },
+    //         {
+    //           type: 'finish',
+    //           finishReason: 'stop',
+    //           usage: testUsage,
+    //         },
+    //       ]),
+    //     });
+
+    //     const result = loopFn({
+    //       runId,
+    //       model: mockModel,
+    //       options: {
+    //         output: 'enum',
+    //         enum: ['foobar', 'barfoo'],
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+    //     [
+    //       "foobar",
+    //     ]
+    //   `);
+    //   });
+    // });
+
+    // describe.todo('options.experimental_repairText', () => {
+    //   it('should be able to repair a JSONParseError', async () => {
+    //     const result = executeFn({
+    //       runId,
+    //       model: new MockLanguageModelV2({
+    //         doStream: async () => ({
+    //           stream: convertArrayToReadableStream([
+    //             {
+    //               type: 'response-metadata',
+    //               id: 'id-0',
+    //               modelId: 'mock-model-id',
+    //               timestamp: new Date(0),
+    //             },
+    //             { type: 'text-start', id: '1' },
+    //             {
+    //               type: 'text-delta',
+    //               id: '1',
+    //               delta: '{ "content": "provider metadata test" ',
+    //             },
+    //             { type: 'text-end', id: '1' },
+    //             {
+    //               type: 'finish',
+    //               finishReason: 'stop',
+    //               usage: testUsage,
+    //             },
+    //           ]),
+    //         }),
+    //       }),
+    //       options: {
+    //         schema: z.object({ content: z.string() }),
+    //         experimental_repairText: async ({ text, error }) => {
+    //           expect(error).toBeInstanceOf(JSONParseError);
+    //           expect(text).toStrictEqual('{ "content": "provider metadata test" ');
+    //           return text + '}';
+    //         },
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     // consume stream
+    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+
+    //     expect(await result.object).toStrictEqual({
+    //       content: 'provider metadata test',
+    //     });
+    //   });
+
+    //   it('should be able to repair a TypeValidationError', async () => {
+    //     const result = executeFn({
+    //       runId,
+    //       model: new MockLanguageModelV2({
+    //         doStream: async () => ({
+    //           stream: convertArrayToReadableStream([
+    //             {
+    //               type: 'response-metadata',
+    //               id: 'id-0',
+    //               modelId: 'mock-model-id',
+    //               timestamp: new Date(0),
+    //             },
+    //             { type: 'text-start', id: '1' },
+    //             {
+    //               type: 'text-delta',
+    //               id: '1',
+    //               delta: '{ "content-a": "provider metadata test" }',
+    //             },
+    //             { type: 'text-end', id: '1' },
+    //             {
+    //               type: 'finish',
+    //               finishReason: 'stop',
+    //               usage: testUsage,
+    //             },
+    //           ]),
+    //         }),
+    //       }),
+    //       options: {
+    //         schema: z.object({ content: z.string() }),
+    //         experimental_repairText: async ({ text, error }) => {
+    //           expect(error).toBeInstanceOf(TypeValidationError);
+    //           expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
+    //           return `{ "content": "provider metadata test" }`;
+    //         },
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     // consume stream
+    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+
+    //     expect(await result.aisdk.v5.object).toStrictEqual({
+    //       content: 'provider metadata test',
+    //     });
+    //   });
+
+    //   it('should be able to handle repair that returns null', async () => {
+    //     const result = executeFn({
+    //       runId,
+    //       model: new MockLanguageModelV2({
+    //         doStream: async () => ({
+    //           stream: convertArrayToReadableStream([
+    //             {
+    //               type: 'response-metadata',
+    //               id: 'id-0',
+    //               modelId: 'mock-model-id',
+    //               timestamp: new Date(0),
+    //             },
+    //             { type: 'text-start', id: '1' },
+    //             {
+    //               type: 'text-delta',
+    //               id: '1',
+    //               delta: '{ "content-a": "provider metadata test" }',
+    //             },
+    //             { type: 'text-end', id: '1' },
+    //             {
+    //               type: 'finish',
+    //               finishReason: 'stop',
+    //               usage: testUsage,
+    //             },
+    //           ]),
+    //         }),
+    //       }),
+    //       options: {
+    //         schema: z.object({ content: z.string() }),
+    //         experimental_repairText: async ({ text, error }) => {
+    //           expect(error).toBeInstanceOf(TypeValidationError);
+    //           expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
+    //           return null;
+    //         },
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     // consume stream
+    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+
+    //     expect(result.aisdk.v5.object).rejects.toThrow('No object generated: response did not match schema.');
+    //   });
+
+    //   it('should be able to repair JSON wrapped with markdown code blocks', async () => {
+    //     const result = executeFn({
+    //       runId,
+    //       model: new MockLanguageModelV2({
+    //         doStream: async () => ({
+    //           stream: convertArrayToReadableStream([
+    //             {
+    //               type: 'response-metadata',
+    //               id: 'id-0',
+    //               modelId: 'mock-model-id',
+    //               timestamp: new Date(0),
+    //             },
+    //             { type: 'text-start', id: '1' },
+    //             {
+    //               type: 'text-delta',
+    //               id: '1',
+    //               delta: '```json\n{ "content": "test message" }\n```',
+    //             },
+    //             { type: 'text-end', id: '1' },
+    //             {
+    //               type: 'finish',
+    //               finishReason: 'stop',
+    //               usage: testUsage,
+    //             },
+    //           ]),
+    //         }),
+    //       }),
+    //       options: {
+    //         schema: z.object({ content: z.string() }),
+    //         experimental_repairText: async ({ text, error }) => {
+    //           expect(error).toBeInstanceOf(JSONParseError);
+    //           expect(text).toStrictEqual('```json\n{ "content": "test message" }\n```');
+
+    //           // Remove markdown code block wrapper
+    //           const cleaned = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    //           return cleaned;
+    //         },
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     // consume stream
+    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+
+    //     expect(await result.aisdk.v5.object).toStrictEqual({
+    //       content: 'test message',
+    //     });
+    //   });
+
+    //   it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
+    //     const result = executeFn({
+    //       runId,
+    //       model: new MockLanguageModelV2({
+    //         doStream: async () => ({
+    //           stream: convertArrayToReadableStream([
+    //             {
+    //               type: 'response-metadata',
+    //               id: 'id-0',
+    //               modelId: 'mock-model-id',
+    //               timestamp: new Date(0),
+    //             },
+    //             { type: 'text-start', id: '1' },
+    //             { type: 'text-delta', id: '1', delta: '{ broken json' },
+    //             { type: 'text-end', id: '1' },
+    //             {
+    //               type: 'finish',
+    //               finishReason: 'stop',
+    //               usage: testUsage,
+    //             },
+    //           ]),
+    //         }),
+    //       }),
+    //       options: {
+    //         schema: z.object({ content: z.string() }),
+    //         experimental_repairText: async ({ text }) => text + '{',
+    //       },
+    //       prompt: 'prompt',
+    //     });
+
+    //     try {
+    //       await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+    //       await result.aisdk.v5.object;
+    //       fail('must throw error');
+    //     } catch (error) {
+    //       verifyNoObjectGeneratedError(error, {
+    //         message: 'No object generated: could not parse the response.',
+    //         response: {
+    //           id: 'id-0',
+    //           timestamp: new Date(0),
+    //           modelId: 'mock-model-id',
+    //         },
+    //         usage: testUsage,
+    //         finishReason: 'stop',
+    //       });
+    //     }
+    //   });
+    // });
   });
 }

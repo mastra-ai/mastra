@@ -1,13 +1,14 @@
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
-import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
+import { getResponseFormat } from './object/schema';
 import { transformSteps } from './output-helpers';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';
@@ -22,7 +23,6 @@ export class AISDKV5OutputStream {
   #modelOutput: MastraModelOutput;
   #options: AISDKV5OutputStreamOptions;
   #messageList: MessageList;
-
   constructor({
     modelOutput,
     options,
@@ -243,16 +243,30 @@ export class AISDKV5OutputStream {
     return this.#modelOutput.textStream;
   }
 
+  get elementStream() {
+    return this.#modelOutput.elementStream;
+  }
+
   get fullStream() {
     let startEvent: OutputChunkType;
     let hasStarted: boolean = false;
 
     // let stepCounter = 1;
+    const responseFormat = getResponseFormat(this.#options.objectOptions);
     const fullStream = this.#modelOutput.fullStream;
 
     return fullStream.pipeThrough(
-      new TransformStream<ChunkType, NonNullable<OutputChunkType>>({
+      new TransformStream<ChunkType | NonNullable<OutputChunkType>>({
         transform(chunk, controller) {
+          if (responseFormat.type === 'json' && chunk.type === 'object') {
+            /**
+             * Pass through 'object' chunks that were created by
+             * createObjectStreamTransformer in base/output.ts.
+             */
+            controller.enqueue(chunk as ObjectStreamPart<any>);
+            return;
+          }
+
           if (chunk.type === 'step-start' && !startEvent) {
             startEvent = convertMastraChunkToAISDKv5({
               chunk,
@@ -268,17 +282,19 @@ export class AISDKV5OutputStream {
             startEvent = undefined;
           }
 
-          const transformedChunk = convertMastraChunkToAISDKv5({
-            chunk,
-          });
+          if ('payload' in chunk) {
+            const transformedChunk = convertMastraChunkToAISDKv5({
+              chunk,
+            });
 
-          if (transformedChunk) {
-            // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
-            //   console.log('step counter', stepCounter);
-            //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
-            // }
+            if (transformedChunk) {
+              // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
+              //   console.log('step counter', stepCounter);
+              //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
+              // }
 
-            controller.enqueue(transformedChunk);
+              controller.enqueue(transformedChunk);
+            }
           }
         },
       }),

@@ -85,7 +85,7 @@ export class SaveQueueManager {
    */
   private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfig) {
     const newMessages = messageList.drainUnsavedMessages();
-    console.log(JSON.stringify(newMessages, null, 2), 'persistUnsavedMessages');
+
     if (newMessages.length > 0 && this.memory) {
       await this.memory.saveMessages({
         messages: newMessages,

@@ -354,7 +354,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      it.todo('should contain correct step inputs', async () => {
+      it('should contain correct step inputs', async () => {
         await result.aisdk.v5.consumeStream();
 
         expect(stepInputs).toMatchInlineSnapshot(`
@@ -414,11 +414,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "text": "thinking",
                       "type": "reasoning",
                     },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [
                     {
                       "input": {
                         "value": "value",

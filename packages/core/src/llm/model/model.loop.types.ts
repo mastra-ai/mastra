@@ -8,15 +8,14 @@ import type {
   StreamTextResult as OriginalStreamTextResult,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
-  StopCondition,
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
-import type { LoopConfig, ObjectOptions } from '../../loop/types';
+import type { z, ZodSchema } from 'zod';
+import type { LoopConfig, LoopOptions, ObjectOptions } from '../../loop/types';
 import type { RuntimeContext } from '../../runtime-context';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../../tools';
 import type { inferOutput, TripwireProperties } from './shared.types';
-import type { AgentMemoryOption } from '../../agent';
+import type { StructuredOutputOptions } from '../../processors';
 
 type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 
@@ -61,11 +60,14 @@ type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSch
 export type ModelLoopStreamArgs<
   Tools extends ToolSet,
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   messages: UIMessage[] | ModelMessage[];
   objectOptions?: ObjectOptions;
   options?: LoopConfig;
-  stopWhen?: StopCondition<any>;
+  stopWhen?: LoopOptions['stopWhen'];
+  output?: Output;
+  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
 } & StreamTextOptions<Tools, Output>;
 
 export type StreamTextResult<

@@ -18,6 +18,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
 }: LoopRun<Tools>) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
+      const writer = new WritableStream<ChunkType>({
+        write: chunk => {
+          controller.enqueue(chunk);
+        },
+      });
+
       const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
       modelStreamSpan.setAttributes({
@@ -37,6 +43,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
         toolChoice,
         modelStreamSpan,
         controller,
+        writer,
         ...rest,
       });
 

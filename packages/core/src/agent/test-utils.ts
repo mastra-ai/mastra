@@ -62,7 +62,8 @@ export class MockMemory extends MastraMemory {
   async saveMessages(
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages } = args as any;
+    const { messages, format } = args as any;
+
     for (const msg of messages) {
       const existing = this.messages.get(msg.id);
       if (existing) {
@@ -75,7 +76,7 @@ export class MockMemory extends MastraMemory {
         this.messages.set(msg.id, msg);
       }
     }
-    return messages;
+    return this.getMessages({ threadId: messages[0].threadId, resourceId: messages[0].resourceId, format });
   }
   async rememberMessages() {
     return { messages: [], messagesV2: [] };

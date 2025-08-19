@@ -287,8 +287,6 @@ async function processOutputStream({
           hasErrored: true,
         });
 
-        controller.enqueue(chunk);
-
         runState.setState({
           stepResult: {
             isContinued: false,
@@ -296,7 +294,14 @@ async function processOutputStream({
           },
         });
 
-        await options?.onError?.({ error: chunk.payload.error });
+        let e = chunk.payload.error;
+        if (typeof e === 'object') {
+          e = new Error(chunk.payload.error.message);
+          Object.assign(e, chunk.payload.error);
+        }
+
+        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: e } });
+        await options?.onError?.({ error: e });
 
         break;
       default:
@@ -484,6 +489,13 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
           });
         }
 
+        controller.enqueue({
+          type: 'error',
+          runId,
+          from: 'AGENT',
+          payload: { error },
+        });
+
         runState.setState({
           hasErrored: true,
           stepResult: {
@@ -538,7 +550,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
           finishReason: runState.state.stepResult?.reason,
           content: messageList.get.response.aiV5.modelContent(),
           // @ts-ignore this is how it worked internally for transformResponse which was removed TODO: how should this actually work?
-          response: { ...responseMetadata, messages: messageList.get.response.aiV5.model() },
+          response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
           request: request,
           usage: outputStream.usage as LanguageModelV2Usage,
         }),
@@ -560,6 +572,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         metadata: {
           providerMetadata: runState.state.providerOptions,
           ...responseMetadata,
+          ...rawResponse,
           headers: rawResponse?.headers,
           request,
         },

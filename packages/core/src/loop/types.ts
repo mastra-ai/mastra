@@ -24,6 +24,7 @@ export type LoopConfig = {
 
 export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   model: LanguageModelV2;
+  mode?: 'generate' | 'stream';
   logger?: IMastraLogger;
   runId?: string;
   idGenerator?: MastraIdGenerator;
@@ -45,19 +46,9 @@ export type LoopOptions<Tools extends ToolSet = ToolSet> = {
 
 export type ObjectOptions =
   | {
-      /**
-       * Defaults to 'object' output if 'schema' is provided without 'output'
-       */
-      output?: 'object' | 'array';
-      schema: Parameters<typeof asSchema>[0];
+      schema?: Parameters<typeof asSchema>[0];
       schemaName?: string;
       schemaDescription?: string;
-    }
-  | {
-      output: 'no-schema';
-      schema?: never;
-      schemaName?: never;
-      schemaDescription?: never;
     }
   | undefined;
 
@@ -71,4 +62,5 @@ export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
 export type OuterLLMRun<Tools extends ToolSet = ToolSet> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
+  writer: WritableStream<ChunkType>;
 } & LoopRun<Tools>;

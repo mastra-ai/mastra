@@ -706,7 +706,6 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     {
       "content": [
         {
-          "providerOptions": undefined,
           "text": "Hello, world!",
           "type": "text",
         },
@@ -730,7 +729,6 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     {
       "content": [
         {
-          "providerOptions": undefined,
           "text": "Hello, world!",
           "type": "text",
         },

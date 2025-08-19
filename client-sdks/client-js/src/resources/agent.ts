@@ -31,6 +31,7 @@ import { BaseResource } from './base';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { parseClientRuntimeContext } from '../utils';
 import { MessageList } from '@mastra/core/agent';
+import { processMastraStream } from '../utils/process-data-stream';
 
 export class AgentVoice extends BaseResource {
   constructor(
@@ -112,6 +113,207 @@ export class Agent extends BaseResource {
    */
   details(): Promise<GetAgentResponse> {
     return this.request(`/api/agents/${this.agentId}`);
+  }
+
+  async processStreamResponse_vNext(processedParams: any, writable: any) {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/stream/vnext`, {
+      method: 'POST',
+      body: processedParams,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    try {
+      let toolCalls: ToolInvocation[] = [];
+      let finishReasonToolCalls = false;
+      let messages: UIMessage[] = [];
+      let hasProcessedToolCalls = false;
+
+      // Use tee() to split the stream into two branches
+      const [streamForWritable, streamForProcessing] = response.body.tee();
+
+      // Pipe one branch to the writable stream
+      streamForWritable
+        .pipeTo(writable, {
+          preventClose: true,
+        })
+        .catch(error => {
+          console.error('Error piping to writable stream:', error);
+        });
+
+      // Process the other branch for chat response handling
+      this.processChatResponse_vNext({
+        stream: streamForProcessing,
+        update: ({ message }) => {
+          const existingIndex = messages.findIndex(m => m.id === message.id);
+
+          if (existingIndex !== -1) {
+            messages[existingIndex] = message;
+          } else {
+            messages.push(message);
+          }
+        },
+        onFinish: async ({ finishReason, message }) => {
+          if (finishReason === 'tool-calls') {
+            const toolCall = [...(message?.parts ?? [])]
+              .reverse()
+              .find(part => part.type === 'tool-invocation')?.toolInvocation;
+            if (toolCall) {
+              toolCalls.push(toolCall);
+            }
+
+            // Handle tool calls if needed
+            for (const toolCall of toolCalls) {
+              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+              if (clientTool && clientTool.execute) {
+                const result = await clientTool.execute(
+                  {
+                    context: toolCall?.args,
+                    runId: processedParams.runId,
+                    resourceId: processedParams.resourceId,
+                    threadId: processedParams.threadId,
+                    runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                  },
+                  {
+                    messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                    toolCallId: toolCall?.toolCallId,
+                  },
+                );
+
+                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
+
+                const toolInvocationPart = lastMessage?.parts?.find(
+                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocationUIPart | undefined;
+
+                if (toolInvocationPart) {
+                  toolInvocationPart.toolInvocation = {
+                    ...toolInvocationPart.toolInvocation,
+                    state: 'result',
+                    result,
+                  };
+                }
+
+                const toolInvocation = lastMessage?.toolInvocations?.find(
+                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocation | undefined;
+
+                if (toolInvocation) {
+                  toolInvocation.state = 'result';
+                  // @ts-ignore
+                  toolInvocation.result = result;
+                }
+
+                // write the tool result part to the stream
+                const writer = writable.getWriter();
+
+                try {
+                  await writer.write(
+                    new TextEncoder().encode(
+                      'a:' +
+                        JSON.stringify({
+                          toolCallId: toolCall.toolCallId,
+                          result,
+                        }) +
+                        '\n',
+                    ),
+                  );
+                } finally {
+                  writer.releaseLock();
+                }
+
+                // Convert messages to the correct format for the recursive call
+                const originalMessages = processedParams.messages;
+                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+
+                // Recursively call stream with updated messages
+                this.processStreamResponse_vNext(
+                  {
+                    ...processedParams,
+                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                  },
+                  writable,
+                ).catch(error => {
+                  console.error('Error processing stream response:', error);
+                });
+              }
+            }
+          } else {
+            setTimeout(() => {
+              writable.close();
+            }, 0);
+          }
+        },
+        lastMessage: undefined,
+      }).catch(error => {
+        console.error('Error processing stream response:', error);
+      });
+    } catch (error) {
+      console.error('Error processing stream response:', error);
+    }
+
+    return response;
+  }
+
+  /**
+   * Streams a response from the agent
+   * @param params - Stream parameters including prompt
+   * @returns Promise containing the enhanced Response object with processDataStream method
+   */
+  async stream_vnext<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: StreamParams<T>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const processedParams = {
+      ...params,
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      clientTools: processClientTools(params.clientTools),
+    };
+
+    // Create a readable stream that will handle the response processing
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+
+    // Start processing the response in the background
+    const response = await this.processStreamResponse_vNext(processedParams, writable);
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
   }
 
   /**
@@ -292,6 +494,347 @@ export class Agent extends BaseResource {
     }
 
     return response;
+  }
+
+  private async processChatResponse_vNext({
+    stream,
+    update,
+    onToolCall,
+    onFinish,
+    getCurrentDate = () => new Date(),
+    lastMessage,
+  }: {
+    stream: ReadableStream<Uint8Array>;
+    update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
+    onToolCall?: UseChatOptions['onToolCall'];
+    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    generateId?: () => string;
+    getCurrentDate?: () => Date;
+    lastMessage: UIMessage | undefined;
+  }) {
+    const replaceLastMessage = lastMessage?.role === 'assistant';
+    let step = replaceLastMessage
+      ? 1 +
+        // find max step in existing tool invocations:
+        (lastMessage.toolInvocations?.reduce((max, toolInvocation) => {
+          return Math.max(max, toolInvocation.step ?? 0);
+        }, 0) ?? 0)
+      : 0;
+
+    const message: UIMessage = replaceLastMessage
+      ? structuredClone(lastMessage)
+      : {
+          id: uuid(),
+          createdAt: getCurrentDate(),
+          role: 'assistant',
+          content: '',
+          parts: [],
+        };
+
+    let currentTextPart: TextUIPart | undefined = undefined;
+    let currentReasoningPart: ReasoningUIPart | undefined = undefined;
+    let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
+
+    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+      const part = message.parts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+      ) as ToolInvocationUIPart | undefined;
+
+      if (part != null) {
+        part.toolInvocation = invocation;
+      } else {
+        message.parts.push({
+          type: 'tool-invocation',
+          toolInvocation: invocation,
+        });
+      }
+    }
+
+    const data: JSONValue[] = [];
+
+    // keep list of current message annotations for message
+    let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
+
+    // keep track of partial tool calls
+    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+
+    let usage: any = {
+      completionTokens: NaN,
+      promptTokens: NaN,
+      totalTokens: NaN,
+    };
+    let finishReason: string = 'unknown';
+
+    function execUpdate() {
+      // make a copy of the data array to ensure UI is updated (SWR)
+      const copiedData = [...data];
+
+      // keeps the currentMessage up to date with the latest annotations,
+      // even if annotations preceded the message creation
+      if (messageAnnotations?.length) {
+        message.annotations = messageAnnotations;
+      }
+
+      const copiedMessage = {
+        // deep copy the message to ensure that deep changes (msg attachments) are updated
+        // with SolidJS. SolidJS uses referential integration of sub-objects to detect changes.
+        ...structuredClone(message),
+        // add a revision id to ensure that the message is updated with SWR. SWR uses a
+        // hashing approach by default to detect changes, but it only works for shallow
+        // changes. This is why we need to add a revision id to ensure that the message
+        // is updated with SWR (without it, the changes get stuck in SWR and are not
+        // forwarded to rendering):
+        revisionId: uuid(),
+      } as UIMessage;
+
+      update({
+        message: copiedMessage,
+        data: copiedData,
+        replaceLastMessage,
+      });
+    }
+
+    await processMastraStream({
+      stream,
+      onChunk: async chunk => {
+        switch (chunk.type) {
+          case 'step-start': {
+            // keep message id stable when we are updating an existing message:
+            if (!replaceLastMessage) {
+              message.id = chunk.payload.messageId;
+            }
+
+            // add a step boundary part to the message
+            message.parts.push({ type: 'step-start' });
+            execUpdate();
+            break;
+          }
+
+          case 'text-delta': {
+            if (currentTextPart == null) {
+              currentTextPart = {
+                type: 'text',
+                text: chunk.payload.text,
+              };
+              message.parts.push(currentTextPart);
+            } else {
+              currentTextPart.text += chunk.payload.text;
+            }
+
+            message.content += chunk.payload.text;
+            execUpdate();
+            break;
+          }
+
+          case 'reasoning-delta': {
+            if (currentReasoningTextDetail == null) {
+              currentReasoningTextDetail = { type: 'text', text: chunk.payload.text };
+              if (currentReasoningPart != null) {
+                currentReasoningPart.details.push(currentReasoningTextDetail);
+              }
+            } else {
+              currentReasoningTextDetail.text += chunk.payload.text;
+            }
+
+            if (currentReasoningPart == null) {
+              currentReasoningPart = {
+                type: 'reasoning',
+                reasoning: chunk.payload.text,
+                details: [currentReasoningTextDetail],
+              };
+              message.parts.push(currentReasoningPart);
+            } else {
+              currentReasoningPart.reasoning += chunk.payload.text;
+            }
+
+            message.reasoning = (message.reasoning ?? '') + chunk.payload.text;
+
+            execUpdate();
+            break;
+          }
+          case 'file': {
+            message.parts.push({
+              type: 'file',
+              mimeType: chunk.payload.mimeType,
+              data: chunk.payload.data,
+            });
+
+            execUpdate();
+            break;
+          }
+
+          case 'source': {
+            message.parts.push({
+              type: 'source',
+              source: chunk.payload.source,
+            });
+            execUpdate();
+            break;
+          }
+
+          case 'tool-call': {
+            const invocation = {
+              state: 'call',
+              step,
+              ...chunk.payload,
+            } as const;
+
+            if (partialToolCalls[chunk.payload.toolCallId] != null) {
+              // change the partial tool call to a full tool call
+              message.toolInvocations![partialToolCalls[chunk.payload.toolCallId]!.index] = invocation;
+            } else {
+              if (message.toolInvocations == null) {
+                message.toolInvocations = [];
+              }
+
+              message.toolInvocations.push(invocation);
+            }
+
+            updateToolInvocationPart(chunk.payload.toolCallId, invocation);
+
+            execUpdate();
+
+            // invoke the onToolCall callback if it exists. This is blocking.
+            // In the future we should make this non-blocking, which
+            // requires additional state management for error handling etc.
+            if (onToolCall) {
+              const result = await onToolCall({ toolCall: chunk.payload });
+              if (result != null) {
+                const invocation = {
+                  state: 'result',
+                  step,
+                  ...chunk.payload,
+                  result,
+                } as const;
+
+                // store the result in the tool invocation
+                message.toolInvocations![message.toolInvocations!.length - 1] = invocation;
+
+                updateToolInvocationPart(chunk.payload.toolCallId, invocation);
+
+                execUpdate();
+              }
+            }
+          }
+
+          case 'tool-call-input-streaming-start': {
+            if (message.toolInvocations == null) {
+              message.toolInvocations = [];
+            }
+
+            // add the partial tool call to the map
+            partialToolCalls[chunk.payload.toolCallId] = {
+              text: '',
+              step,
+              toolName: chunk.payload.toolName,
+              index: message.toolInvocations.length,
+            };
+
+            const invocation = {
+              state: 'partial-call',
+              step,
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: undefined,
+            } as const;
+
+            message.toolInvocations.push(invocation);
+
+            updateToolInvocationPart(chunk.payload.toolCallId, invocation);
+
+            execUpdate();
+            break;
+          }
+
+          case 'tool-call-delta': {
+            const partialToolCall = partialToolCalls[chunk.payload.toolCallId];
+
+            partialToolCall!.text += chunk.payload.argsTextDelta;
+
+            const { value: partialArgs } = parsePartialJson(partialToolCall!.text);
+
+            const invocation = {
+              state: 'partial-call',
+              step: partialToolCall!.step,
+              toolCallId: chunk.payload.toolCallId,
+              toolName: partialToolCall!.toolName,
+              args: partialArgs,
+            } as const;
+
+            message.toolInvocations![partialToolCall!.index] = invocation;
+
+            updateToolInvocationPart(chunk.payload.toolCallId, invocation);
+
+            execUpdate();
+            break;
+          }
+
+          case 'tool-result': {
+            const toolInvocations = message.toolInvocations;
+
+            if (toolInvocations == null) {
+              throw new Error('tool_result must be preceded by a tool_call');
+            }
+
+            // find if there is any tool invocation with the same toolCallId
+            // and replace it with the result
+            const toolInvocationIndex = toolInvocations.findIndex(
+              invocation => invocation.toolCallId === chunk.payload.toolCallId,
+            );
+
+            if (toolInvocationIndex === -1) {
+              throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+            }
+
+            const invocation = {
+              ...toolInvocations[toolInvocationIndex],
+              state: 'result' as const,
+              ...chunk.payload,
+            } as const;
+
+            toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
+
+            updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+
+            execUpdate();
+            break;
+          }
+
+          case 'error': {
+            throw new Error(chunk.payload.error);
+          }
+
+          case 'data': {
+            data.push(...chunk.payload.data);
+            execUpdate();
+            break;
+          }
+
+          case 'step-finish': {
+            step += 1;
+
+            // reset the current text and reasoning parts
+            currentTextPart = chunk.payload.isContinued ? currentTextPart : undefined;
+            currentReasoningPart = undefined;
+            currentReasoningTextDetail = undefined;
+
+            execUpdate();
+            break;
+          }
+
+          case 'finish': {
+            finishReason = chunk.payload.finishReason;
+            if (chunk.payload.usage != null) {
+              // usage = calculateLanguageModelUsage(value.usage);
+              usage = chunk.payload.usage;
+            }
+            break;
+          }
+        }
+      },
+    });
+
+    onFinish?.({ message, finishReason, usage });
   }
 
   private async processChatResponse({

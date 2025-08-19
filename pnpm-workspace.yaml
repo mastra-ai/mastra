@@ -13,4 +13,5 @@ packages:
   - "packages/*/integration-tests-v5"
   - "packages/cloud"
   - "auth/*"
+  - "observability/*"
   - "explorations/longmemeval"
