@@ -55,7 +55,6 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      console.log('executor start', step.id, stepInfo, params.input, params.resumeData);
       const stepResult = await step.execute({
         workflowId: params.workflowId,
         runId,
@@ -92,7 +91,6 @@ export class StepExecutor extends MastraBase {
         engine: {},
         abortSignal: abortController?.signal,
       });
-      console.log('executor end', step.id, stepResult);
 
       const endedAt = Date.now();
 
@@ -153,11 +151,9 @@ export class StepExecutor extends MastraBase {
     const abortController = new AbortController();
     const ee = new EventEmitter();
 
-    console.log('executor start condition eval', this.mastra, step);
     const results = await Promise.all(
       step.conditions.map(condition => {
         try {
-          console.log('evaluating condition', condition, params);
           return this.evaluateCondition({
             workflowId: params.workflowId,
             condition,
@@ -176,7 +172,6 @@ export class StepExecutor extends MastraBase {
         }
       }),
     );
-    console.log('executor end', results);
 
     const idxs = results.reduce((acc, result, idx) => {
       if (result) {

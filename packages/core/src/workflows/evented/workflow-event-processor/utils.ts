@@ -33,7 +33,6 @@ export function getNestedWorkflow(
 }
 
 export function getStep(workflow: Workflow, executionPath: number[]): Step<string, any, any, any, any, any> | null {
-  console.log('getStep', workflow.id, executionPath);
   let idx = 0;
   const stepGraph = workflow.stepGraph;
   let parentStep = stepGraph[executionPath[0]!];

@@ -7341,6 +7341,7 @@ describe('Workflow', () => {
       });
 
       const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+        console.log('step_other', resumeData);
         if (!resumeData) {
           return await suspend();
         }
@@ -7452,7 +7453,7 @@ describe('Workflow', () => {
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
-      console.dir(result, { depth: null });
+      console.dir({ result }, { depth: null });
 
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
@@ -7471,7 +7472,9 @@ describe('Workflow', () => {
         expect.fail('Workflow should be suspended');
       }
       expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
+      console.log('resuming');
       const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
+      console.dir({ resumedResults }, { depth: null });
 
       // @ts-ignore
       expect(resumedResults.steps['nested-workflow-c'].output).toEqual({

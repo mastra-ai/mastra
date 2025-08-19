@@ -93,7 +93,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'canceled',
       },
     });
-    console.log('processWorkflowCancel', workflowId, runId, currentState);
 
     await this.endWorkflow({
       workflow: undefined as any,
@@ -208,7 +207,6 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      console.log('ending nested', workflowId, parentWorkflow);
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {
@@ -231,13 +229,11 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
-    const { workflowId, resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runId, runtimeContext } =
-      args;
+    const { resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runId, runtimeContext } = args;
 
     // TODO: if there are still active paths don't end the workflow yet
     // handle nested workflow
     if (parentWorkflow) {
-      console.log('ending nested', workflowId, parentWorkflow);
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {
@@ -285,7 +281,6 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      console.log('failing nested', workflowId, parentWorkflow);
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {
@@ -480,7 +475,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
 
-      console.log('waiting for event', step.step.id);
       await this.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         data: {
@@ -545,8 +539,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
-      console.log('starting nested', step.step.id, prevResult);
-      if (resumeData) {
+      if (resumeSteps?.length > 1) {
         const stepData = stepResults[step.step.id];
         const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
@@ -573,44 +566,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
 
         const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
-          workflowName: workflowId,
+          workflowName: step.step.id,
           runId: nestedRunId,
         });
 
         const nestedStepResults = snapshot?.context;
         const nestedSteps = resumeSteps.slice(1);
-        const nestedExecutionPath = snapshot?.suspendedPaths?.[nestedSteps[0]!] as any;
-
-        console.dir({ nestedSnapshot: snapshot, nestedExecutionPath, nestedSteps }, { depth: null });
-        console.dir(
-          {
-            nestedResume: {
-              type: 'workflow.resume',
-              data: {
-                workflowId: step.step.id,
-                parentWorkflow: {
-                  stepId: step.step.id,
-                  workflowId,
-                  runId,
-                  executionPath,
-                  resumeSteps: nestedSteps,
-                  stepResults,
-                  input: prevResult,
-                  parentWorkflow,
-                },
-                executionPath: nestedExecutionPath,
-                runId: nestedRunId,
-                resumeSteps: nestedSteps,
-                stepResults: nestedStepResults,
-                prevResult,
-                resumeData,
-                activeSteps,
-                runtimeContext,
-              },
-            },
-          },
-          { depth: null },
-        );
 
         await this.pubsub.publish('workflows', {
           type: 'workflow.resume',
@@ -621,7 +582,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               workflowId,
               runId,
               executionPath,
-              resumeSteps: nestedSteps,
+              resumeSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
@@ -699,7 +660,6 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     const ee = new EventEmitter();
     ee.on('watch-v2', async (event: any) => {
-      console.log('watch-v2', event);
       await this.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         data: event,
@@ -717,12 +677,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       emitter: ee,
       runtimeContext: rc,
       input: (prevResult as any)?.output,
-      resumeData,
+      resumeData: resumeSteps?.length === 1 && resumeSteps?.[0] === step.step.id ? resumeData : undefined,
       runCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
     });
     runtimeContext = Object.fromEntries(rc.entries());
-    console.dir({ stepId: step.step.id, stepResult, stepResults, runtimeContext }, { depth: null });
 
     // @ts-ignore
     if (stepResult.status === 'bailed') {
@@ -872,7 +831,6 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       const currentIdx = executionPath[1];
       const currentResult = (snapshot?.context?.[step.step.id] as any)?.output;
-      console.dir({ foreachUpdate: { executionPath, currentResult, currentIdx, prevResult } }, { depth: null });
 
       let newResult = prevResult;
       if (currentIdx !== undefined) {
@@ -902,17 +860,12 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       // handle nested workflow
       if (parentContext) {
-        console.log('YOYO', prevResult, parentContext?.input?.output, {
-          ...prevResult,
-          payload: parentContext.input?.output ?? {},
-        });
         prevResult = stepResults[step.step.id] = {
           ...prevResult,
           payload: parentContext.input?.output ?? {},
         };
       }
 
-      console.log('saving data', step.step.id, stepResults, runtimeContext);
       const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
@@ -929,7 +882,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (!prevResult?.status || prevResult.status === 'failed') {
-      console.log('failed step', prevResult);
       await this.pubsub.publish('workflows', {
         type: 'workflow.fail',
         data: {
@@ -1077,7 +1029,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
-      console.dir({ parallel: { allResults, executionPath } }, { depth: null });
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {
@@ -1154,19 +1105,17 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   async process(event: Event, ack?: () => Promise<void>) {
-    console.log('processing event', event);
     const { type, data } = event;
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
+    console.log('processing event', type, workflowData.workflowId, workflowData.runId, workflowData.executionPath);
 
     const currentState = await this.loadData({
       workflowId: workflowData.workflowId,
       runId: workflowData.runId,
     });
-    console.dir({ processing: { eventType: type, currentState } }, { depth: null });
 
     if (currentState?.status === 'canceled' && type !== 'workflow.end') {
-      console.log('workflow canceled', type);
       return;
     }
 
@@ -1267,13 +1216,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         break;
     }
 
-    console.log('processed event', type, ack);
     try {
       await ack?.();
     } catch (e) {
       console.error('Error acking event', e);
     }
-
-    console.log('event acked', type);
   }
 }
