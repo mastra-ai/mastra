@@ -87,6 +87,7 @@ export async function processWorkflowSleep(
   });
 
   const duration = await stepExecutor.resolveSleep({
+    workflowId,
     step,
     runId,
     stepResults,
@@ -169,6 +170,7 @@ export async function processWorkflowSleepUntil(
 ) {
   const startedAt = Date.now();
   const duration = await stepExecutor.resolveSleepUntil({
+    workflowId,
     step,
     runId,
     stepResults,

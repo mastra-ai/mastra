@@ -57,6 +57,7 @@ export class StepExecutor extends MastraBase {
     try {
       console.log('executor start', step.id, stepInfo, params.input, params.resumeData);
       const stepResult = await step.execute({
+        workflowId: params.workflowId,
         runId,
         mastra: this.mastra!,
         runtimeContext,
@@ -82,6 +83,8 @@ export class StepExecutor extends MastraBase {
         bail: (result: any) => {
           bailed = { payload: result };
         },
+        // TODO
+        writer: undefined as any,
         abort: () => {
           abortController?.abort();
         },
@@ -135,6 +138,7 @@ export class StepExecutor extends MastraBase {
   }
 
   async evaluateConditions(params: {
+    workflowId: string;
     step: Extract<StepFlowEntry, { type: 'conditional' }>;
     runId: string;
     input?: any;
@@ -155,6 +159,7 @@ export class StepExecutor extends MastraBase {
         try {
           console.log('evaluating condition', condition, params);
           return this.evaluateCondition({
+            workflowId: params.workflowId,
             condition,
             runId,
             runtimeContext,
@@ -185,6 +190,7 @@ export class StepExecutor extends MastraBase {
   }
 
   async evaluateCondition({
+    workflowId,
     condition,
     runId,
     inputData,
@@ -195,6 +201,7 @@ export class StepExecutor extends MastraBase {
     abortController,
     runCount = 0,
   }: {
+    workflowId: string;
     condition: ExecuteFunction<any, any, any, any, any>;
     runId: string;
     inputData?: any;
@@ -206,6 +213,7 @@ export class StepExecutor extends MastraBase {
     runCount?: number;
   }): Promise<boolean> {
     return condition({
+      workflowId,
       runId,
       mastra: this.mastra!,
       runtimeContext,
@@ -231,6 +239,8 @@ export class StepExecutor extends MastraBase {
       bail: (_result: any) => {
         throw new Error('Not implemented');
       },
+      // TODO
+      writer: undefined as any,
       abort: () => {
         abortController?.abort();
       },
@@ -241,6 +251,7 @@ export class StepExecutor extends MastraBase {
   }
 
   async resolveSleep(params: {
+    workflowId: string;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
     runId: string;
     input?: any;
@@ -265,6 +276,7 @@ export class StepExecutor extends MastraBase {
 
     try {
       return await step.fn({
+        workflowId: params.workflowId,
         runId,
         mastra: this.mastra!,
         runtimeContext,
@@ -293,6 +305,8 @@ export class StepExecutor extends MastraBase {
         abort: () => {
           abortController?.abort();
         },
+        // TODO
+        writer: undefined as any,
         [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
         engine: {},
         abortSignal: abortController?.signal,
@@ -304,6 +318,7 @@ export class StepExecutor extends MastraBase {
   }
 
   async resolveSleepUntil(params: {
+    workflowId: string;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
     runId: string;
     input?: any;
@@ -328,6 +343,7 @@ export class StepExecutor extends MastraBase {
 
     try {
       const result = await step.fn({
+        workflowId: params.workflowId,
         runId,
         mastra: this.mastra!,
         runtimeContext,
@@ -356,6 +372,8 @@ export class StepExecutor extends MastraBase {
         abort: () => {
           abortController?.abort();
         },
+        // TODO
+        writer: undefined as any,
         [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
         engine: {},
         abortSignal: abortController?.signal,

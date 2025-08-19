@@ -79,6 +79,7 @@ export async function processWorkflowConditional(
 ) {
   console.log('conditional found');
   const idxs = await stepExecutor.evaluateConditions({
+    workflowId,
     step,
     runId,
     stepResults,

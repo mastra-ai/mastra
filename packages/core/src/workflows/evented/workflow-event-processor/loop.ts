@@ -34,6 +34,7 @@ export async function processWorkflowLoop(
 ) {
   console.log('loop found', step.step.id, stepResult, runCount);
   const loopCondition = await stepExecutor.evaluateCondition({
+    workflowId,
     condition: step.condition,
     runId,
     stepResults,
