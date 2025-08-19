@@ -20,7 +20,7 @@ services:
       - '6370:6379'
     command: redis-server --requirepass redis_password
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD', 'redis-cli', '--no-auth-warning', '-a', 'redis_password', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
