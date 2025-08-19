@@ -12,7 +12,6 @@ import { getOutputSchema } from '../aisdk/v5/object/schema';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '../aisdk/v5/object/stream-object';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
-import { convertMastraChunkToAISDKv5 } from '../aisdk/v5/transform';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
@@ -71,28 +70,29 @@ export class MastraModelOutput extends MastraBase {
   #toolResults: any[] = [];
   #warnings: any[] = [];
   #finishReason: string | undefined;
-  #providerMetadata: Record<string, any> | undefined;
-  #response: any | undefined;
   #request: any | undefined;
   #usageCount: Record<string, number> = {};
 
-  #objectPromise: DelayedPromise<any> = new DelayedPromise();
-  #finishReasonPromise: DelayedPromise<string | undefined> = new DelayedPromise();
-  #usagePromise: DelayedPromise<Record<string, number>> = new DelayedPromise();
-  #warningsPromise: DelayedPromise<any[]> = new DelayedPromise();
-  #providerMetadataPromise: DelayedPromise<Record<string, any> | undefined> = new DelayedPromise();
-  #responsePromise: DelayedPromise<any> = new DelayedPromise();
-  #requestPromise: DelayedPromise<any> = new DelayedPromise();
-  #textPromise: DelayedPromise<string> = new DelayedPromise();
-  #reasoningPromise: DelayedPromise<string> = new DelayedPromise();
-  #reasoningTextPromise: DelayedPromise<string | undefined> = new DelayedPromise();
-  #sourcesPromise: DelayedPromise<any[]> = new DelayedPromise();
-  #filesPromise: DelayedPromise<any[]> = new DelayedPromise();
-  #toolCallsPromise: DelayedPromise<any[]> = new DelayedPromise();
-  #toolResultsPromise: DelayedPromise<any[]> = new DelayedPromise();
-  #stepsPromise: DelayedPromise<StepBufferItem[]> = new DelayedPromise();
-  #totalUsagePromise: DelayedPromise<Record<string, number>> = new DelayedPromise();
-  #contentPromise: DelayedPromise<any> = new DelayedPromise();
+  #delayedPromises = {
+    object: new DelayedPromise<any>(),
+    finishReason: new DelayedPromise<string | undefined>(),
+    usage: new DelayedPromise<Record<string, number>>(),
+    warnings: new DelayedPromise<any[]>(),
+    providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
+    response: new DelayedPromise<any>(),
+    request: new DelayedPromise<any>(),
+    text: new DelayedPromise<string>(),
+    reasoning: new DelayedPromise<string>(),
+    reasoningText: new DelayedPromise<string | undefined>(),
+    sources: new DelayedPromise<any[]>(),
+    files: new DelayedPromise<any[]>(),
+    toolCalls: new DelayedPromise<any[]>(),
+    toolResults: new DelayedPromise<any[]>(),
+    steps: new DelayedPromise<StepBufferItem[]>(),
+    totalUsage: new DelayedPromise<Record<string, number>>(),
+    content: new DelayedPromise<any>(),
+    reasoningDetails: new DelayedPromise<any[]>(),
+  };
 
   #streamConsumed = false;
 
@@ -102,7 +102,7 @@ export class MastraModelOutput extends MastraBase {
   constructor({
     stream,
     options,
-    model,
+    model: _model,
     messageList,
   }: {
     model: {
@@ -251,12 +251,11 @@ export class MastraModelOutput extends MastraBase {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
+              let response = {};
               if (chunk.payload.metadata) {
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-                self.#providerMetadata = chunk.payload.metadata.providerMetadata;
-
-                self.#response = {
+                response = {
                   ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser ?? [],
                 };
@@ -267,75 +266,61 @@ export class MastraModelOutput extends MastraBase {
               chunk.payload.output.usage = self.#usageCount;
 
               // Resolve all delayed promises with final values
-              self.#finishReasonPromise.resolve(self.#finishReason);
-              self.#usagePromise.resolve(self.#usageCount);
-              self.#warningsPromise.resolve(self.#warnings);
-              self.#providerMetadataPromise.resolve(self.#providerMetadata);
-              self.#responsePromise.resolve(self.#response);
-              self.#requestPromise.resolve(self.#request);
-              self.#textPromise.resolve(self.#bufferedText.join(''));
-              self.#reasoningPromise.resolve(self.#bufferedReasoning.join(''));
+              self.#delayedPromises.finishReason.resolve(self.#finishReason);
+              self.#delayedPromises.usage.resolve(self.#usageCount);
+              self.#delayedPromises.warnings.resolve(self.#warnings);
+              self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
+              self.#delayedPromises.response.resolve(response);
+              self.#delayedPromises.request.resolve(self.#request);
+              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+              self.#delayedPromises.reasoning.resolve(self.#bufferedReasoning.join(''));
               const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
-              self.#reasoningTextPromise.resolve(reasoningText);
-              self.#sourcesPromise.resolve(self.#bufferedSources);
-              self.#filesPromise.resolve(self.#bufferedFiles);
-              self.#toolCallsPromise.resolve(self.#toolCalls);
-              self.#toolResultsPromise.resolve(self.#toolResults);
-              self.#stepsPromise.resolve(self.#bufferedSteps);
-              self.#totalUsagePromise.resolve(self.#getTotalUsage());
-              self.#contentPromise.resolve(messageList.get.response.aiV5.stepContent());
+              self.#delayedPromises.reasoningText.resolve(reasoningText);
+              self.#delayedPromises.sources.resolve(self.#bufferedSources);
+              self.#delayedPromises.files.resolve(self.#bufferedFiles);
+              self.#delayedPromises.toolCalls.resolve(self.#toolCalls);
+              self.#delayedPromises.toolResults.resolve(self.#toolResults);
+              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
+              self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
+              self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
+              self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
               if (baseFinishStep) {
                 const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
 
-                let onFinishPayload: any = {};
-
-                if (model.version === 'v2') {
-                  // Convert toolCalls and toolResults to AI SDK v5 format for onFinish
-                  const convertedToolCalls = self.#toolCalls.map(toolCall =>
-                    convertMastraChunkToAISDKv5({ chunk: toolCall }),
-                  );
-                  const convertedToolResults = self.#toolResults.map(toolResult =>
-                    convertMastraChunkToAISDKv5({ chunk: toolResult }),
-                  );
-                  const convertedSources = self.#bufferedSources.map(source =>
-                    convertMastraChunkToAISDKv5({ chunk: source }),
-                  );
-                  const convertedFiles = self.#bufferedFiles
-                    .map(file => {
-                      if (file.type === 'file') {
-                        return (convertMastraChunkToAISDKv5({ chunk: file }) as any)?.file;
-                      }
-                      return;
-                    })
-                    .filter(Boolean);
-
-                  onFinishPayload = {
-                    text: baseFinishStep.text,
-                    warnings: baseFinishStep.warnings ?? [],
-                    finishReason: chunk.payload.stepResult.reason,
-                    // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
-                    content: messageList.get.response.aiV5.stepContent(),
-                    request: self.#request,
-                    error: self.error,
-                    reasoning: self.reasoningDetails,
-                    reasoningText: self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined,
-                    sources: convertedSources,
-                    files: convertedFiles,
-                    steps: transformSteps({ steps: this.#bufferedSteps }),
-                    response: { ...self.#response, messages: messageList.get.response.aiV5.model() },
-                    usage: chunk.payload.output.usage,
-                    totalUsage: self.#getTotalUsage(),
-                    toolCalls: convertedToolCalls,
-                    toolResults: convertedToolResults,
-                    staticToolCalls: convertedToolCalls.filter((toolCall: any) => toolCall.dynamic === false),
-                    staticToolResults: convertedToolResults.filter((toolResult: any) => toolResult.dynamic === false),
-                    dynamicToolCalls: convertedToolCalls.filter((toolCall: any) => toolCall.dynamic === true),
-                    dynamicToolResults: convertedToolResults.filter((toolResult: any) => toolResult.dynamic === true),
-                  };
-                }
+                const onFinishPayload = {
+                  text: baseFinishStep.text,
+                  warnings: baseFinishStep.warnings ?? [],
+                  finishReason: chunk.payload.stepResult.reason,
+                  // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
+                  content: messageList.get.response.aiV5.stepContent(),
+                  request: await self.request,
+                  error: self.error,
+                  reasoning: await self.aisdk.v5.reasoning,
+                  reasoningText: await self.aisdk.v5.reasoningText,
+                  sources: await self.aisdk.v5.sources,
+                  files: await self.aisdk.v5.files,
+                  steps: transformSteps({ steps: self.#bufferedSteps }),
+                  response: { ...(await self.response), messages: messageList.get.response.aiV5.model() },
+                  usage: chunk.payload.output.usage,
+                  totalUsage: self.#getTotalUsage(),
+                  toolCalls: await self.aisdk.v5.toolCalls,
+                  toolResults: await self.aisdk.v5.toolResults,
+                  staticToolCalls: (await self.aisdk.v5.toolCalls).filter(
+                    (toolCall: any) => toolCall.dynamic === false,
+                  ),
+                  staticToolResults: (await self.aisdk.v5.toolResults).filter(
+                    (toolResult: any) => toolResult.dynamic === false,
+                  ),
+                  dynamicToolCalls: (await self.aisdk.v5.toolCalls).filter(
+                    (toolCall: any) => toolCall.dynamic === true,
+                  ),
+                  dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
+                    (toolResult: any) => toolResult.dynamic === true,
+                  ),
+                };
 
                 await options?.onFinish?.(onFinishPayload);
               }
@@ -407,23 +392,7 @@ export class MastraModelOutput extends MastraBase {
               const error =
                 typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
 
-              self.#finishReasonPromise.reject(error);
-              self.#usagePromise.reject(error);
-              self.#warningsPromise.reject(error);
-              self.#providerMetadataPromise.reject(error);
-              self.#responsePromise.reject(error);
-              self.#requestPromise.reject(error);
-              self.#textPromise.reject(error);
-              self.#reasoningPromise.reject(error);
-              self.#reasoningTextPromise.reject(error);
-              self.#sourcesPromise.reject(error);
-              self.#filesPromise.reject(error);
-              self.#toolCallsPromise.reject(error);
-              self.#toolResultsPromise.reject(error);
-              self.#stepsPromise.reject(error);
-              self.#totalUsagePromise.reject(error);
-              self.#contentPromise.reject(error);
-              self.#objectPromise.reject(error);
+              Object.values(self.#delayedPromises).forEach(promise => promise.reject(error));
 
               break;
           }
@@ -443,50 +412,39 @@ export class MastraModelOutput extends MastraBase {
     });
   }
 
-  get text() {
+  private getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
     if (!this.#streamConsumed) {
       void this.consumeStream();
     }
-    return this.#textPromise.promise;
+    return promise.promise;
+  }
+
+  get text() {
+    return this.getDelayedPromise(this.#delayedPromises.text);
   }
 
   get reasoning() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#reasoningPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.reasoning);
   }
 
   get reasoningText() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#reasoningTextPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.reasoningText);
   }
 
   get reasoningDetails() {
-    return Object.values(this.#bufferedReasoningDetails || {});
+    return this.getDelayedPromise(this.#delayedPromises.reasoningDetails);
   }
 
   get sources() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#sourcesPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.sources);
   }
 
   get files() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#filesPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.files);
   }
 
   get steps() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#stepsPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.steps);
   }
 
   teeStream() {
@@ -504,7 +462,7 @@ export class MastraModelOutput extends MastraBase {
       .pipeThrough(
         createObjectStreamTransformer({
           objectOptions: self.#options.objectOptions!,
-          onFinish: data => self.#objectPromise.resolve(data),
+          onFinish: data => self.#delayedPromises.object.resolve(data),
         }),
       )
       .pipeThrough(
@@ -516,64 +474,51 @@ export class MastraModelOutput extends MastraBase {
 
             controller.enqueue(chunk);
           },
+          flush: () => {
+            // If stream ends without proper finish/error chunks, reject unresolved promises
+            // This must be in the final transformer in the fullStream pipeline
+            // to ensure all of the delayed promises had a chance to resolve or reject already
+            // Avoids promises hanging forever
+            Object.values(self.#delayedPromises).forEach(promise => {
+              if (promise.status.type === 'pending') {
+                promise.reject(new Error('Stream terminated unexpectedly'));
+              }
+            });
+          },
         }),
       );
   }
 
   get finishReason() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#finishReasonPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.finishReason);
   }
 
   get toolCalls() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#toolCallsPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.toolCalls);
   }
 
   get toolResults() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#toolResultsPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.toolResults);
   }
 
   get usage() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#usagePromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.usage);
   }
 
   get warnings() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#warningsPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.warnings);
   }
 
   get providerMetadata() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#providerMetadataPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.providerMetadata);
   }
 
   get response() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#responsePromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.response);
   }
 
   get request() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#requestPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.request);
   }
 
   get error() {
@@ -669,17 +614,11 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get totalUsage() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#totalUsagePromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.totalUsage);
   }
 
   get content() {
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#contentPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.content);
   }
 
   get aisdk() {
@@ -753,16 +692,13 @@ export class MastraModelOutput extends MastraBase {
 
   get object() {
     if (!this.#options.objectOptions?.schema) {
-      this.#objectPromise.reject(new Error('output schema is required to get object'));
-      return this.#objectPromise.promise;
+      this.#delayedPromises.object.reject(new Error('output schema is required to get object'));
+      return this.#delayedPromises.object.promise;
     }
-    if (!this.#streamConsumed) {
-      void this.consumeStream();
-    }
-    return this.#objectPromise.promise;
+    return this.getDelayedPromise(this.#delayedPromises.object);
   }
 
-  // Internal methods for immediate values - used internally by Mastra
+  // Internal methods for immediate values - used internally by Mastra (llm-execution.ts bailing on errors/abort signals with current state)
   // These are not part of the public API
   _getImmediateToolCalls() {
     return this.#toolCalls;
