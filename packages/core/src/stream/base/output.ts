@@ -423,6 +423,7 @@ export class MastraModelOutput extends MastraBase {
               self.#stepsPromise.reject(error);
               self.#totalUsagePromise.reject(error);
               self.#contentPromise.reject(error);
+              self.#objectPromise.reject(error);
 
               break;
           }
@@ -504,7 +505,6 @@ export class MastraModelOutput extends MastraBase {
         createObjectStreamTransformer({
           objectOptions: self.#options.objectOptions!,
           onFinish: data => self.#objectPromise.resolve(data),
-          onError: error => self.#objectPromise.reject(error),
         }),
       )
       .pipeThrough(
@@ -752,6 +752,10 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get object() {
+    if (!this.#options.objectOptions?.schema) {
+      this.#objectPromise.reject(new Error('output schema is required to get object'));
+      return this.#objectPromise.promise;
+    }
     if (!this.#streamConsumed) {
       void this.consumeStream();
     }

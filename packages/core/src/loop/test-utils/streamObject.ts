@@ -1022,9 +1022,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": undefined,
+              "error": [Error: Type validation failed: Value: {"invalid":"Hello, world!"}.
+            Error message: Validation failed],
               "files": [],
-              "finishReason": "stop",
+              "finishReason": "error",
               "reasoning": [],
               "reasoningText": undefined,
               "request": {},
@@ -1056,7 +1057,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "type": "text",
                     },
                   ],
-                  "finishReason": "stop",
+                  "finishReason": "error",
                   "providerMetadata": undefined,
                   "request": {},
                   "response": {
