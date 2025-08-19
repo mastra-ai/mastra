@@ -82,6 +82,23 @@ export const londonWeatherAgent = new Agent({
 });
 ```
 
+## Example usage
+
+Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
+
+```typescript filename="src/test-london-weather-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("londonWeatherAgent");
+
+const response = await agent.generate("How many times has it rained this year?");
+
+console.log(response.text);
+```
+
+
 <GithubLink
   marginTop='mt-16'
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/using-a-tool"
