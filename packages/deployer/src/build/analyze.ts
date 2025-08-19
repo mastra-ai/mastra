@@ -64,6 +64,13 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
 }
 
 /**
+ * Check if a path is relative without relying on `isAbsolute()` as we want to allow package names (e.g. `@pkg/name`)
+ */
+function isRelativePath(id: string): boolean {
+  return id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../');
+}
+
+/**
  * Analyzes the entry file to identify dependencies that need optimization.
  * This is the first step of the bundle analysis process.
  *
@@ -273,7 +280,7 @@ export async function bundleExternals(
             name: 'external-resolver',
             resolveId(id: string, importer: string | undefined) {
               const pathsToTranspile = [...transpilePackagesMap.values()];
-              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && isAbsolute(id)) {
+              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && !isRelativePath(id)) {
                 return {
                   id: resolveFrom(importer, id),
                   external: true,
