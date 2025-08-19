@@ -272,7 +272,9 @@ export async function bundleExternals(
             name: 'external-resolver',
             resolveId(id: string, importer: string | undefined) {
               const pathsToTranspile = [...transpilePackagesMap.values()];
-              if (importer && pathsToTranspile.some(p => importer?.startsWith(p))) {
+              const notRelative = !id.startsWith('.');
+              console.log({ id, importer, pathsToTranspile });
+              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && notRelative) {
                 return {
                   id: resolveFrom(importer, id),
                   external: true,
