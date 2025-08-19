@@ -7,6 +7,7 @@ import virtual from '@rollup/plugin-virtual';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { isAbsolute } from 'node:path';
 import { rollup, type OutputAsset, type OutputChunk, type Plugin } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import { isNodeBuiltin } from './isNodeBuiltin';
@@ -272,9 +273,7 @@ export async function bundleExternals(
             name: 'external-resolver',
             resolveId(id: string, importer: string | undefined) {
               const pathsToTranspile = [...transpilePackagesMap.values()];
-              const notRelative = !id.startsWith('.');
-              console.log({ id, importer, pathsToTranspile });
-              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && notRelative) {
+              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && isAbsolute(id)) {
                 return {
                   id: resolveFrom(importer, id),
                   external: true,
