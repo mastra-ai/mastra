@@ -15,7 +15,6 @@ type RunExperimentResult<TScorerName extends string = string> = {
   scores: Record<TScorerName, number>;
   summary: {
     totalItems: number;
-    duration: number;
   };
 };
 
@@ -161,7 +160,6 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
     scores: averageScores,
     summary: {
       totalItems,
-      duration: Date.now() - startTime,
     },
   };
 };
