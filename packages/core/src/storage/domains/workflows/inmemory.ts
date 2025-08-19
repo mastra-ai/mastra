@@ -36,26 +36,29 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       return {};
     }
 
+    let snapshot;
     if (!run.snapshot) {
+      snapshot = {
+        context: {},
+        activePaths: [],
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        serializedStepGraph: [],
+        value: {},
+        waitingPaths: {},
+        status: 'pending',
+        runId: run.run_id,
+      } as WorkflowRunState;
+
       this.collection.set(runId, {
         ...run,
-        snapshot: {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          serializedStepGraph: [],
-          value: {},
-          waitingPaths: {},
-          status: 'pending',
-          runId: run.run_id,
-        },
+        snapshot,
       });
     }
 
-    const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+    snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
 
-    if (!snapshot || !snapshot?.snapshot?.context) {
+    if (!snapshot || !snapshot?.context) {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
@@ -67,7 +70,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       snapshot: snapshot,
     });
 
-    return JSON.parse(JSON.stringify(snapshot.snapshot.context));
+    return JSON.parse(JSON.stringify(snapshot.context));
   }
 
   async updateWorkflowState({
@@ -91,29 +94,33 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       return;
     }
 
+    let snapshot;
     if (!run.snapshot) {
+      snapshot = {
+        context: {},
+        activePaths: [],
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        serializedStepGraph: [],
+        value: {},
+        waitingPaths: {},
+        status: 'pending',
+        runId: run.run_id,
+      } as WorkflowRunState;
+
       this.collection.set(runId, {
         ...run,
-        snapshot: {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          serializedStepGraph: [],
-          value: {},
-          waitingPaths: {},
-          status: 'pending',
-          runId: run.run_id,
-        },
+        snapshot,
       });
+    } else {
+      snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
     }
 
-    let snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
-    if (!snapshot || !snapshot?.snapshot?.context) {
+    if (!snapshot || !snapshot?.context) {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    snapshot = { ...snapshot.snapshot, ...opts };
+    snapshot = { ...snapshot, ...opts };
     this.collection.set(runId, {
       ...run,
       snapshot: snapshot,
