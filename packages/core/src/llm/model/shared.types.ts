@@ -1,5 +1,6 @@
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
+import type { ScoringData } from './base.types';
 
 export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
   ? z.infer<Output>
@@ -11,4 +12,8 @@ export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = und
 export type TripwireProperties = {
   tripwire?: boolean;
   tripwireReason?: string;
+};
+
+export type ScoringProperties = {
+  scoringData?: ScoringData;
 };

@@ -1374,6 +1374,9 @@ importers:
       json-schema-to-zod:
         specifier: ^2.6.1
         version: 2.6.1
+      p-map:
+        specifier: ^7.0.3
+        version: 7.0.3
       pino:
         specifier: ^9.7.0
         version: 9.7.0
@@ -14173,6 +14176,10 @@ packages:
   p-map@6.0.0:
     resolution: {integrity: sha512-T8BatKGY+k5rU+Q/GTYgrEf2r4xRMevAN5mtXc2aPc4rS1j3s+vWTaO2Wag94neXuCAUAs8cxBL9EeB5EA6diw==}
     engines: {node: '>=16'}
+
+  p-map@7.0.3:
+    resolution: {integrity: sha512-VkndIv2fIB99swvQoA65bm+fsmt6UNdGeIB0oxBs+WhAhdh08QA04JXpI7rbB9r08/nkbysKoya9rtDERYOYMA==}
+    engines: {node: '>=18'}
 
   p-queue@6.6.2:
     resolution: {integrity: sha512-RwFpb72c/BhQLEXIZ5K2e+AhgNVmIejGlTgiB9MzZ0e93GRvqZ7uSi0dvRF7/XIXDeNkra2fNHBxTyPDGySpjQ==}
@@ -29420,6 +29427,8 @@ snapshots:
       aggregate-error: 4.0.1
 
   p-map@6.0.0: {}
+
+  p-map@7.0.3: {}
 
   p-queue@6.6.2:
     dependencies:
