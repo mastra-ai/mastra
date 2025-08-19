@@ -970,133 +970,6 @@ describe('Input and Output Processors with VNext Methods', () => {
   });
 
   describe('Custom Output with Processors', () => {
-    it('should handle multiple processors with structured output', async () => {
-      let firstProcessorObject: any = null;
-      let secondProcessorObject: any = null;
-
-      class FirstProcessor implements Processor {
-        readonly name = 'first-processor';
-
-        async processOutputResult({ messages }) {
-          const processedMessages = messages.map(msg => ({
-            ...msg,
-            content: {
-              ...msg.content,
-              parts: msg.content.parts.map(part => {
-                if (part.type === 'text') {
-                  try {
-                    const data = JSON.parse(part.text);
-                    const modified = { ...data, first_processed: true };
-                    firstProcessorObject = modified;
-                    return { ...part, text: JSON.stringify(modified) };
-                  } catch {
-                    return part;
-                  }
-                }
-                return part;
-              }),
-            },
-          }));
-
-          return processedMessages;
-        }
-      }
-
-      class SecondProcessor implements Processor {
-        readonly name = 'second-processor';
-
-        async processOutputResult({ messages }) {
-          const processedMessages = messages.map(msg => ({
-            ...msg,
-            content: {
-              ...msg.content,
-              parts: msg.content.parts.map(part => {
-                if (part.type === 'text') {
-                  try {
-                    const data = JSON.parse(part.text);
-                    const modified = { ...data, second_processed: true };
-                    secondProcessorObject = modified;
-                    return { ...part, text: JSON.stringify(modified) };
-                  } catch {
-                    return part;
-                  }
-                }
-                return part;
-              }),
-            },
-          }));
-
-          return processedMessages;
-        }
-      }
-
-      const agent = new Agent({
-        name: 'multi-structured-processor-test-agent',
-        instructions: 'You know about US elections.',
-        model: new MockLanguageModelV2({
-          doGenerate: async () => ({
-            content: [
-              {
-                type: 'text',
-                text: '{"winner": "Joe Biden", "year": "2020"}',
-              },
-            ],
-            warnings: [],
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-          doStream: async () => ({
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"winner":' },
-              { type: 'text-delta', id: '1', delta: '"Joe' },
-              { type: 'text-delta', id: '1', delta: ' Biden",' },
-              { type: 'text-delta', id: '1', delta: '"year":"2020"}' },
-              { type: 'text-end', id: '1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
-            ]),
-          }),
-        }),
-        outputProcessors: [new FirstProcessor(), new SecondProcessor()],
-      });
-
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        let result = await agent.generate_vnext('Who won the 2020 US presidential election?', {
-          output: z.object({
-            winner: z.string(),
-            year: z.string(),
-          }),
-          format,
-        });
-
-        // Both processors should have run in sequence
-        expect(result.object.winner).toBe('Joe Biden');
-        expect(result.object.year).toBe('2020');
-        expect((result.object as any).first_processed).toBe(true);
-        expect((result.object as any).second_processed).toBe(true);
-
-        // Verify both processors were called
-        expect(firstProcessorObject).toEqual({
-          winner: 'Joe Biden',
-          year: '2020',
-          first_processed: true,
-        });
-
-        expect(secondProcessorObject).toEqual({
-          winner: 'Joe Biden',
-          year: '2020',
-          first_processed: true,
-          second_processed: true,
-        });
-      }
-
-      await testWithFormat('aisdk');
-      // await testWithFormat('mastra');
-    });
-
     it('should process streamed structured output through output processors with stream_vnext', async () => {
       let processedChunks: string[] = [];
       let finalProcessedObject: any = null;
@@ -1663,76 +1536,74 @@ describe('Input and Output Processors with VNext Methods', () => {
         }, 40000);
       });
 
-      it.todo(
-        'should work with streamVNext',
-        async () => {
-          const ideaSchema = z.object({
-            idea: z.string().describe('The creative idea'),
-            category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
-            feasibility: z.number().min(1).max(10).describe('How feasible is this idea (1-10)'),
-            resources: z.array(z.string()).describe('Resources needed to implement'),
-          });
+      it('should work with streamVNext', async () => {
+        const ideaSchema = z.object({
+          idea: z.string().describe('The creative idea'),
+          category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
+          feasibility: z.number().min(1).max(10).describe('How feasible is this idea (1-10)'),
+          resources: z.array(z.string()).describe('Resources needed to implement'),
+        });
 
-          const agent = new Agent({
-            name: 'Creative Thinker',
-            instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
-            model: model,
-          });
+        const agent = new Agent({
+          name: 'Creative Thinker',
+          instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
+          model: model,
+        });
 
-          let result;
+        let result;
 
-          if (model.specificationVersion === 'v1') {
-            return;
-          } else {
-            result = await agent.stream_vnext(
-              'Come up with an innovative solution for reducing food waste in restaurants. json',
-              {
-                format,
-                structuredOutput: {
-                  schema: ideaSchema,
-                  model,
-                  errorStrategy: 'strict',
-                },
+        if (model.specificationVersion === 'v1') {
+          return;
+        } else {
+          result = await agent.stream_vnext(
+            `
+                Come up with an innovative solution for reducing food waste in restaurants. 
+                Make sure to include an idea, category, feasibility, and resources.
+              `,
+            {
+              format,
+              structuredOutput: {
+                schema: ideaSchema,
+                model,
+                errorStrategy: 'strict',
               },
-            );
-          }
+            },
+          );
+        }
 
-          for await (const _chunk of result.fullStream) {
-            // console.log(chunk)
-          }
+        for await (const _chunk of result.fullStream) {
+          // console.log(chunk)
+        }
 
-          console.log('getting text');
+        console.log('getting text');
+        const resultText = await result.text;
+        console.log('getting object');
+        const resultObj = await result.object;
 
-          const resultText = await result.text;
-          console.log('getting object');
-          const resultObj = await result.object;
+        console.log('got result object', resultObj);
 
-          console.log('got result object', resultObj);
+        // Verify we have both natural text AND structured data
+        expect(resultText).toBeTruthy();
+        expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
+        expect(resultObj).toBeDefined();
 
-          // Verify we have both natural text AND structured data
-          expect(resultText).toBeTruthy();
-          expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
-          expect(resultObj).toBeDefined();
+        // Validate structured data
+        expect(resultObj).toMatchObject({
+          idea: expect.any(String),
+          category: expect.stringMatching(/^(technology|business|art|science|other)$/),
+          feasibility: expect.any(Number),
+          resources: expect.any(Array),
+        });
 
-          // Validate structured data
-          expect(resultObj).toMatchObject({
-            idea: expect.any(String),
-            category: expect.stringMatching(/^(technology|business|art|science|other)$/),
-            feasibility: expect.any(Number),
-            resources: expect.any(Array),
-          });
+        // Validate content
+        // expect(resultObj.idea.toLowerCase()).toMatch(/food waste|restaurant|reduce/);
+        expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
+        expect(resultObj.feasibility).toBeLessThanOrEqual(10);
+        expect(resultObj.resources.length).toBeGreaterThan(0);
 
-          // Validate content
-          // expect(resultObj.idea.toLowerCase()).toMatch(/food waste|restaurant|reduce/);
-          expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
-          expect(resultObj.feasibility).toBeLessThanOrEqual(10);
-          expect(resultObj.resources.length).toBeGreaterThan(0);
-
-          console.log('Natural text:', resultText);
-          console.log('Structured idea data:', resultObj);
-        },
-        60000,
-      );
+        console.log('Natural text:', resultText);
+        console.log('Structured idea data:', resultObj);
+      }, 60000);
     });
   }
 

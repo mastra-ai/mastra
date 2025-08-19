@@ -1729,13 +1729,11 @@ export class Agent<
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
-          console.log('messagesnomem', messages);
           const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
             runtimeContext,
             messageList,
           });
 
-          console.log('messageList', messageList.get.all.prompt());
           return {
             messageObjects: messageList.get.all.prompt(),
             convertedTools,
@@ -2193,7 +2191,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   }
 
   async #execute(options: InnerAgentExecutionOptions) {
-    console.log('options', options);
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 

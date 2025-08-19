@@ -77,6 +77,8 @@ export class MastraModelOutput extends MastraBase {
   #finishReason: string | undefined;
   #request: any | undefined;
   #usageCount: Record<string, number> = {};
+  #tripwire = false;
+  #tripwireReason = '';
 
   #delayedPromises = {
     object: new DelayedPromise<any>(),
@@ -284,8 +286,51 @@ export class MastraModelOutput extends MastraBase {
 
               chunk.payload.output.usage = self.#usageCount;
 
+              try {
+                if (self.processorRunner) {
+                  await self.processorRunner.runOutputProcessors(self.messageList);
+                  const outputText = self.messageList.get.response.aiV4
+                    .core()
+                    .map(m => MessageList.coreContentToString(m.content))
+                    .join('\n');
+
+                  const messages = self.messageList.get.response.v2();
+                  const messagesWithStructuredData = messages.filter(
+                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                  );
+
+                  if (
+                    messagesWithStructuredData[0] &&
+                    messagesWithStructuredData[0].content.metadata?.structuredOutput
+                  ) {
+                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
+                    self.#delayedPromises.object.resolve(structuredOutput);
+                  } else if (!self.#options.objectOptions?.schema) {
+                    self.#delayedPromises.object.resolve(undefined);
+                  }
+
+                  self.#delayedPromises.text.resolve(outputText);
+                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
+                } else {
+                  self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
+                  if (!self.#options.objectOptions?.schema) {
+                    self.#delayedPromises.object.resolve(undefined);
+                  }
+                }
+              } catch (error) {
+                if (error instanceof TripWire) {
+                  self.#tripwire = true;
+                  self.#tripwireReason = error.message;
+                  self.#delayedPromises.finishReason.resolve('other');
+                } else {
+                  self.#error = error instanceof Error ? error.message : String(error);
+                  self.#delayedPromises.finishReason.resolve('error');
+                }
+                self.#delayedPromises.object.resolve(undefined);
+              }
+
               // Resolve all delayed promises with final values
-              self.#delayedPromises.finishReason.resolve(self.#finishReason);
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
@@ -532,9 +577,10 @@ export class MastraModelOutput extends MastraBase {
             // This must be in the final transformer in the fullStream pipeline
             // to ensure all of the delayed promises had a chance to resolve or reject already
             // Avoids promises hanging forever
-            Object.values(self.#delayedPromises).forEach(promise => {
+            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
+              console.log(key, promise.status.type);
               if (promise.status.type === 'pending') {
-                promise.reject(new Error('Stream terminated unexpectedly'));
+                promise.reject(new Error(`Stream ${key} terminated unexpectedly`));
               }
             });
           },
@@ -640,10 +686,7 @@ export class MastraModelOutput extends MastraBase {
       },
     });
 
-    let object: any;
-    if (this.#options.objectOptions?.schema) {
-      object = await this.object;
-    }
+    const object = await this.object;
 
     const fullOutput = {
       text: await this.text,
@@ -663,55 +706,34 @@ export class MastraModelOutput extends MastraBase {
       totalUsage: await this.totalUsage,
       object,
       error: this.error,
-      tripwire: false,
-      tripwireReason: '',
+      tripwire: this.#tripwire,
+      tripwireReason: this.#tripwireReason,
     };
-
-    let processedResult;
-    try {
-      processedResult = await this.processorRunner?.runOutputProcessors(this.messageList);
-    } catch (error) {
-      if (error instanceof TripWire) {
-        fullOutput.tripwire = true;
-        fullOutput.tripwireReason = error.message;
-        fullOutput.finishReason = 'other';
-      } else {
-        fullOutput.error = error instanceof Error ? error.message : String(error);
-        fullOutput.finishReason = 'error';
-      }
-    }
-
-    if (!processedResult) {
-      return fullOutput;
-    }
 
     fullOutput.response.messages = this.messageList.get.response.aiV5.model();
 
-    const outputText = this.messageList.get.response.aiV4
-      .core()
-      .map(m => MessageList.coreContentToString(m.content))
-      .join('\n');
+    // const outputText = this.messageList.get.response.aiV4
+    //   .core()
+    //   .map(m => MessageList.coreContentToString(m.content))
+    //   .join('\n');
 
-    fullOutput.text = outputText;
-
-    const messages = this.messageList.get.response.v2();
-    const messagesWithStructuredData = messages.filter(
-      msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-    );
-
-    if (fullOutput.object) {
-      try {
-        fullOutput.object = JSON.parse(outputText);
-      } catch (error) {
-        console.error(error);
-      }
-    }
-
-    if (messagesWithStructuredData[0] && messagesWithStructuredData[0].content.metadata?.structuredOutput) {
-      fullOutput.object = messagesWithStructuredData[0].content.metadata.structuredOutput;
-    }
+    // if (fullOutput.object) {
+    //   try {
+    //     fullOutput.object = JSON.parse(outputText);
+    //   } catch (error) {
+    //     console.error(error);
+    //   }
+    // }
 
     return fullOutput;
+  }
+
+  get tripwire() {
+    return this.#tripwire;
+  }
+
+  get tripwireReason() {
+    return this.#tripwireReason;
   }
 
   get totalUsage() {
@@ -730,7 +752,7 @@ export class MastraModelOutput extends MastraBase {
 
   get objectStream() {
     const self = this;
-    if (!self.#options.objectOptions) {
+    if (!self.#options.objectOptions?.schema) {
       throw new Error('objectStream requires objectOptions');
     }
 
@@ -792,10 +814,10 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get object() {
-    if (!this.#options.objectOptions?.schema) {
-      this.#delayedPromises.object.reject(new Error('output schema is required to get object'));
-      return this.#delayedPromises.object.promise;
+    if (!this.processorRunner && !this.#options.objectOptions?.schema) {
+      this.#delayedPromises.object.resolve(undefined);
     }
+
     return this.getDelayedPromise(this.#delayedPromises.object);
   }
 
