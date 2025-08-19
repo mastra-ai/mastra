@@ -447,11 +447,6 @@ export class MastraModelOutput extends MastraBase {
                 reason,
               } = await self.processorRunner.processPart(chunk as any, processorStates);
 
-              console.log('processedPart', processedPart);
-              console.log('blocked', blocked);
-              console.log('reason', reason);
-              console.log('SUHHHHHH, YOOO');
-
               if (blocked) {
                 // Send tripwire part and close stream for abort
                 controller.enqueue({
@@ -580,6 +575,9 @@ export class MastraModelOutput extends MastraBase {
     });
 
     let object: any;
+
+    console.log('objectOptions', this.#options.objectOptions);
+
     if (this.#options.objectOptions?.schema) {
       object = await this.object;
     }
@@ -607,6 +605,14 @@ export class MastraModelOutput extends MastraBase {
       // experimental_output: // TODO
     };
 
+    console.log(
+      'BEFORE',
+      this.messageList.get.response.aiV4
+        .core()
+        .map(m => MessageList.coreContentToString(m.content))
+        .join('\n'),
+    );
+
     let processedResult;
     try {
       processedResult = await this.processorRunner?.runOutputProcessors(this.messageList);
@@ -615,6 +621,9 @@ export class MastraModelOutput extends MastraBase {
         fullOutput.tripwire = true;
         fullOutput.tripwireReason = error.message;
         fullOutput.finishReason = 'other';
+      } else {
+        fullOutput.error = error instanceof Error ? error.message : String(error);
+        fullOutput.finishReason = 'error';
       }
     }
 
@@ -628,6 +637,8 @@ export class MastraModelOutput extends MastraBase {
       .core()
       .map(m => MessageList.coreContentToString(m.content))
       .join('\n');
+
+    console.log('AFTER ZZZ', outputText);
 
     fullOutput.text = outputText;
 

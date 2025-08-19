@@ -8,6 +8,7 @@ import type {
   StreamTextResult as OriginalStreamTextResult,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
+  CallSettings,
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -69,6 +70,7 @@ export type ModelLoopStreamArgs<
   output?: Output;
   structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
   outputProcessors?: OutputProcessor[];
+  modelSettings?: CallSettings;
 } & StreamTextOptions<Tools, Output>;
 
 export type StreamTextResult<

@@ -2178,10 +2178,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           })
           .add(options.context || [], 'context');
 
-        console.log('what about this', messageList.get.all.prompt());
-
         if (!memory || (!thread?.id && !resourceId)) {
-          console.log('does this happens');
           messageList.add(options.messages, 'user');
           const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
             runtimeContext,
@@ -2376,7 +2373,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         });
 
         const outputProcessors =
-          options.outputProcessors ||
+          inputData.outputProcessors ||
           (this.#outputProcessors
             ? typeof this.#outputProcessors === 'function'
               ? await this.#outputProcessors({
@@ -2403,10 +2400,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       inputSchema: z.any(),
       outputSchema: z.any(),
       execute: async ({ inputData }) => {
-        console.log('inputData', inputData);
-
         const outputProcessors =
-          options.outputProcessors ||
+          inputData.outputProcessors ||
           (this.#outputProcessors
             ? typeof this.#outputProcessors === 'function'
               ? await this.#outputProcessors({
@@ -2414,10 +2409,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 })
               : this.#outputProcessors
             : []);
+
         const result = llm.stream({
           ...inputData,
           objectOptions: {
-            schema: inputData.structuredOutput?.schema || inputData.output,
+            schema: inputData.output,
           },
           outputProcessors,
         });
@@ -2543,8 +2539,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             : [structuredProcessor];
         }
 
-        console.log('inputDatainExecute', inputData);
-
         const loopOptions: ModelLoopStreamArgs<any, any> = {
           messages: result.messages as ModelMessage[],
           runtimeContext: result.runtimeContext!,
@@ -2601,13 +2595,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             onStepFinish: result.onStepFinish,
           },
           objectOptions: {
-            schema: (options.structuredOutput as any)?.schema || options.output,
+            schema: options.output,
+          },
+          outputProcessors: effectiveOutputProcessors,
+          modelSettings: {
+            temperature: 0,
+            ...(options.modelSettings || {}),
           },
         };
 
         return loopOptions;
       })
-      .then(!options.output || options.experimental_output ? streamTextStep : streamObjectStep)
+      .then(!options.output ? streamTextStep : streamObjectStep)
       .commit();
 
     const run = await executionWorkflow.createRunAsync();

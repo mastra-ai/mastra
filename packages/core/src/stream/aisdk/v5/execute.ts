@@ -64,8 +64,6 @@ export function execute({
     });
   }
 
-  console.log('objectOptions', objectOptions ? getResponseFormat(objectOptions) : undefined,)
-
   const stream = v5.initialize({
     runId,
     onResult,
