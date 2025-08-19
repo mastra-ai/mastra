@@ -51,18 +51,26 @@ export const trace = {
       endTime: '2025-08-15T15:05:30.048Z',
       name: "agent run: 'Chef Agent Responses'",
       metadata: {
-        spanType: 'workflow_run',
-        workflowId: 'my-workflow',
-        status: 'success',
+        spanType: 'agent_run',
+        agentId: 'Chef Agent Responses',
+        instructions:
+          '\n    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever\n    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.\n    You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.\n    ',
+        availableTools: [],
+        runId: '90ccf436-fe5d-4587-8b71-1cf7cdb0c944',
+        usage: {
+          promptTokens: 886,
+          completionTokens: 217,
+          totalTokens: 1103,
+        },
+        toolResults: [],
+        toolCalls: [],
       },
       level: 'DEFAULT',
       statusMessage: null,
       version: null,
-      input: {
-        ingredient: 'avocado',
-      },
+      input: null,
       output: {
-        result: 'suh',
+        text: "Great! Let's make something delicious with Oreos. Here are a few ideas:\n\n### Oreo Mug Cake\n\n**Ingredients:**\n- 4 Oreos\n- 1/4 cup milk\n- 1/4 teaspoon baking powder (optional for fluffiness)\n\n**Instructions:**\n1. **Crush the Oreos:** Place the Oreos in a microwave-safe mug and crush them with a spoon until they are in small pieces.\n2. **Add Milk:** Pour the milk over the crushed Oreos and stir until you have a smooth mixture.\n3. **Add Baking Powder:** If you want a fluffier cake, add the baking powder and mix well.\n4. **Microwave:** Microwave the mug on high for about 1-2 minutes, or until the cake has set.\n5. **Enjoy:** Let it cool slightly before digging in!\n\nFeel free to add a scoop of ice cream or a drizzle of chocolate syrup on top for extra indulgence. Enjoy your treat!",
       },
       modelParameters: null,
       completionStartTime: null,

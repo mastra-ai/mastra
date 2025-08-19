@@ -169,7 +169,7 @@ export function TraceDialog({
 
         <div
           className={cn('p-[1.5rem] overflow-y-auto  grid', {
-            'grid-rows-[1fr_2fr]': combinedView,
+            'grid-rows-[2fr_3fr]': combinedView,
             'grid-rows-[1fr]': !combinedView,
           })}
         >
