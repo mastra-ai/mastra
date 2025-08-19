@@ -1,3 +1,4 @@
+import type { LanguageModelV1FinishReason } from '@ai-sdk/provider';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -14,6 +15,8 @@ import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 
 import type { MastraPrimitives } from '../../action';
+import { AISpanType } from '../../ai-tracing';
+import type { AISpan, AnyAISpan } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -37,9 +40,6 @@ import type {
   StreamReturn,
 } from './base.types';
 import type { inferOutput } from './shared.types';
-import { AISpanType } from '../../ai-tracing';
-import type { AISpan, AnyAISpan } from '../../ai-tracing';
-import type { LanguageModelV1FinishReason } from '@ai-sdk/provider';
 
 export class MastraLLMV1 extends MastraBase {
   #model: LanguageModel;

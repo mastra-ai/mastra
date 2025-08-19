@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
+import type { AnyAISpan } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -31,7 +32,6 @@ import type {
   WatchEvent,
   WorkflowRunState,
 } from './types';
-import type { AnyAISpan } from '../ai-tracing';
 
 export type DefaultEngineType = {};
 

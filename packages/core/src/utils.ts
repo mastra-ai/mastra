@@ -4,6 +4,7 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { AnyAISpan } from './ai-tracing';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
@@ -13,7 +14,6 @@ import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
-import type { AnyAISpan } from './ai-tracing';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 

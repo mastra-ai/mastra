@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
+import { AISpanType, getSelectedAITracing } from '../ai-tracing';
+import type { AISpan, AnyAISpan, AITracingContext } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { ChunkType } from '../stream/types';
@@ -11,7 +13,6 @@ import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
 import type { Emitter, StepFailure, StepResult, StepSuccess } from './types';
 import type { DefaultEngineType, SerializedStepFlowEntry, StepFlowEntry } from './workflow';
-import { AISpanType, getSelectedAITracing, type AISpan, type AnyAISpan, type AITracingContext } from '../ai-tracing';
 
 export type ExecutionContext = {
   workflowId: string;

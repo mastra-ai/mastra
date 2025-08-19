@@ -19,10 +19,10 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
 import type { MastraLanguageModel } from '../agent/types';
+import type { AISpan, AISpanType } from '../ai-tracing';
 import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
-import type { AISpan, AISpanType } from '../ai-tracing';
 
 export type LanguageModel = MastraLanguageModel;
 

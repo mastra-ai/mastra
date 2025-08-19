@@ -1,6 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
+import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -26,7 +27,6 @@ import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AgentVNextStreamOptions } from './agent.types';
-import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';

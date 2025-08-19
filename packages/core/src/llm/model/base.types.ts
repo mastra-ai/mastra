@@ -20,9 +20,9 @@ import type {
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
+import type { AISpan, AISpanType } from '../../ai-tracing';
 import type { RuntimeContext } from '../../runtime-context';
 import type { inferOutput, TripwireProperties } from './shared.types';
-import type { AISpan, AISpanType } from '../../ai-tracing';
 
 export type { ToolSet } from 'ai';
 

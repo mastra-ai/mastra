@@ -5,6 +5,8 @@ import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import { AISpanType, getSelectedAITracing } from '../ai-tracing';
+import type { AISpan, AnyAISpan } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
@@ -62,8 +64,6 @@ import type {
   AgentMemoryOption,
   AgentAISpanProperties,
 } from './types';
-import { AISpanType, getSelectedAITracing } from '../ai-tracing';
-import type { AISpan, AnyAISpan } from '../ai-tracing';
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
