@@ -37,6 +37,13 @@ import {
   logGitState,
   backupAndReplaceFile,
   renameAndCopyFile,
+  gitCheckoutBranch,
+  gitClone,
+  gitCheckoutRef,
+  gitRevParse,
+  gitAddAndCommit,
+  gitAddAll,
+  gitCommit,
 } from '../utils';
 
 // Helper function to resolve the model to use
@@ -88,16 +95,15 @@ const cloneTemplateStep = createStep({
 
     try {
       // Clone repository
-      const cloneCmd = `git clone "${repo}" "${tempDir}"`;
-      await exec(cloneCmd);
+      await gitClone(repo, tempDir);
 
       // Checkout specific ref if provided
       if (ref !== 'main' && ref !== 'master') {
-        await exec(`git checkout "${ref}"`, { cwd: tempDir });
+        await gitCheckoutRef(tempDir, ref);
       }
 
       // Get commit SHA
-      const { stdout: commitSha } = await exec('git rev-parse HEAD', { cwd: tempDir });
+      const commitSha = await gitRevParse(tempDir, 'HEAD');
 
       return {
         templateDir: tempDir,
@@ -657,11 +663,11 @@ const programmaticFileCopyStep = createStep({
       if (copiedFiles.length > 0) {
         try {
           const fileList = copiedFiles.map(f => f.destination);
-          const gitCommand = ['git', 'add', ...fileList];
-          await exec(gitCommand.join(' '), { cwd: targetPath });
-          await exec(
-            `git commit -m "feat(template): copy ${copiedFiles.length} files from ${slug}@${commitSha.substring(0, 7)}"`,
-            { cwd: targetPath },
+          await gitAddAndCommit(
+            targetPath,
+            `feat(template): copy ${copiedFiles.length} files from ${slug}@${commitSha.substring(0, 7)}`,
+            fileList,
+            { skipIfNoStaged: true },
           );
           console.log(`✓ Committed ${copiedFiles.length} copied files`);
         } catch (commitError) {
@@ -701,29 +707,7 @@ const intelligentMergeStep = createStep({
       // Create or switch to git branch for template integration
       let branchName = baseBranchName;
 
-      try {
-        // Try to create new branch
-        await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
-        console.log(`Created new branch: ${branchName}`);
-      } catch (error) {
-        // If branch exists, check if we can switch to it or create a unique name
-        const errorStr = error instanceof Error ? error.message : String(error);
-        if (errorStr.includes('already exists')) {
-          try {
-            // Try to switch to existing branch
-            await exec(`git checkout "${branchName}"`, { cwd: targetPath });
-            console.log(`Switched to existing branch: ${branchName}`);
-          } catch {
-            // If can't switch, create a unique branch name
-            const timestamp = Date.now().toString().slice(-6);
-            branchName = `${baseBranchName}-${timestamp}`;
-            await exec(`git checkout -b "${branchName}"`, { cwd: targetPath });
-            console.log(`Created unique branch: ${branchName}`);
-          }
-        } else {
-          throw error; // Re-throw if it's a different error
-        }
-      }
+      await gitCheckoutBranch(branchName, baseBranchName, targetPath);
 
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
@@ -1173,11 +1157,11 @@ Previous iterations may have fixed some issues, so start by re-running validateC
 
       // Commit the validation fixes
       try {
-        await exec(
-          `git add . && git commit -m "fix(template): resolve validation errors for ${slug}@${commitSha.substring(0, 7)}" || true`,
-          {
-            cwd: targetPath,
-          },
+        await gitAddAll(targetPath);
+        await gitCommit(
+          targetPath,
+          `fix(template): resolve validation errors for ${slug}@${commitSha.substring(0, 7)}`,
+          { skipIfNoStaged: true },
         );
       } catch (commitError) {
         console.warn('Failed to commit validation fixes:', commitError);

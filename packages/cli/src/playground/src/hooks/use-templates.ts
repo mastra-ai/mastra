@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 
 export interface Template {
   slug: string;
@@ -134,10 +134,84 @@ async function getTemplateRepoEnvVars({
   return {};
 }
 
+interface TemplateInstallationRequest {
+  repo: string;
+  ref?: string;
+  slug?: string;
+  targetPath?: string;
+  variables?: Record<string, string>;
+}
+
+interface TemplateInstallationResult {
+  success: boolean;
+  applied: boolean;
+  branchName?: string;
+  message: string;
+  // Optional error message from workflow
+  error?: string;
+  // Optional validation result details
+  validationResults?: {
+    valid: boolean;
+    errorsFixed: number;
+    remainingErrors: number;
+  };
+  // Optional array of errors from different steps
+  errors?: string[];
+  // Optional detailed step results
+  stepResults?: {
+    copySuccess: boolean;
+    mergeSuccess: boolean;
+    validationSuccess: boolean;
+    filesCopied: number;
+    conflictsSkipped: number;
+    conflictsResolved: number;
+  };
+}
+
+async function installTemplate(request: TemplateInstallationRequest): Promise<TemplateInstallationResult> {
+  const response = await fetch('/api/templates/install', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  // Try to parse JSON regardless of status to extract error details
+  let data: any = null;
+  try {
+    data = await response.json();
+  } catch {
+    // ignore parse errors; we'll use status text below
+  }
+
+  if (!response.ok) {
+    const msg =
+      data && typeof data.error === 'string'
+        ? data.error
+        : `Template installation failed: ${response.status} ${response.statusText}`;
+    throw new Error(msg);
+  }
+
+  // At this point we expect TemplateInstallationResult shape
+  const result = data as TemplateInstallationResult;
+  if (!result?.success) {
+    // Treat workflow-level failure as an error for the UI layer
+    throw new Error(result?.error || result?.message || 'Template installation failed');
+  }
+  return result;
+}
+
 export const useMastraTemplates = () => {
   return useQuery({
     queryKey: ['mastra-templates'],
     queryFn: getMastraTemplateRepos,
+  });
+};
+
+export const useInstallTemplate = () => {
+  return useMutation({
+    mutationFn: installTemplate,
   });
 };
 

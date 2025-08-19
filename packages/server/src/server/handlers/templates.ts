@@ -2,6 +2,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { agentBuilderTemplateWorkflow } from '@mastra/agent-builder';
 import type { Context } from '../types';
 import { handleError } from './error';
+import { basename, dirname } from 'path';
 
 export interface TemplateInstallationRequest {
   /** Template repository URL or slug */
@@ -65,7 +66,32 @@ export async function installTemplateHandler({
   const logger = mastra.getLogger();
 
   try {
-    logger.info('Starting template installation', { repo, ref, slug, targetPath, variables });
+    // Resolve default targetPath when not explicitly provided
+    let effectiveTargetPath = targetPath;
+    if (!effectiveTargetPath) {
+      const envRoot = process.env.MASTRA_PROJECT_ROOT?.trim();
+      if (envRoot) {
+        effectiveTargetPath = envRoot;
+      } else {
+        const cwd = process.cwd();
+        const parent = dirname(cwd);
+        const grand = dirname(parent);
+        // Detect when running under `<project>/.mastra/output` and resolve back to project root
+        if (basename(cwd) === 'output' && basename(parent) === '.mastra') {
+          effectiveTargetPath = grand;
+        } else {
+          effectiveTargetPath = cwd;
+        }
+      }
+    }
+
+    logger.info('Starting template installation', {
+      repo,
+      ref,
+      slug,
+      targetPath: effectiveTargetPath,
+      variables,
+    });
 
     // Create workflow run
     const run = await agentBuilderTemplateWorkflow.createRunAsync();
@@ -89,7 +115,7 @@ export async function installTemplateHandler({
         repo,
         ref: ref || 'main',
         slug,
-        targetPath,
+        targetPath: effectiveTargetPath,
       },
       runtimeContext,
     });

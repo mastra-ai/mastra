@@ -2,7 +2,6 @@ import { spawn as nodeSpawn } from 'child_process';
 import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
 import { join, dirname, relative, isAbsolute, resolve } from 'path';
 import { createTool } from '@mastra/core/tools';
-import { MCPClient } from '@mastra/mcp';
 import { z } from 'zod';
 import { exec, spawnSWPM } from './utils';
 
@@ -429,28 +428,26 @@ export const tools = await mcpClient.getTools();
   };
 
   static DEFAULT_TOOLS = async (projectPath?: string, mode: 'template' | 'code-editor' = 'code-editor') => {
-    const mcpClient = new MCPClient({
-      id: 'agent-builder-mcp-client',
-      servers: {
-        // web: {
-        // 	command: 'node',
-        // 	args: ['/Users/daniellew/Documents/Mastra/web-search/build/index.js'],
-        // },
-        docs: {
-          command: 'npx',
-          args: ['-y', '@mastra/mcp-docs-server'],
-        },
-      },
-    });
+    // const { MCPClient } = await import('@mastra/mcp');
 
-    const tools = await mcpClient.getTools();
+    // const mcpClient = new MCPClient({
+    //   id: 'agent-builder-mcp-client',
+    //   servers: {
+    //     docs: {
+    //       command: 'npx',
+    //       args: ['-y', '@mastra/mcp-docs-server'],
+    //     },
+    //   },
+    // });
+
+    // const tools = await mcpClient.getTools();
     const filteredTools: Record<string, any> = {};
 
-    Object.keys(tools).forEach(key => {
-      if (!key.includes('MastraCourse')) {
-        filteredTools[key] = tools[key];
-      }
-    });
+    // Object.keys(tools).forEach(key => {
+    //   if (!key.includes('MastraCourse')) {
+    //     filteredTools[key] = tools[key];
+    //   }
+    // });
 
     const agentBuilderTools = {
       ...filteredTools,

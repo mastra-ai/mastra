@@ -1,4 +1,4 @@
-import { useTemplateRepo, useTemplateRepoEnvVars } from '@/hooks/use-templates';
+import { useTemplateRepo, useTemplateRepoEnvVars, useInstallTemplate } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import {
   Breadcrumb,
@@ -33,6 +33,8 @@ export default function Template() {
     owner: 'mastra-ai',
     branch: selectedProvider,
   });
+
+  const { mutateAsync: installTemplate } = useInstallTemplate();
 
   const providerOptions = [
     { value: 'openai', label: 'OpenAI' },
@@ -99,7 +101,7 @@ export default function Template() {
     setSelectedProvider(value);
   };
 
-  const handleInstallTemplate = () => {
+  const handleInstallTemplate = async () => {
     const errors = Object.entries(variables).reduce((acc, [key, value]) => {
       if (value === '') {
         acc.push(key);
@@ -114,11 +116,21 @@ export default function Template() {
 
     if (template) {
       setIsInstalling(true);
-
-      setTimeout(() => {
-        setIsInstalling(false);
+      try {
+        const repo = template.githubUrl || `https://github.com/mastra-ai/template-${template.slug}`;
+        await installTemplate({
+          repo,
+          ref: selectedProvider || 'main',
+          slug: template.slug,
+          variables: variables as Record<string, string>,
+        });
         setSuccess(true);
-      }, 4000);
+      } catch (err: any) {
+        console.error('Template installation failed', err);
+        alert(err?.message || 'Template installation failed');
+      } finally {
+        setIsInstalling(false);
+      }
     }
   };
 
