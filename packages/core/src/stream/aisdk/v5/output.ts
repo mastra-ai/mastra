@@ -228,9 +228,7 @@ export class AISDKV5OutputStream {
   }
 
   get reasoning() {
-    return this.#modelOutput.reasoning.then(() => 
-      this.#modelOutput.reasoningDetails
-    );
+    return this.#modelOutput.reasoningDetails;
   }
 
   get response() {
