@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { mkdtemp, copyFile, readFile, mkdir, readdir, rm } from 'fs/promises';
+import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, dirname, resolve, extname, basename } from 'path';
 import { openai } from '@ai-sdk/openai';
@@ -659,6 +659,81 @@ const programmaticFileCopyStep = createStep({
         }
       }
 
+      // Ensure tsconfig.json exists in target by copying from template if available, else generate a minimal one
+      try {
+        const targetTsconfig = resolve(targetPath, 'tsconfig.json');
+        if (!existsSync(targetTsconfig)) {
+          const templateTsconfig = resolve(templateDir, 'tsconfig.json');
+          if (existsSync(templateTsconfig)) {
+            await copyFile(templateTsconfig, targetTsconfig);
+            copiedFiles.push({
+              source: templateTsconfig,
+              destination: targetTsconfig,
+              unit: { kind: 'other', id: 'tsconfig.json' },
+            });
+            console.log('✓ Copied tsconfig.json from template to target');
+          } else {
+            // Generate a minimal tsconfig.json as a fallback
+            const minimalTsconfig = {
+              compilerOptions: {
+                target: 'ES2020',
+                module: 'NodeNext',
+                moduleResolution: 'NodeNext',
+                strict: false,
+                esModuleInterop: true,
+                skipLibCheck: true,
+                resolveJsonModule: true,
+                outDir: 'dist',
+              },
+              include: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts'],
+              exclude: ['node_modules', 'dist', 'build', '.next', '.output', '.turbo'],
+            } as const;
+
+            await writeFile(targetTsconfig, JSON.stringify(minimalTsconfig, null, 2), 'utf-8');
+            copiedFiles.push({
+              source: '[generated tsconfig.json]',
+              destination: targetTsconfig,
+              unit: { kind: 'other', id: 'tsconfig.json' },
+            });
+            console.log('✓ Generated minimal tsconfig.json in target');
+          }
+        }
+      } catch (e) {
+        conflicts.push({
+          unit: { kind: 'other', id: 'tsconfig.json' },
+          issue: `Failed to ensure tsconfig.json: ${e instanceof Error ? e.message : String(e)}`,
+          sourceFile: 'tsconfig.json',
+          targetFile: 'tsconfig.json',
+        });
+      }
+
+      // If the target project has no Mastra index file, copy from template
+      try {
+        const targetMastraIndex = resolve(targetPath, 'src/mastra/index.ts');
+        if (!existsSync(targetMastraIndex)) {
+          const templateMastraIndex = resolve(templateDir, 'src/mastra/index.ts');
+          if (existsSync(templateMastraIndex)) {
+            if (!existsSync(dirname(targetMastraIndex))) {
+              await mkdir(dirname(targetMastraIndex), { recursive: true });
+            }
+            await copyFile(templateMastraIndex, targetMastraIndex);
+            copiedFiles.push({
+              source: templateMastraIndex,
+              destination: targetMastraIndex,
+              unit: { kind: 'other', id: 'mastra-index' },
+            });
+            console.log('✓ Copied src/mastra/index.ts from template to target');
+          }
+        }
+      } catch (e) {
+        conflicts.push({
+          unit: { kind: 'other', id: 'mastra-index' },
+          issue: `Failed to ensure Mastra index file: ${e instanceof Error ? e.message : String(e)}`,
+          sourceFile: 'src/mastra/index.ts',
+          targetFile: 'src/mastra/index.ts',
+        });
+      }
+
       // Commit the copied files
       if (copiedFiles.length > 0) {
         try {
@@ -775,6 +850,11 @@ CRITICAL INSTRUCTIONS:
 4. **Variable vs file names**: A variable name might differ from file name (e.g., filename: ./downloaderTool.ts, export const fetcherTool(...))
 5. **File copying**: Most files are already copied programmatically. Only use copyFile tool for edge cases where additional files are needed
 
+MASTRA INDEX FILE HANDLING (src/mastra/index.ts):
+- Do NOT create a new index file with writeFile.
+- If the index file is missing, use copyFile to copy src/mastra/index.ts from the template.
+- If the index file exists, update it using multiEdit (add imports and registrations). Do not overwrite.
+
 KEY RESPONSIBILITIES:
 1. Resolve any conflicts from the programmatic copy step
 2. Register components in existing Mastra index file (agents, workflows, networks, mcp-servers)
@@ -838,15 +918,16 @@ Template information:
       });
 
       // Add registration tasks for successfully copied files
-      const nonToolFiles = copiedFiles.filter(f => f.unit.kind !== 'tool');
-      if (nonToolFiles.length > 0) {
+      const registrableKinds = new Set(['agent', 'workflow', 'network', 'mcp-server']);
+      const registrableFiles = copiedFiles.filter(f => registrableKinds.has(f.unit.kind as any));
+      if (registrableFiles.length > 0) {
         tasks.push({
           id: 'register-components',
-          content: `Register ${nonToolFiles.length} components in existing Mastra index file (src/mastra/index.ts)`,
+          content: `Register ${registrableFiles.length} components in existing Mastra index file (src/mastra/index.ts)`,
           status: 'pending' as const,
           priority: 'medium' as const,
           dependencies: conflicts.length > 0 ? conflicts.map(c => `conflict-${c.unit.kind}-${c.unit.id}`) : undefined,
-          notes: `Components to register: ${nonToolFiles.map(f => `${f.unit.kind}:${f.unit.id}`).join(', ')}`,
+          notes: `Components to register: ${registrableFiles.map(f => `${f.unit.kind}:${f.unit.id}`).join(', ')}`,
         });
       }
 
