@@ -140,11 +140,11 @@ async function runSingleOutputsTest(
     const generateOptions: any = {
       maxSteps: 1,
       experimental_output: testTool.inputSchema,
-      // structuredOutput: {
-      //   schema: testTool.inputSchema!,
-      //   model: model,
-      //   errorStrategy: 'strict',
-      // },
+      structuredOutput: {
+        schema: testTool.inputSchema!,
+        model: model,
+        errorStrategy: 'strict',
+      },
     };
 
     if (model.provider.includes('openai') || model.modelId.includes('openai')) {
