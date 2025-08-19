@@ -22,8 +22,8 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
 import type { RuntimeContext } from '../../runtime-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores/types';
-import type { inferOutput, TripwireProperties } from './shared.types';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
+import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
 export type { ToolSet } from 'ai';
 
@@ -91,9 +91,8 @@ export type GenerateTextResult<
 > = Omit<OriginalGenerateTextResult<Tools, inferOutput<Output>>, 'experimental_output'> & {
   object?: Output extends undefined ? never : inferOutput<Output>;
   messageList?: MessageList;
-} & TripwireProperties & {
-    scoringData?: ScoringData;
-  };
+} & TripwireProperties &
+  ScoringProperties;
 
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   | Parameters<typeof generateObject<inferOutput<Output>>>[0]
@@ -116,9 +115,8 @@ export type GenerateObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema
 export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   OriginalGenerateObjectResult<inferOutput<Output>> & {
     readonly reasoning?: never;
-  } & TripwireProperties & {
-      scoringData?: ScoringData;
-    };
+  } & TripwireProperties &
+    ScoringProperties;
 
 export type GenerateReturn<
   Tools extends ToolSet,
