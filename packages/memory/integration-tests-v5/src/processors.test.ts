@@ -325,7 +325,7 @@ describe('Memory with Processors', () => {
 
     const requestInputMessages2 = res2.request.body?.input;
 
-    if (!Array.isArray(requestInputMessages)) {
+    if (!Array.isArray(requestInputMessages2)) {
       throw new Error(`responseMessages should be an array`);
     }
 

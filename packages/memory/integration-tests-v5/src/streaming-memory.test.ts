@@ -100,7 +100,7 @@ describe('Memory Streaming Tests', () => {
     const resourceId = 'test-resource-msg-id';
     const customIds: UUID[] = [];
 
-    const _mastra = new Mastra({
+    new Mastra({
       idGenerator: () => {
         const id = randomUUID();
         customIds.push(id);

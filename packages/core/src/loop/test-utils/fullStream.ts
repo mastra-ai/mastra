@@ -18,7 +18,7 @@ import {
 
 export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.fullStream', () => {
-    it('should send maintain conversation history in the llm input', async () => {
+    it('should maintain conversation history in the llm input', async () => {
       const messageList = new MessageList();
       messageList.add(
         [
