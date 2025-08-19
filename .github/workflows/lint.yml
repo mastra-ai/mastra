@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -41,7 +39,7 @@ jobs:
       - name: Lint
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./integrations/**/*" --filter "!@mastra/playground" lint
       - name: Format
-        run: pnpm list-prettier-files | xargs -r prettier --check
+        run: pnpm prettier --check .
 
   prebuild:
     name: Prebuild
