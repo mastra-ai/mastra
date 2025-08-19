@@ -765,6 +765,11 @@ export default withGT(
         destination: "/docs/server-db/snapshots",
         permanent: true,
       },
+      {
+        source: "/examples/agents/hierarchical-multi-agent",
+        destination: "/examples/agents/supervisor-agent",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),
