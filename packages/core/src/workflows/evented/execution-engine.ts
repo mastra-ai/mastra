@@ -1,26 +1,16 @@
 import type { Emitter, ExecutionGraph, SerializedStepFlowEntry, StepResult, Mastra } from '../..';
 import { ExecutionEngine } from '../..';
 import type { RuntimeContext } from '../../di';
-import type { PubSub, Event } from '../../events';
+import type { Event } from '../../events';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
-  protected pubsub: PubSub;
 
-  constructor({
-    mastra,
-    eventProcessor,
-    pubsub,
-  }: {
-    mastra?: Mastra;
-    eventProcessor: WorkflowEventProcessor;
-    pubsub: PubSub;
-  }) {
+  constructor({ mastra, eventProcessor }: { mastra?: Mastra; eventProcessor: WorkflowEventProcessor }) {
     super({ mastra });
     this.eventProcessor = eventProcessor;
-    this.pubsub = pubsub;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -54,6 +44,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     abortController: AbortController;
   }): Promise<TOutput> {
+    const pubsub = this.mastra?.pubsub;
+    if (!pubsub) {
+      throw new Error('No Pubsub adapter configured on the Mastra instance');
+    }
+
     const activePromises: Promise<void>[] = [];
     const tempCb = (event: Event, cb?: () => Promise<void>) => {
       const promise = this.eventProcessor
@@ -66,13 +61,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
         });
       activePromises.push(promise);
     };
-    await this.pubsub.subscribe('workflows', tempCb);
+    await pubsub.subscribe('workflows', tempCb);
 
     if (params.resume) {
       const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
       const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
 
-      await this.pubsub.publish('workflows', {
+      await pubsub.publish('workflows', {
         type: 'workflow.resume',
         data: {
           workflowId: params.workflowId,
@@ -86,7 +81,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         },
       });
     } else {
-      await this.pubsub.publish('workflows', {
+      await pubsub.publish('workflows', {
         type: 'workflow.start',
         data: {
           workflowId: params.workflowId,
@@ -102,22 +97,22 @@ export class EventedExecutionEngine extends ExecutionEngine {
         // console.log('finishCb', event);
         if (event.type === 'workflow.end' && event.data.runId === params.runId) {
           resolve(event.data);
-          await this.pubsub.unsubscribe('workflows-finish', finishCb);
+          await pubsub.unsubscribe('workflows-finish', finishCb);
         } else if (event.type === 'workflow.fail' && event.data.runId === params.runId) {
           resolve(event.data);
-          await this.pubsub.unsubscribe('workflows-finish', finishCb);
+          await pubsub.unsubscribe('workflows-finish', finishCb);
         } else if (event.type === 'workflow.suspend' && event.data.runId === params.runId) {
           resolve(event.data);
-          await this.pubsub.unsubscribe('workflows-finish', finishCb);
+          await pubsub.unsubscribe('workflows-finish', finishCb);
         }
 
         await ack?.();
       };
 
-      this.pubsub.subscribe('workflows-finish', finishCb).catch(() => {});
+      pubsub.subscribe('workflows-finish', finishCb).catch(() => {});
     });
 
-    await this.pubsub.unsubscribe('workflows', tempCb);
+    await pubsub.unsubscribe('workflows', tempCb);
     await Promise.all(activePromises);
 
     if (resultData.prevResult.status === 'failed') {

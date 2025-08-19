@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
@@ -99,7 +100,7 @@ export class Mastra<
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
-  #pubsub?: PubSub;
+  #pubsub: PubSub;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -182,6 +183,8 @@ export class Mastra<
     */
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
+    } else {
+      this.#pubsub = new EventEmitterPubSub();
     }
 
     /*

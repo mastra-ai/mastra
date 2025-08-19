@@ -1,11 +1,15 @@
-import type { PubSub } from './pubsub';
+import type { Mastra } from '../mastra';
 import type { Event } from './types';
 
 export abstract class EventProcessor {
-  protected pubsub: PubSub;
+  protected mastra: Mastra;
 
-  constructor({ pubsub }: { pubsub: PubSub }) {
-    this.pubsub = pubsub;
+  __registerMastra(mastra: Mastra) {
+    this.mastra = mastra;
+  }
+
+  constructor({ mastra }: { mastra: Mastra }) {
+    this.mastra = mastra;
   }
 
   protected abstract process(event: Event): Promise<void>;

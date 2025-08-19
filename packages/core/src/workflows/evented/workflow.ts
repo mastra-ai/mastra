@@ -18,7 +18,6 @@ import type {
 } from '../..';
 import { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Tool } from '../../tools';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -275,17 +274,13 @@ export function createWorkflow<
     any,
     EventedEngineType
   >[],
->(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, pubsub?: PubSub) {
-  pubsub = pubsub ?? new EventEmitterPubSub();
-  const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra!, pubsub });
-  const executionEngine = new EventedExecutionEngine({ mastra: params.mastra!, eventProcessor, pubsub });
-  return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(
-    {
-      ...params,
-      executionEngine,
-    },
-    pubsub,
-  );
+>(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
+  const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
+  const executionEngine = new EventedExecutionEngine({ mastra: params.mastra!, eventProcessor });
+  return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>({
+    ...params,
+    executionEngine,
+  });
 }
 
 export class EventedWorkflow<
@@ -296,11 +291,8 @@ export class EventedWorkflow<
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
-  protected pubsub: PubSub;
-
-  constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, pubsub: PubSub) {
+  constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
     super(params);
-    this.pubsub = pubsub;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -315,19 +307,16 @@ export class EventedWorkflow<
     // Return a new Run instance with object parameters
     const run: Run<TEngineType, TSteps, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
-      new EventedRun(
-        {
-          workflowId: this.id,
-          runId: runIdToUse,
-          executionEngine: this.executionEngine,
-          executionGraph: this.executionGraph,
-          serializedStepGraph: this.serializedStepGraph,
-          mastra: this.mastra,
-          retryConfig: this.retryConfig,
-          cleanup: () => this.runs.delete(runIdToUse),
-        },
-        this.pubsub,
-      );
+      new EventedRun({
+        workflowId: this.id,
+        runId: runIdToUse,
+        executionEngine: this.executionEngine,
+        executionGraph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        mastra: this.mastra,
+        retryConfig: this.retryConfig,
+        cleanup: () => this.runs.delete(runIdToUse),
+      });
 
     this.runs.set(runIdToUse, run);
 
@@ -364,26 +353,20 @@ export class EventedRun<
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > extends Run<TEngineType, TSteps, TInput, TOutput> {
-  protected pubsub: PubSub;
-
-  constructor(
-    params: {
-      workflowId: string;
-      runId: string;
-      executionEngine: ExecutionEngine;
-      executionGraph: ExecutionGraph;
-      serializedStepGraph: SerializedStepFlowEntry[];
-      mastra?: Mastra;
-      retryConfig?: {
-        attempts?: number;
-        delay?: number;
-      };
-      cleanup?: () => void;
-    },
-    pubsub: PubSub,
-  ) {
+  constructor(params: {
+    workflowId: string;
+    runId: string;
+    executionEngine: ExecutionEngine;
+    executionGraph: ExecutionGraph;
+    serializedStepGraph: SerializedStepFlowEntry[];
+    mastra?: Mastra;
+    retryConfig?: {
+      attempts?: number;
+      delay?: number;
+    };
+    cleanup?: () => void;
+  }) {
     super(params);
-    this.pubsub = pubsub;
     this.serializedStepGraph = params.serializedStepGraph;
   }
 
@@ -585,23 +568,23 @@ export class EventedRun<
     };
 
     if (type === 'watch-v2') {
-      this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+      this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
     } else {
-      this.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
+      this.mastra?.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
     }
 
     return () => {
       if (type === 'watch-v2') {
-        this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+        this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
       } else {
-        this.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
+        this.mastra?.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
       }
     };
   }
 
   async cancel() {
     console.log('sending cancel event');
-    await this.pubsub.publish('workflows', {
+    await this.mastra?.pubsub.publish('workflows', {
       type: 'workflow.cancel',
       data: {
         workflowId: this.workflowId,
@@ -612,7 +595,7 @@ export class EventedRun<
 
   async sendEvent(eventName: string, data: any) {
     console.log('sending user event');
-    await this.pubsub.publish('workflows', {
+    await this.mastra?.pubsub.publish('workflows', {
       type: `workflow.user-event.${eventName}`,
       data: {
         workflowId: this.workflowId,
