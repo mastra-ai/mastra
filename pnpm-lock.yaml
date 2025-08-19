@@ -2662,6 +2662,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2674,6 +2677,9 @@ importers:
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.9
+      tsup:
+        specifier: ^8.4.0
+        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
         version: 5.8.3

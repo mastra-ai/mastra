@@ -17,6 +17,7 @@ export type ExecutionContext = {
   runId: string;
   executionPath: number[];
   suspendedPaths: Record<string, number[]>;
+  waitingPaths?: Record<string, number[]>;
   retryConfig: {
     attempts: number;
     delay: number;

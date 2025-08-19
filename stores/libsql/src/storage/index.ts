@@ -21,7 +21,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { Trace } from '@mastra/core/telemetry';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { LegacyEvalsLibSQL } from './domains/legacy-evals';
 import { MemoryLibSQL } from './domains/memory';
 import { StoreOperationsLibSQL } from './domains/operations';
@@ -339,6 +339,40 @@ export class LibSQLStore extends MastraStorage {
   /**
    * WORKFLOWS
    */
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined> {
+    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
+  }
 
   async persistWorkflowSnapshot({
     workflowName,

@@ -256,6 +256,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       activePaths: [],
       suspendedPaths: {},
       serializedStepGraph: [],
+      waitingPaths: {},
       timestamp: Date.now(),
       status: 'success' as WorkflowRunState['status'],
     };
@@ -285,6 +286,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       activePaths: [],
       suspendedPaths: {},
       serializedStepGraph: [],
+      waitingPaths: {},
       timestamp: Date.now(),
       status: 'success' as WorkflowRunState['status'],
     };

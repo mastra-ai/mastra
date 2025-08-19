@@ -33,12 +33,14 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@types/node": "^20.19.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "tsup": "^8.4.0"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.11-0 <0.11.0-0"
