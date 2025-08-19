@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path, { normalize } from 'node:path';
-import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
 import type { RegisterOptions } from 'typescript-paths';
 import { createHandler } from 'typescript-paths';
