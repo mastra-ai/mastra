@@ -5,9 +5,11 @@ description: Example of creating an AI agent in Mastra with a system prompt to d
 
 import { GithubLink } from "@/components/github-link";
 
-# Agent System Prompt
+# Changing the System Prompt
 
-When building AI agents, you need to define their role, personality, and capabilities. A system prompt (provided via `instructions`) acts as the agent's foundational identity. It tells the agent *who* it is and how it should behave. Unlike user messages that ask *what* to do, the system prompt defines the agent's expertise, tone, and approach to all interactions.
+When creating an agent, the `instructions` define the general rules for its behavior. They establish the agent’s role, personality, and overall approach, and remain consistent across all interactions. A `system` prompt can be passed to `.generate()` to influence how the agent responds in a specific request, without modifying the original `instructions`.
+
+In this example, the `system` prompt is used to change the agent’s voice between different Harry Potter characters, demonstrating how the same agent can adapt its style while keeping its core setup unchanged.
 
 ## Prerequisites
 
@@ -19,17 +21,18 @@ OPENAI_API_KEY=<your-api-key>
 
 ## Creating an agent
 
-Create a simple agent that returns facts about a city.
+Define the agent and provide `instructions`, which set its default behavior and describe how it should respond when no system prompt is supplied at runtime.
 
-```typescript filename="src/mastra/agents/example-city-agent.ts" showLineNumbers copy
+```typescript filename="src/mastra/agents/example-harry-potter-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
-export const cityAgent = new Agent({
-  name: "city-agent",
-  description: "Create facts for a city",
-  instructions:
-    "You are an expert in geography and travel. When given the name of a city, respond with one interesting, lesser-known fact about that city. Keep the response concise and factual.",
+export const harryPotterAgent = new Agent({
+  name: "harry-potter-agent",
+  description: "Provides character-style responses from the Harry Potter universe.",
+  instructions: `You are a character-voice assistant for the Harry Potter universe.
+    Reply in the speaking style of the requested character (e.g., Harry, Hermione, Ron, Dumbledore, Snape, Hagrid).
+    If no character is specified, default to Harry Potter.`,
   model: openai("gpt-4o")
 });
 ```
@@ -43,25 +46,53 @@ To use an agent, register it in your main Mastra instance.
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 
-import { cityAgent } from "./agents/example-city-agent";
+import { harryPotterAgent } from "./agents/example-harry-potter-agent";
 
 export const mastra = new Mastra({
   // ...
-  agents: { cityAgent }
+  agents: { harryPotterAgent }
 });
 ```
 
-## Example usage
+## Default character response
 
-Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
+Use `getAgent()` to retrieve the agent and call `generate()` with a prompt. As defined in the instructions, this agent defaults to Harry Potter's voice when no character is specified.
 
-```typescript showLineNumbers copy
+```typescript filename="src/test-harry-potter-agent.ts" showLineNumbers copy
 import "dotenv/config";
-const agent = mastra.getAgent("cityAgent");
 
-const result = await agent.generate("Create an interesting fact about London");
+import { mastra } from "./mastra";
 
-console.log(result.text);
+const agent = mastra.getAgent("harryPotterAgent");
+
+const response = await agent.generate("What is your favorite room in Hogwarts?");
+
+console.log(response.text);
+```
+
+### Changing the character voice
+
+By providing a different system prompt at runtime, the agent’s voice can be switched to another character. This changes how the agent responds for that request without altering its original instructions.
+
+```typescript {8} filename="src/test-harry-potter-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("harryPotterAgent");
+
+const response = await agent.generate([
+  {
+    role: "system",
+    content: "You are Draco Malfoy."
+  },
+  {
+    role: "user",
+    content: "What is your favorite room in Hogwarts?"
+  }
+]);
+
+console.log(response.text);
 ```
 
 <GithubLink
