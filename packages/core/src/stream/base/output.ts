@@ -712,19 +712,6 @@ export class MastraModelOutput extends MastraBase {
 
     fullOutput.response.messages = this.messageList.get.response.aiV5.model();
 
-    // const outputText = this.messageList.get.response.aiV4
-    //   .core()
-    //   .map(m => MessageList.coreContentToString(m.content))
-    //   .join('\n');
-
-    // if (fullOutput.object) {
-    //   try {
-    //     fullOutput.object = JSON.parse(outputText);
-    //   } catch (error) {
-    //     console.error(error);
-    //   }
-    // }
-
     return fullOutput;
   }
 
