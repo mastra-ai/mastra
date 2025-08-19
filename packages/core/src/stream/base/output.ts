@@ -8,11 +8,12 @@ import { MastraBase } from '../../base';
 import type { ObjectOptions } from '../../loop/types';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { getOutputSchema } from '../aisdk/v5/object/schema';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '../aisdk/v5/object/stream-object';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
+import { convertMastraChunkToAISDKv5 } from '../aisdk/v5/transform';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
-import { getOutputSchema } from '../aisdk/v5/object/schema';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
@@ -74,7 +75,27 @@ export class MastraModelOutput extends MastraBase {
   #response: any | undefined;
   #request: any | undefined;
   #usageCount: Record<string, number> = {};
+
   #objectPromise: DelayedPromise<any> = new DelayedPromise();
+  #finishReasonPromise: DelayedPromise<string | undefined> = new DelayedPromise();
+  #usagePromise: DelayedPromise<Record<string, number>> = new DelayedPromise();
+  #warningsPromise: DelayedPromise<any[]> = new DelayedPromise();
+  #providerMetadataPromise: DelayedPromise<Record<string, any> | undefined> = new DelayedPromise();
+  #responsePromise: DelayedPromise<any> = new DelayedPromise();
+  #requestPromise: DelayedPromise<any> = new DelayedPromise();
+  #textPromise: DelayedPromise<string> = new DelayedPromise();
+  #reasoningPromise: DelayedPromise<string> = new DelayedPromise();
+  #reasoningTextPromise: DelayedPromise<string | undefined> = new DelayedPromise();
+  #sourcesPromise: DelayedPromise<any[]> = new DelayedPromise();
+  #filesPromise: DelayedPromise<any[]> = new DelayedPromise();
+  #toolCallsPromise: DelayedPromise<any[]> = new DelayedPromise();
+  #toolResultsPromise: DelayedPromise<any[]> = new DelayedPromise();
+  #stepsPromise: DelayedPromise<StepBufferItem[]> = new DelayedPromise();
+  #totalUsagePromise: DelayedPromise<Record<string, number>> = new DelayedPromise();
+  #contentPromise: DelayedPromise<any> = new DelayedPromise();
+
+  #streamConsumed = false;
+
   public runId: string;
   #options: MastraModelOutputOptions;
 
@@ -195,7 +216,7 @@ export class MastraModelOutput extends MastraBase {
                 files: self.#bufferedByStep.files,
                 toolCalls: self.#bufferedByStep.toolCalls,
                 toolResults: self.#bufferedByStep.toolResults,
-                warnings: self.warnings,
+                warnings: self.#warnings,
                 reasoningDetails: reasoningDetails,
                 providerMetadata: providerMetadata,
                 experimental_providerMetadata: providerMetadata,
@@ -242,7 +263,27 @@ export class MastraModelOutput extends MastraBase {
               }
 
               this.populateUsageCount(chunk.payload.output.usage);
-              chunk.payload.output.usage = self.totalUsage;
+
+              chunk.payload.output.usage = self.#usageCount;
+
+              // Resolve all delayed promises with final values
+              self.#finishReasonPromise.resolve(self.#finishReason);
+              self.#usagePromise.resolve(self.#usageCount);
+              self.#warningsPromise.resolve(self.#warnings);
+              self.#providerMetadataPromise.resolve(self.#providerMetadata);
+              self.#responsePromise.resolve(self.#response);
+              self.#requestPromise.resolve(self.#request);
+              self.#textPromise.resolve(self.#bufferedText.join(''));
+              self.#reasoningPromise.resolve(self.#bufferedReasoning.join(''));
+              const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
+              self.#reasoningTextPromise.resolve(reasoningText);
+              self.#sourcesPromise.resolve(self.#bufferedSources);
+              self.#filesPromise.resolve(self.#bufferedFiles);
+              self.#toolCallsPromise.resolve(self.#toolCalls);
+              self.#toolResultsPromise.resolve(self.#toolResults);
+              self.#stepsPromise.resolve(self.#bufferedSteps);
+              self.#totalUsagePromise.resolve(self.#getTotalUsage());
+              self.#contentPromise.resolve(messageList.get.response.aiV5.stepContent());
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
@@ -252,32 +293,47 @@ export class MastraModelOutput extends MastraBase {
                 let onFinishPayload: any = {};
 
                 if (model.version === 'v2') {
+                  // Convert toolCalls and toolResults to AI SDK v5 format for onFinish
+                  const convertedToolCalls = self.#toolCalls.map(toolCall =>
+                    convertMastraChunkToAISDKv5({ chunk: toolCall }),
+                  );
+                  const convertedToolResults = self.#toolResults.map(toolResult =>
+                    convertMastraChunkToAISDKv5({ chunk: toolResult }),
+                  );
+                  const convertedSources = self.#bufferedSources.map(source =>
+                    convertMastraChunkToAISDKv5({ chunk: source }),
+                  );
+                  const convertedFiles = self.#bufferedFiles
+                    .map(file => {
+                      if (file.type === 'file') {
+                        return (convertMastraChunkToAISDKv5({ chunk: file }) as any)?.file;
+                      }
+                      return;
+                    })
+                    .filter(Boolean);
+
                   onFinishPayload = {
                     text: baseFinishStep.text,
                     warnings: baseFinishStep.warnings ?? [],
                     finishReason: chunk.payload.stepResult.reason,
                     // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
                     content: messageList.get.response.aiV5.stepContent(),
-                    request: this.request,
+                    request: self.#request,
                     error: self.error,
-                    reasoning: this.aisdk.v5.reasoning,
-                    reasoningText: !this.aisdk.v5.reasoningText ? undefined : this.aisdk.v5.reasoningText,
-                    sources: this.aisdk.v5.sources,
-                    files: this.aisdk.v5.files,
+                    reasoning: self.reasoningDetails,
+                    reasoningText: self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined,
+                    sources: convertedSources,
+                    files: convertedFiles,
                     steps: transformSteps({ steps: this.#bufferedSteps }),
-                    response: { ...this.response, messages: messageList.get.response.aiV5.model() },
+                    response: { ...self.#response, messages: messageList.get.response.aiV5.model() },
                     usage: chunk.payload.output.usage,
-                    totalUsage: self.totalUsage,
-                    toolCalls: this.aisdk.v5.toolCalls,
-                    toolResults: this.aisdk.v5.toolResults,
-                    staticToolCalls: this.aisdk.v5.toolCalls.filter((toolCall: any) => toolCall.dynamic === false),
-                    staticToolResults: this.aisdk.v5.toolResults.filter(
-                      (toolResult: any) => toolResult.dynamic === false,
-                    ),
-                    dynamicToolCalls: this.aisdk.v5.toolCalls.filter((toolCall: any) => toolCall.dynamic === true),
-                    dynamicToolResults: this.aisdk.v5.toolResults.filter(
-                      (toolResult: any) => toolResult.dynamic === true,
-                    ),
+                    totalUsage: self.#getTotalUsage(),
+                    toolCalls: convertedToolCalls,
+                    toolResults: convertedToolResults,
+                    staticToolCalls: convertedToolCalls.filter((toolCall: any) => toolCall.dynamic === false),
+                    staticToolResults: convertedToolResults.filter((toolResult: any) => toolResult.dynamic === false),
+                    dynamicToolCalls: convertedToolCalls.filter((toolCall: any) => toolCall.dynamic === true),
+                    dynamicToolResults: convertedToolResults.filter((toolResult: any) => toolResult.dynamic === true),
                   };
                 }
 
@@ -346,6 +402,28 @@ export class MastraModelOutput extends MastraBase {
 
             case 'error':
               self.#error = chunk.payload.error;
+
+              // Reject all delayed promises on error
+              const error =
+                typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
+
+              self.#finishReasonPromise.reject(error);
+              self.#usagePromise.reject(error);
+              self.#warningsPromise.reject(error);
+              self.#providerMetadataPromise.reject(error);
+              self.#responsePromise.reject(error);
+              self.#requestPromise.reject(error);
+              self.#textPromise.reject(error);
+              self.#reasoningPromise.reject(error);
+              self.#reasoningTextPromise.reject(error);
+              self.#sourcesPromise.reject(error);
+              self.#filesPromise.reject(error);
+              self.#toolCallsPromise.reject(error);
+              self.#toolResultsPromise.reject(error);
+              self.#stepsPromise.reject(error);
+              self.#totalUsagePromise.reject(error);
+              self.#contentPromise.reject(error);
+
               break;
           }
 
@@ -365,15 +443,24 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get text() {
-    return this.#bufferedText.join('');
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#textPromise.promise;
   }
 
   get reasoning() {
-    return this.#bufferedReasoning.join('');
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#reasoningPromise.promise;
   }
 
   get reasoningText() {
-    return this.reasoning;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#reasoningTextPromise.promise;
   }
 
   get reasoningDetails() {
@@ -381,15 +468,24 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get sources() {
-    return this.#bufferedSources;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#sourcesPromise.promise;
   }
 
   get files() {
-    return this.#bufferedFiles;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#filesPromise.promise;
   }
 
   get steps() {
-    return this.#bufferedSteps;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#stepsPromise.promise;
   }
 
   teeStream() {
@@ -425,35 +521,59 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get finishReason() {
-    return this.#finishReason;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#finishReasonPromise.promise;
   }
 
   get toolCalls() {
-    return this.#toolCalls;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#toolCallsPromise.promise;
   }
 
   get toolResults() {
-    return this.#toolResults;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#toolResultsPromise.promise;
   }
 
   get usage() {
-    return this.#usageCount;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#usagePromise.promise;
   }
 
   get warnings() {
-    return this.#warnings;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#warningsPromise.promise;
   }
 
   get providerMetadata() {
-    return this.#providerMetadata;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#providerMetadataPromise.promise;
   }
 
   get response() {
-    return this.#response;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#responsePromise.promise;
   }
 
   get request() {
-    return this.#request;
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#requestPromise.promise;
   }
 
   get error() {
@@ -497,6 +617,7 @@ export class MastraModelOutput extends MastraBase {
   // }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
+    this.#streamConsumed = true;
     try {
       await consumeStream({
         stream: this.fullStream.pipeThrough(
@@ -521,26 +642,26 @@ export class MastraModelOutput extends MastraBase {
     });
 
     let object: any;
-    if (this.#options.objectOptions) {
+    if (this.#options.objectOptions?.schema) {
       object = await this.object;
     }
 
     return {
-      text: this.text,
-      usage: this.usage,
-      steps: this.steps,
-      finishReason: this.finishReason,
-      warnings: this.warnings,
-      providerMetadata: this.providerMetadata,
-      request: this.request,
-      reasoning: this.reasoning,
-      reasoningText: this.reasoningText,
-      toolCalls: this.toolCalls,
-      toolResults: this.toolResults,
-      sources: this.sources,
-      files: this.files,
-      response: this.response,
-      totalUsage: this.totalUsage,
+      text: await this.text,
+      usage: await this.usage,
+      steps: await this.steps,
+      finishReason: await this.finishReason,
+      warnings: await this.warnings,
+      providerMetadata: await this.providerMetadata,
+      request: await this.request,
+      reasoning: await this.reasoning,
+      reasoningText: await this.reasoningText,
+      toolCalls: await this.toolCalls,
+      toolResults: await this.toolResults,
+      sources: await this.sources,
+      files: await this.files,
+      response: await this.response,
+      totalUsage: await this.totalUsage,
       object,
       error: this.error,
       // experimental_output: // TODO
@@ -548,16 +669,17 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get totalUsage() {
-    let total = 0;
-    for (const [key, value] of Object.entries(this.#usageCount)) {
-      if (key !== 'totalTokens' && value && !key.startsWith('cached')) {
-        total += value;
-      }
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
     }
-    return {
-      ...this.#usageCount,
-      totalTokens: total,
-    };
+    return this.#totalUsagePromise.promise;
+  }
+
+  get content() {
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
+    return this.#contentPromise.promise;
   }
 
   get aisdk() {
@@ -630,6 +752,48 @@ export class MastraModelOutput extends MastraBase {
   }
 
   get object() {
+    if (!this.#streamConsumed) {
+      void this.consumeStream();
+    }
     return this.#objectPromise.promise;
+  }
+
+  // Internal methods for immediate values - used internally by Mastra
+  // These are not part of the public API
+  _getImmediateToolCalls() {
+    return this.#toolCalls;
+  }
+
+  _getImmediateToolResults() {
+    return this.#toolResults;
+  }
+
+  _getImmediateText() {
+    return this.#bufferedText.join('');
+  }
+
+  _getImmediateUsage() {
+    return this.#usageCount;
+  }
+
+  _getImmediateWarnings() {
+    return this.#warnings;
+  }
+
+  _getImmediateFinishReason() {
+    return this.#finishReason;
+  }
+
+  #getTotalUsage() {
+    let total = 0;
+    for (const [key, value] of Object.entries(this.#usageCount)) {
+      if (key !== 'totalTokens' && value && !key.startsWith('cached')) {
+        total += value;
+      }
+    }
+    return {
+      ...this.#usageCount,
+      totalTokens: total,
+    };
   }
 }

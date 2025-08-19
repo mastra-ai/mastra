@@ -458,9 +458,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
 
           controller.enqueue({ type: 'abort', runId, from: 'AGENT', payload: {} });
 
-          const usage = outputStream.usage;
+          const usage = outputStream._getImmediateUsage();
           const responseMetadata = runState.state.responseMetadata;
-          const text = outputStream.text;
+          const text = outputStream._getImmediateText();
 
           return bail({
             messageId,
@@ -509,7 +509,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
        * Add tool calls to the message list
        */
 
-      const toolCalls = outputStream.toolCalls?.map(chunk => {
+      const toolCalls = outputStream._getImmediateToolCalls()?.map(chunk => {
         return chunk.payload;
       });
 
@@ -535,24 +535,24 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         );
       }
 
-      const finishReason = runState?.state?.stepResult?.reason ?? outputStream.finishReason;
+      const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();
       const hasErrored = runState.state.hasErrored;
-      const usage = outputStream.usage;
+      const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
-      const text = outputStream.text;
+      const text = outputStream._getImmediateText();
 
       const steps = inputData.output?.steps || [];
 
       steps.push(
         new DefaultStepResult({
-          warnings: outputStream.warnings,
+          warnings: outputStream._getImmediateWarnings(),
           providerMetadata: providerOptions,
           finishReason: runState.state.stepResult?.reason,
           content: messageList.get.response.aiV5.modelContent(),
           // @ts-ignore this is how it worked internally for transformResponse which was removed TODO: how should this actually work?
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
           request: request,
-          usage: outputStream.usage as LanguageModelV2Usage,
+          usage: outputStream._getImmediateUsage() as LanguageModelV2Usage,
         }),
       );
 

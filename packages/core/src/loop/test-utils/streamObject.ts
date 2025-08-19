@@ -81,6 +81,75 @@ export function verifyNoObjectGeneratedError(
 
 export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('loopFn', () => {
+    describe('result.object auto consume promise', () => {
+      it('should resolve object promise without manual stream consumption', async () => {
+        const result = loopFn({
+          runId,
+          model: createTestModel(),
+          objectOptions: {
+            schema: z.object({ content: z.string() }),
+          },
+          messageList: new MessageList(),
+        });
+
+        // Test that we can await result.object directly without consuming any stream
+        // This would hang forever without auto-consume
+        const obj = await result.object;
+
+        expect(obj).toStrictEqual({
+          content: 'Hello, world!',
+        });
+      });
+
+      it('should work with array schemas too', async () => {
+        const result = loopFn({
+          runId,
+          model: createTestModel({
+            stream: convertArrayToReadableStream([
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: '{"elements":[{"content":"Hello, world!"}]}' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+              },
+            ]),
+          }),
+          objectOptions: {
+            schema: z.array(z.object({ content: z.string() })),
+          },
+          messageList: new MessageList(),
+        });
+
+        // Test that auto-consume works for arrays too
+        const obj = await result.object;
+
+        expect(obj).toStrictEqual([{ content: 'Hello, world!' }]);
+      });
+
+      it('should still work when stream is manually consumed first', async () => {
+        const result = loopFn({
+          runId,
+          model: createTestModel(),
+          objectOptions: {
+            schema: z.object({ content: z.string() }),
+          },
+          messageList: new MessageList(),
+        });
+
+        // Manually consume stream first (existing pattern)
+        void convertAsyncIterableToArray(result.objectStream);
+
+        // Then await object - should still work
+        const obj = await result.object;
+
+        expect(obj).toStrictEqual({
+          content: 'Hello, world!',
+        });
+      });
+    });
+
     describe('output = "object"', () => {
       describe('result.objectStream', () => {
         it('should send object deltas', async () => {
@@ -461,7 +530,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           // expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
           await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          expect(result.usage).toMatchInlineSnapshot(expectedOutput);
+          expect(await result.usage).toMatchInlineSnapshot(expectedOutput);
         });
       });
 
@@ -499,7 +568,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           //   testProvider: { testKey: 'testValue' },
           // });
           await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          expect(result.providerMetadata).toStrictEqual({
+          expect(await result.providerMetadata).toStrictEqual({
             testProvider: { testKey: 'testValue' },
           });
         });
@@ -612,7 +681,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           // void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
           // currently not a delayed promise
-          expect(result.request).toStrictEqual({
+          expect(await result.request).toStrictEqual({
             body: 'test body',
           });
         });
@@ -752,12 +821,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: new MessageList(),
           });
 
-          await result.consumeStream();
-          expect(result.finishReason).toStrictEqual('stop');
-
-          // TODO: This should be await result.finishReason as a delayed promise instead of awaiting consumeStream
-          // void result.consumeStream();
-          // expect(await result.finishReason).toStrictEqual('stop');
+          // Now finishReason is a delayed promise that auto-consumes
+          expect(await result.finishReason).toStrictEqual('stop');
         });
       });
 

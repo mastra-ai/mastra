@@ -151,26 +151,30 @@ export class AISDKV5OutputStream {
   }
 
   get sources() {
-    return this.#modelOutput.sources.map(source => {
-      return convertMastraChunkToAISDKv5({
-        chunk: source,
-      });
-    });
+    return this.#modelOutput.sources.then(sources => 
+      sources.map(source => {
+        return convertMastraChunkToAISDKv5({
+          chunk: source,
+        });
+      })
+    );
   }
 
   get files() {
-    return this.#modelOutput.files
-      .map(file => {
-        if (file.type === 'file') {
-          return (
-            convertMastraChunkToAISDKv5({
-              chunk: file,
-            }) as any
-          )?.file;
-        }
-        return;
-      })
-      .filter(Boolean);
+    return this.#modelOutput.files.then(files => 
+      files
+        .map(file => {
+          if (file.type === 'file') {
+            return (
+              convertMastraChunkToAISDKv5({
+                chunk: file,
+              }) as any
+            )?.file;
+          }
+          return;
+        })
+        .filter(Boolean)
+    );
   }
 
   get text() {
@@ -182,35 +186,41 @@ export class AISDKV5OutputStream {
   }
 
   get generateTextFiles() {
-    return this.#modelOutput.files
-      .map(file => {
-        if (file.type === 'file') {
-          return (
-            convertMastraChunkToAISDKv5({
-              chunk: file,
-              mode: 'generate',
-            }) as any
-          )?.file;
-        }
-        return;
-      })
-      .filter(Boolean);
+    return this.#modelOutput.files.then(files => 
+      files
+        .map(file => {
+          if (file.type === 'file') {
+            return (
+              convertMastraChunkToAISDKv5({
+                chunk: file,
+                mode: 'generate',
+              }) as any
+            )?.file;
+          }
+          return;
+        })
+        .filter(Boolean)
+    );
   }
 
   get toolCalls() {
-    return this.#modelOutput.toolCalls.map(toolCall => {
-      return convertMastraChunkToAISDKv5({
-        chunk: toolCall,
-      });
-    });
+    return this.#modelOutput.toolCalls.then(toolCalls => 
+      toolCalls.map(toolCall => {
+        return convertMastraChunkToAISDKv5({
+          chunk: toolCall,
+        });
+      })
+    );
   }
 
   get toolResults() {
-    return this.#modelOutput.toolResults.map(toolResult => {
-      return convertMastraChunkToAISDKv5({
-        chunk: toolResult,
-      });
-    });
+    return this.#modelOutput.toolResults.then(toolResults => 
+      toolResults.map(toolResult => {
+        return convertMastraChunkToAISDKv5({
+          chunk: toolResult,
+        });
+      })
+    );
   }
 
   get reasoningText() {
@@ -218,21 +228,27 @@ export class AISDKV5OutputStream {
   }
 
   get reasoning() {
-    return this.#modelOutput.reasoningDetails;
+    return this.#modelOutput.reasoning.then(() => 
+      this.#modelOutput.reasoningDetails
+    );
   }
 
   get response() {
-    return {
-      ...this.#modelOutput.response,
-    };
+    return this.#modelOutput.response.then(response => ({
+      ...response,
+    }));
   }
 
   get steps() {
-    return transformSteps({ steps: this.#modelOutput.steps });
+    return this.#modelOutput.steps.then(steps => 
+      transformSteps({ steps })
+    );
   }
 
   get generateTextSteps() {
-    return transformSteps({ steps: this.#modelOutput.steps });
+    return this.#modelOutput.steps.then(steps => 
+      transformSteps({ steps })
+    );
   }
 
   get content() {
@@ -310,22 +326,22 @@ export class AISDKV5OutputStream {
     }
 
     return {
-      text: this.#modelOutput.text,
-      usage: this.#modelOutput.usage,
-      steps: this.generateTextSteps,
-      finishReason: this.#modelOutput.finishReason,
-      warnings: this.#modelOutput.warnings,
-      providerMetadata: this.#modelOutput.providerMetadata,
-      request: this.#modelOutput.request,
-      reasoning: this.reasoning,
-      reasoningText: this.reasoningText,
-      toolCalls: this.toolCalls,
-      toolResults: this.toolResults,
-      sources: this.sources,
-      files: this.generateTextFiles,
-      response: this.response,
+      text: await this.#modelOutput.text,
+      usage: await this.#modelOutput.usage,
+      steps: await this.generateTextSteps,
+      finishReason: await this.#modelOutput.finishReason,
+      warnings: await this.#modelOutput.warnings,
+      providerMetadata: await this.#modelOutput.providerMetadata,
+      request: await this.#modelOutput.request,
+      reasoning: await this.reasoning,
+      reasoningText: await this.reasoningText,
+      toolCalls: await this.toolCalls,
+      toolResults: await this.toolResults,
+      sources: await this.sources,
+      files: await this.generateTextFiles,
+      response: await this.response,
       content: this.content,
-      totalUsage: this.#modelOutput.totalUsage,
+      totalUsage: await this.#modelOutput.totalUsage,
       error: this.error,
       ...(object ? { object } : {}),
       // experimental_output: // TODO
