@@ -17,7 +17,6 @@ import type {
   WorkflowResult,
 } from '../..';
 import { RuntimeContext } from '../../di';
-import type { PubSub } from '../../events';
 import { Tool } from '../../tools';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
