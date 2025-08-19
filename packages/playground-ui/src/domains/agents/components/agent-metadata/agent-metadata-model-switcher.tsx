@@ -24,8 +24,8 @@ const Models = {
     icon: 'openai.chat',
   },
   anthropic: {
-    models: anthropicModels?.map(model => ({ provider: 'anthropic', model, icon: 'anthropic.chat' })),
-    icon: 'anthropic.chat',
+    models: anthropicModels?.map(model => ({ provider: 'anthropic', model, icon: 'anthropic.messages' })),
+    icon: 'anthropic.messages',
   },
   google: {
     models: googleModels?.map(model => ({ provider: 'google', model, icon: 'GOOGLE' })),

@@ -3,6 +3,7 @@ import { TransformStream } from 'stream/web';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
 import type { TelemetrySettings } from 'ai-v5';
+import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import type { ObjectOptions } from '../../loop/types';
@@ -16,7 +17,6 @@ import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
-import { TripWire } from '../../agent';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {

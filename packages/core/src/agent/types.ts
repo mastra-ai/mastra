@@ -2,6 +2,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
+import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -32,6 +33,10 @@ export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, Me
 export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
+
+export type AgentAISpanProperties = {
+  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+};
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
@@ -137,6 +142,8 @@ export type AgentGenerateOptions<
   inputProcessors?: InputProcessor[];
   /** Output processors to use for this generation call (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
+  /** AI tracing context for span hierarchy and metadata */
+  aiTracingContext?: AITracingContext;
 } & (
   | {
       /**
@@ -210,6 +217,8 @@ export type AgentStreamOptions<
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessor[];
+  /** AI tracing context for span hierarchy and metadata */
+  aiTracingContext?: AITracingContext;
 } & (
   | {
       /**

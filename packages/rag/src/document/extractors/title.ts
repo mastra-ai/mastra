@@ -111,23 +111,6 @@ export class TitleExtractor extends BaseExtractor {
     for (const [key, nodes] of Object.entries(nodesByDocument)) {
       const titleCandidates = await this.getTitlesCandidates(nodes);
       const combinedTitles = titleCandidates.join(', ');
-      const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
-        prompt: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: this.combineTemplate.format({
-                  context: combinedTitles,
-                }),
-              },
-            ],
-          },
-        ],
-      });
 
       let title = '';
 

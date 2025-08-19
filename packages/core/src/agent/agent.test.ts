@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
@@ -22,12 +23,12 @@ import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import type { MastraMessageV2 } from './types';
 import { Agent } from './index';
-import { randomUUID } from 'crypto';
 
 import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 
 config();
 
+// @ts-expect-error mock doesn't need to properly implement everything (for now)
 class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
   messages: Map<string, MastraMessageV1 | MastraMessageV2> = new Map();

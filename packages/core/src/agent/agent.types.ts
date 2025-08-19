@@ -103,7 +103,7 @@ A list of messages. You can either use `prompt` or `messages` but not both.
 export type AgentExecutionOptions<
   OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk'
+  FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk',
 > = {
   instructions?: string;
   context?: CoreMessage[] | ModelMessage[];
@@ -126,13 +126,9 @@ export type AgentExecutionOptions<
 
   abortSignal?: AbortSignal;
 
-  onStepFinish?: FORMAT extends 'aisdk'
-  ? StreamTextOnStepFinishCallback<any>
-  : LoopConfig['onStepFinish'];
+  onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
 
-  onFinish?: FORMAT extends 'aisdk'
-  ? StreamTextOnFinishCallback<any>
-  : LoopConfig['onFinish'];
+  onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
 
   /** Input processors to use for this stream call (overrides agent's default) */
   inputProcessors?: InputProcessor[];
@@ -145,9 +141,12 @@ export type AgentExecutionOptions<
   toolChoice?: ToolChoice<any>;
 
   modelSettings?: LoopOptions['modelSettings'];
-}
+};
 
-export type InnerAgentExecutionOptions = AgentExecutionOptions & { writableStream?: WritableStream<ChunkType>, messages: MessageListInput }
+export type InnerAgentExecutionOptions = AgentExecutionOptions & {
+  writableStream?: WritableStream<ChunkType>;
+  messages: MessageListInput;
+};
 
 /**
  * Options for streaming responses with an agent
@@ -202,12 +201,12 @@ export type AgentVNextStreamOptions<
   Prompt &
   (Output extends undefined
     ? {
-      experimental_output?: StructuredOutput;
-      maxSteps?: number;
-      output?: never;
-    }
+        experimental_output?: StructuredOutput;
+        maxSteps?: number;
+        output?: never;
+      }
     : {
-      output: Output;
-      experimental_output?: never;
-      maxSteps?: never;
-    });
+        output: Output;
+        experimental_output?: never;
+        maxSteps?: never;
+      });

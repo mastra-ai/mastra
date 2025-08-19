@@ -4,6 +4,7 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { AnyAISpan } from './ai-tracing';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
@@ -226,6 +227,7 @@ export interface ToolOptions {
   agentName?: string;
   model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
+  agentAISpan?: AnyAISpan;
 }
 
 /**

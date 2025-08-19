@@ -1,3 +1,4 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -97,7 +98,7 @@ export type SharedMemoryConfig = {
   options?: MemoryConfig;
 
   vector?: MastraVector | false;
-  embedder?: EmbeddingModel<string>;
+  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
 
   processors?: MemoryProcessor[];
 };

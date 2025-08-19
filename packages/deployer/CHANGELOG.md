@@ -1,5 +1,30 @@
 # @mastra/deployer
 
+## 0.14.0-alpha.2
+
+### Patch Changes
+
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+  - @mastra/core@0.14.0-alpha.2
+  - @mastra/server@0.14.0-alpha.2
+
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- bca2ba3: Fix issue where `.json` files couldn't be imported and used with deployers
+- 6313063: Implement model switcher in playground
+- 6dfc4a6: In a previous release analysis of the Mastra configuration was added. A bug was fixed to properly support TypeScript.
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+  - @mastra/server@0.14.0-alpha.1
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes
