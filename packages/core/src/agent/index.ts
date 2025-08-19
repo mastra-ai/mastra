@@ -2276,7 +2276,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           result: GenerateReturn<any, Output, ExperimentalOutput>;
           outputText: string;
           agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-          structuredOutput?: boolean;
           overrideScorers?: MastraScorers;
         }) => Promise<{
           scoringData: {
