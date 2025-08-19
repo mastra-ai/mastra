@@ -152,15 +152,10 @@ Rules:
 - Base explanation only on the verified claims, not prior knowledge
 
 Format:
-{
-    "reason": "The score is {score} because {explanation of faithfulness}"
-}
+"The score is {score} because {explanation of faithfulness}"
 
 Example Responses:
-{
-    "reason": "The score is 1.0 because all claims made in the output are supported by the provided context"
-}
-{
-    "reason": "The score is 0.5 because while half of the claims are supported by the context, the remaining claims either contradict the context or cannot be verified"
+"The score is 1.0 because all claims made in the output are supported by the provided context"
+"The score is 0.5 because while half of the claims are supported by the context, the remaining claims either contradict the context or cannot be verified"
 }`;
 }

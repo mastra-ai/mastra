@@ -80,6 +80,8 @@ export function pgTests() {
       const BASE_SCHEMA = {
         id: { type: 'integer', primaryKey: true, nullable: false },
         name: { type: 'text', nullable: true },
+        createdAt: { type: 'timestamp', nullable: false },
+        updatedAt: { type: 'timestamp', nullable: false },
       } as Record<string, StorageColumn>;
 
       beforeEach(async () => {
@@ -116,7 +118,7 @@ export function pgTests() {
 
         await store.insert({
           tableName: camelCaseTable as TABLE_NAMES,
-          record: { id: '1', name: 'Alice' },
+          record: { id: '1', name: 'Alice', createdAt: new Date(), updatedAt: new Date() },
         });
 
         const row: any = await store.load({
@@ -136,7 +138,7 @@ export function pgTests() {
 
         await store.insert({
           tableName: snakeCaseTable as TABLE_NAMES,
-          record: { id: '2', name: 'Bob' },
+          record: { id: '2', name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
         });
 
         const row: any = await store.load({

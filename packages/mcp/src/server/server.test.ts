@@ -1564,7 +1564,7 @@ describe('MCPServer - Elicitation', () => {
   it('should handle elicitation request with reject response', async () => {
     const mockElicitationHandler = vi.fn(async request => {
       expect(request.message).toBe('Please provide sensitive data');
-      return { action: 'reject' as const };
+      return { action: 'decline' as const };
     });
 
     elicitationClient = new InternalMastraMCPClient({
@@ -1586,7 +1586,7 @@ describe('MCPServer - Elicitation', () => {
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(result.content[0].text)).toEqual({ action: 'reject' });
+    expect(JSON.parse(result.content[0].text)).toEqual({ action: 'decline' });
   });
 
   it('should handle elicitation request with cancel response', async () => {

@@ -20,7 +20,7 @@ export const FeedbackTrigger: React.FC = () => {
           variant="ghost"
           size="sm"
           onClick={handleOpen}
-          className="dark:bg-[#121212] bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
+          className="dark:bg-[#121212]  bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
         >
           <T id="_locale_.layout.feedback">Question? Give us feedback</T>
         </Button>

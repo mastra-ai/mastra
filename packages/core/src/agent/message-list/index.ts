@@ -183,6 +183,14 @@ export class MessageList {
           return userMessages;
         },
       },
+      response: {
+        v2: () => {
+          const responseMessages = Array.from(this.newResponseMessages);
+          this.messages = this.messages.filter(m => !this.newResponseMessages.has(m));
+          this.newResponseMessages.clear();
+          return responseMessages;
+        },
+      },
     };
   }
 
