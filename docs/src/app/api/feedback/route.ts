@@ -260,7 +260,7 @@ async function sendToSlack(feedback: any) {
         elements: [
           {
             type: "mrkdwn",
-            text: `💡 <https://www.notion.so/a24777b679b04a38b713d55690b96dd1|View feedback database in Notion>`,
+            text: `💡 <https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>`,
           },
         ],
       },
