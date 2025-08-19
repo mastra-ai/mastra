@@ -677,7 +677,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       emitter: ee,
       runtimeContext: rc,
       input: (prevResult as any)?.output,
-      resumeData: resumeSteps?.length === 1 && resumeSteps?.[0] === step.step.id ? resumeData : undefined,
+      resumeData:
+        step.type === 'waitForEvent' || (resumeSteps?.length === 1 && resumeSteps?.[0] === step.step.id)
+          ? resumeData
+          : undefined,
       runCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
     });
