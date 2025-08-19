@@ -875,7 +875,6 @@ describe('AI Tracing', () => {
         instances: {
           standard: {
             serviceName: 'standard-service',
-            instanceName: 'standard-instance',
             exporters: [],
           },
           custom: customInstance,
@@ -968,17 +967,14 @@ describe('AI Tracing', () => {
         instances: {
           console: {
             serviceName: 'console-service',
-            instanceName: 'console-instance',
             exporters: [],
           },
           langfuse: {
             serviceName: 'langfuse-service',
-            instanceName: 'langfuse-instance',
             exporters: [],
           },
           datadog: {
             serviceName: 'datadog-service',
-            instanceName: 'datadog-instance',
             exporters: [],
           },
         },

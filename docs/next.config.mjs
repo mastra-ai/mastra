@@ -44,6 +44,18 @@ export default withGT(
             destination: "/api/copilotkit",
           },
           {
+            source: "/en/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/ja/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
             source: "/:locale/docs/_next/:path+",
             destination: "/_next/:path+",
           },

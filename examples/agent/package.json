@@ -6,8 +6,8 @@
   "main": "index.js",
   "version": "0.0.1",
   "dependencies": {
-    "@ai-sdk/google": "latest",
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/google": "^1.2.22",
+    "@ai-sdk/openai": "^1.3.23",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/evals": "latest",

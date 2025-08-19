@@ -1,5 +1,11 @@
 # @mastra/client-js
 
+## 0.10.22-alpha.2
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.2
+
 ## 0.10.22-alpha.1
 
 ### Patch Changes
