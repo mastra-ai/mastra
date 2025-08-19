@@ -384,7 +384,8 @@ describe('Tool Schema Compatibility', () => {
 
             // Google does not support unions of objects and is flakey withnulls
             if (
-              (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null')))
+              isGoogleModel(model) &&
+              (testTool.id.includes('unionObjects') || testTool.id.includes('null'))
               // This works consistently locally but for some reason keeps failing in CI,
               // model.modelId.includes('gpt-4o-mini') ||
               // (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
@@ -396,11 +397,10 @@ describe('Tool Schema Compatibility', () => {
               it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
               return;
             }
-            console.log('are we getting here?');
+
             it.concurrent(
               `should handle ${schemaName} schema`,
               async () => {
-                console.log('running', schemaName);
                 let result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id, schemaName);
 
                 // Sometimes models are flaky, run it again if it fails
