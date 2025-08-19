@@ -109,7 +109,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
           return inputData.stepResult.isContinued;
         })
         .map(({ inputData }) => {
-          const toolCalls = rest.messageList.get.response.v3().filter((message: any) => message.role === 'tool');
+          const toolCalls = rest.messageList.get.response.aiV5
+            .model()
+            .filter((message: any) => message.role === 'tool');
           inputData.output.toolCalls = toolCalls;
 
           return inputData;
@@ -142,7 +144,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
         inputData: {
           messageId: messageId!,
           messages: {
-            all: rest.messageList.get.input.aiV5.model(),
+            all: rest.messageList.get.all.aiV5.model(),
             user: rest.messageList.get.input.aiV5.model(),
             nonUser: [],
           },
