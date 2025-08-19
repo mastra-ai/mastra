@@ -16,7 +16,9 @@ The [getting started guide](/docs/getting-started/installation) scaffolds a proj
 <FileTree>
   <FileTree.Folder name="src" defaultOpen>
     <FileTree.Folder name="mastra" defaultOpen>
-      <FileTree.Folder name="public" />
+      <FileTree.Folder name="public" defaultOpen>
+        <FileTree.File name="static-asset.xyz" />
+      </FileTree.Folder>
       <FileTree.Folder name="agents" />
       <FileTree.Folder name="tools" />
       <FileTree.Folder name="workflows" />
@@ -51,7 +53,7 @@ The build process follows these steps:
 2. **Creates build directory**: Generates a `.mastra/` directory containing:
     - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
     - **`output`**: Contains the production-ready application bundle with `index.mjs`, `instrumentation.mjs`, and project-specific files.
-3. **Copies static assets**: Moves the `public/` folder to the output directory for serving static files.
+3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
 4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
 5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.
 
@@ -65,7 +67,7 @@ After building, Mastra creates a `.mastra/` directory with the following structu
     <FileTree.Folder name="output" defaultOpen>
       <FileTree.File name="index.mjs" />
       <FileTree.File name="instrumentation.mjs" />
-      <FileTree.Folder name="public" />
+      <FileTree.File name="static-asset.xyz" />
     </FileTree.Folder>
   </FileTree.Folder>
 </FileTree>
