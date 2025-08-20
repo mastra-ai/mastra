@@ -27,13 +27,23 @@ export function getOutputSchema({ schema }: { schema?: Parameters<typeof asSchem
     };
   }
 
-  // TODO: Do we need to also wrap Enum type?
-  // example:
-  // {
-  //   type: 'string',
-  //   enum: [ 'element 1', 'element 2', 'element 3' ],
-  //   '$schema': 'http://json-schema.org/draft-07/schema#'
-  // }
+  // Handle enum schemas - wrap in object like AI SDK does
+  if (itemSchema.enum && Array.isArray(itemSchema.enum)) {
+    const enumOutputSchema: JSONSchema7 = {
+      $schema: $schema,
+      type: 'object',
+      properties: {
+        result: { type: itemSchema.type || 'string', enum: itemSchema.enum },
+      },
+      required: ['result'],
+      additionalProperties: false,
+    };
+
+    return {
+      jsonSchema: enumOutputSchema,
+      outputFormat: 'enum',
+    };
+  }
 
   return {
     jsonSchema: jsonSchema,
