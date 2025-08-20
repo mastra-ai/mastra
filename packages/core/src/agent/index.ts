@@ -623,10 +623,10 @@ export class Agent<
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM;
-      if (resolvedModel.specificationVersion === 'v1') {
-        llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
-      } else {
+      if (resolvedModel.specificationVersion === 'v2') {
         llm = new MastraLLMVNext({ model: resolvedModel, mastra: this.#mastra });
+      } else {
+        llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
       }
 
       // Apply stored primitives if available
@@ -772,23 +772,7 @@ export class Agent<
 
     let text = '';
 
-    if (llm.getModel().specificationVersion === 'v1') {
-      const result = await (llm as MastraLLMV1).__text({
-        runtimeContext,
-        messages: [
-          {
-            role: 'system',
-            content: systemInstructions,
-          },
-          {
-            role: 'user',
-            content: JSON.stringify(partsToGen),
-          },
-        ],
-      });
-
-      text = result.text;
-    } else {
+    if (llm.getModel().specificationVersion === 'v2') {
       const result = (llm as MastraLLMVNext).stream({
         runtimeContext,
         messages: [
@@ -804,6 +788,22 @@ export class Agent<
       });
 
       text = await result.text;
+    } else {
+      const result = await (llm as MastraLLMV1).__text({
+        runtimeContext,
+        messages: [
+          {
+            role: 'system',
+            content: systemInstructions,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(partsToGen),
+          },
+        ],
+      });
+
+      text = result.text;
     }
 
     // Strip out any r1 think tags if present
