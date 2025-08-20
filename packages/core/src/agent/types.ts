@@ -5,6 +5,7 @@ import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
+  CoreSystemMessage,
   DefaultLLMStreamOptions,
   DefaultLLMStreamObjectOptions,
   DefaultLLMTextObjectOptions,
@@ -41,6 +42,8 @@ export type ToolsetsInput = Record<string, ToolsInput>;
 
 export type MastraLanguageModel = LanguageModelV1;
 
+export type InstructionsInput = string | CoreSystemMessage | CoreSystemMessage[];
+
 type FallbackFields<S extends ZodTypeAny> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
   | { errorStrategy: 'fallback'; fallbackValue: z.infer<S> };
@@ -67,7 +70,7 @@ export interface AgentConfig<
   id?: TAgentId;
   name: TAgentId;
   description?: string;
-  instructions: DynamicArgument<string>;
+  instructions: DynamicArgument<InstructionsInput>;
   model: DynamicArgument<MastraLanguageModel>;
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
@@ -99,7 +102,7 @@ export type AgentGenerateOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: InstructionsInput;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -181,7 +184,7 @@ export type AgentStreamOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: InstructionsInput;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;

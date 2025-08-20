@@ -4288,6 +4288,118 @@ describe('Dynamic instructions with mastra instance', () => {
   });
 });
 
+describe('CoreMessage instructions support', () => {
+  let dummyModel: MockLanguageModelV1;
+
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'Test response',
+      }),
+    });
+  });
+
+  it('should support single CoreMessage instruction', async () => {
+    const agent = new Agent({
+      name: 'core-message-agent',
+      instructions: {
+        role: 'system',
+        content: 'You are a helpful assistant',
+      },
+      model: dummyModel,
+    });
+
+    const response = await agent.generate('Hello');
+    expect(response.text).toBe('Test response');
+  });
+
+  it('should support CoreMessage array instructions', async () => {
+    const agent = new Agent({
+      name: 'core-message-array-agent',
+      instructions: [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'system', content: 'Always be polite.' },
+      ],
+      model: dummyModel,
+    });
+
+    const response = await agent.generate('Hello');
+    expect(response.text).toBe('Test response');
+  });
+
+  it('should support dynamic CoreMessage instructions', async () => {
+    const agent = new Agent({
+      name: 'dynamic-core-agent',
+      instructions: ({ runtimeContext }) => {
+        const mode = runtimeContext.get('mode');
+        return {
+          role: 'system',
+          content: mode === 'casual' ? 'Be casual and friendly' : 'Be formal and professional',
+        };
+      },
+      model: dummyModel,
+    });
+
+    const context = new RuntimeContext();
+    context.set('mode', 'casual');
+
+    const response = await agent.generate('Hello', { runtimeContext: context });
+    expect(response.text).toBe('Test response');
+  });
+
+  it('should allow override with CoreMessage in generate options', async () => {
+    const agent = new Agent({
+      name: 'override-agent',
+      instructions: 'Default instructions',
+      model: dummyModel,
+    });
+
+    const response = await agent.generate('Hello', {
+      instructions: {
+        role: 'system',
+        content: 'Override instructions',
+      },
+    });
+    expect(response.text).toBe('Test response');
+  });
+
+  it('should maintain backward compatibility with string instructions', async () => {
+    const agent = new Agent({
+      name: 'string-agent',
+      instructions: 'You are a helpful assistant',
+      model: dummyModel,
+    });
+
+    const response = await agent.generate('Hello');
+    expect(response.text).toBe('Test response');
+  });
+
+  it('should convert CoreSystemMessage instructions for voice', async () => {
+    const mockVoice = {
+      addInstructions: vi.fn(),
+      addTools: vi.fn(),
+    };
+
+    const agent = new Agent({
+      name: 'voice-agent',
+      instructions: {
+        role: 'system',
+        content: 'You are a helpful voice assistant.',
+      },
+      model: dummyModel,
+      voice: mockVoice as any,
+    });
+
+    await agent.getVoice();
+
+    // Verify voice received the instruction text
+    expect(mockVoice.addInstructions).toHaveBeenCalledWith('You are a helpful voice assistant.');
+  });
+});
+
 describe('UIMessageWithMetadata support', () => {
   let dummyModel: MockLanguageModelV1;
   let mockMemory: MockMemory;

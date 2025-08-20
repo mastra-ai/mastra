@@ -5,7 +5,7 @@ import type { CoreMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
-import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
+import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, InstructionsInput } from './types';
 
 export type CallSettings = {
   /**
@@ -105,7 +105,7 @@ export type AgentVNextStreamOptions<
   StructuredOutput extends ZodSchema | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: InstructionsInput;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
