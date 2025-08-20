@@ -81,9 +81,9 @@ describe('CloudDeployer Integration Tests', () => {
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
       
       // Verify cloud-specific dependencies
-      expect(packageJson.dependencies['@mastra/loggers']).toBe('latest');
-      expect(packageJson.dependencies['@mastra/libsql']).toBe('latest');
-      expect(packageJson.dependencies['@mastra/cloud']).toBe('latest');
+      expect(packageJson.dependencies['@mastra/loggers']).toBe('0.10.6');
+      expect(packageJson.dependencies['@mastra/libsql']).toBe('0.13.1');
+      expect(packageJson.dependencies['@mastra/cloud']).toBe('0.1.7');
       
       // Verify original dependencies
       expect(packageJson.dependencies['express']).toBe('^4.18.0');
