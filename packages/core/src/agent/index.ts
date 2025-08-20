@@ -2823,7 +2823,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       },
     });
 
-    const streamTextStep = createStep({
+    const streamStep = createStep({
       id: 'stream-text-step',
       inputSchema: z.any(),
       outputSchema: z.any(),
@@ -2845,6 +2845,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const streamResult = llm.stream({
           ...inputData,
           outputProcessors,
+          ...(inputData.output
+            ? {
+                objectOptions: {
+                  schema: inputData.output,
+                },
+              }
+            : {}),
         });
 
         if (options.format === 'aisdk') {
@@ -2852,37 +2859,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
 
         return streamResult;
-      },
-    });
-
-    const streamObjectStep = createStep({
-      id: 'stream-object-step',
-      inputSchema: z.any(),
-      outputSchema: z.any(),
-      execute: async ({ inputData }) => {
-        const outputProcessors =
-          inputData.outputProcessors ||
-          (this.#outputProcessors
-            ? typeof this.#outputProcessors === 'function'
-              ? await this.#outputProcessors({
-                  runtimeContext: inputData.runtimeContext || new RuntimeContext(),
-                })
-              : this.#outputProcessors
-            : []);
-
-        const result = llm.stream({
-          ...inputData,
-          objectOptions: {
-            schema: inputData.output,
-          },
-          outputProcessors,
-        });
-
-        if (options.format === 'aisdk') {
-          return result.aisdk.v5;
-        }
-
-        return result;
       },
     });
 
@@ -3066,7 +3042,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         return loopOptions;
       })
-      .then(!options.output ? streamTextStep : streamObjectStep)
+      .then(streamStep)
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
