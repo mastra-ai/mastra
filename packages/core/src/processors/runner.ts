@@ -8,7 +8,7 @@ import type { Processor } from './index';
 /**
  * Implementation of processor state management
  */
-class ProcessorState {
+export class ProcessorState {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
   public streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [];
