@@ -367,14 +367,6 @@ export class AISDKV5OutputStream<TObjectSchema = undefined> {
     return this.#modelOutput.error;
   }
 
-  get tripwire() {
-    return this.#modelOutput.tripwire;
-  }
-
-  get tripwireReason() {
-    return this.#modelOutput.tripwireReason;
-  }
-
   get object() {
     return this.#modelOutput.object;
   }
