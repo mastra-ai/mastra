@@ -25,7 +25,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
 import { delay } from '../../utils';
 
-import type { StreamTextWithMessagesArgs } from './model.loop.types';
+import type { ModelLoopStreamArgs } from './model.loop.types';
 
 export class MastraLLMVNext extends MastraBase {
   #model: LanguageModelV2;
@@ -121,20 +121,19 @@ export class MastraLLMVNext extends MastraBase {
 
   stream<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined = undefined>({
     messages,
-    onStepFinish,
-    onFinish,
     stopWhen = stepCountIs(5),
-    tools = {},
+    tools = {} as Tools,
     runId,
-    temperature,
+    modelSettings,
     toolChoice = 'auto',
-    experimental_output,
-    telemetry,
+    telemetry_settings,
     threadId,
     resourceId,
     objectOptions,
+    options,
+    outputProcessors,
     // ...rest
-  }: StreamTextWithMessagesArgs<Tools, Z>): MastraModelOutput {
+  }: ModelLoopStreamArgs<Tools, Z>): MastraModelOutput {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -144,27 +143,15 @@ export class MastraLLMVNext extends MastraBase {
       tools: Object.keys(tools || {}),
     });
 
-    let schema: z.ZodType<Z> | Schema<Z> | undefined;
-    if (experimental_output) {
-      this.logger.debug('[LLM] - Using experimental output', {
-        runId,
-      });
-      if (typeof (experimental_output as any).parse === 'function') {
-        schema = experimental_output as z.ZodType<Z>;
-        if (schema instanceof z.ZodArray) {
-          schema = schema._def.type as z.ZodType<Z>;
-        }
-      } else {
-        schema = jsonSchema(experimental_output as JSONSchema7) as unknown as Schema<Z>;
-      }
-    }
-
     if (objectOptions?.schema) {
       objectOptions.schema = this._applySchemaCompat(objectOptions.schema as any);
     }
 
     try {
-      const messageList = new MessageList();
+      const messageList = new MessageList({
+        threadId,
+        resourceId,
+      });
       messageList.add(messages, 'input');
 
       const loopOptions: LoopOptions<Tools> = {
@@ -173,18 +160,18 @@ export class MastraLLMVNext extends MastraBase {
         tools: tools as Tools,
         stopWhen,
         toolChoice,
-        modelSettings: {
-          temperature,
-        },
+        modelSettings,
         telemetry_settings: {
           ...this.experimental_telemetry,
-          ...telemetry,
+          ...telemetry_settings,
         },
         objectOptions,
+        outputProcessors,
         options: {
+          ...options,
           onStepFinish: async props => {
             try {
-              await onStepFinish?.({ ...props, runId: runId! });
+              await options?.onStepFinish?.({ ...props, runId: runId! });
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {
@@ -229,7 +216,7 @@ export class MastraLLMVNext extends MastraBase {
 
           onFinish: async props => {
             try {
-              await onFinish?.({ ...props, runId: runId! });
+              await options?.onFinish?.({ ...props, runId: runId! });
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {
@@ -266,13 +253,6 @@ export class MastraLLMVNext extends MastraBase {
             });
           },
         },
-        // ...rest,
-        // TODO:
-        // experimental_output: schema
-        //     ? (Output.object({
-        //         schema,
-        //     }) as any)
-        //     : undefined,
       };
 
       return loop(loopOptions);
