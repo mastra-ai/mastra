@@ -330,13 +330,14 @@ export abstract class Bundler extends MastraBundler {
     const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
-        const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
-        const pkg = await readJSON(pkgPath);
-
-        if (workspaceMap.has(pkg.name)) {
-          workspaceDependencies.add(pkg.name);
+        if (workspaceMap.has(dep)) {
+          workspaceDependencies.add(dep);
           continue;
         }
+
+        // fix with better pkg root resolving
+        const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
+        const pkg = await readJSON(pkgPath);
 
         dependenciesToInstall.set(dep, pkg.version);
       } catch {
