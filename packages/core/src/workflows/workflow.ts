@@ -739,12 +739,13 @@ export class Workflow<
             | DynamicMapping<TPrevSchema, z.ZodType<any>>;
         }
       | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
+    stepOptions?: { id?: string | null },
   ) {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+        id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         execute: mappingConfig as any,
@@ -785,7 +786,7 @@ export class Workflow<
     );
 
     const mappingStep: any = createStep({
-      id: `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+      id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async ctx => {
