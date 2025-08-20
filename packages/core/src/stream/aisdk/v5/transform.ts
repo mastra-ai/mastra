@@ -4,7 +4,7 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { CoreMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
 import type { ChunkType } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
@@ -17,9 +17,9 @@ type StreamPart =
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
-        all: unknown[];
-        user: unknown[];
-        nonUser: unknown[];
+        all: CoreMessage[];
+        user: CoreMessage[];
+        nonUser: CoreMessage[];
       };
     };
 

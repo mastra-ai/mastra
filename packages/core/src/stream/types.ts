@@ -7,7 +7,7 @@ import type {
   LanguageModelV2ResponseMetadata,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
-import type { StepResult } from 'ai-v5';
+import type { CoreMessage, StepResult } from 'ai-v5';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -31,7 +31,7 @@ export interface TextStartPayload {
   providerMetadata?: SharedV2ProviderMetadata;
 }
 
-interface TextDeltaPayload {
+export interface TextDeltaPayload {
   id: string;
   providerMetadata?: SharedV2ProviderMetadata;
   text: string;
@@ -133,9 +133,9 @@ interface FinishPayload {
     [key: string]: any;
   };
   messages: {
-    all: any[];
-    user: any[];
-    nonUser: any[];
+    all: CoreMessage[];
+    user: CoreMessage[];
+    nonUser: CoreMessage[];
   };
   [key: string]: any;
 }
@@ -166,7 +166,6 @@ interface StepStartPayload {
 interface StepFinishPayload {
   id?: string;
   providerMetadata?: SharedV2ProviderMetadata;
-  reason?: string;
   totalUsage?: LanguageModelV2Usage;
   response?: LanguageModelV2ResponseMetadata;
   messageId?: string;
