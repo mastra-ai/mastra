@@ -29,9 +29,7 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "zod": "^3.25.67"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -42,7 +40,8 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "@internal/types-builder": "workspace:*",
+    "zod": "^3.25.67"
   },
   "keywords": [
     "mastra",
@@ -52,6 +51,7 @@
     "speech-recognition"
   ],
   "peerDependencies": {
-    "@mastra/core": "^0.10.0"
+    "@mastra/core": "^0.10.0",
+    "zod": "^3.0.0 || ^4.0.0"
   }
 }
