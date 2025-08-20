@@ -3,6 +3,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { AISpanType, getSelectedAITracing } from '../ai-tracing';
 import type { AISpan, AnyAISpan, TracingContext } from '../ai-tracing';
+import { wrapMastra } from '../ai-tracing/context';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { ChunkType } from '../stream/types';
@@ -161,11 +162,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
-    parentSpan?: AnyAISpan;
+    currentSpan?: AnyAISpan;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, parentSpan } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, currentSpan } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
@@ -183,8 +184,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     // if parentSpan passed, use it to build workflowSpan
     // otherwise, attempt to create new trace
     let workflowAISpan: AISpan<AISpanType.WORKFLOW_RUN> | undefined;
-    if (parentSpan) {
-      workflowAISpan = parentSpan.createChildSpan({
+    if (currentSpan) {
+      workflowAISpan = currentSpan.createChildSpan({
         type: AISpanType.WORKFLOW_RUN,
         ...spanArgs,
       });
