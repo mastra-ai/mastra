@@ -1622,7 +1622,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
     });
 
-    describe.todo('output = "enum"', () => {
+    describe('output = "enum"', () => {
       it('should stream an enum value', async () => {
         const mockModel = createTestModel({
           stream: convertArrayToReadableStream([
@@ -1655,8 +1655,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
           {
-            "description": undefined,
-            "name": undefined,
             "schema": {
               "$schema": "http://json-schema.org/draft-07/schema#",
               "additionalProperties": false,
