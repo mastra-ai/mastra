@@ -3,6 +3,7 @@ import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
@@ -22,7 +23,7 @@ type AISDKV5OutputStreamOptions = {
 
 type FullStreamType<T> = T extends undefined
   ? ReadableStream<TextStreamPart<ToolSet>>
-  : ReadableStream<ObjectStreamPart<T>>;
+  : ReadableStream<ObjectStreamPart<T extends z.ZodSchema ? Partial<z.infer<T>> : T>>;
 
 export class AISDKV5OutputStream<TObjectSchema = undefined> {
   #modelOutput: MastraModelOutput;
