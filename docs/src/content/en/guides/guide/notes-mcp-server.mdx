@@ -44,9 +44,9 @@ rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
 You should also change the `src/mastra/index.ts` file like so:
 
 ```ts copy filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
@@ -54,8 +54,8 @@ export const mastra = new Mastra({
     url: ":memory:",
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -115,7 +115,7 @@ import { MCPServer } from "@mastra/mcp";
 export const notes = new MCPServer({
   name: "notes",
   version: "0.1.0",
-  tools: {}
+  tools: {},
 });
 ```
 
@@ -123,8 +123,8 @@ Register this MCP server in your Mastra instance at `src/mastra/index.ts`. The k
 
 ```typescript copy filename="src/mastra/index.ts" {4, 15-17}
 import { Mastra } from "@mastra/core";
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
 import { notes } from "./mcp/server";
 
 export const mastra = new Mastra({
@@ -133,8 +133,8 @@ export const mastra = new Mastra({
     url: ":memory:",
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
   mcpServers: {
     notes,
@@ -149,7 +149,7 @@ Resource handlers allow clients to discover and read the content your server man
 ```typescript copy filename="src/mastra/mcp/resources.ts"
 import fs from "fs/promises";
 import path from "path";
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 import type { MCPServerResources, Resource } from "@mastra/mcp";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -161,8 +161,8 @@ const listNoteFiles = async (): Promise<Resource[]> => {
     await fs.mkdir(NOTES_DIR, { recursive: true });
     const files = await fs.readdir(NOTES_DIR);
     return files
-      .filter(file => file.endsWith('.md'))
-      .map(file => {
+      .filter((file) => file.endsWith(".md"))
+      .map((file) => {
         const title = file.replace(".md", "");
         return {
           uri: `notes://${title}`,
@@ -183,7 +183,7 @@ const readNoteFile = async (uri: string): Promise<string | null> => {
   try {
     return await fs.readFile(notePath, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       console.error(`Error reading resource ${uri}:`, error);
     }
     return null;
@@ -210,7 +210,7 @@ export const notes = new MCPServer({
   name: "notes",
   version: "0.1.0",
   tools: {},
-  resources: resourceHandlers
+  resources: resourceHandlers,
 });
 ```
 
@@ -234,8 +234,14 @@ export const writeNoteTool = createTool({
   id: "write",
   description: "Write a new note or overwrite an existing one.",
   inputSchema: z.object({
-    title: z.string().nonempty().describe("The title of the note. This will be the filename."),
-    content: z.string().nonempty().describe("The markdown content of the note."),
+    title: z
+      .string()
+      .nonempty()
+      .describe("The title of the note. This will be the filename."),
+    content: z
+      .string()
+      .nonempty()
+      .describe("The markdown content of the note."),
   }),
   outputSchema: z.string().nonempty(),
   execute: async ({ context }) => {
@@ -287,21 +293,34 @@ Implement the prompts in `src/mastra/mcp/prompts.ts`:
 
 ```typescript copy filename="src/mastra/mcp/prompts.ts"
 import type { MCPServerPrompts } from "@mastra/mcp";
-import { unified } from 'unified';
-import remarkParse from 'remark-parse';
-import matter from 'gray-matter';
-import type { Node } from 'unist';
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import matter from "gray-matter";
+import type { Node } from "unist";
 
 const prompts = [
-  { name: "new_daily_note", description: "Create a new daily note.", version: "1.0.0" },
-  { name: "summarize_note", description: "Give me a TL;DR of the note.", version: "1.0.0" },
-  { name: "brainstorm_ideas", description: "Brainstorm new ideas based on a note.", version: "1.0.0" }
+  {
+    name: "new_daily_note",
+    description: "Create a new daily note.",
+    version: "1.0.0",
+  },
+  {
+    name: "summarize_note",
+    description: "Give me a TL;DR of the note.",
+    version: "1.0.0",
+  },
+  {
+    name: "brainstorm_ideas",
+    description: "Brainstorm new ideas based on a note.",
+    version: "1.0.0",
+  },
 ];
 
 function stringifyNode(node: Node): string {
-  if ('value' in node && typeof node.value === 'string') return node.value;
-  if ('children' in node && Array.isArray(node.children)) return node.children.map(stringifyNode).join('');
-  return '';
+  if ("value" in node && typeof node.value === "string") return node.value;
+  if ("children" in node && Array.isArray(node.children))
+    return node.children.map(stringifyNode).join("");
+  return "";
 }
 
 export async function analyzeMarkdown(md: string) {
@@ -309,37 +328,66 @@ export async function analyzeMarkdown(md: string) {
   const tree = unified().use(remarkParse).parse(content);
   const headings: string[] = [];
   const wordCounts: Record<string, number> = {};
-  let currentHeading = 'untitled';
+  let currentHeading = "untitled";
   wordCounts[currentHeading] = 0;
   tree.children.forEach((node) => {
-    if (node.type === 'heading' && node.depth === 2) {
+    if (node.type === "heading" && node.depth === 2) {
       currentHeading = stringifyNode(node);
       headings.push(currentHeading);
       wordCounts[currentHeading] = 0;
     } else {
       const textContent = stringifyNode(node);
       if (textContent.trim()) {
-        wordCounts[currentHeading] = (wordCounts[currentHeading] || 0) + textContent.split(/\\s+/).length;
+        wordCounts[currentHeading] =
+          (wordCounts[currentHeading] || 0) + textContent.split(/\\s+/).length;
       }
     }
   });
   return { headings, wordCounts };
 }
 
-const getPromptMessages: MCPServerPrompts['getPromptMessages'] = async ({ name, args }) => {
+const getPromptMessages: MCPServerPrompts["getPromptMessages"] = async ({
+  name,
+  args,
+}) => {
   switch (name) {
     case "new_daily_note":
-      const today = new Date().toISOString().split('T')[0];
-      return [{ role: "user", content: { type: "text", text: `Create a new note titled \"${today}\" with sections: \"## Tasks\", \"## Meetings\", \"## Notes\".` } }];
+      const today = new Date().toISOString().split("T")[0];
+      return [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Create a new note titled \"${today}\" with sections: \"## Tasks\", \"## Meetings\", \"## Notes\".`,
+          },
+        },
+      ];
     case "summarize_note":
       if (!args?.noteContent) throw new Error("No content provided");
       const metaSum = await analyzeMarkdown(args.noteContent as string);
-      return [{ role: "user", content: { type: "text", text: `Summarize each section in ≤ 3 bullets.\\n\\n### Outline\\n${metaSum.headings.map(h => `- ${h} (${metaSum.wordCounts[h] || 0} words)`).join("\\n")}`.trim() } }];
+      return [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Summarize each section in ≤ 3 bullets.\\n\\n### Outline\\n${metaSum.headings.map((h) => `- ${h} (${metaSum.wordCounts[h] || 0} words)`).join("\\n")}`.trim(),
+          },
+        },
+      ];
     case "brainstorm_ideas":
       if (!args?.noteContent) throw new Error("No content provided");
       const metaBrain = await analyzeMarkdown(args.noteContent as string);
-      return [{ role: "user", content: { type: "text", text: `Brainstorm 3 ideas for underdeveloped sections below ${args?.topic ? `on ${args.topic}` : '.'}\\n\\nUnderdeveloped sections:\\n${metaBrain.headings.length ? metaBrain.headings.map(h => `- ${h}`).join("\\n") : "- (none, pick any)"}` } }];
-    default: throw new Error(`Prompt \"${name}\" not found`);
+      return [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Brainstorm 3 ideas for underdeveloped sections below ${args?.topic ? `on ${args.topic}` : "."}\\n\\nUnderdeveloped sections:\\n${metaBrain.headings.length ? metaBrain.headings.map((h) => `- ${h}`).join("\\n") : "- (none, pick any)"}`,
+          },
+        },
+      ];
+    default:
+      throw new Error(`Prompt \"${name}\" not found`);
   }
 };
 

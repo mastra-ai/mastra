@@ -61,7 +61,9 @@ npm install @mastra/rag@latest ai@^4.0.0
 ```
 
 <Callout type="info">
-Mastra currently does not support v5 of the AI SDK (see [support thread](https://github.com/mastra-ai/mastra/issues/5470)). For this guide you'll need to use v4.
+  Mastra currently does not support v5 of the AI SDK (see [support
+  thread](https://github.com/mastra-ai/mastra/issues/5470)). For this guide
+  you'll need to use v4.
 </Callout>
 
 ### Define the Agent
@@ -116,18 +118,20 @@ import { Mastra } from "@mastra/core/mastra";
 import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db"
-})
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+});
 
 export const mastra = new Mastra({
-  vectors: { libSqlVector }
+  vectors: { libSqlVector },
 });
 ```
 
 For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
 
 <Callout>
-For the purpose of this guide you are using a hardcoded absolute path to your local LibSQL file, however for production usage this won't work. You should use a remote persistent database then.
+  For the purpose of this guide you are using a hardcoded absolute path to your
+  local LibSQL file, however for production usage this won't work. You should
+  use a remote persistent database then.
 </Callout>
 
 ### Register the Agent with Mastra
@@ -140,12 +144,12 @@ import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
 
 const libSqlVector = new LibSQLVector({
-  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db"
-})
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+});
 
 export const mastra = new Mastra({
   agents: { researchAgent },
-  vectors: { libSqlVector }
+  vectors: { libSqlVector },
 });
 ```
 
@@ -177,7 +181,7 @@ const chunks = await doc.chunk({
   strategy: "recursive",
   maxSize: 512,
   overlap: 50,
-  separators: ["\n\n", "\n", " "]
+  separators: ["\n\n", "\n", " "],
 });
 
 console.log("Number of chunks:", chunks.length);
@@ -204,7 +208,8 @@ Finally, you'll prepare the content for RAG by:
 3. Storing both the embeddings and metadata (original text and source information) in the vector database
 
 <Callout>
-This metadata is crucial as it allows for returning the actual content when the vector store finds relevant matches.
+  This metadata is crucial as it allows for returning the actual content when
+  the vector store finds relevant matches.
 </Callout>
 
 This allows the agent to efficiently search and retrieve relevant information.
@@ -228,7 +233,7 @@ const chunks = await doc.chunk({
   strategy: "recursive",
   maxSize: 512,
   overlap: 50,
-  separators: ["\n\n", "\n", " "]
+  separators: ["\n\n", "\n", " "],
 });
 
 // Generate embeddings

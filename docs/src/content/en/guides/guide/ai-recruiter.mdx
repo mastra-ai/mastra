@@ -34,13 +34,12 @@ import { z } from "zod";
 export const candidateWorkflow = createWorkflow({
   id: "candidate-workflow",
   inputSchema: z.object({
-    resumeText: z.string()
+    resumeText: z.string(),
   }),
   outputSchema: z.object({
-    question: z.string()
-  })
-})
-  .commit()
+    question: z.string(),
+  }),
+}).commit();
 ```
 
 ### Step: Gather Candidate Info
@@ -159,18 +158,18 @@ To the existing `src/mastra/workflows/candidate-workflow.ts` file change the `ca
 export const candidateWorkflow = createWorkflow({
   id: "candidate-workflow",
   inputSchema: z.object({
-    resumeText: z.string()
+    resumeText: z.string(),
   }),
   outputSchema: z.object({
-    question: z.string()
-  })
+    question: z.string(),
+  }),
 })
   .then(gatherCandidateInfo)
   .branch([
-    [async ({ inputData: { isTechnical }}) => isTechnical, askAboutSpecialty],
-    [async ({ inputData: { isTechnical }}) => !isTechnical, askAboutRole],
+    [async ({ inputData: { isTechnical } }) => isTechnical, askAboutSpecialty],
+    [async ({ inputData: { isTechnical } }) => !isTechnical, askAboutRole],
   ])
-  .commit()
+  .commit();
 ```
 
 ### Register the Workflow with Mastra
@@ -208,18 +207,19 @@ You can also test the workflow programmatically by calling [`.createRunAsync()`]
 
 ```ts copy filename="src/test-workflow.ts"
 import { mastra } from "./mastra";
- 
+
 const run = await mastra.getWorkflow("candidateWorkflow").createRunAsync();
- 
+
 const res = await run.start({
   inputData: {
-    resumeText: "Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces."
-  }
+    resumeText:
+      "Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.",
+  },
 });
- 
+
 // Dump the complete workflow result (includes status, steps and result)
 console.log(JSON.stringify(res, null, 2));
- 
+
 // Get the workflow output value
 if (res.status === "success") {
   console.log(`Output value: ${res.result.question}`);
