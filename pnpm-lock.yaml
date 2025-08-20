@@ -511,13 +511,13 @@ importers:
         version: link:../../packages/cli
       tsx:
         specifier: ^4.19.3
-        version: 4.20.3
+        version: 4.20.4
 
   explorations/longmemeval:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.23
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^1.1.3
         version: 1.1.3
@@ -578,7 +578,7 @@ importers:
         version: 20.19.9
       tsx:
         specifier: ^4.19.2
-        version: 4.20.3
+        version: 4.20.4
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
@@ -706,7 +706,7 @@ importers:
     dependencies:
       mem0ai:
         specifier: ^2.1.36
-        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250803.0)(@google/genai@1.14.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
+        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250819.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -914,7 +914,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1166,8 +1166,8 @@ importers:
         specifier: ^10.12.4
         version: 10.12.4
       posthog-js:
-        specifier: ^1.258.5
-        version: 1.258.5
+        specifier: ^1.260.1
+        version: 1.260.1
       prism-react-renderer:
         specifier: ^2.4.1
         version: 2.4.1(react@19.1.1)
@@ -1310,7 +1310,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1398,7 +1398,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.0
         version: '@ai-sdk/openai@2.0.0(zod@3.25.76)'
@@ -1698,7 +1698,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1836,7 +1836,7 @@ importers:
         version: 1.2.12(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
         version: 1.17.1(hono@4.8.12)
@@ -1872,16 +1872,16 @@ importers:
         version: 0.0.7(@modelcontextprotocol/sdk@1.17.3)(hono@4.8.12)
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
+        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
       tsx:
         specifier: ^4.19.4
-        version: 4.20.3
+        version: 4.20.4
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -1899,7 +1899,7 @@ importers:
         version: link:../mcp
       '@modelcontextprotocol/sdk':
         specifier: ^1.13.0
-        version: 1.13.3
+        version: 1.17.3
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -1951,22 +1951,22 @@ importers:
         version: 4.8.12
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
+        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
       tsx:
         specifier: ^4.19.4
-        version: 4.20.3
+        version: 4.20.4
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)
 
   packages/mcp-registry-registry:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.13.0
-        version: 1.13.3
+        version: 1.17.3
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -2009,22 +2009,22 @@ importers:
         version: 4.8.12
       tsup:
         specifier: ^8.5.0
-        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
+        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
       tsx:
         specifier: ^4.20.3
-        version: 4.20.3
+        version: 4.20.4
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)
 
   packages/mcp/integration-tests:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@ai-sdk/react':
         specifier: ^1.2.12
         version: 1.2.12(react@19.1.1)(zod@3.25.76)
@@ -2110,7 +2110,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2155,7 +2155,7 @@ importers:
         version: 1.2.21(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^1.3.0
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@ai-sdk/react':
         specifier: ^1.2.1
         version: 1.2.12(react@19.1.1)(zod@3.25.76)
@@ -2579,7 +2579,7 @@ importers:
         version: 1.2.10(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2801,8 +2801,8 @@ importers:
   stores/clickhouse:
     dependencies:
       '@clickhouse/client':
-        specifier: ^1.12.0
-        version: 1.12.0
+        specifier: ^1.12.1
+        version: 1.12.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2842,8 +2842,8 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250803.0
-        version: 4.20250803.0
+        specifier: ^4.20250816.0
+        version: 4.20250819.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2869,8 +2869,8 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250712.2
-        version: 4.20250712.2(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+        specifier: ^4.20250813.1
+        version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -2888,8 +2888,8 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250803.0
-        version: 4.20250803.0
+        specifier: ^4.20250816.0
+        version: 4.20250819.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2915,8 +2915,8 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250712.2
-        version: 4.20250712.2(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+        specifier: ^4.20250813.1
+        version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -3503,8 +3503,8 @@ importers:
         version: 3.25.76
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250803.0
-        version: 4.20250803.0
+        specifier: ^4.20250816.0
+        version: 4.20250819.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3650,8 +3650,8 @@ importers:
         specifier: ^6.7.1
         version: 6.7.1(encoding@0.1.13)
       '@google-cloud/text-to-speech':
-        specifier: ^6.1.0
-        version: 6.1.0
+        specifier: ^6.2.0
+        version: 6.2.0
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -3685,7 +3685,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.14.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
+        version: 1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.2.1
@@ -3969,7 +3969,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.23(zod@3.25.76)
+        version: 1.3.24(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
         version: 1.17.1(hono@4.8.12)
@@ -4087,12 +4087,6 @@ packages:
 
   '@ai-sdk/openai-compatible@0.2.16':
     resolution: {integrity: sha512-LkvfcM8slJedRyJa/MiMiaOzcMjV1zNDwzTHEGz7aAsgsQV0maLfmJRi/nuSwf5jmp0EouC+JXXDUj2l94HgQw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.0.0
-
-  '@ai-sdk/openai@1.3.23':
-    resolution: {integrity: sha512-86U7rFp8yacUAOE/Jz8WbGcwMCqWvjK33wk5DXkfnAOEn3mx2r7tNSJdjukQFZbAK97VMXGPPHxF+aEARDXRXQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -5384,45 +5378,45 @@ packages:
     resolution: {integrity: sha512-Lbt0/Q9W9BJtGz1IITdmeqal7y1zp9EaxOEMvsTEDhOxKf/0F/M1d0gJmHEU0puQzYPp9zJsIWC2yJjbgy3Y3Q==}
     engines: {node: '>=18.17.0'}
 
-  '@clickhouse/client-common@1.12.0':
-    resolution: {integrity: sha512-cyI4n7u9jK30d9q1q0ceQ7IwJ/MtTs5HxoQfc8yHpN+ok5wqaU2jAtq5hpa1z7C7sS1pDy/ZOFmOzg1v1F683g==}
+  '@clickhouse/client-common@1.12.1':
+    resolution: {integrity: sha512-ccw1N6hB4+MyaAHIaWBwGZ6O2GgMlO99FlMj0B0UEGfjxM9v5dYVYql6FpP19rMwrVAroYs/IgX2vyZEBvzQLg==}
 
-  '@clickhouse/client@1.12.0':
-    resolution: {integrity: sha512-vJUSX8THhTzlVn0WxPukVjOgNRaSoY02ubQkB0LpqNoHFxXuF5jQZZAYvGZWpBGbYQ/4gfPrqu8g4TX5UKeNxA==}
+  '@clickhouse/client@1.12.1':
+    resolution: {integrity: sha512-7ORY85rphRazqHzImNXMrh4vsaPrpetFoTWpZYueCO2bbO6PXYDXp/GQ4DgxnGIqbWB/Di1Ai+Xuwq2o7DJ36A==}
     engines: {node: '>=16'}
 
-  '@cloudflare/workerd-darwin-64@1.20250712.0':
-    resolution: {integrity: sha512-M6S6a/LQ0Jb0R+g0XhlYi1adGifvYmxA5mD/i9TuZZgjs2bIm5ELuka/n3SCnI98ltvlx3HahRaHagAtOilsFg==}
+  '@cloudflare/workerd-darwin-64@1.20250816.0':
+    resolution: {integrity: sha512-yN1Rga4ufTdrJPCP4gEqfB47i1lWi3teY5IoeQbUuKnjnCtm4pZvXur526JzCmaw60Jx+AEWf5tizdwRd5hHBQ==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
 
-  '@cloudflare/workerd-darwin-arm64@1.20250712.0':
-    resolution: {integrity: sha512-7sFzn6rvAcnLy7MktFL42dYtzL0Idw/kiUmNf2P3TvsBRoShhLK5ZKhbw+NAhvU8e4pXWm5lkE0XmpieA0zNjw==}
+  '@cloudflare/workerd-darwin-arm64@1.20250816.0':
+    resolution: {integrity: sha512-WyKPMQhbU+TTf4uDz3SA7ZObspg7WzyJMv/7J4grSddpdx2A4Y4SfPu3wsZleAOIMOAEVi0A1sYDhdltKM7Mxg==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
 
-  '@cloudflare/workerd-linux-64@1.20250712.0':
-    resolution: {integrity: sha512-EFRrGe/bqK7NHtht7vNlbrDpfvH3eRvtJOgsTpEQEysDjVmlK6pVJxSnLy9Hg1zlLY15IfhfGC+K2qisseHGJQ==}
+  '@cloudflare/workerd-linux-64@1.20250816.0':
+    resolution: {integrity: sha512-NWHOuFnVBaPRhLHw8kjPO9GJmc2P/CTYbnNlNm0EThyi57o/oDx0ldWLJqEHlrdEPOw7zEVGBqM/6M+V9agC6w==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
 
-  '@cloudflare/workerd-linux-arm64@1.20250712.0':
-    resolution: {integrity: sha512-rG8JUleddhUHQVwpXOYv0VbL0S9kOtR9PNKecgVhFpxEhC8aTeg2HNBBjo8st7IfcUvY8WaW3pD3qdAMZ05UwQ==}
+  '@cloudflare/workerd-linux-arm64@1.20250816.0':
+    resolution: {integrity: sha512-FR+/yhaWs7FhfC3GKsM3+usQVrGEweJ9qyh7p+R6HNwnobgKr/h5ATWvJ4obGJF6ZHHodgSe+gOSYR7fkJ1xAQ==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
 
-  '@cloudflare/workerd-windows-64@1.20250712.0':
-    resolution: {integrity: sha512-qS8H5RCYwE21Om9wo5/F807ClBJIfknhuLBj16eYxvJcj9JqgAKWi12BGgjyGxHuJJjeoQ63lr4wHAdbFntDDg==}
+  '@cloudflare/workerd-windows-64@1.20250816.0':
+    resolution: {integrity: sha512-0lqClj2UMhFa8tCBiiX7Zhd5Bjp0V+X8oNBG6V6WsR9p9/HlIHAGgwRAM7aYkyG+8KC8xlbC89O2AXUXLpHx0g==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20250803.0':
-    resolution: {integrity: sha512-Zgfb9y971379/b0fDvSkH6l830dVDanO5kxUHbg2TI5kQDWMRtFPsAntRtEwRqOU7aFFDrDd4gp/bcs6+ZokUQ==}
+  '@cloudflare/workers-types@4.20250819.0':
+    resolution: {integrity: sha512-TGghrtaQzT2k71gdiUOxwwt3owni1rWX3+BBTk1K/H0vmsinwEJsGmEJRdvIuQO72Davtfz9u6LBbR1uNoE1Qw==}
 
   '@codemirror/autocomplete@6.18.6':
     resolution: {integrity: sha512-PHHBXFomUs5DF+9tCOM/UoW6XQ4R44lLNNhRaW9PKPTU0D7lIjRg3ElxaJnTwsl/oHiR93WSXDBrekhoUGCPtg==}
@@ -6262,12 +6256,12 @@ packages:
     resolution: {integrity: sha512-7/5LRgykyOfQENcm6hDKP8SX/u9XxE5YOiWOkgkwcoO+cG8xT/cyOvp9wwN3IxfdYgpHs8CE7Nq2PKX2lNaEXw==}
     engines: {node: '>=14'}
 
-  '@google-cloud/text-to-speech@6.1.0':
-    resolution: {integrity: sha512-QP8ESj0/QWyWDVI2wD0azoToxeBJ86IENajTTxgWkSXAki474qwv4hZgt5AHCtMJWHmWG5OnVNHzah5+zfbTlg==}
+  '@google-cloud/text-to-speech@6.2.0':
+    resolution: {integrity: sha512-CsmGFNZVL0mPrgcrkBPJ5LB8TPEKiPsER0N5h3nAkkPIeyAGGn3YwuRWyQhDYI5/XWLp11LlDEWqL8B14aYtNg==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.14.0':
-    resolution: {integrity: sha512-jirYprAAJU1svjwSDVCzyVq+FrJpJd5CSxR/g2Ga/gZ0ZYZpcWjMS75KJl9y71K1mDN+tcx6s21CzCbB2R840g==}
+  '@google/genai@1.15.0':
+    resolution: {integrity: sha512-4CSW+hRTESWl3xVtde7pkQ3E+dDFhDq+m4ztmccRctZfx1gKy3v0M9STIMGk6Nq0s6O2uKMXupOZQ1JGorXVwQ==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.11.0
@@ -7010,10 +7004,6 @@ packages:
 
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
-
-  '@modelcontextprotocol/sdk@1.13.3':
-    resolution: {integrity: sha512-bGwA78F/U5G2jrnsdRkPY3IwIwZeWUEfb5o764b79lb0rJmMT76TLwKhdNZOWakOQtedYefwIR4emisEMvInKA==}
-    engines: {node: '>=18'}
 
   '@modelcontextprotocol/sdk@1.17.3':
     resolution: {integrity: sha512-JPwUKWSsbzx+DLFznf/QZ32Qa+ptfbUlHhRLrBQBAFu9iI1iYvizM4p+zhhRDceSsPutXp4z+R/HPVphlIiclg==}
@@ -9571,10 +9561,6 @@ packages:
 
   '@types/long@4.0.2':
     resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
-
-  '@types/long@5.0.0':
-    resolution: {integrity: sha512-eQs9RsucA/LNjnMoJvWG/nXa7Pot/RbBzilF/QRIU/xRl+0ApxrSUFsV5lmf01SvSlqMzJ7Zwxe440wmz2SJGA==}
-    deprecated: This is a stub types definition. long provides its own type definitions, so you do not need this installed.
 
   '@types/mdast@4.0.4':
     resolution: {integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==}
@@ -12199,8 +12185,8 @@ packages:
     resolution: {integrity: sha512-V6eky/xz2mcKfAd1Ioxyd6nmA61gao3n01C+YeuIwu3vzM9EDR6wcVzMSIbLMDXWeoi9SHYctXuKYC5uJUT3eQ==}
     engines: {node: '>=14'}
 
-  google-gax@5.0.1-rc.1:
-    resolution: {integrity: sha512-kz3HlvYvmQVBcam2C7FOphE6xrhjrlbKrRpNxvWYAmVHi+SCeMReWcKp64WJXNL7clSYAgYer3gCKVTTF/+wPA==}
+  google-gax@5.0.1:
+    resolution: {integrity: sha512-I8fTFXvIG8tYpiDxDXwCXoFsTVsvHJ2GA7DToH+eaRccU8r3nqPMFghVb2GdHSVcu4pq9ScRyB2S1BjO+vsa1Q==}
     engines: {node: '>=18'}
 
   google-logging-utils@0.0.2:
@@ -13675,8 +13661,8 @@ packages:
     resolution: {integrity: sha512-r9deDe9p5FJUPZAk3A59wGH7Ii9YrjjWw0jmw/liSbHl2CHiyXj6FcDXDu2K3TjVAXqiJdaw3xxwlZZr9E6nHg==}
     hasBin: true
 
-  miniflare@4.20250712.2:
-    resolution: {integrity: sha512-cZ8WyQBwqfjYLjd61fDR4/j0nAVbjB3Wxbun/brL9S5FAi4RlTR0LyMTKsIVA0s+nL4Pg9VjVMki4M/Jk2cz+Q==}
+  miniflare@4.20250816.0:
+    resolution: {integrity: sha512-HuakGvmsU8aC60wsHP7Su+BgJFly1GmKbmbR/nqIz0Xlk6wcd/pp3vZ7jtbT3unf+aeBOlEO/CzcUb8xFsJLdA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -14637,8 +14623,8 @@ packages:
     resolution: {integrity: sha512-Jtc2612XINuBjIl/QTWsV5UvE8UHuNblcO3vVADSrKsrc6RqGX6lOW1cEo3CM2v0XG4Nat8nI+YM7/f26VxXLw==}
     engines: {node: '>=12'}
 
-  posthog-js@1.258.5:
-    resolution: {integrity: sha512-Tx6CzS8MsGAQGPrQth5TbkGxGQgAY01SktNW773/KDmVOWiRVZq/WQF/MRJRiuFxJ7qjethZQi3aBWfWKdr1RA==}
+  posthog-js@1.260.1:
+    resolution: {integrity: sha512-DD8ZSRpdScacMqtqUIvMFme8lmOWkOvExG8VvjONE7Cm3xpRH5xXpfrwMJE4bayTGWKMx4ij6SfphK6dm/o2ug==}
     peerDependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
@@ -16019,11 +16005,6 @@ packages:
     peerDependencies:
       typescript: ^5.8.3
 
-  tsx@4.20.3:
-    resolution: {integrity: sha512-qjbnuR9Tr+FJOMBqJCW5ehvIo/buZq7vH7qD7JziU98h6l3qGy0a/yPFjwO+y0/T7GFpNgNAvEcPPVfyT8rrPQ==}
-    engines: {node: '>=18.0.0'}
-    hasBin: true
-
   tsx@4.20.4:
     resolution: {integrity: sha512-yyxBKfORQ7LuRt/BQKBXrpcq59ZvSW0XxwfjAt3w2/8PmdxaFzijtMhTawprSHhpzeM5BgU2hXHG3lklIERZXg==}
     engines: {node: '>=18.0.0'}
@@ -16657,8 +16638,8 @@ packages:
     resolution: {integrity: sha512-JNjcULU2e4KJwUNv6CHgI46UvDGitb6dGryHajXTDiLgg1/RiGoPSDw4kZfYnwGtEXf2ZMeIewDQgFGzkCB2Sg==}
     engines: {node: '>=12.17'}
 
-  workerd@1.20250712.0:
-    resolution: {integrity: sha512-7h+k1OxREpiZW0849g0uQNexRWMcs5i5gUGhJzCY8nIx6Tv4D/ndlXJ47lEFj7/LQdp165IL9dM2D5uDiedZrg==}
+  workerd@1.20250816.0:
+    resolution: {integrity: sha512-5gIvHPE/3QVlQR1Sc1NdBkWmqWj/TSgIbY/f/qs9lhiLBw/Da+HbNBTVYGjvwYqEb3NQ+XQM4gAm5b2+JJaUJg==}
     engines: {node: '>=16'}
     hasBin: true
 
@@ -16935,12 +16916,6 @@ snapshots:
       zod: 3.25.76
 
   '@ai-sdk/openai-compatible@0.2.16(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      zod: 3.25.76
-
-  '@ai-sdk/openai@1.3.23(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
@@ -19159,28 +19134,28 @@ snapshots:
     dependencies:
       csstype: 3.1.3
 
-  '@clickhouse/client-common@1.12.0': {}
+  '@clickhouse/client-common@1.12.1': {}
 
-  '@clickhouse/client@1.12.0':
+  '@clickhouse/client@1.12.1':
     dependencies:
-      '@clickhouse/client-common': 1.12.0
+      '@clickhouse/client-common': 1.12.1
 
-  '@cloudflare/workerd-darwin-64@1.20250712.0':
+  '@cloudflare/workerd-darwin-64@1.20250816.0':
     optional: true
 
-  '@cloudflare/workerd-darwin-arm64@1.20250712.0':
+  '@cloudflare/workerd-darwin-arm64@1.20250816.0':
     optional: true
 
-  '@cloudflare/workerd-linux-64@1.20250712.0':
+  '@cloudflare/workerd-linux-64@1.20250816.0':
     optional: true
 
-  '@cloudflare/workerd-linux-arm64@1.20250712.0':
+  '@cloudflare/workerd-linux-arm64@1.20250816.0':
     optional: true
 
-  '@cloudflare/workerd-windows-64@1.20250712.0':
+  '@cloudflare/workerd-windows-64@1.20250816.0':
     optional: true
 
-  '@cloudflare/workers-types@4.20250803.0': {}
+  '@cloudflare/workers-types@4.20250819.0': {}
 
   '@codemirror/autocomplete@6.18.6':
     dependencies:
@@ -19814,13 +19789,13 @@ snapshots:
       - supports-color
     optional: true
 
-  '@google-cloud/text-to-speech@6.1.0':
+  '@google-cloud/text-to-speech@6.2.0':
     dependencies:
-      google-gax: 5.0.1-rc.1
+      google-gax: 5.0.1
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.14.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)':
+  '@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)':
     dependencies:
       google-auth-library: 9.15.1(encoding@0.1.13)
       ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
@@ -20650,23 +20625,6 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/sdk@1.13.3':
-    dependencies:
-      ajv: 6.12.6
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.3
-      express: 5.1.0
-      express-rate-limit: 7.5.0(express@5.1.0)
-      pkce-challenge: 5.0.0
-      raw-body: 3.0.0
-      zod: 3.25.76
-      zod-to-json-schema: 3.24.6(zod@3.25.76)
-    transitivePeerDependencies:
-      - supports-color
-
   '@modelcontextprotocol/sdk@1.17.3':
     dependencies:
       ajv: 6.12.6
@@ -20914,7 +20872,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20963,7 +20921,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22044,7 +22002,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -23834,10 +23792,6 @@ snapshots:
   '@types/lodash@4.17.20': {}
 
   '@types/long@4.0.2': {}
-
-  '@types/long@5.0.0':
-    dependencies:
-      long: 5.3.2
 
   '@types/mdast@4.0.4':
     dependencies:
@@ -27076,11 +27030,10 @@ snapshots:
       - encoding
       - supports-color
 
-  google-gax@5.0.1-rc.1:
+  google-gax@5.0.1:
     dependencies:
       '@grpc/grpc-js': 1.13.4
       '@grpc/proto-loader': 0.7.15
-      '@types/long': 5.0.0
       abort-controller: 3.0.0
       duplexify: 4.1.3
       google-auth-library: 10.2.1
@@ -28680,11 +28633,11 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250803.0)(@google/genai@1.14.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
+  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250819.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.0)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
     dependencies:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
-      '@cloudflare/workers-types': 4.20250803.0
-      '@google/genai': 1.14.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
+      '@cloudflare/workers-types': 4.20250819.0
+      '@google/genai': 1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       '@langchain/core': 0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76))
       '@mistralai/mistralai': 1.7.2(zod@3.25.76)
       '@qdrant/js-client-rest': 1.15.0(typescript@5.8.3)
@@ -28973,7 +28926,7 @@ snapshots:
 
   mini-svg-data-uri@1.4.4: {}
 
-  miniflare@4.20250712.2(bufferutil@4.0.9)(utf-8-validate@6.0.3):
+  miniflare@4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       acorn: 8.14.0
@@ -28983,7 +28936,7 @@ snapshots:
       sharp: 0.33.5
       stoppable: 1.1.0
       undici: 7.12.0
-      workerd: 1.20250712.0
+      workerd: 1.20250816.0
       ws: 8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       youch: 4.1.0-beta.10
       zod: 3.22.3
@@ -29863,15 +29816,6 @@ snapshots:
       postcss: 8.5.6
       ts-node: 10.9.2(@types/node@20.19.9)(typescript@5.8.3)
 
-  postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.0):
-    dependencies:
-      lilconfig: 3.1.3
-    optionalDependencies:
-      jiti: 2.4.2
-      postcss: 8.5.6
-      tsx: 4.20.3
-      yaml: 2.8.0
-
   postcss-load-config@6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(yaml@2.8.0):
     dependencies:
       lilconfig: 3.1.3
@@ -29917,7 +29861,7 @@ snapshots:
 
   postgres@3.4.7: {}
 
-  posthog-js@1.258.5:
+  posthog-js@1.260.1:
     dependencies:
       core-js: 3.43.0
       fflate: 0.4.8
@@ -31564,35 +31508,6 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  tsup@8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0):
-    dependencies:
-      bundle-require: 5.1.0(esbuild@0.25.8)
-      cac: 6.7.14
-      chokidar: 4.0.3
-      consola: 3.4.2
-      debug: 4.4.1(supports-color@8.1.1)
-      esbuild: 0.25.8
-      fix-dts-default-cjs-exports: 1.0.1
-      joycon: 3.1.1
-      picocolors: 1.1.1
-      postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.0)
-      resolve-from: 5.0.0
-      rollup: 4.46.2
-      source-map: 0.8.0-beta.0
-      sucrase: 3.35.0
-      tinyexec: 0.3.2
-      tinyglobby: 0.2.14
-      tree-kill: 1.2.2
-    optionalDependencies:
-      '@microsoft/api-extractor': 7.52.8(@types/node@20.19.9)
-      postcss: 8.5.6
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - jiti
-      - supports-color
-      - tsx
-      - yaml
-
   tsup@8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0):
     dependencies:
       bundle-require: 5.1.0(esbuild@0.25.8)
@@ -31626,13 +31541,6 @@ snapshots:
     dependencies:
       tslib: 1.14.1
       typescript: 5.8.3
-
-  tsx@4.20.3:
-    dependencies:
-      esbuild: 0.25.8
-      get-tsconfig: 4.10.1
-    optionalDependencies:
-      fsevents: 2.3.3
 
   tsx@4.20.4:
     dependencies:
@@ -31999,27 +31907,6 @@ snapshots:
       - supports-color
       - terser
 
-  vite-node@3.2.4(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0):
-    dependencies:
-      cac: 6.7.14
-      debug: 4.4.1(supports-color@8.1.1)
-      es-module-lexer: 1.7.0
-      pathe: 2.0.3
-      vite: 6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
-    transitivePeerDependencies:
-      - '@types/node'
-      - jiti
-      - less
-      - lightningcss
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
-
   vite-node@3.2.4(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0):
     dependencies:
       cac: 6.7.14
@@ -32076,22 +31963,6 @@ snapshots:
       '@types/node': 20.19.9
       fsevents: 2.3.3
       terser: 5.43.1
-
-  vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0):
-    dependencies:
-      esbuild: 0.25.8
-      fdir: 6.4.6(picomatch@4.0.2)
-      picomatch: 4.0.2
-      postcss: 8.5.6
-      rollup: 4.46.2
-      tinyglobby: 0.2.14
-    optionalDependencies:
-      '@types/node': 20.19.9
-      fsevents: 2.3.3
-      jiti: 2.4.2
-      terser: 5.43.1
-      tsx: 4.20.3
-      yaml: 2.8.0
 
   vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0):
     dependencies:
@@ -32174,49 +32045,6 @@ snapshots:
       '@types/debug': 4.1.12
       '@types/node': 20.19.9
       '@vitest/ui': 3.2.3(vitest@3.2.4)
-      jsdom: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
-    transitivePeerDependencies:
-      - jiti
-      - less
-      - lightningcss
-      - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
-
-  vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0):
-    dependencies:
-      '@types/chai': 5.2.2
-      '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
-      '@vitest/pretty-format': 3.2.4
-      '@vitest/runner': 3.2.4
-      '@vitest/snapshot': 3.2.4
-      '@vitest/spy': 3.2.4
-      '@vitest/utils': 3.2.4
-      chai: 5.2.0
-      debug: 4.4.1(supports-color@8.1.1)
-      expect-type: 1.2.1
-      magic-string: 0.30.17
-      pathe: 2.0.3
-      picomatch: 4.0.2
-      std-env: 3.9.0
-      tinybench: 2.9.0
-      tinyexec: 0.3.2
-      tinyglobby: 0.2.14
-      tinypool: 1.1.1
-      tinyrainbow: 2.0.0
-      vite: 6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
-      vite-node: 3.2.4(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/debug': 4.1.12
-      '@types/node': 20.19.9
       jsdom: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
     transitivePeerDependencies:
       - jiti
@@ -32389,13 +32217,13 @@ snapshots:
 
   wordwrapjs@5.1.0: {}
 
-  workerd@1.20250712.0:
+  workerd@1.20250816.0:
     optionalDependencies:
-      '@cloudflare/workerd-darwin-64': 1.20250712.0
-      '@cloudflare/workerd-darwin-arm64': 1.20250712.0
-      '@cloudflare/workerd-linux-64': 1.20250712.0
-      '@cloudflare/workerd-linux-arm64': 1.20250712.0
-      '@cloudflare/workerd-windows-64': 1.20250712.0
+      '@cloudflare/workerd-darwin-64': 1.20250816.0
+      '@cloudflare/workerd-darwin-arm64': 1.20250816.0
+      '@cloudflare/workerd-linux-64': 1.20250816.0
+      '@cloudflare/workerd-linux-arm64': 1.20250816.0
+      '@cloudflare/workerd-windows-64': 1.20250816.0
 
   wrap-ansi@6.2.0:
     dependencies:
