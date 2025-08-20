@@ -68,6 +68,7 @@ import type {
   AgentMemoryOption,
   AgentAISpanProperties,
 } from './types';
+import type { AISDKV5OutputStream } from '../stream';
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
@@ -3245,11 +3246,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): ReturnType<MastraModelOutput['getFullOutput']> {
+  ): Promise<
+    ReturnType<FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']>
+  > {
     const result = await this.streamVNext(messages, options);
 
     if (result.tripwire) {
-      return result as unknown as ReturnType<MastraModelOutput['getFullOutput']>;
+      return result as ReturnType<
+        FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']
+      >;
     }
 
     let fullOutput = await result.getFullOutput();
@@ -3260,7 +3265,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       throw error;
     }
 
-    return fullOutput;
+    return fullOutput as ReturnType<
+      FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']
+    >;
   }
 
   async streamVNext<
@@ -3270,7 +3277,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): Promise<MastraModelOutput> {
+  ): Promise<FORMAT extends 'mastra' ? MastraModelOutput : AISDKV5OutputStream> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
@@ -3316,7 +3323,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       });
     }
 
-    return result.result as unknown as MastraModelOutput;
+    return result.result as FORMAT extends 'mastra' ? MastraModelOutput : AISDKV5OutputStream;
   }
 
   async generate(

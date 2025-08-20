@@ -344,6 +344,14 @@ export class AISDKV5OutputStream {
     return fullOutput;
   }
 
+  get tripwire() {
+    return this.#modelOutput.tripwire;
+  }
+
+  get tripwireReason() {
+    return this.#modelOutput.tripwireReason;
+  }
+
   get error() {
     return this.#modelOutput.error;
   }
