@@ -3,6 +3,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { AISpanType, getSelectedAITracing } from '../ai-tracing';
 import type { AISpan, AnyAISpan, AITracingContext } from '../ai-tracing';
+import { wrapMastra } from '../ai-tracing/context';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { ChunkType } from '../stream/types';
@@ -162,11 +163,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
-    parentAISpan?: AnyAISpan;
+    currentAISpan?: AnyAISpan;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, parentAISpan } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, currentAISpan } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
@@ -184,8 +185,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     // if parentSpan passed, use it to build workflowSpan
     // otherwise, attempt to create new trace
     let aiSpan: AISpan<AISpanType.WORKFLOW_RUN> | undefined;
-    if (parentAISpan) {
-      aiSpan = parentAISpan.createChildSpan({
+    if (currentAISpan) {
+      aiSpan = currentAISpan.createChildSpan({
         type: AISpanType.WORKFLOW_RUN,
         ...spanArgs,
       });
@@ -695,12 +696,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
         const aiTracingContext: AITracingContext = {
-          parentAISpan: stepAISpan,
+          currentAISpan: stepAISpan,
         };
+
+        // Create wrapped Mastra instance with tracing context
+        const wrappedMastra = wrapMastra(data.mastra, aiTracingContext);
 
         const enhancedData = {
           ...data,
-          aiTracingContext,
+          mastra: wrappedMastra, // Pass wrapped version instead of original
+          aiTracingContext, // Still available for manual span creation
         };
 
         const telemetry = this.mastra?.getTelemetry();
