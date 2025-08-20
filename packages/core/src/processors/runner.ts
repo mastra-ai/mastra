@@ -3,6 +3,7 @@ import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { StreamTextResult } from '../llm';
 import type { IMastraLogger } from '../logger';
+import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
 
 /**
@@ -162,7 +163,7 @@ export class ProcessorRunner {
   }
 
   async runOutputProcessorsForStream(
-    streamResult: StreamObjectResult<any, any, any> | StreamTextResult<any, any>,
+    streamResult: StreamObjectResult<any, any, any> | StreamTextResult<any, any> | MastraModelOutput,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {

@@ -33,14 +33,22 @@ describe('Logs Handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // @ts-expect-error - mockLogger is not typed
     mockLogger = {
       getLogsByRunId: vi.fn(),
       getLogs: vi.fn(),
       transports: new Map<string, unknown>(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      error: vi.fn(),
+      cleanup: vi.fn(),
+      trackException: vi.fn(),
+      getTransports: vi.fn(() => mockLogger.transports ?? new Map<string, unknown>()),
     } as unknown as MockedLogger & {
       transports: Record<string, unknown>;
+      getTransports: () => Map<string, unknown>;
     };
-    mockLogger.getTransports = vi.fn(() => mockLogger.transports ?? new Map<string, unknown>());
 
     mastra = new Mastra({
       logger: mockLogger as unknown as IMastraLogger,

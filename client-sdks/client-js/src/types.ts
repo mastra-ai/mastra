@@ -65,6 +65,7 @@ export interface GetAgentResponse {
   workflows: Record<string, GetWorkflowResponse>;
   provider: string;
   modelId: string;
+  modelVersion: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
 }

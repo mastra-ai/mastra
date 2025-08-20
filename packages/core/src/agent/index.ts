@@ -69,6 +69,7 @@ import type {
   AgentMemoryOption,
   AgentAISpanProperties,
 } from './types';
+import type { AISDKV5OutputStream } from '../stream';
 export * from './input-processor';
 export { TripWire };
 export { MessageList };

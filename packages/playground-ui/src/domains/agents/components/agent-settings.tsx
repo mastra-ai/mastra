@@ -14,36 +14,68 @@ import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 
-export const AgentSettings = () => {
+export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
   const { settings, setSettings, resetAll } = useAgentSettings();
 
+  let radioValue;
+
+  if (modelVersion === 'v2') {
+    radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generateVNext' : 'streamVNext';
+  } else {
+    radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
+  }
   return (
     <div className="px-5 text-xs py-2 pb-4">
       <section className="space-y-7">
         <Entry label="Chat Method">
           <RadioGroup
             orientation="horizontal"
-            value={settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream'}
+            value={radioValue}
             onValueChange={(value: string) =>
               setSettings({
                 ...settings,
-                modelSettings: { ...settings?.modelSettings, chatWithGenerate: value === 'generate' },
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  chatWithGenerate: value === 'generate',
+                  chatWithGenerateVNext: value === 'generateVNext',
+                  chatWithStreamVNext: value === 'streamVNext',
+                },
               })
             }
             className="flex flex-row gap-4"
           >
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="generate" id="generate" className="text-icon6" />
-              <Label className="text-icon6 text-ui-md" htmlFor="generate">
-                Generate
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="stream" id="stream" className="text-icon6" />
-              <Label className="text-icon6 text-ui-md" htmlFor="stream">
-                Stream
-              </Label>
-            </div>
+            {modelVersion !== 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="generate" id="generate" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generate">
+                  Generate
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="generateVNext" id="generateVNext" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generateVNext">
+                  Generate vNext
+                </Label>
+              </div>
+            )}
+            {modelVersion !== 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="stream" id="stream" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="stream">
+                  Stream
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="streamVNext" id="streamVNext" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="streamVNext">
+                  Stream vNext
+                </Label>
+              </div>
+            )}
           </RadioGroup>
         </Entry>
 
