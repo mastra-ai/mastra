@@ -1,4 +1,3 @@
-
 import type { TransformCallback } from 'stream';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import { LoggerTransport } from '@mastra/core/logger';

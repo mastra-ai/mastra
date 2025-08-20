@@ -10,12 +10,16 @@ import { getMastraEntryFile } from './utils/file.js';
 import { successEntrypoint } from './utils/report.js';
 
 export class CloudDeployer extends Deployer {
+  constructor() {
+    super({ name: 'cloud' });
+  }
+
   async deploy(_outputDirectory: string): Promise<void> {}
   async writeInstrumentationFile(outputDirectory: string) {
     const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
     const __dirname = dirname(fileURLToPath(import.meta.url));
 
-    await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
+    await copy(join(__dirname, '../templates', 'instrumentation-template.js'), instrumentationFile);
   }
   writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
     dependencies.set('@mastra/loggers', 'latest');
@@ -69,9 +73,9 @@ console.log(JSON.stringify({
   type: "READINESS",
   startTime,
   metadata: {
-    teamId: ${TEAM_ID},
-    projectId: ${PROJECT_ID},
-    buildId: ${BUILD_ID},
+    teamId: "${TEAM_ID}",
+    projectId: "${PROJECT_ID}",
+    buildId: "${BUILD_ID}",
   },
 }));
 
@@ -165,9 +169,9 @@ console.log(JSON.stringify({
   type: "READINESS",
   startTime,
   metadata: {
-    teamId: ${TEAM_ID},
-    projectId: ${PROJECT_ID},
-    buildId: ${BUILD_ID},
+    teamId: "${TEAM_ID}",
+    projectId: "${PROJECT_ID}",
+    buildId: "${BUILD_ID}",
   },
 }));
 
@@ -178,9 +182,9 @@ console.log(JSON.stringify({
   startTime,
   durationMs: Date.now() - startTime,
   metadata: {
-    teamId: ${TEAM_ID},
-    projectId: ${PROJECT_ID},
-    buildId: ${BUILD_ID},
+    teamId: "${TEAM_ID}",
+    projectId: "${PROJECT_ID}",
+    buildId: "${BUILD_ID}",
   },
 }));
 `;
