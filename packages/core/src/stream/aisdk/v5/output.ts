@@ -20,11 +20,11 @@ type AISDKV5OutputStreamOptions = {
   objectOptions?: ObjectOptions;
 };
 
-type FullStreamType<T> = T extends undefined | unknown
+type FullStreamType<T> = T extends undefined
   ? ReadableStream<TextStreamPart<ToolSet>>
   : ReadableStream<ObjectStreamPart<T>>;
 
-export class AISDKV5OutputStream<TObjectSchema = unknown | undefined> {
+export class AISDKV5OutputStream<TObjectSchema = undefined> {
   #modelOutput: MastraModelOutput;
   #options: AISDKV5OutputStreamOptions;
   #messageList: MessageList;
