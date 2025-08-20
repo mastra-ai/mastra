@@ -329,7 +329,10 @@ export async function generateVNextHandler({
       ...rest,
       runtimeContext: finalRuntimeContext,
       format: rest.format || 'mastra',
-      abortSignal,
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
     });
 
     return result;
@@ -436,7 +439,10 @@ export function streamVNextGenerateHandler({
     const streamResult = agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      abortSignal,
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
       format: body.format ?? 'mastra',
     });
 
@@ -478,7 +484,10 @@ export async function streamVNextUIMessageHandler({
     const streamResult = await agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      abortSignal,
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
       format: 'aisdk',
     });
 
