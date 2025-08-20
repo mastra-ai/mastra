@@ -41,6 +41,7 @@ import { ProcessorRunner } from '../processors/runner';
 import { RuntimeContext } from '../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
+import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
@@ -68,7 +69,6 @@ import type {
   AgentMemoryOption,
   AgentAISpanProperties,
 } from './types';
-import type { AISDKV5OutputStream } from '../stream';
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
