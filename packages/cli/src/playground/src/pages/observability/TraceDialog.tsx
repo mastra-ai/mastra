@@ -1,8 +1,16 @@
-import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 import { cn } from '@/lib/utils';
-import { SideDialog, SideDialogHeader, SideDialogTop } from '@mastra/playground-ui';
-import { PanelLeft, PanelLeftIcon, PanelTopIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  SideDialog,
+  SideDialogHeader,
+  SideDialogTop,
+  SideDialogCodeSection,
+  KeyValueList,
+} from '@mastra/playground-ui';
+import { isThisYear, isToday } from 'date-fns';
+import { format } from 'date-fns/format';
+import { Calendar, CalendarIcon, ClockIcon, PanelLeftIcon, PanelTopIcon, SquareSplitVerticalIcon } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 
 // Recursive component to render spans as nested elements
 function SpanTree({
@@ -95,8 +103,23 @@ export function TraceDialog({
   const [selectedSpanId, setSelectedSpanId] = useState<any>(null);
   const [selectedSpan, setSelectedSpan] = useState<any>(null);
   const [combinedView, setCombinedView] = useState<boolean>(false);
+  const [combinedViewProportion, setCombinedViewProportion] = useState<'1/1' | '1/2' | '1/3'>('1/1');
 
-  // console.log('-->>', nestedSpans, spanIds);
+  // Handler to toggle combined view proportion
+  const toggleCombinedViewProportion = () => {
+    setCombinedViewProportion(prev => {
+      switch (prev) {
+        case '1/3':
+          return '1/2';
+        case '1/2':
+          return '1/1';
+        case '1/1':
+          return '1/3';
+        default:
+          return '1/3';
+      }
+    });
+  };
 
   console.log({ selectedSpan });
 
@@ -154,6 +177,55 @@ export function TraceDialog({
     setSelectedSpanId(nextSpanId);
   };
 
+  const selectedSpanInfo = [
+    {
+      key: 'id',
+      label: 'Span ID',
+      value: selectedSpan?.id,
+    },
+    {
+      key: 'id',
+      label: 'Trace ID',
+      value: selectedSpan?.traceId,
+    },
+    {
+      key: 'createdAt',
+      label: 'Created At',
+      value: formatDate(selectedSpan?.createdAt),
+    },
+    {
+      key: 'startedAt',
+      label: 'Started At',
+      value: formatDate(selectedSpan?.startTime),
+    },
+  ];
+
+  function formatDate(dateString: string | undefined): React.ReactNode {
+    if (!dateString) return '';
+
+    const date = new Date(dateString);
+
+    if (isNaN(date.getTime())) return '';
+
+    if (isToday(date)) {
+      return (
+        <span className="flex items-center [&>svg]:w-[1em] [&>svg]:opacity-70 [&>svg]:h-[1em] gap-[0.5rem]">
+          <ClockIcon />
+          {format(date, 'HH:mm:ss')}
+        </span>
+      );
+    }
+
+    return (
+      <span className="flex items-center [&>svg]:w-[.9em] [&>svg]:opacity-60 [&>svg]:h-[.9em] gap-[0.5rem]">
+        <CalendarIcon />
+        {isThisYear(date) ? format(date, 'dd MMM') : format(date, 'dd MMM yyyy')}
+        <ClockIcon />
+        {format(date, 'HH:mm:ss')}
+      </span>
+    );
+  }
+
   return (
     <>
       <SideDialog
@@ -169,42 +241,45 @@ export function TraceDialog({
 
         <div
           className={cn('p-[1.5rem] overflow-y-auto  grid', {
-            'grid-rows-[2fr_3fr]': combinedView,
-            'grid-rows-[1fr]': !combinedView,
+            'grid-rows-[auto_1fr_1fr]': combinedView && combinedViewProportion === '1/1',
+            'grid-rows-[auto_1fr_2fr]': combinedView && combinedViewProportion === '1/2',
+            'grid-rows-[auto_1fr_3fr]': combinedView && combinedViewProportion === '1/3',
+            'grid-rows-[auto_1fr]': !combinedView,
           })}
         >
-          {/* <SideDialogHeader>
-              <h2>Trace</h2>
-            </SideDialogHeader> */}
+          <SideDialogHeader>
+            <h2>Trace</h2>
+          </SideDialogHeader>
 
-          {/* Trace summary */}
-          {/* <div className="bg-bg-2 p-4 rounded-lg">
-                <h3 className="font-semibold text-el-6 mb-2">{trace?.name}</h3>
-                <div className="text-sm text-el-3 space-y-1">
-                <div>Total Latency: {trace?.latency}ms</div>
-                <div>Environment: {trace?.environment}</div>
-                <div>Created: {new Date(trace?.createdAt).toLocaleString()}</div>
-                </div>
-                </div> */}
-
-          {/* Spans tree */}
-
-          <div className="space-y-4 overflow-y-auto">
+          <div className="space-y-[1.5rem] overflow-y-auto">
             {nestedSpans?.map((span: any) => (
               <SpanTree key={span.id} span={span} onSpanClick={handleSpanClick} selectedSpanId={selectedSpanId} />
             ))}
           </div>
           {combinedView && (
-            <div className="border-t-2 border-gray-500">
-              <div className="flex items-center justify-between">
+            <div className="overflow-y-auto border-t-2 border-gray-500 grid grid-rows-[auto_1fr]">
+              <div className="flex items-center justify-between py-[.5rem] border-b border-border1 pr-[1rem]">
                 <SideDialogTop onNext={toNextSpan} onPrevious={toPreviousSpan} showInnerNav={true}>
                   <div className="flex items-center gap-[0.5rem] text-icon4 text-[0.875rem]">{selectedSpanId}</div>
                 </SideDialogTop>
-                <button className="flex items-center gap-1" onClick={() => setCombinedView(false)}>
-                  {combinedView ? <PanelLeftIcon /> : <PanelTopIcon />}
-                </button>
+                <div className="flex items-center gap-[1rem]">
+                  <button onClick={toggleCombinedViewProportion}>
+                    <SquareSplitVerticalIcon />
+                  </button>
+                  <button className="flex items-center gap-1" onClick={() => setCombinedView(false)}>
+                    {combinedView ? <PanelLeftIcon /> : <PanelTopIcon />}
+                  </button>
+                </div>
               </div>
-              <SpanDetails span={selectedSpan} />
+
+              <div className="grid grid-cols-[20rem_1fr] p-[1.5rem] overflow-y-auto">
+                <div className="overflow-y-auto">
+                  <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
+                </div>
+                <div className="overflow-y-auto">
+                  <SpanDetails span={selectedSpan} />
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -217,15 +292,22 @@ export function TraceDialog({
         hasCloseButton={true}
         className={cn('w-[calc(100vw-20rem)] max-w-[60%]', '3xl:max-w-[50rem]', '4xl:max-w-[40%]')}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pr-[1.5rem]">
           <SideDialogTop onNext={toNextSpan} onPrevious={toPreviousSpan} showInnerNav={true}>
-            <div className="flex items-center gap-[0.5rem] text-icon4 text-[0.875rem]">{selectedSpanId}</div>
+            <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
+              <span>{selectedSpan?.traceId?.slice(0, 6)}</span>›<span>{selectedSpanId?.slice(0, 6)}</span>
+            </div>
           </SideDialogTop>
           <button className="flex items-center gap-1" onClick={() => setCombinedView(true)}>
             {combinedView ? <PanelLeftIcon /> : <PanelTopIcon />}
           </button>
         </div>
-        <div className="p-[1.5rem] overflow-y-auto">
+
+        <div className="p-[1.5rem] overflow-y-auto grid gap-[1.5rem]">
+          <SideDialogHeader>
+            <h2>{selectedSpan?.name}</h2>
+          </SideDialogHeader>
+          <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
           <SpanDetails span={selectedSpan} />
         </div>
       </SideDialog>
@@ -235,39 +317,11 @@ export function TraceDialog({
 
 function SpanDetails({ span }: { span: any }) {
   return (
-    <div className="grid gap-[1.5rem]">
-      <section className="border border-border1 rounded-lg">
-        <div className="border-b border-border1 last:border-b-0 grid">
-          <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
-          {span && (
-            <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
-              <CodeMirrorBlock value={JSON.stringify(span.input || {}, null, 2)} />
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="border border-border1 rounded-lg">
-        <div className="border-b border-border1 last:border-b-0 grid">
-          <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Output</h3>
-          {span && (
-            <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
-              <CodeMirrorBlock value={JSON.stringify(span?.output || {}, null, 2)} />
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="border border-border1 rounded-lg">
-        <div className="border-b border-border1 last:border-b-0 grid">
-          <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Metadata</h3>
-          {span && (
-            <div className={cn('overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}>
-              <CodeMirrorBlock value={JSON.stringify(span?.metadata || {}, null, 2)} />
-            </div>
-          )}
-        </div>
-      </section>
+    <div className="grid gap-[1.5rem] mb-[2rem]">
+      <SideDialogCodeSection title="Input" codeStr={JSON.stringify(span.input || {}, null, 2)} />
+      <SideDialogCodeSection title="Output" codeStr={JSON.stringify(span.output || {}, null, 2)} />
+      <SideDialogCodeSection title="Metadata" codeStr={JSON.stringify(span.metadata || {}, null, 2)} />
+      <SideDialogCodeSection title="Parameters" codeStr={JSON.stringify(span.parameters || {}, null, 2)} />
     </div>
   );
 }
