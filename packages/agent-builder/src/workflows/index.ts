@@ -28,9 +28,10 @@ import {
   IntelligentMergeResultSchema,
   ValidationFixInputSchema,
   ValidationFixResultSchema,
+  PrepareBranchInputSchema,
+  PrepareBranchResultSchema,
 } from '../types';
 import {
-  exec,
   getMastraTemplate,
   kindWeight,
   spawnSWPM,
@@ -42,8 +43,6 @@ import {
   gitCheckoutRef,
   gitRevParse,
   gitAddAndCommit,
-  gitAddAll,
-  gitCommit,
 } from '../utils';
 
 // Helper function to resolve the model to use
@@ -296,7 +295,23 @@ const orderUnitsStep = createStep({
   },
 });
 
-// Step 5: Package merge
+// Step 5: Prepare branch
+const prepareBranchStep = createStep({
+  id: 'prepare-branch',
+  description: 'Create or switch to integration branch before modifications',
+  inputSchema: PrepareBranchInputSchema,
+  outputSchema: PrepareBranchResultSchema,
+  execute: async ({ inputData, runtimeContext }) => {
+    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+
+    const branchName = `feat/install-template-${inputData.slug}`;
+    await gitCheckoutBranch(branchName, targetPath);
+
+    return { branchName };
+  },
+});
+
+// Step 6: Package merge
 const packageMergeStep = createStep({
   id: 'package-merge',
   description: 'Merge template package.json dependencies into target project and install',
@@ -373,6 +388,10 @@ const packageMergeStep = createStep({
 
       await writeFile(targetPkgPath, JSON.stringify(targetPkg, null, 2), 'utf-8');
 
+      await gitAddAndCommit(targetPath, `feat(template): merge deps for ${slug}`, [targetPkgPath], {
+        skipIfNoStaged: true,
+      });
+
       return {
         success: true,
         applied: true,
@@ -390,7 +409,7 @@ const packageMergeStep = createStep({
   },
 });
 
-// Step 6: Flat install
+// Step 7: Flat install
 const flatInstallStep = createStep({
   id: 'flat-install',
   description: 'Run a flat install command without specifying packages',
@@ -403,6 +422,14 @@ const flatInstallStep = createStep({
     try {
       // Run flat install using swpm (no specific packages)
       await spawnSWPM(targetPath, 'install', []);
+
+      const lock = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock']
+        .map(f => join(targetPath, f))
+        .find(f => existsSync(f));
+
+      await gitAddAndCommit(targetPath, `chore(template): commit lockfile after install`, lock ? [lock] : undefined, {
+        skipIfNoStaged: true,
+      });
 
       return {
         success: true,
@@ -765,7 +792,7 @@ const programmaticFileCopyStep = createStep({
   },
 });
 
-// Step 8: Intelligent merging with AgentBuilder
+// Step 9: Intelligent merging with AgentBuilder
 const intelligentMergeStep = createStep({
   id: 'intelligent-merge',
   description: 'Use AgentBuilder to intelligently merge template files',
@@ -773,16 +800,9 @@ const intelligentMergeStep = createStep({
   outputSchema: IntelligentMergeResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Intelligent merge step starting...');
-    const { conflicts, copiedFiles, commitSha, slug, templateDir } = inputData;
+    const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
-
-    const baseBranchName = `feat/install-template-${slug}`;
     try {
-      // Create or switch to git branch for template integration
-      let branchName = baseBranchName;
-
-      await gitCheckoutBranch(branchName, baseBranchName, targetPath);
-
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
         id: 'copy-file',
@@ -1072,10 +1092,13 @@ Start by listing your tasks and work through them systematically!
         }
       });
 
+      await gitAddAndCommit(targetPath, `feat(template): apply intelligent merge for ${slug}`, undefined, {
+        skipIfNoStaged: true,
+      });
+
       return {
         success: true,
         applied: true,
-        branchName,
         message: `Successfully resolved ${conflicts.length} conflicts from template ${slug}`,
         conflictsResolved: conflictResolutions,
       };
@@ -1083,7 +1106,6 @@ Start by listing your tasks and work through them systematically!
       return {
         success: false,
         applied: false,
-        branchName: baseBranchName,
         message: `Failed to resolve conflicts: ${error instanceof Error ? error.message : String(error)}`,
         conflictsResolved: [],
         error: error instanceof Error ? error.message : String(error),
@@ -1092,7 +1114,7 @@ Start by listing your tasks and work through them systematically!
   },
 });
 
-// Step 9: Validation and Fix Step - validates merged code and fixes any issues
+// Step 10: Validation and Fix Step - validates merged code and fixes any issues
 const validationAndFixStep = createStep({
   id: 'validation-and-fix',
   description: 'Validate the merged template code and fix any validation errors using a specialized agent',
@@ -1259,11 +1281,13 @@ Previous iterations may have fixed some issues, so start by re-running validateC
 
       // Commit the validation fixes
       try {
-        await gitAddAll(targetPath);
-        await gitCommit(
+        await gitAddAndCommit(
           targetPath,
           `fix(template): resolve validation errors for ${slug}@${commitSha.substring(0, 7)}`,
-          { skipIfNoStaged: true },
+          undefined,
+          {
+            skipIfNoStaged: true,
+          },
         );
       } catch (commitError) {
         console.warn('Failed to commit validation fixes:', commitError);
@@ -1342,6 +1366,16 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
       packageInfo: packageResult,
     };
   })
+  .then(prepareBranchStep)
+  .map(async ({ getStepResult, getInitData }) => {
+    const cloneResult = getStepResult(cloneTemplateStep);
+    const initData = getInitData();
+    return {
+      commitSha: cloneResult.commitSha,
+      slug: cloneResult.slug,
+      targetPath: initData.targetPath,
+    };
+  })
   .then(packageMergeStep)
   .map(async ({ getInitData }) => {
     const initData = getInitData();
@@ -1397,16 +1431,13 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     };
   })
   .then(validationAndFixStep)
-  .map(async ({ getStepResult, getInitData }) => {
+  .map(async ({ getStepResult }) => {
     const validationResult = getStepResult(validationAndFixStep);
+    const prepareBranchResult = getStepResult(prepareBranchStep);
     const intelligentMergeResult = getStepResult(intelligentMergeStep);
     const copyResult = getStepResult(programmaticFileCopyStep);
-    const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData();
 
-    // Ensure branchName is always present, with fallback logic
-    const branchName =
-      intelligentMergeResult.branchName || `feat/install-template-${cloneResult.slug || initData.slug}`;
+    const branchName = prepareBranchResult.branchName;
 
     // Aggregate errors from all steps
     const allErrors = [copyResult.error, intelligentMergeResult.error, validationResult.error].filter(Boolean);

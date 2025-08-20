@@ -165,6 +165,7 @@ export const IntelligentMergeInputSchema = z.object({
   commitSha: z.string(),
   slug: z.string(),
   targetPath: z.string().optional(),
+  branchName: z.string().optional(),
 });
 
 export const IntelligentMergeResultSchema = z.object({
@@ -173,7 +174,6 @@ export const IntelligentMergeResultSchema = z.object({
   message: z.string(),
   conflictsResolved: z.array(ConflictResolutionSchema),
   error: z.string().optional(),
-  branchName: z.string().optional(),
 });
 
 // Validation schemas and types
@@ -276,4 +276,14 @@ export const FlatInstallResultSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   details: z.string().optional(),
+});
+
+export const PrepareBranchInputSchema = z.object({
+  slug: z.string(),
+  commitSha: z.string().optional(), // from clone-template if relevant
+  targetPath: z.string().optional(),
+});
+
+export const PrepareBranchResultSchema = z.object({
+  branchName: z.string(),
 });

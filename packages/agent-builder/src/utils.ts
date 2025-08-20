@@ -248,7 +248,7 @@ export async function gitAddAndCommit(
   return gitCommit(cwd, message, opts);
 }
 
-export async function gitCheckoutBranch(branchName: string, baseBranchName: string, targetPath: string) {
+export async function gitCheckoutBranch(branchName: string, targetPath: string) {
   try {
     if (!(await isInsideGitRepo(targetPath))) return;
     // Try to create new branch using centralized git runner
@@ -265,9 +265,9 @@ export async function gitCheckoutBranch(branchName: string, baseBranchName: stri
       } catch {
         // If can't switch, create a unique branch name
         const timestamp = Date.now().toString().slice(-6);
-        branchName = `${baseBranchName}-${timestamp}`;
-        await git(targetPath, 'checkout', '-b', branchName);
-        console.log(`Created unique branch: ${branchName}`);
+        const uniqueBranchName = `${branchName}-${timestamp}`;
+        await git(targetPath, 'checkout', '-b', uniqueBranchName);
+        console.log(`Created unique branch: ${uniqueBranchName}`);
       }
     } else {
       throw error; // Re-throw if it's a different error
