@@ -3,6 +3,7 @@
  */
 import type * as AIV4 from 'ai';
 import type * as AIV5 from 'ai-v5';
+import type { MastraMessageV2 } from '../index';
 import { convertMessages } from './convert-messages';
 
 // Example 1: Convert AI SDK v5 UI messages to v4 Core messages
@@ -24,13 +25,13 @@ const v4CoreMessages = convertMessages(v5UIMessages).to('AIV4.Core');
 console.log('V4 Core Messages:', v4CoreMessages);
 
 // Example 2: Convert database messages (Mastra V2) to AI SDK v5 UI messages
-const dbMessages = [
+const dbMessages: MastraMessageV2[] = [
   {
     id: 'db-msg-1',
-    role: 'user' as const,
+    role: 'user',
     createdAt: new Date(),
     content: {
-      format: 2 as const,
+      format: 2,
       parts: [{ type: 'text', text: 'What is the weather today?' }],
       content: 'What is the weather today?',
     },
@@ -41,12 +42,18 @@ const v5UIMessagesFromDB = convertMessages(dbMessages).to('AIV5.UI');
 console.log('V5 UI Messages from DB:', v5UIMessagesFromDB);
 
 // Example 3: Convert any format to Mastra's internal V2 format for storage
-const mixedMessages = [
-  { role: 'user', content: 'Simple string message' },
+const mixedMessages: AIV4.UIMessage[] = [
+  {
+    id: 'msg-1',
+    role: 'user',
+    content: 'Simple string message',
+    parts: [{ type: 'text', text: 'Simple string message' }],
+  },
   {
     id: 'v4-msg',
-    role: 'assistant' as const,
+    role: 'assistant',
     content: 'I can help with that!',
+    parts: [{ type: 'text', text: 'I can help with that!' }],
   },
 ];
 
