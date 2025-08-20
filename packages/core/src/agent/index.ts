@@ -74,6 +74,7 @@ export { TripWire };
 export { MessageList };
 export * from './types';
 
+export type { AgentExecutionOptions, AgentVNextStreamOptions, InnerAgentExecutionOptions } from './agent.types';
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 export type { MastraLanguageModel } from '../llm/model/shared.types';
 

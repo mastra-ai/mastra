@@ -11,7 +11,14 @@ import type {
   PaginationInfo,
   MastraMessageV2,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput, UIMessageWithMetadata } from '@mastra/core/agent';
+import type {
+  AgentExecutionOptions,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  ToolsInput,
+  UIMessageWithMetadata,
+} from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -89,6 +96,13 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
 } & WithoutMethods<
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
+
+export type StreamVNextParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+  messages: MessageListInput;
+  output?: T;
+  runtimeContext?: RuntimeContext | Record<string, any>;
+  clientTools?: ToolsInput;
+} & WithoutMethods<Omit<AgentExecutionOptions<T>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
 
 export type UpdateModelParams = {
   modelId: string;
