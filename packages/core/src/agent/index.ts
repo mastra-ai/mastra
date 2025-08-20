@@ -63,6 +63,7 @@ import type {
   ToolsInput,
   AgentMemoryOption,
   AgentAISpanProperties,
+  InstructionsInput,
 } from './types';
 export * from './input-processor';
 export { TripWire };
@@ -124,7 +125,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
-  #instructions: DynamicArgument<string>;
+  #instructions: DynamicArgument<InstructionsInput>;
   readonly #description?: string;
   model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
@@ -378,7 +379,8 @@ export class Agent<
     if (this.#voice) {
       const voice = this.#voice;
       voice?.addTools(await this.getTools({ runtimeContext }));
-      voice?.addInstructions(await this.getInstructions({ runtimeContext }));
+      const instructions = await this.getInstructions({ runtimeContext });
+      voice?.addInstructions(this.#convertInstructionsToString(instructions));
       return voice;
     } else {
       return new DefaultVoice();
@@ -407,9 +409,9 @@ export class Agent<
   }
 
   public getInstructions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | string
-    | Promise<string> {
-    if (typeof this.#instructions === 'string') {
+    | InstructionsInput
+    | Promise<InstructionsInput> {
+    if (typeof this.#instructions !== 'function') {
       return this.#instructions;
     }
 
@@ -432,6 +434,23 @@ export class Agent<
 
       return instructions;
     });
+  }
+
+  #convertInstructionsToString(instructions: InstructionsInput): string {
+    if (typeof instructions === 'string') {
+      return instructions;
+    }
+
+    // Handle single CoreSystemMessage or array
+    const messages = Array.isArray(instructions) ? instructions : [instructions];
+
+    // Extract text content from messages - CoreSystemMessage only has string content
+    const textParts: string[] = [];
+    for (const msg of messages) {
+      textParts.push(msg.content);
+    }
+
+    return textParts.join('\n\n');
   }
 
   public getDescription(): string {
@@ -1586,7 +1605,7 @@ export class Agent<
     writableStream,
     parentAISpan,
   }: {
-    instructions: string;
+    instructions: InstructionsInput;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -1610,7 +1629,7 @@ export class Agent<
           name: `agent run: '${this.id}'`,
           attributes: {
             agentId: this.id,
-            instructions,
+            instructions: this.#convertInstructionsToString(instructions),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
@@ -1684,10 +1703,7 @@ export class Agent<
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem({
-            role: 'system',
-            content: instructions || `${this.instructions}.`,
-          })
+          .addSystem(instructions || await this.getInstructions({ runtimeContext }))
           .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
@@ -1857,7 +1873,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .addSystem(instructions || `${this.instructions}.`)
+          .addSystem(instructions || await this.getInstructions({ runtimeContext }))
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
@@ -2073,7 +2089,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           runId,
           outputText,
-          instructions,
+          instructions: this.#convertInstructionsToString(instructions),
           runtimeContext,
           structuredOutput,
           overrideScorers,
