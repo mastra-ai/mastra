@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
 import type * as AIV4 from 'ai';
 import type * as AIV5 from 'ai-v5';
-import { convertMessages } from './convert-messages';
+import { describe, it, expect } from 'vitest';
 import type { MastraMessageV2 } from '../index';
+import { convertMessages } from './convert-messages';
 
 describe('convertMessages', () => {
   describe('AIV5 UI to other formats', () => {
@@ -42,6 +42,7 @@ describe('convertMessages', () => {
       id: 'test-2',
       role: 'assistant',
       content: 'Hi there!',
+      parts: [{ type: 'text', text: 'Hi there!' }],
     };
 
     it('converts AIV4 UI to AIV5 UI', () => {
@@ -66,7 +67,10 @@ describe('convertMessages', () => {
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe('assistant');
       expect(result[0].content.format).toBe(2);
-      expect(result[0].content.content).toBe('Hi there!');
+      // Check that parts are preserved
+      expect(result[0].content.parts).toHaveLength(1);
+      expect(result[0].content.parts[0].type).toBe('text');
+      expect(result[0].content.parts[0].text).toBe('Hi there!');
     });
   });
 
@@ -98,21 +102,24 @@ describe('convertMessages', () => {
   });
 
   describe('Multiple messages', () => {
-    const messages = [
+    const messages: AIV4.UIMessage[] = [
       {
         id: 'msg-1',
-        role: 'user' as const,
+        role: 'user',
         content: 'Hello',
+        parts: [{ type: 'text', text: 'Hello' }],
       },
       {
         id: 'msg-2',
-        role: 'assistant' as const,
+        role: 'assistant',
         content: 'Hi! How can I help?',
+        parts: [{ type: 'text', text: 'Hi! How can I help?' }],
       },
       {
         id: 'msg-3',
-        role: 'user' as const,
+        role: 'user',
         content: 'What is the weather?',
+        parts: [{ type: 'text', text: 'What is the weather?' }],
       },
     ];
 
@@ -135,9 +142,10 @@ describe('convertMessages', () => {
     it('converts multiple messages to Mastra V2', () => {
       const result = convertMessages(messages).to('Mastra.V2');
       expect(result).toHaveLength(3);
-      expect(result[0].content.content).toBe('Hello');
-      expect(result[1].content.content).toBe('Hi! How can I help?');
-      expect(result[2].content.content).toBe('What is the weather?');
+      // Check that parts are preserved for each message
+      expect(result[0].content.parts[0].text).toBe('Hello');
+      expect(result[1].content.parts[0].text).toBe('Hi! How can I help?');
+      expect(result[2].content.parts[0].text).toBe('What is the weather?');
       result.forEach(msg => {
         expect(msg.content.format).toBe(2);
       });
@@ -151,12 +159,12 @@ describe('convertMessages', () => {
       parts: [
         { type: 'text', text: 'Let me check the weather for you.' },
         {
-          type: 'tool',
-          state: 'call',
+          type: 'tool' as const,
+          state: 'partial-call',
           id: 'tool-1',
           name: 'getWeather',
           input: { city: 'San Francisco' },
-        },
+        } as AIV5.UIMessage['parts'][number],
       ],
     };
 

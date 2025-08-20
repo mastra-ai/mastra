@@ -1,9 +1,9 @@
 /**
  * Example usage of the convertMessages utility
  */
-import { convertMessages } from './convert-messages';
-import type * as AIV5 from 'ai-v5';
 import type * as AIV4 from 'ai';
+import type * as AIV5 from 'ai-v5';
+import { convertMessages } from './convert-messages';
 
 // Example 1: Convert AI SDK v5 UI messages to v4 Core messages
 const v5UIMessages: AIV5.UIMessage[] = [
@@ -18,12 +18,12 @@ const v5UIMessages: AIV5.UIMessage[] = [
     parts: [
       { type: 'text', text: 'Of course! What do you need help with?' },
       {
-        type: 'tool',
-        state: 'call',
+        type: 'tool' as const,
+        state: 'partial-call',
         id: 'tool-1',
         name: 'searchDocs',
         input: { query: 'user guides' },
-      },
+      } as AIV5.UIMessage['parts'][number],
     ],
   },
 ];
@@ -68,11 +68,13 @@ const v4UIMessages: AIV4.UIMessage[] = [
     id: 'ui-1',
     role: 'system',
     content: 'You are a helpful assistant.',
+    parts: [{ type: 'text', text: 'You are a helpful assistant.' }],
   },
   {
     id: 'ui-2',
     role: 'user',
     content: 'Tell me a joke',
+    parts: [{ type: 'text', text: 'Tell me a joke' }],
   },
 ];
 
