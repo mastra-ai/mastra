@@ -12,6 +12,8 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
+import type { MastraModelOutput } from '@mastra/core/stream';
+import type { AISDKV5OutputStream } from '../../../../core/dist/stream/aisdk/v5/output';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
@@ -292,6 +294,53 @@ export async function generateHandler({
   }
 }
 
+export async function generateVNextHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'generateVNext'> & {
+    runtimeContext?: Record<string, unknown>;
+    format?: 'mastra' | 'aisdk';
+  };
+  abortSignal?: AbortSignal;
+}): Promise<ReturnType<Agent['generateVNext']>> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const result = await agent.generateVNext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      format: rest.format || 'mastra',
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error generating from agent');
+  }
+}
+
 export async function streamGenerateHandler({
   mastra,
   runtimeContext,
@@ -368,6 +417,7 @@ export function streamVNextGenerateHandler({
   agentId: string;
   body: GetBody<'streamVNext'> & {
     runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['streamVNext']> {
@@ -389,10 +439,59 @@ export function streamVNextGenerateHandler({
     const streamResult = agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      abortSignal,
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
+      format: body.format ?? 'mastra',
     });
 
     return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export async function streamVNextUIMessageHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'streamVNext'> & {
+    runtimeContext?: string;
+  };
+  abortSignal?: AbortSignal;
+}): Promise<Response | undefined> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const streamResult = await agent.streamVNext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
+      format: 'aisdk',
+    });
+
+    return streamResult.toUIMessageStreamResponse();
   } catch (error) {
     return handleError(error, 'error streaming agent response');
   }

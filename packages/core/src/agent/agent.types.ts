@@ -125,7 +125,7 @@ export type AgentExecutionOptions<
 
   stopWhen?: LoopOptions['stopWhen'];
 
-  abortSignal?: AbortSignal;
+  options?: Omit<LoopConfig, 'onStepFinish' | 'onFinish'>;
 
   onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
 
