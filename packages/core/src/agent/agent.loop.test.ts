@@ -1,9 +1,13 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { MockLanguageModelV2 } from 'ai-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { RuntimeContext } from '../runtime-context';
 import { Agent } from './index';
+
+vi.setConfig({
+  testTimeout: 30_000,
+});
 
 describe('Agent Loop Tests', () => {
   it('Should throw an error if the model is a v2 model', async () => {
@@ -143,12 +147,12 @@ describe('Agent Loop Tests', () => {
     const agent = new Agent({
       id: 'test',
       name: 'test',
-      instructions: 'test',
+      instructions: 'You are a helpful assistant that provides structured data.',
       model: openai('gpt-4o-mini'),
     });
 
-    // @TODO: Weird chunks depending on run with gpt-4o-mini
-    let result = await agent.stream_vnext('test', {
+    // Test with aisdk format
+    let result = await agent.stream_vnext('Generate a person with name "John Doe" and age 30', {
       runtimeContext: new RuntimeContext(),
       format: 'aisdk',
       output: z.object({
@@ -157,13 +161,18 @@ describe('Agent Loop Tests', () => {
       }),
     });
 
+    const aisdkChunks = [];
     for await (const chunk of result.objectStream) {
-      console.log('AISDK', chunk);
+      aisdkChunks.push(chunk);
     }
 
-    console.log(await result.object);
+    const aisdkObject = await result.object;
+    expect(aisdkObject).toBeDefined();
+    expect(aisdkObject.name).toBe('John Doe');
+    expect(aisdkObject.age).toBe(30);
 
-    result = await agent.stream_vnext('test', {
+    // Test with mastra format
+    result = await agent.stream_vnext('Generate a person with name "Jane Smith" and age 25', {
       runtimeContext: new RuntimeContext(),
       format: 'mastra',
       output: z.object({
@@ -172,10 +181,14 @@ describe('Agent Loop Tests', () => {
       }),
     });
 
+    const mastraChunks = [];
     for await (const chunk of result.objectStream) {
-      console.log('MASTRA', chunk);
+      mastraChunks.push(chunk);
     }
 
-    console.log(await result.object);
+    const mastraObject = await result.object;
+    expect(mastraObject).toBeDefined();
+    expect(mastraObject.name).toBe('Jane Smith');
+    expect(mastraObject.age).toBe(25);
   });
 });
