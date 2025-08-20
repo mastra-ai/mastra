@@ -3,9 +3,9 @@ import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } 
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { ObjectOptions } from '../../../loop/types';
+import { getResponseFormat } from '../../base/schema';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
-import { getResponseFormat } from './object/schema';
 
 type ExecutionProps = {
   runId: string;
@@ -24,6 +24,11 @@ type ExecutionProps = {
   modelSettings?: CallSettings;
   onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
   objectOptions?: ObjectOptions;
+  /**
+  Additional HTTP headers to be sent with the request.
+  Only applicable for HTTP-based providers.
+  */
+  headers?: Record<string, string | undefined>;
 };
 
 export function execute({
@@ -40,6 +45,7 @@ export function execute({
   includeRawChunks,
   modelSettings,
   objectOptions,
+  headers,
 }: ExecutionProps) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -69,8 +75,9 @@ export function execute({
           providerOptions,
           abortSignal: options?.abortSignal,
           includeRawChunks,
-          responseFormat: objectOptions ? getResponseFormat(objectOptions) : undefined,
-          ...modelSettings,
+          responseFormat: objectOptions?.schema ? getResponseFormat(objectOptions?.schema) : undefined,
+          ...(modelSettings ?? {}),
+          headers,
         });
         return stream as any;
       } catch (error) {
@@ -84,7 +91,10 @@ export function execute({
             start: async controller => {
               controller.enqueue({
                 type: 'error',
-                error,
+                error: {
+                  message: error instanceof Error ? error.message : JSON.stringify(error),
+                  stack: error instanceof Error ? error.stack : undefined,
+                },
               });
               controller.close();
             },

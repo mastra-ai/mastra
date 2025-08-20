@@ -92,7 +92,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       it('should only execute a single step', async () => {
         await result.aisdk.v5.consumeStream();
-        expect(result.aisdk.v5.steps.length).toBe(1);
+        expect((await result.aisdk.v5.steps).length).toBe(1);
       });
 
       it('should include provider-executed tool call and result content', async () => {
@@ -1092,7 +1092,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     it.skip('should include error result in response messages', async () => {
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.response.messages).toMatchInlineSnapshot(`
+      expect((await result.aisdk.v5.response).messages).toMatchInlineSnapshot(`
             [
               {
                 "content": [
