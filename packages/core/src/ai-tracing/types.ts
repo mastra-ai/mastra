@@ -382,6 +382,4 @@ export type TracingSelector = (
 export interface AITracingContext {
   /** Parent AI span for creating child spans in nested operations */
   parentAISpan?: AnyAISpan;
-  /** User-defined metadata */
-  metadata?: Record<string, any>;
 }

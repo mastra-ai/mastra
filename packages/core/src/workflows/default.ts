@@ -696,7 +696,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return async (data: any) => {
         const aiTracingContext: AITracingContext = {
           parentAISpan: stepAISpan,
-          metadata: {},
         };
 
         const enhancedData = {
