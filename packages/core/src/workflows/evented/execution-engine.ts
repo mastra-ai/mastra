@@ -1,7 +1,7 @@
 import type { Emitter, ExecutionGraph, SerializedStepFlowEntry, StepResult, Mastra } from '../..';
-import { ExecutionEngine } from '../..';
 import type { RuntimeContext } from '../../di';
-import type { Event } from '../../events';
+import type { Event } from '../../events/types';
+import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -48,20 +48,6 @@ export class EventedExecutionEngine extends ExecutionEngine {
     if (!pubsub) {
       throw new Error('No Pubsub adapter configured on the Mastra instance');
     }
-
-    const activePromises: Promise<void>[] = [];
-    const tempCb = (event: Event, cb?: () => Promise<void>) => {
-      const promise = this.eventProcessor
-        .process(event, cb)
-        .then(() => {
-          console.log('event processed', event?.type, event?.data.workflowId, event?.data?.runId);
-        })
-        .catch(e => {
-          console.error('Error processing event', e);
-        });
-      activePromises.push(promise);
-    };
-    await pubsub.subscribe('workflows', tempCb);
 
     if (params.resume) {
       const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
@@ -111,9 +97,6 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
       pubsub.subscribe('workflows-finish', finishCb).catch(() => {});
     });
-
-    await pubsub.unsubscribe('workflows', tempCb);
-    await Promise.all(activePromises);
 
     if (resultData.prevResult.status === 'failed') {
       return {

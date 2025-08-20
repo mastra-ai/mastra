@@ -4,6 +4,7 @@ import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -20,6 +21,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
+import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
 
@@ -63,6 +65,13 @@ export interface Config<
 
   // @deprecated add memory to your Agent directly instead
   memory?: never;
+
+  events?: {
+    [topic: string]: (
+      event: Event,
+      cb?: () => Promise<void>,
+    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  };
 }
 
 @InstrumentClass({
@@ -101,6 +110,9 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #events: {
+    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  } = {};
 
   /**
    * @deprecated use getTelemetry() instead
@@ -185,6 +197,30 @@ export class Mastra<
       this.#pubsub = config.pubsub;
     } else {
       this.#pubsub = new EventEmitterPubSub();
+    }
+
+    this.#events = {};
+    for (const topic in config?.events ?? {}) {
+      if (!Array.isArray(config?.events?.[topic])) {
+        this.#events[topic] = [config?.events?.[topic] as any];
+      } else {
+        this.#events[topic] = config?.events?.[topic] ?? [];
+      }
+    }
+
+    const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
+    const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
+      try {
+        await workflowEventProcessor.process(event, cb);
+        console.log('event processed', event?.type, event?.data.workflowId, event?.data?.runId);
+      } catch (e) {
+        console.error('Error processing event', e);
+      }
+    };
+    if (this.#events.workflows) {
+      this.#events.workflows.push(workflowEventCb);
+    } else {
+      this.#events.workflows = [workflowEventCb];
     }
 
     /*
@@ -998,6 +1034,40 @@ do:
         `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
       );
       return undefined;
+    }
+  }
+
+  public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.subscribe(topic, listener);
+  }
+
+  public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.unsubscribe(topic, listener);
+  }
+
+  public async startEventListeners() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.subscribe(topic, listener);
+      }
+    }
+  }
+
+  public async stopEventListeners() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.unsubscribe(topic, listener);
+      }
     }
   }
 }

@@ -7,12 +7,12 @@ import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
 import type { StreamEvent, WatchEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 
 const testStorage = new MockStore();
 
@@ -48,11 +48,12 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -157,6 +158,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle basic suspend and resume flow', async () => {
@@ -231,11 +234,12 @@ describe('Workflow', () => {
         .then(evaluateImproved)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -257,6 +261,7 @@ describe('Workflow', () => {
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);
 
       const resumeResult = await getWorkflowState();
+      await mastra.stopEventListeners();
 
       expect(resumeResult.steps).toEqual({
         input: { input: 'test' },
@@ -300,6 +305,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use an agent as a step', async () => {
@@ -369,12 +376,13 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
@@ -599,6 +607,8 @@ describe('Workflow', () => {
           type: 'finish',
         },
       ]);
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle sleep waiting flow', async () => {
@@ -626,11 +636,12 @@ describe('Workflow', () => {
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -767,6 +778,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle waitForEvent waiting flow', async () => {
@@ -794,11 +807,12 @@ describe('Workflow', () => {
       });
       workflow.then(step1).waitForEvent('user-event-test', step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -913,6 +927,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -950,11 +966,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { value: 'bail' } });
@@ -987,6 +1004,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should throw error when execution flow not defined', () => {
@@ -1057,7 +1076,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1070,6 +1094,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should have access to typed workflow results', async () => {
@@ -1094,7 +1120,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1107,6 +1138,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should execute multiple steps in parallel', async () => {
@@ -1139,7 +1172,12 @@ describe('Workflow', () => {
 
       workflow.parallel([step1, step2]).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1165,6 +1203,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should have runId in the step execute function - bug #4260', async () => {
@@ -1188,7 +1228,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage, pubsub: new EventEmitterPubSub() });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1204,6 +1249,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+
+      await mastra.stopEventListeners();
     });
 
     describe('Variable Resolution', () => {
@@ -1231,11 +1278,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
@@ -1258,6 +1306,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should provide access to step results and trigger data via getStepResult helper', async () => {
@@ -1306,11 +1356,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputValue: 'test-input' } });
@@ -1363,11 +1414,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         await run.start({ inputData: { inputData: 'test-input' } });
@@ -1377,6 +1429,8 @@ describe('Workflow', () => {
             inputData: { inputData: 'test-input' },
           }),
         );
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve trigger data from getInitData', async () => {
@@ -1411,11 +1465,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1469,11 +1524,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1492,6 +1548,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve trigger data and DI runtimeContext values via .map()', async () => {
@@ -1537,11 +1595,12 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const runtimeContext = new RuntimeContext<{ life: number }>();
         runtimeContext.set('life', 42);
@@ -1563,6 +1622,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve dynamic mappings via .map()', async () => {
@@ -1622,11 +1683,12 @@ describe('Workflow', () => {
           })
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1653,6 +1715,8 @@ describe('Workflow', () => {
           result: 'test-input',
           second: 'success',
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve variables from previous steps', async () => {
@@ -1691,10 +1755,11 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         await run.start({ inputData: {} });
@@ -1706,6 +1771,8 @@ describe('Workflow', () => {
             },
           }),
         );
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve inputs from previous steps that are not objects', async () => {
@@ -1734,11 +1801,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1762,6 +1830,8 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve inputs from previous steps that are arrays', async () => {
@@ -1790,11 +1860,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1818,6 +1889,8 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve inputs from previous steps that are arrays via .map()', async () => {
@@ -1855,11 +1928,12 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1883,6 +1957,8 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve constant values via .map()', async () => {
@@ -1928,11 +2004,12 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1951,6 +2028,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should resolve fully dynamic input via .map()', async () => {
@@ -1992,11 +2071,12 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -2015,6 +2095,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
     });
 
@@ -2089,11 +2171,12 @@ describe('Workflow', () => {
           .then(step4)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { status: 'success' } });
@@ -2108,6 +2191,8 @@ describe('Workflow', () => {
           step2: { status: 'success', output: { result: 'step2' } },
           step4: { status: 'success', output: { result: 'step2' } },
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should handle failing dependencies', async () => {
@@ -2140,11 +2225,12 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
@@ -2167,6 +2253,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         });
         expect((step1Result as any)?.error).toMatch(/^Error: Failed/);
+
+        await mastra.stopEventListeners();
       });
 
       it('should support simple string conditions', async () => {
@@ -2224,11 +2312,12 @@ describe('Workflow', () => {
           ])
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { status: 'success' } });
@@ -2255,6 +2344,8 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should support custom condition functions', async () => {
@@ -2294,11 +2385,12 @@ describe('Workflow', () => {
           ])
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { count: 5 } });
@@ -2320,6 +2412,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
     });
 
@@ -2351,11 +2445,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).sleep(1000).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2380,6 +2475,8 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
+
+      await mastra.stopEventListeners();
     });
 
     it('should execute a a sleep until step', async () => {
@@ -2414,10 +2511,11 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2442,6 +2540,8 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(900);
+
+      await mastra.stopEventListeners();
     });
 
     it('should execute a waitForEvent step', async () => {
@@ -2474,11 +2574,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).waitForEvent('hello-event', step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2509,6 +2610,8 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(1000);
+
+      await mastra.stopEventListeners();
     });
 
     // timeouts not supported for now
@@ -2542,11 +2645,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2571,6 +2675,8 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(900);
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -2604,11 +2710,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).sleep(1000).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -2629,6 +2736,8 @@ describe('Workflow', () => {
       });
 
       expect(result.steps['step2']).toBeUndefined();
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to abort workflow execution immediately', async () => {
@@ -2661,11 +2770,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -2685,6 +2795,8 @@ describe('Workflow', () => {
       });
 
       expect(result.steps['step2']).toBeUndefined();
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to abort workflow execution during a step', async () => {
@@ -2731,11 +2843,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -2787,10 +2900,11 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
 
@@ -2818,6 +2932,8 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
       expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle variable resolution errors', async () => {
@@ -2848,11 +2964,12 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       await expect(run.start({ inputData: {} })).resolves.toMatchObject({
@@ -2876,6 +2993,8 @@ describe('Workflow', () => {
           },
         },
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle step execution errors within branches', async () => {
@@ -2916,11 +3035,12 @@ describe('Workflow', () => {
 
       workflow.parallel([step1, step2]).then(step3).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -2941,6 +3061,8 @@ describe('Workflow', () => {
         },
       });
       expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle step execution errors within nested workflows', async () => {
@@ -2991,11 +3113,12 @@ describe('Workflow', () => {
         .then(workflow)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'main-workflow': mainWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await mainWorkflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3011,6 +3134,8 @@ describe('Workflow', () => {
       });
 
       expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Step execution failed/);
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3095,11 +3220,12 @@ describe('Workflow', () => {
         })
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3118,6 +3244,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3179,10 +3307,11 @@ describe('Workflow', () => {
         .then(finalStep)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
@@ -3252,11 +3381,12 @@ describe('Workflow', () => {
         .then(finalStep)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
@@ -3267,6 +3397,8 @@ describe('Workflow', () => {
       expect(result.result).toEqual({ finalValue: 12 });
       // @ts-ignore
       expect(result.steps.increment.output).toEqual({ value: 12 });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3312,11 +3444,12 @@ describe('Workflow', () => {
 
       counterWorkflow.foreach(mapStep).then(finalStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
@@ -3387,11 +3520,12 @@ describe('Workflow', () => {
 
       counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
@@ -3464,11 +3598,12 @@ describe('Workflow', () => {
 
       counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
@@ -3496,6 +3631,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3601,11 +3738,12 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 1 } });
@@ -3617,6 +3755,8 @@ describe('Workflow', () => {
       expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
       // @ts-ignore
       expect(result.steps.start.output).toEqual({ newValue: 2 });
+
+      await mastra.stopEventListeners();
     });
 
     it('should run the else branch', async () => {
@@ -3721,11 +3861,12 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 6 } });
@@ -3791,6 +3932,8 @@ describe('Workflow', () => {
           nested: { value: 42 },
         },
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3857,13 +4000,14 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'test-workflow': workflow,
         },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3882,6 +4026,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3910,7 +4056,7 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         workflows: {
           'test-workflow': workflow,
@@ -3918,6 +4064,7 @@ describe('Workflow', () => {
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       workflow.then(step1).then(step2).commit();
 
@@ -3943,6 +4090,8 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
+
+      await mastra.stopEventListeners();
     });
 
     it('should retry a step with a custom retry config', async () => {
@@ -3970,7 +4119,7 @@ describe('Workflow', () => {
         retryConfig: { attempts: 5, delay: 200 },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: {
@@ -3978,6 +4127,7 @@ describe('Workflow', () => {
         },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       workflow.then(step1).then(step2).commit();
 
@@ -4003,6 +4153,8 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -4038,11 +4190,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(createStep(randomTool)).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -4065,6 +4218,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -4094,11 +4249,12 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
@@ -4189,6 +4345,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should watch workflow state changes and call onTransition when attaching from separate run', async () => {
@@ -4216,11 +4374,12 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
@@ -4311,6 +4470,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should unsubscribe from transitions when unwatch is called', async () => {
@@ -4338,11 +4499,12 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const onTransition = vi.fn();
       const onTransition2 = vi.fn();
@@ -4374,6 +4536,8 @@ describe('Workflow', () => {
 
       expect(onTransition).toHaveBeenCalledTimes(10);
       expect(onTransition2).toHaveBeenCalledTimes(10);
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use all action types in a workflow', async () => {
@@ -4408,11 +4572,12 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(createStep(randomTool)).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
 
@@ -4508,6 +4673,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -4618,12 +4785,13 @@ describe('Workflow', () => {
       // Create a new storage instance for initial run
       const initialStorage = new MockStore();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: initialStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -4695,6 +4863,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle parallel steps with conditional suspend', async () => {
@@ -4767,12 +4937,13 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
 
@@ -4847,6 +5018,8 @@ describe('Workflow', () => {
           suspendedAt: expect.any(Number),
         },
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle complex workflow with multiple suspends', async () => {
@@ -4963,11 +5136,12 @@ describe('Workflow', () => {
         .parallel([humanIntervention, explainResponse])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const started = run.start({ inputData: { input: 'test' } });
@@ -5049,6 +5223,8 @@ describe('Workflow', () => {
         },
         humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle basic suspend and resume flow with async await syntax', async () => {
@@ -5132,12 +5308,13 @@ describe('Workflow', () => {
         .then(evaluateImproved)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5301,6 +5478,8 @@ describe('Workflow', () => {
       });
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
+
+      await mastra.stopEventListeners();
     });
 
     it('should work with runtimeContext - bug #4442', async () => {
@@ -5348,12 +5527,13 @@ describe('Workflow', () => {
 
       promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5370,6 +5550,8 @@ describe('Workflow', () => {
       expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
       // @ts-ignore
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
+
+      await mastra.stopEventListeners();
     });
 
     it('should work with custom runtimeContext - bug #4442', async () => {
@@ -5417,12 +5599,13 @@ describe('Workflow', () => {
 
       promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5442,6 +5625,8 @@ describe('Workflow', () => {
       expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
       // @ts-ignore
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
+
+      await mastra.stopEventListeners();
     });
 
     it('should handle basic suspend and resume in a dountil workflow', async () => {
@@ -5507,12 +5692,13 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'dowhile-workflow': dowhileWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await dowhileWorkflow.createRunAsync();
       const result = await run.start({ inputData: { value: 0 } });
@@ -5539,6 +5725,8 @@ describe('Workflow', () => {
       expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
         status: 'success',
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -5575,7 +5763,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'test-workflow': workflow,
         },
@@ -5583,6 +5771,7 @@ describe('Workflow', () => {
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       // Create a few runs
       const run1 = await workflow.createRunAsync();
@@ -5598,6 +5787,8 @@ describe('Workflow', () => {
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
+
+      await mastra.stopEventListeners();
     });
 
     it('should get workflow run by id from storage', async () => {
@@ -5620,7 +5811,7 @@ describe('Workflow', () => {
       const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: {
@@ -5628,6 +5819,7 @@ describe('Workflow', () => {
         },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       // Create a few runs
       const run1 = await workflow.createRunAsync();
@@ -5646,6 +5838,8 @@ describe('Workflow', () => {
       expect(run3?.runId).toBe(run1.runId);
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -5665,12 +5859,13 @@ describe('Workflow', () => {
       const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step1).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       // Access new instance properties directly - should work without warning
       const run = await workflow.createRunAsync();
@@ -5678,6 +5873,8 @@ describe('Workflow', () => {
 
       expect(telemetry).toBeDefined();
       expect(telemetry).toBeInstanceOf(Telemetry);
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -5749,13 +5946,14 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         logger: false,
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
@@ -5801,6 +5999,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use an agent in parallel', async () => {
@@ -5886,13 +6086,14 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const nestedWorkflow1 = createWorkflow({
         id: 'nested-workflow',
@@ -6021,13 +6222,14 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       workflow
         .then(startStep)
@@ -6094,6 +6296,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
@@ -6130,13 +6334,14 @@ describe('Workflow', () => {
           }),
         }),
       });
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const agentStep = createStep({
         id: 'agent-step',
@@ -6209,6 +6414,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -6297,13 +6504,14 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6336,6 +6544,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to nest workflows sequentially', async () => {
@@ -6403,13 +6613,14 @@ describe('Workflow', () => {
         .commit();
       counterWorkflow.then(wfA).then(wfB).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6426,6 +6637,8 @@ describe('Workflow', () => {
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 28,
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able clone workflows as steps', async () => {
@@ -6516,13 +6729,14 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6555,6 +6769,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
 
     it('should be able to nest workflows with conditions', async () => {
@@ -6651,11 +6867,12 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6789,11 +7006,12 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -6830,6 +7048,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should execute else-branch', async () => {
@@ -6930,11 +7150,12 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -6972,6 +7193,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
 
       it('should execute nested else and if-branch', async () => {
@@ -7109,11 +7332,12 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 1 } });
@@ -7151,6 +7375,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
     });
 
@@ -7247,12 +7473,13 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           logger: false,
           storage: testStorage,
           workflows: { 'counter-workflow': counterWorkflow },
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -7279,6 +7506,8 @@ describe('Workflow', () => {
         expect(other).toHaveBeenCalledTimes(2);
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
+
+        await mastra.stopEventListeners();
       });
     });
 
@@ -7366,13 +7595,14 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: {
             'counter-workflow': counterWorkflow,
           },
           storage: testStorage,
           pubsub: new EventEmitterPubSub(),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -7400,6 +7630,8 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+
+        await mastra.stopEventListeners();
       });
     });
 
@@ -7527,12 +7759,13 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'counter-workflow': counterWorkflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -7569,6 +7802,8 @@ describe('Workflow', () => {
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(1);
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -7590,17 +7825,20 @@ describe('Workflow', () => {
       const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = workflow.createRun();
       const result = await run.start({ runtimeContext });
 
       // @ts-ignore
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
+
+      await mastra.stopEventListeners();
     });
 
     it('should inject runtimeContext dependencies into steps during resume', async () => {
@@ -7632,12 +7870,13 @@ describe('Workflow', () => {
       });
       workflow.then(step).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: initialStorage,
         workflows: { 'test-workflow': workflow },
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = workflow.createRun();
       await run.start({ runtimeContext });
@@ -7655,6 +7894,8 @@ describe('Workflow', () => {
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -7740,11 +7981,12 @@ describe('Workflow', () => {
       // This tests the fix: consecutive parallel calls should work with proper type inference
       workflow.parallel([step1, step2]).parallel([step3, step4]).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'consecutive-parallel-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = workflow.createRun();
       const result = await run.start({ inputData: { input: 'test-data' } });
@@ -7785,6 +8027,8 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+
+      await mastra.stopEventListeners();
     });
   });
 
@@ -7809,16 +8053,19 @@ describe('Workflow', () => {
         .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const result = await workflow.createRun().start({ inputData: {} });
 
       expect(result.status).toBe('success');
       expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
+
+      await mastra.stopEventListeners();
     });
 
     it('multiple steps should have different run counts', async () => {
@@ -7855,11 +8102,12 @@ describe('Workflow', () => {
         .dountil(step2, async ({ inputData }) => inputData.count === 10)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -7867,6 +8115,8 @@ describe('Workflow', () => {
       expect(result.status).toBe('success');
       expect(result.steps.step1).toHaveProperty('output', { count: 3 });
       expect(result.steps.step2).toHaveProperty('output', { count: 10 });
+
+      await mastra.stopEventListeners();
     });
 
     it('runCount should exist and equal zero for the first run', async () => {
@@ -7890,17 +8140,20 @@ describe('Workflow', () => {
         .then(step)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
         pubsub: new EventEmitterPubSub(),
       });
+      await mastra.startEventListeners();
 
       const run = workflow.createRun();
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);
       expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+
+      await mastra.stopEventListeners();
     });
   });
 });
