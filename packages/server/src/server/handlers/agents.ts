@@ -89,6 +89,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           }
         }
 
+        const model = llm?.getModel();
+
         return {
           id,
           name: agent.name,
@@ -97,6 +99,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
           modelId: llm?.getModelId(),
+          modelVersion: model?.specificationVersion,
           defaultGenerateOptions: defaultGenerateOptions as any,
           defaultStreamOptions: defaultStreamOptions as any,
         };
@@ -182,6 +185,8 @@ export async function getAgentByIdHandler({
     const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
     const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
+    const model = llm?.getModel();
+
     return {
       name: agent.name,
       instructions,
@@ -189,6 +194,7 @@ export async function getAgentByIdHandler({
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
+      modelVersion: model?.specificationVersion,
       defaultGenerateOptions: defaultGenerateOptions as any,
       defaultStreamOptions: defaultStreamOptions as any,
     };
