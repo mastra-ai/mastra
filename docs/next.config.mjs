@@ -44,6 +44,18 @@ export default withGT(
             destination: "/api/copilotkit",
           },
           {
+            source: "/en/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/ja/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
             source: "/:locale/docs/_next/:path+",
             destination: "/_next/:path+",
           },
@@ -763,6 +775,11 @@ export default withGT(
       {
         source: "/reference/workflows/snapshots",
         destination: "/docs/server-db/snapshots",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/hierarchical-multi-agent",
+        destination: "/examples/agents/supervisor-agent",
         permanent: true,
       },
     ],

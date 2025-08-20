@@ -1,4 +1,6 @@
 import type { Agent } from '../agent';
+import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
+import type { AITracingConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -42,6 +44,7 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
+  observability?: AITracingConfig;
   idGenerator?: MastraIdGenerator;
   deployer?: MastraDeployer;
   server?: ServerConfig;
@@ -213,6 +216,14 @@ export class Mastra<
           `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
         `If you are using a custom instrumentation file or want to disable this warning, set the globalThis.___MASTRA_TELEMETRY___ variable to true in your instrumentation file.`,
       );
+    }
+
+    /*
+    AI Tracing
+    */
+
+    if (config?.observability) {
+      setupAITracing(config.observability);
     }
 
     /*
@@ -653,6 +664,12 @@ do:
         this.#mcpServers?.[key]?.__setLogger(this.#logger);
       });
     }
+
+    // Set logger for AI tracing instances
+    const allTracingInstances = getAllAITracing();
+    allTracingInstances.forEach(instance => {
+      instance.__setLogger(this.#logger);
+    });
   }
 
   public setTelemetry(telemetry: OtelConfig) {
@@ -982,5 +999,15 @@ do:
       );
       return undefined;
     }
+  }
+
+  /**
+   * Shutdown Mastra and clean up all resources
+   */
+  async shutdown(): Promise<void> {
+    // Shutdown AI tracing registry and all instances
+    await shutdownAITracingRegistry();
+
+    this.#logger?.info('Mastra shutdown completed');
   }
 }

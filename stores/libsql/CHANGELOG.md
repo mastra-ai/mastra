@@ -1,5 +1,18 @@
 # @mastra/libsql
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- d6e39da: Load most recent snapshot from storage
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+
 ## 0.13.2
 
 ### Patch Changes

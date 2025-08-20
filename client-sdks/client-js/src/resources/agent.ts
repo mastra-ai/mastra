@@ -24,6 +24,7 @@ import type {
   GetToolResponse,
   ClientOptions,
   StreamParams,
+  UpdateModelParams,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -788,7 +789,7 @@ export class Agent extends BaseResource {
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
-  updateModel(params: { model: MastraLanguageModel }): Promise<{ message: string }> {
+  updateModel(params: UpdateModelParams): Promise<{ message: string }> {
     return this.request(`/api/agents/${this.agentId}/model`, {
       method: 'POST',
       body: params,
