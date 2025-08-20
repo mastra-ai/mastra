@@ -1,4 +1,6 @@
 export * from './agent/index.warning';
+export { convertMessages } from './agent/message-list';
+export type { OutputFormat as MessageOutputFormat } from './agent/message-list';
 export * from './base.warning';
 export * from './deployer/index.warning';
 export * from './storage/index.warning';
