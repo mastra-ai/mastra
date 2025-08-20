@@ -3,6 +3,7 @@ import type { Span } from '@opentelemetry/api';
 import type { asSchema, CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
+import type { OutputProcessor } from '../processors';
 import type { ChunkType } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
@@ -37,6 +38,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   options?: LoopConfig;
   providerOptions?: SharedV2ProviderOptions;
   tools?: Tools;
+  outputProcessors?: OutputProcessor[];
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   _internal?: StreamInternal;
