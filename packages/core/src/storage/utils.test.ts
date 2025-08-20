@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { safelyParseJSON } from '.';
+import { safelyParseJSON } from './utils';
 
 describe('safelyParseJSON', () => {
   const sampleObject = {
@@ -51,5 +51,23 @@ describe('safelyParseJSON', () => {
 
     // Assert: Verify different object instances
     expect(numberResult).not.toBe(booleanResult);
+  });
+  it('should return raw string when provided a non-JSON string', () => {
+    const raw = 'hello world'; // not valid JSON
+    expect(safelyParseJSON(raw)).toBe(raw);
+  });
+
+  it('should still parse valid JSON strings', () => {
+    const json = '{"a":1,"b":"two"}';
+    expect(safelyParseJSON(json)).toEqual({ a: 1, b: 'two' });
+  });
+  it('parses JSON numbers/booleans/arrays', () => {
+    expect(safelyParseJSON('123')).toBe(123);
+    expect(safelyParseJSON('true')).toBe(true);
+    expect(safelyParseJSON('[1,2]')).toEqual([1, 2]);
+  });
+
+  it('trims whitespace around JSON strings', () => {
+    expect(safelyParseJSON(' { "x": 1 } ')).toEqual({ x: 1 });
   });
 });
