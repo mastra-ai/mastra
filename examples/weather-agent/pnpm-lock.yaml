@@ -7,6 +7,7 @@ settings:
 overrides:
   '@mastra/core': link:../../packages/core
   '@mastra/libsql': link:../../stores/libsql
+  mastra: link:../../packages/cli
 
 importers:
 
@@ -21,6 +22,9 @@ importers:
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
+      mastra:
+        specifier: link:../../packages/cli
+        version: link:../../packages/cli
       zod:
         specifier: ^3.25.67
         version: 3.25.67
