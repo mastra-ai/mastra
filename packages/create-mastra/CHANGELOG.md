@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.22-alpha.2
+
+### Patch Changes
+
+- 36928f0: Use right icon for anthropic in model switcher
+
 ## 0.10.22-alpha.1
 
 ### Patch Changes
