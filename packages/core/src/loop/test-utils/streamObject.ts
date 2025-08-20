@@ -1440,7 +1440,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
             options: {
               onFinish: async event => {
-                console.log('calling onFinishResult2', event);
                 onFinishResult = event as unknown as typeof onFinishResult;
               },
             },
