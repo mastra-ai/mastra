@@ -1,8 +1,19 @@
+import { ReadableStream } from 'node:stream/web';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { agentBuilderTemplateWorkflow } from '@mastra/agent-builder';
 import type { Context } from '../types';
 import { handleError } from './error';
 import { basename, dirname } from 'path';
+
+interface TemplateContext extends Context {
+  runtimeContext?: RuntimeContext;
+  runId?: string;
+  repo: string;
+  ref?: string;
+  slug?: string;
+  targetPath?: string;
+  variables?: Record<string, string>;
+}
 
 export interface TemplateInstallationRequest {
   /** Template repository URL or slug */
@@ -17,75 +28,61 @@ export interface TemplateInstallationRequest {
   variables?: Record<string, string>;
 }
 
-export interface TemplateInstallationResult {
-  /** Whether installation was successful */
-  success: boolean;
-  /** Whether any changes were applied */
-  applied: boolean;
-  /** Git branch name created for the installation */
-  branchName?: string;
-  /** Success/error message */
-  message: string;
-  /** Validation results if available */
-  validationResults?: {
-    valid: boolean;
-    errorsFixed: number;
-    remainingErrors: number;
-  };
-  /** Error details if installation failed */
-  error?: string;
-  /** Array of errors from different steps */
-  errors?: string[];
-  /** Detailed step results */
-  stepResults?: {
-    copySuccess: boolean;
-    mergeSuccess: boolean;
-    validationSuccess: boolean;
-    filesCopied: number;
-    conflictsSkipped: number;
-    conflictsResolved: number;
-  };
+// Helper function to resolve target path and set runtime context variables
+function prepareTemplateInstallation({
+  targetPath,
+  variables,
+  runtimeContext,
+}: {
+  targetPath?: string;
+  variables?: Record<string, string>;
+  runtimeContext?: RuntimeContext;
+}) {
+  // Resolve default targetPath when not explicitly provided
+  let effectiveTargetPath = targetPath;
+  if (!effectiveTargetPath) {
+    const envRoot = process.env.MASTRA_PROJECT_ROOT?.trim();
+    if (envRoot) {
+      effectiveTargetPath = envRoot;
+    } else {
+      const cwd = process.cwd();
+      const parent = dirname(cwd);
+      const grand = dirname(parent);
+      // Detect when running under `<project>/.mastra/output` and resolve back to project root
+      if (basename(cwd) === 'output' && basename(parent) === '.mastra') {
+        effectiveTargetPath = grand;
+      } else {
+        effectiveTargetPath = cwd;
+      }
+    }
+  }
+
+  // Set environment variables in runtime context if provided
+  if (variables) {
+    Object.entries(variables).forEach(([key, value]) => {
+      runtimeContext?.set(key, value);
+    });
+  }
+
+  return effectiveTargetPath;
 }
 
-export async function installTemplateHandler({
+export async function createTemplateInstallRunHandler({
   mastra,
   runtimeContext,
+  runId: prevRunId,
   repo,
   ref,
   slug,
   targetPath,
   variables,
-}: Context & {
-  runtimeContext: RuntimeContext;
-  repo: string;
-  ref?: string;
-  slug?: string;
-  targetPath?: string;
-  variables?: Record<string, string>;
-}): Promise<TemplateInstallationResult> {
+}: TemplateContext): Promise<{ runId: string }> {
   const logger = mastra.getLogger();
 
   try {
-    // Resolve default targetPath when not explicitly provided
-    let effectiveTargetPath = targetPath;
-    if (!effectiveTargetPath) {
-      const envRoot = process.env.MASTRA_PROJECT_ROOT?.trim();
-      if (envRoot) {
-        effectiveTargetPath = envRoot;
-      } else {
-        const cwd = process.cwd();
-        const parent = dirname(cwd);
-        const grand = dirname(parent);
-        // Detect when running under `<project>/.mastra/output` and resolve back to project root
-        if (basename(cwd) === 'output' && basename(parent) === '.mastra') {
-          effectiveTargetPath = grand;
-        } else {
-          effectiveTargetPath = cwd;
-        }
-      }
-    }
+    const effectiveTargetPath = prepareTemplateInstallation({ targetPath, variables, runtimeContext });
 
-    logger.info('Starting template installation', {
+    logger.info('Creating template installation run', {
       repo,
       ref,
       slug,
@@ -94,22 +91,54 @@ export async function installTemplateHandler({
     });
 
     // Create workflow run
-    const run = await agentBuilderTemplateWorkflow.createRunAsync();
+    const run = await agentBuilderTemplateWorkflow.createRunAsync({ runId: prevRunId });
 
-    // Set environment variables in runtime context if provided
-    if (variables) {
-      Object.entries(variables).forEach(([key, value]) => {
-        runtimeContext.set(key, value);
-      });
-    }
-
-    logger.info('Starting agent-builder template workflow', {
+    logger.info('Created template installation run', {
       runId: run.runId,
       repo,
       ref: ref || 'main',
     });
 
-    // Start the workflow with template installation parameters
+    return { runId: run.runId };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logger.error('Failed to create template installation run', {
+      repo,
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    throw error;
+  }
+}
+
+export async function startAsyncTemplateInstallHandler({
+  mastra,
+  runtimeContext,
+  runId,
+  repo,
+  ref,
+  slug,
+  targetPath,
+  variables,
+}: TemplateContext) {
+  const logger = mastra.getLogger();
+
+  try {
+    const effectiveTargetPath = prepareTemplateInstallation({ targetPath, variables, runtimeContext });
+
+    logger.info('Starting async template installation', {
+      runId,
+      repo,
+      ref,
+      slug,
+      targetPath: effectiveTargetPath,
+      variables,
+    });
+
+    // Get the workflow run and start it
+    const run = await agentBuilderTemplateWorkflow.createRunAsync({ runId });
     const result = await run.start({
       inputData: {
         repo,
@@ -121,46 +150,72 @@ export async function installTemplateHandler({
     });
 
     logger.info('Template workflow completed', {
-      runId: run.runId,
+      runId,
       status: result.status,
     });
 
-    // Transform workflow result to our expected format
-    if (result.status === 'success') {
-      return {
-        success: result.result.success || false,
-        applied: result.result.applied || false,
-        branchName: result.result.branchName,
-        message: result.result.message || 'Template installation completed',
-        validationResults: result.result.validationResults,
-        error: result.result.error,
-        errors: result.result.errors,
-        stepResults: result.result.stepResults,
-      };
-    } else if (result.status === 'failed') {
-      return {
-        success: false,
-        applied: false,
-        message: `Template installation failed: ${result.error.message}`,
-        error: result.error.message,
-      };
-    } else {
-      return {
-        success: false,
-        applied: false,
-        message: 'Template installation was suspended',
-        error: 'Workflow suspended - manual intervention required',
-      };
-    }
+    return result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    logger.error('Template installation failed', {
+    logger.error('Async template installation failed', {
+      runId,
       repo,
       error: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
     });
 
-    return handleError(error, 'Template installation failed');
+    return handleError(error, 'Async template installation failed');
+  }
+}
+
+export async function streamTemplateInstallHandler({
+  mastra,
+  runtimeContext,
+  runId,
+  repo,
+  ref,
+  slug,
+  targetPath,
+  variables,
+}: TemplateContext) {
+  const logger = mastra.getLogger();
+
+  try {
+    const effectiveTargetPath = prepareTemplateInstallation({ targetPath, variables, runtimeContext });
+
+    logger.info('Starting template installation stream', {
+      runId,
+      repo,
+      ref,
+      slug,
+      targetPath: effectiveTargetPath,
+      variables,
+    });
+
+    // Get the workflow run and stream it
+    const run = await agentBuilderTemplateWorkflow.createRunAsync({ runId });
+    const result = run.stream({
+      inputData: {
+        repo,
+        ref: ref || 'main',
+        slug,
+        targetPath: effectiveTargetPath,
+      },
+      runtimeContext,
+    });
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logger.error('Template installation stream failed', {
+      runId,
+      repo,
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    return handleError(error, 'Template installation stream failed');
   }
 }

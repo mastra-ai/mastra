@@ -1,4 +1,9 @@
-import { useTemplateRepo, useTemplateRepoEnvVars, useInstallTemplate } from '@/hooks/use-templates';
+import {
+  useTemplateRepo,
+  useTemplateRepoEnvVars,
+  useStreamTemplateInstall,
+  useCreateTemplateInstallRun,
+} from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import {
   Breadcrumb,
@@ -20,11 +25,12 @@ import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
   const [selectedProvider, setSelectedProvider] = useState<string>('');
-  const [isInstalling, setIsInstalling] = useState(false);
   const [variables, setVariables] = useState({});
   const [errors, setErrors] = useState<string[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [currentRunId, setCurrentRunId] = useState<string>('');
+
   const { data: template, isLoading: isLoadingTemplate } = useTemplateRepo({
     repoOrSlug: templateSlug,
     owner: 'mastra-ai',
@@ -36,7 +42,8 @@ export default function Template() {
     branch: selectedProvider,
   });
 
-  const { mutateAsync: installTemplate } = useInstallTemplate();
+  const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
+  const { streamInstall, streamResult, isStreaming, installationResult } = useStreamTemplateInstall();
 
   const providerOptions = [
     { value: 'openai', label: 'OpenAI' },
@@ -117,24 +124,51 @@ export default function Template() {
     }
 
     if (template) {
-      setIsInstalling(true);
+      // Reset states
+      setFailure(null);
+      setSuccess(false);
+      setCurrentRunId('');
+
       try {
         const repo = template.githubUrl || `https://github.com/mastra-ai/template-${template.slug}`;
-        await installTemplate({
+        const templateParams = {
           repo,
           ref: selectedProvider || 'main',
           slug: template.slug,
           variables: variables as Record<string, string>,
+        };
+
+        // Step 1: Create the template installation run
+        const { runId } = await createTemplateInstallRun({
+          templateSlug: template.slug,
+          params: templateParams,
         });
-        setSuccess(true);
+
+        setCurrentRunId(runId);
+
+        // Step 2: Start streaming the installation with the runId
+        await streamInstall.mutateAsync({
+          templateSlug: template.slug,
+          params: templateParams,
+          runId,
+        });
       } catch (err: any) {
         setFailure(err?.message || 'Template installation failed');
         console.error('Template installation failed', err);
-      } finally {
-        setIsInstalling(false);
       }
     }
   };
+
+  // Watch for installation completion
+  useEffect(() => {
+    if (installationResult) {
+      if (installationResult.success) {
+        setSuccess(true);
+      } else {
+        setFailure(installationResult.error || installationResult.message || 'Template installation failed');
+      }
+    }
+  }, [installationResult]);
 
   const handleVariableChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -180,7 +214,20 @@ export default function Template() {
           />
           {template && (
             <>
-              {isInstalling && <TemplateInstallation name={template.title} />}
+              {isStreaming && (
+                <div className="space-y-4">
+                  <TemplateInstallation name={template.title} />
+                  {currentRunId && <div className="text-xs text-gray-500 text-center">Run ID: {currentRunId}</div>}
+                  {streamResult.message && (
+                    <div className="text-sm text-gray-600 text-center">{streamResult.message}</div>
+                  )}
+                  {streamResult.currentStep && (
+                    <div className="text-sm text-blue-600 text-center">
+                      Current step: {streamResult.currentStep.name}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {template && success && (
                 <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
@@ -188,7 +235,7 @@ export default function Template() {
 
               {template && failure && <TemplateFailure errorMsg={failure} />}
 
-              {!isInstalling && !success && !failure && (
+              {!isStreaming && !success && !failure && (
                 <TemplateForm
                   providerOptions={providerOptions}
                   selectedProvider={selectedProvider}

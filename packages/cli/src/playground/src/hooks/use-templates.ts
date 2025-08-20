@@ -1,6 +1,8 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { TemplateInstallationRequest, TemplateInstallationResult } from '@mastra/client-js';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { client } from '@/lib/client';
+import { useState } from 'react';
 
 export interface Template {
   slug: string;
@@ -138,7 +140,7 @@ async function getTemplateRepoEnvVars({
 
 async function installTemplate(request: TemplateInstallationRequest): Promise<TemplateInstallationResult> {
   const template = client.getTemplates();
-  const result = await template.install(request);
+  const result = await template.installAsync(request.slug!, request);
 
   if (!result?.success) {
     throw new Error(result?.error || result?.message || 'Template installation failed');
@@ -171,4 +173,191 @@ export const useTemplateRepoEnvVars = ({ repo, owner, branch }: { repo: string; 
     queryKey: ['template-repo-env-vars', repo, owner, branch],
     queryFn: () => getTemplateRepoEnvVars({ repo, owner, branch }),
   });
+};
+
+export const useCreateTemplateInstallRun = () => {
+  return useMutation({
+    mutationFn: async ({
+      templateSlug,
+      params,
+      runId,
+    }: {
+      templateSlug: string;
+      params: TemplateInstallationRequest & { runtimeContext?: RuntimeContext };
+      runId?: string;
+    }) => {
+      const template = client.getTemplates();
+      return await template.createInstallRun(templateSlug, params, runId);
+    },
+  });
+};
+
+export const useInstallTemplateAsync = () => {
+  return useMutation({
+    mutationFn: async ({
+      templateSlug,
+      params,
+      runId,
+    }: {
+      templateSlug: string;
+      params: TemplateInstallationRequest & { runtimeContext?: RuntimeContext };
+      runId?: string;
+    }) => {
+      const template = client.getTemplates();
+      const result = await template.installAsync(templateSlug, params, runId);
+
+      if (!result?.success) {
+        throw new Error(result?.error || result?.message || 'Template installation failed');
+      }
+      return result;
+    },
+  });
+};
+
+export const useStreamTemplateInstall = () => {
+  const [streamResult, setStreamResult] = useState<any>({});
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [installationResult, setInstallationResult] = useState<TemplateInstallationResult | null>(null);
+
+  const streamInstall = useMutation({
+    mutationFn: async ({
+      templateSlug,
+      params,
+      runId,
+    }: {
+      templateSlug: string;
+      params: TemplateInstallationRequest & { runtimeContext?: RuntimeContext };
+      runId?: string;
+    }) => {
+      setIsStreaming(true);
+      setStreamResult({});
+      setInstallationResult(null);
+
+      const template = client.getTemplates();
+      const stream = await template.streamInstall(templateSlug, params, runId);
+
+      if (!stream) throw new Error('No stream returned');
+
+      // Get a reader from the ReadableStream
+      const reader = stream.getReader();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Handle different event types from the template installation workflow
+          if (value.type === 'start') {
+            setStreamResult((prev: any) => ({
+              ...prev,
+              runId: value.payload.runId,
+              eventTimestamp: new Date(),
+              status: 'running',
+              message: 'Template installation started...',
+            }));
+          }
+
+          if (value.type === 'step-start') {
+            setStreamResult((prev: any) => ({
+              ...prev,
+              currentStep: {
+                id: value.payload.id,
+                name: value.payload.name || value.payload.id,
+                status: 'running',
+              },
+              eventTimestamp: new Date(),
+              message: `Starting step: ${value.payload.name || value.payload.id}`,
+            }));
+          }
+
+          if (value.type === 'step-result') {
+            setStreamResult((prev: any) => ({
+              ...prev,
+              currentStep: {
+                ...prev.currentStep,
+                status: value.payload.status,
+                output: value.payload.output,
+                error: value.payload.error,
+              },
+              eventTimestamp: new Date(),
+              message:
+                value.payload.status === 'success'
+                  ? `Completed step: ${prev.currentStep?.name || value.payload.id}`
+                  : `Failed step: ${prev.currentStep?.name || value.payload.id}`,
+            }));
+          }
+
+          if (value.type === 'step-finish') {
+            setStreamResult((prev: any) => ({
+              ...prev,
+              currentStep: undefined,
+              eventTimestamp: new Date(),
+            }));
+          }
+
+          if (value.type === 'finish') {
+            const finalResult = value.payload.result;
+            setStreamResult((prev: any) => ({
+              ...prev,
+              status: value.payload.status,
+              currentStep: undefined,
+              eventTimestamp: new Date(),
+              message:
+                value.payload.status === 'success'
+                  ? 'Template installation completed successfully!'
+                  : 'Template installation failed',
+            }));
+
+            // Transform the final workflow result to TemplateInstallationResult
+            if (finalResult) {
+              const templateResult: TemplateInstallationResult = {
+                success: finalResult.success || false,
+                applied: finalResult.applied || false,
+                branchName: finalResult.branchName,
+                message:
+                  finalResult.message ||
+                  (value.payload.status === 'success'
+                    ? 'Template installation completed'
+                    : 'Template installation failed'),
+                validationResults: finalResult.validationResults,
+                error: finalResult.error,
+                errors: finalResult.errors,
+                stepResults: finalResult.stepResults,
+              };
+              setInstallationResult(templateResult);
+            }
+          }
+
+          if (value.type === 'error') {
+            setStreamResult((prev: any) => ({
+              ...prev,
+              status: 'failed',
+              error: value.payload.error,
+              eventTimestamp: new Date(),
+              message: `Error: ${value.payload.error}`,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error streaming template installation:', error);
+        setStreamResult((prev: any) => ({
+          ...prev,
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          eventTimestamp: new Date(),
+          message: 'Template installation failed with error',
+        }));
+      } finally {
+        setIsStreaming(false);
+        reader.releaseLock();
+      }
+    },
+  });
+
+  return {
+    streamInstall,
+    streamResult,
+    isStreaming,
+    installationResult,
+  };
 };
