@@ -11,6 +11,7 @@ import {
   TemplateSuccess,
   ToolsIcon,
   AgentIcon,
+  TemplateFailure,
 } from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
 import { useEffect, useState } from 'react';
@@ -22,6 +23,7 @@ export default function Template() {
   const [isInstalling, setIsInstalling] = useState(false);
   const [variables, setVariables] = useState({});
   const [errors, setErrors] = useState<string[]>([]);
+  const [failure, setFailure] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const { data: template, isLoading: isLoadingTemplate } = useTemplateRepo({
     repoOrSlug: templateSlug,
@@ -126,8 +128,8 @@ export default function Template() {
         });
         setSuccess(true);
       } catch (err: any) {
+        setFailure(err?.message || 'Template installation failed');
         console.error('Template installation failed', err);
-        alert(err?.message || 'Template installation failed');
       } finally {
         setIsInstalling(false);
       }
@@ -184,7 +186,9 @@ export default function Template() {
                 <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
               )}
 
-              {!isInstalling && !success && (
+              {template && failure && <TemplateFailure errorMsg={failure} />}
+
+              {!isInstalling && !success && !failure && (
                 <TemplateForm
                   providerOptions={providerOptions}
                   selectedProvider={selectedProvider}
