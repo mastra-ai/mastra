@@ -35,6 +35,76 @@ import { processMastraStream } from '../utils/process-mastra-stream';
 import type { MastraModelOutput } from '@mastra/core/stream';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 
+async function executeToolCallAndRespond({
+  response,
+  params,
+  runId,
+  resourceId,
+  threadId,
+  runtimeContext,
+  respondFn,
+}: {
+  params: StreamVNextParams<any>;
+  response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
+  runId?: string;
+  resourceId?: string;
+  threadId?: string;
+  runtimeContext?: RuntimeContext<any>;
+  respondFn: Agent['generateVNext'];
+}) {
+  if (response.finishReason === 'tool-calls') {
+    const toolCalls = (
+      response as unknown as {
+        toolCalls: { toolName: string; args: any; toolCallId: string }[];
+        messages: CoreMessage[];
+      }
+    ).toolCalls;
+
+    if (!toolCalls || !Array.isArray(toolCalls)) {
+      return response;
+    }
+
+    for (const toolCall of toolCalls) {
+      const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+
+      if (clientTool && clientTool.execute) {
+        const result = await clientTool.execute(
+          { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
+          {
+            messages: (response as unknown as { messages: CoreMessage[] }).messages,
+            toolCallId: toolCall?.toolCallId,
+          },
+        );
+
+        const updatedMessages = [
+          {
+            role: 'user',
+            content: params.messages,
+          },
+          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                result,
+              },
+            ],
+          },
+        ] as MessageListInput;
+
+        // @ts-ignore
+        return respondFn({
+          ...params,
+          messages: updatedMessages,
+        });
+      }
+    }
+  }
+}
+
 export class AgentVoice extends BaseResource {
   constructor(
     options: ClientOptions,
@@ -228,55 +298,15 @@ export class Agent extends BaseResource {
     );
 
     if (response.finishReason === 'tool-calls') {
-      const toolCalls = (
-        response as unknown as {
-          toolCalls: { toolName: string; args: any; toolCallId: string }[];
-          messages: CoreMessage[];
-        }
-      ).toolCalls;
-
-      if (!toolCalls || !Array.isArray(toolCalls)) {
-        return response;
-      }
-
-      for (const toolCall of toolCalls) {
-        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
-
-        if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(
-            { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
-            {
-              messages: (response as unknown as { messages: CoreMessage[] }).messages,
-              toolCallId: toolCall?.toolCallId,
-            },
-          );
-
-          const updatedMessages = [
-            {
-              role: 'user',
-              content: params.messages,
-            },
-            ...(response.response as unknown as { messages: CoreMessage[] }).messages,
-            {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result,
-                },
-              ],
-            },
-          ] as MessageListInput;
-
-          // @ts-ignore
-          return this.generateVNext({
-            ...params,
-            messages: updatedMessages,
-          });
-        }
-      }
+      return executeToolCallAndRespond({
+        response,
+        params,
+        runId,
+        resourceId,
+        threadId,
+        runtimeContext: runtimeContext as RuntimeContext<any>,
+        respondFn: this.generateVNext.bind(this),
+      }) as unknown as Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
     }
 
     return response;
