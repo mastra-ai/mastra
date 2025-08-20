@@ -64,13 +64,13 @@ export class StructuredOutputProcessor<S extends z.ZodTypeAny> implements Proces
           const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${textContent}`;
           const schema = this.schema;
 
-          if (modelDef.specificationVersion === 'v1') {
-            // Use structuring agent to extract structured data from the unstructured text
-            structuredResult = await this.structuringAgent.generate(prompt, {
+          // Use structuring agent to extract structured data from the unstructured text
+          if (modelDef.specificationVersion === 'v2') {
+            structuredResult = await this.structuringAgent.generateVNext(prompt, {
               output: schema,
             });
           } else {
-            structuredResult = await this.structuringAgent.generateVNext(prompt, {
+            structuredResult = await this.structuringAgent.generate(prompt, {
               output: schema,
             });
           }
