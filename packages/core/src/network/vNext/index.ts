@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
-import type { CoreMessage } from 'ai';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { AiMessageType, Mastra, MastraMessageV2, Tool } from '../..';
+import type { Mastra, MastraMessageV2, Tool } from '../..';
 import { Agent, MessageList } from '../../agent';
-import type { MastraLanguageModel, UIMessageWithMetadata } from '../../agent';
+import type { MastraLanguageModel } from '../../agent';
+import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 import type { MastraMemory } from '../../memory';
@@ -71,15 +71,15 @@ export class NewAgentNetwork extends MastraBase {
     this.#mastra = mastra;
   }
 
-  private getLastMessage(messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]) {
+  private getLastMessage(messages: MessageListInput) {
     let message = '';
     if (typeof messages === 'string') {
       message = messages;
     } else {
-      const lastMessage = messages[messages.length - 1];
+      const lastMessage = Array.isArray(messages) ? messages[messages.length - 1] : messages;
       if (typeof lastMessage === 'string') {
         message = lastMessage;
-      } else if (lastMessage?.content) {
+      } else if (lastMessage && `content` in lastMessage && lastMessage?.content) {
         const lastMessageContent = lastMessage.content;
         if (typeof lastMessageContent === 'string') {
           message = lastMessageContent;
@@ -104,7 +104,7 @@ export class NewAgentNetwork extends MastraBase {
     runtimeContext: RuntimeContext;
     threadId: string;
     resourceId: string;
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+    messages: MessageListInput;
   }) {
     const memory = await this.getMemory({ runtimeContext });
     let thread = await memory?.getThreadById({ threadId });
@@ -285,7 +285,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async loop(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     {
       runtimeContext,
       maxIterations,
@@ -366,7 +366,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async loopStream(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     {
       runtimeContext,
       maxIterations,
@@ -1023,7 +1023,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async generate(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     {
       runtimeContext,
       threadId,
@@ -1072,7 +1072,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async stream(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    messages: MessageListInput,
     {
       runtimeContext,
       threadId,

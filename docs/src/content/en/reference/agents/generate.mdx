@@ -1,16 +1,16 @@
 ---
-title: "Reference: generate() | Agents | Mastra Docs"
-description: "Documentation for the `.generate()` method in Mastra agents, which produces text or structured responses."
+title: "Reference: Agent.generate() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.generate()` method in Mastra agents, which produces text or structured responses."
 ---
 
-# generate()
+# Agent.generate()
 
 The `.generate()` method is used to interact with an agent to produce text or structured responses. This method accepts messages and optional generation options.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const response = await agent.generate("message for agent");
+```typescript copy
+await agent.generate("message for agent");
 ```
 
 ## Parameters
@@ -31,41 +31,6 @@ const response = await agent.generate("message for agent");
   ]}
 />
 
-## Extended usage example
-
-```typescript showLineNumbers copy
-const response = await agent.generate([
-  { role: "user", content: "message for agent" },
-  {
-    role: "user",
-    content: [
-      {
-        type: "text",
-        text: "message for agent"
-      },
-      {
-        type: "image",
-        imageUrl: "https://example.com/image.jpg",
-        mimeType: "image/jpeg"
-      }
-    ]
-  }
-], {
-  temperature: 0.7,
-  maxSteps: 3,
-  memory: {
-    thread: "user-123",
-    resource: "test-app"
-  },
-  toolChoice: "auto",
-  providerOptions: {
-    openai: {
-      reasoningEffort: "high"
-    }
-  }
-});
-```
-
 ### Options parameters
 
 <PropertiesTable
@@ -84,11 +49,71 @@ const response = await agent.generate([
       description: "Additional context messages to provide to the agent.",
     },
     {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
+      isOptional: true,
+      description: "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
+      properties: [
+        {
+          parameters: [{
+            name: "schema",
+            type: "z.ZodSchema<S>",
+            isOptional: false,
+            description: "Zod schema to validate the output against."
+          }]
+        },
+        {
+          parameters: [{
+            name: "model",
+            type: "MastraLanguageModel",
+            isOptional: false,
+            description: "Model to use for the internal structuring agent."
+          }]
+        },
+        {
+          parameters: [{
+            name: "errorStrategy",
+            type: "'strict' | 'warn' | 'fallback'",
+            isOptional: true,
+            description: "Strategy when parsing or validation fails. Defaults to 'strict'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "fallbackValue",
+            type: "<S extends ZodTypeAny>",
+            isOptional: true,
+            description: "Fallback value when errorStrategy is 'fallback'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "instructions",
+            type: "string",
+            isOptional: true,
+            description: "Custom instructions for the structuring agent."
+          }]
+        },
+      ]
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+    },
+    {
+      name: "inputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+    },
+    {
       name: "experimental_output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
       description:
-        "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+        "Note, the preferred route is to use the `structuredOutput` property. Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
     },
     {
       name: "instructions",
@@ -379,7 +404,7 @@ const response = await agent.generate([
       name: "object",
       type: "object",
       isOptional: true,
-      description: "The generated structured response. Present when a schema is provided via `output` or `experimental_output`.",
+      description: "The generated structured response. Present when a schema is provided via `output`, `structuredOutput`, or `experimental_output`.",
     },
     {
       name: "toolCalls",
@@ -407,3 +432,63 @@ const response = await agent.generate([
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+import { ModerationProcessor, TokenLimiterProcessor } from "@mastra/core/processors";
+
+await agent.generate(
+  [
+    { role: "user", content: "message for agent" },
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "message for agent"
+        },
+        {
+          type: "image",
+          imageUrl: "https://example.com/image.jpg",
+          mimeType: "image/jpeg"
+        }
+      ]
+    }
+  ],
+  {
+    temperature: 0.7,
+    maxSteps: 3,
+    memory: {
+      thread: "user-123",
+      resource: "test-app"
+    },
+    toolChoice: "auto",
+    providerOptions: {
+      openai: {
+        reasoningEffort: "high"
+      }
+    },
+    // Structured output with better DX
+    structuredOutput: {
+      schema: z.object({
+        sentiment: z.enum(['positive', 'negative', 'neutral']),
+        confidence: z.number(),
+      }),
+      model: openai("gpt-4o-mini"),
+      errorStrategy: 'warn',
+    },
+    // Output processors for response validation
+    outputProcessors: [
+      new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
+      new TokenLimiterProcessor({ maxTokens: 1000 }),
+    ],
+  }
+);
+```
+
+## Related
+
+- [Agent generation](../../docs/agents/overview.mdx#generate)
+- [Streaming responses](../../docs/agents/streaming.mdx)

@@ -1,5 +1,105 @@
 # @mastra/deployer
 
+## 0.14.0-alpha.3
+
+### Patch Changes
+
+- 04dcd66: Fix babel-preset-typescript import
+- Updated dependencies [227c7e6]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0-alpha.3
+  - @mastra/server@0.14.0-alpha.3
+
+## 0.14.0-alpha.2
+
+### Patch Changes
+
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+  - @mastra/core@0.14.0-alpha.2
+  - @mastra/server@0.14.0-alpha.2
+
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- bca2ba3: Fix issue where `.json` files couldn't be imported and used with deployers
+- 6313063: Implement model switcher in playground
+- 6dfc4a6: In a previous release analysis of the Mastra configuration was added. A bug was fixed to properly support TypeScript.
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+  - @mastra/server@0.14.0-alpha.1
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [c30bca8]
+  - @mastra/core@0.13.3-alpha.0
+  - @mastra/server@0.13.3-alpha.0
+
+## 0.13.2
+
+### Patch Changes
+
+- aaf0224: improve dev playground request detection
+- 42cb4e9: Add warning message when an invalid `src/mastra/index.ts` configuration file is found
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [f6a1ae7]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+  - @mastra/server@0.13.2
+
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+  - @mastra/server@0.13.2-alpha.3
+
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- aaf0224: improve dev playground request detection
+- 42cb4e9: Add warning message when an invalid `src/mastra/index.ts` configuration file is found
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [f6a1ae7]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+  - @mastra/server@0.13.2-alpha.2
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

@@ -1,37 +1,22 @@
 ---
-title: "Reference: Workflow.createRunAsync() | Building Workflows | Mastra Docs"
-description: Documentation for the `.createRunAsync()` method in workflows, which creates a new workflow run instance.
+title: "Reference: Workflow.createRunAsync() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.createRunAsync()` method in workflows, which creates a new workflow run instance.
 ---
+
+import { Callout } from "nextra/components";
 
 # Workflow.createRunAsync()
 
-The `.createRunAsync()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data.
+The `.createRunAsync()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data. This is the current API that returns a `Run` instance.
 
-## Usage
+<Callout>
+For the legacy `createRun()` method that returns an object with methods, see the [Legacy Workflows](../legacyWorkflows/createRun.mdx) section.
+</Callout>
 
-```typescript
-const myWorkflow = createWorkflow({
-  id: "my-workflow",
-  inputSchema: z.object({
-    startValue: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  steps: [step1, step2, step3], // Declare steps used in this workflow
-})
-  .then(step1)
-  .then(step2)
-  .then(step3)
-  .commit();
+## Usage example
 
-const mastra = new Mastra({
-  workflows: {
-    myWorkflow,
-  },
-});
-
-const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
+```typescript copy
+await workflow.createRunAsync();
 ```
 
 ## Parameters
@@ -39,10 +24,9 @@ const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "{ runId?: string }",
-      description:
-        "Optional configuration for the run, including a custom run ID",
+      name: "runId",
+      type: "string",
+      description: "Optional custom identifier for the workflow run",
       isOptional: true,
     },
   ]}
@@ -61,6 +45,21 @@ const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
   ]}
 />
 
+## Extended usage example
+
+```typescript showLineNumbers copy
+const workflow = mastra.getWorkflow("workflow");
+
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: 10,
+  },
+});
+```
+
 ## Related
 
-- [Running workflows](../../docs/workflows/overview.mdx#running-workflows)
+- [Run Class](./run.mdx)
+- [Running workflows](../../examples/workflows/running-workflows.mdx)
