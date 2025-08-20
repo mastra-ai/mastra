@@ -15,8 +15,8 @@ import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
-import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './stream-object';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
