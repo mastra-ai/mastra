@@ -75,7 +75,7 @@ export function execute({
           providerOptions,
           abortSignal: options?.abortSignal,
           includeRawChunks,
-          responseFormat: objectOptions ? getResponseFormat(objectOptions) : undefined,
+          responseFormat: objectOptions?.schema ? getResponseFormat(objectOptions?.schema) : undefined,
           ...(modelSettings ?? {}),
           headers,
         });

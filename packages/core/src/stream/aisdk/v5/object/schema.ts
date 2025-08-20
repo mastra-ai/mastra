@@ -1,8 +1,7 @@
-import type { LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import { asSchema } from 'ai-v5';
 import type { JSONSchema7 } from 'ai-v5';
 
-export function getOutputSchema({ schema }: { schema?: Parameters<typeof asSchema>[0] }) {
+export function getTransformedSchema(schema?: Parameters<typeof asSchema>[0]) {
   const jsonSchema = schema ? asSchema(schema).jsonSchema : undefined;
   if (!jsonSchema) {
     return undefined;
@@ -51,22 +50,27 @@ export function getOutputSchema({ schema }: { schema?: Parameters<typeof asSchem
   };
 }
 
-export function getResponseFormat({
-  schema,
-}:
+type ResponseFormatResult =
   | {
-      schema?: Parameters<typeof asSchema>[0];
+      type: 'text';
     }
-  | undefined = {}): NonNullable<LanguageModelV2CallOptions['responseFormat']> {
+  | {
+      type: 'json';
+      /**
+       * JSON schema that the generated output should conform to.
+       */
+      schema?: JSONSchema7;
+    };
+export function getResponseFormat(schema?: Parameters<typeof asSchema>[0] | undefined): ResponseFormatResult {
   if (schema) {
-    const outputSchema = getOutputSchema({ schema });
+    const transformedSchema = getTransformedSchema(schema);
     return {
       type: 'json',
-      schema: outputSchema?.jsonSchema,
+      schema: transformedSchema?.jsonSchema,
     };
   }
 
-  // response format 'text' for everything else (regular text gen, tool calls, etc)
+  // response format 'text' for everything else
   return {
     type: 'text',
   };

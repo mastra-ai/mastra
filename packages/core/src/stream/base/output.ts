@@ -12,7 +12,7 @@ import type { ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
-import { getOutputSchema } from '../aisdk/v5/object/schema';
+import { getTransformedSchema } from '../aisdk/v5/object/schema';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '../aisdk/v5/object/stream-object';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
@@ -559,7 +559,7 @@ export class MastraModelOutput extends MastraBase {
       )
       .pipeThrough(
         createObjectStreamTransformer({
-          objectOptions: self.#options.objectOptions!,
+          schema: self.#options.objectOptions?.schema,
           onFinish: data => self.#delayedPromises.object.resolve(data),
         }),
       )
@@ -783,7 +783,7 @@ export class MastraModelOutput extends MastraBase {
 
   get textStream() {
     const self = this;
-    const outputSchema = getOutputSchema({ schema: self.#options.objectOptions?.schema });
+    const outputSchema = getTransformedSchema(self.#options.objectOptions?.schema);
     if (outputSchema?.outputFormat === 'array') {
       return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.objectOptions));
     }
