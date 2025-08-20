@@ -26,7 +26,7 @@ When running a workflow, its `status` can be one of the following:
 
 ## Suspending a workflow with `suspend()`
 
-When the state is `suspended`, you can identify any and all steps that have been suspended by looking at the `suspended` array of the workflow result output.
+To pause execution at a specific step until user input is received, use the ⁠suspend function to temporarily halt the workflow, allowing it to resume only when the necessary data is provided.
 
 ![Suspending a workflow with suspend()](/image/workflows/workflows-suspend-resume-suspend.jpg)
 
@@ -61,7 +61,7 @@ export const testWorkflow = createWorkflow({})
   .commit();
 ```
 
-> See [Define Suspendable workflow](/examples/workflows/human-in-the-loop#define-suspendable-workflow) for more information.
+> For more details, check out the [Suspend workflow example](/examples/workflows/human-in-the-loop#suspend-workflow).
 
 ### Identifying suspended steps
 
