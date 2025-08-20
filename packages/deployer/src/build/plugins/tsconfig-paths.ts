@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path, { normalize } from 'node:path';
+import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
 import type { RegisterOptions } from 'typescript-paths';
 import { createHandler } from 'typescript-paths';
@@ -31,25 +32,23 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
       if (!moduleName) {
         let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
 
+        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
+        if (!resolved) {
+          return null;
+        }
+
         // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
         // if so, we need to resolve the request from the importer instead of the root and mark it as external
         if (localResolve) {
           const importerInfo = this.getModuleInfo(importer);
-
           importerMeta = importerInfo?.meta || {};
 
           if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
             return {
-              id: resolveFrom(importer, request) ?? null,
+              ...resolved,
               external: true,
             };
           }
-        }
-
-        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
-
-        if (!resolved) {
-          return null;
         }
 
         return {
