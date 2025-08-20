@@ -92,7 +92,6 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
 export function reasoningDetailsFromMessages(messages: MastraMessageV2[]): ReasoningUIPart[] {
   return messages
     .flatMap(msg => {
-      // v3 messages have content.parts array
       if (msg.content?.parts && Array.isArray(msg.content.parts)) {
         return msg.content.parts;
       }
@@ -110,16 +109,16 @@ export function reasoningDetailsFromMessages(messages: MastraMessageV2[]): Reaso
 
 export function transformSteps({ steps }: { steps: StepBufferItem[] }): DefaultStepResult<any>[] {
   return steps.map(step => {
+    if (!step.response) throw new Error(`No step response found while transforming steps but one was expected.`);
+    if (!step.request) throw new Error(`No step request found while transforming steps but one was expected.`);
     return new DefaultStepResult({
       content: step.content,
       warnings: step.warnings ?? [],
       providerMetadata: step.providerMetadata,
-      finishReason: step.finishReason as StepResult<ToolSet>['finishReason'],
-      response: {
-        ...step.response,
-      } as any,
-      request: step.request as any,
-      usage: step.usage as any,
+      finishReason: step.finishReason || 'unknown',
+      response: step.response,
+      request: step.request,
+      usage: step.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     });
   });
 }

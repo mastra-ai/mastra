@@ -294,8 +294,8 @@ export interface StepBufferItem {
   experimental_providerMetadata?: SharedV2ProviderMetadata;
   isContinued?: boolean;
   logprobs?: LanguageModelV1LogProbs;
-  finishReason?: string;
-  response?: LanguageModelV2ResponseMetadata;
+  finishReason?: LanguageModelV2FinishReason;
+  response?: StepResult<any>['response'];
   request?: LanguageModelRequestMetadata;
   usage?: LanguageModelV2Usage;
   content: StepResult<any>['content'];
