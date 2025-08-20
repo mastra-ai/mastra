@@ -685,15 +685,11 @@ export class MastraModelOutput extends MastraBase {
       },
     });
 
-    const finishReason = await this.finishReason;
-
-    const object = await this.object;
-
     const fullOutput = {
       text: await this.text,
       usage: await this.usage,
       steps: await this.steps,
-      finishReason,
+      finishReason: await this.finishReason,
       warnings: await this.warnings,
       providerMetadata: await this.providerMetadata,
       request: await this.request,
@@ -705,7 +701,7 @@ export class MastraModelOutput extends MastraBase {
       files: await this.files,
       response: await this.response,
       totalUsage: await this.totalUsage,
-      object,
+      object: await this.object,
       error: this.error,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
