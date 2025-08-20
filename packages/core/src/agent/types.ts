@@ -1,3 +1,4 @@
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
@@ -39,7 +40,7 @@ export type AgentAISpanProperties = {
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-export type MastraLanguageModel = LanguageModelV1;
+export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
 
 type FallbackFields<S extends ZodTypeAny> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }

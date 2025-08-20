@@ -14,6 +14,7 @@ import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -225,7 +226,7 @@ export interface ToolOptions {
   runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
-  model?: LanguageModelV1;
+  model?: LanguageModelV1 | LanguageModelV2;
   writableStream?: WritableStream<ChunkType>;
   agentAISpan?: AnyAISpan;
 }

@@ -26,6 +26,7 @@ import type {
   OriginalStreamObjectOnFinishEventArg,
   StreamTextResult,
 } from '../llm/model/base.types';
+import { MastraLLMVNext } from '../llm/model/model.loop';
 import type { TripwireProperties } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -49,7 +50,7 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
-import type { AgentVNextStreamOptions } from './agent.types';
+import type { AgentExecutionOptions, AgentVNextStreamOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -68,6 +69,8 @@ export * from './input-processor';
 export { TripWire };
 export { MessageList };
 export * from './types';
+
+type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -609,7 +612,7 @@ export class Agent<
   }: {
     runtimeContext?: RuntimeContext;
     model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
-  } = {}): MastraLLMV1 | Promise<MastraLLMV1> {
+  } = {}): MastraLLM | Promise<MastraLLM> {
     // If model is provided, resolve it; otherwise use the agent's model
     const modelToUse = model
       ? typeof model === 'function'
@@ -618,7 +621,12 @@ export class Agent<
       : this.getModel({ runtimeContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
-      const llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
+      let llm: MastraLLM;
+      if (resolvedModel.specificationVersion === 'v1') {
+        llm = new MastraLLMV1({ model: resolvedModel, mastra: this.#mastra });
+      } else {
+        llm = new MastraLLMVNext({ model: resolvedModel, mastra: this.#mastra });
+      }
 
       // Apply stored primitives if available
       if (this.#primitives) {
@@ -761,19 +769,41 @@ export class Agent<
     // Resolve instructions using the dedicated method
     const systemInstructions = await this.resolveTitleInstructions(runtimeContext, instructions);
 
-    const { text } = await llm.__text({
-      runtimeContext,
-      messages: [
-        {
-          role: 'system',
-          content: systemInstructions,
-        },
-        {
-          role: 'user',
-          content: JSON.stringify(partsToGen),
-        },
-      ],
-    });
+    let text = '';
+
+    if (llm.getModel().specificationVersion === 'v1') {
+      const result = await (llm as MastraLLMV1).__text({
+        runtimeContext,
+        messages: [
+          {
+            role: 'system',
+            content: systemInstructions,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(partsToGen),
+          },
+        ],
+      });
+
+      text = result.text;
+    } else {
+      const result = (llm as MastraLLMVNext).stream({
+        runtimeContext,
+        messages: [
+          {
+            role: 'system',
+            content: systemInstructions,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(partsToGen),
+          },
+        ],
+      });
+
+      text = await result.text;
+    }
 
     // Strip out any r1 think tags if present
     const cleanedText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
@@ -2208,7 +2238,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         output: ScorerRunOutputForAgent;
       };
     }>;
-    llm: MastraLLMV1;
+    llm: MastraLLMV1 | MastraLLMVNext;
   }>;
   private prepareLLMOptions<
     Tools extends ToolSet,
@@ -2303,7 +2333,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             output: ScorerRunOutputForAgent;
           };
         }>);
-    llm: MastraLLMV1;
+    llm: MastraLLM;
   }> {
     const {
       context,
@@ -2480,6 +2510,19 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
   }
 
+  async generateVNext<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    FORMAT extends 'aisdk' | 'mastra' = 'mastra',
+  >(_messages: MessageListInput, _options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>) {
+    throw new MastraError({
+      id: 'AGENT_GENERATE_VNEXT_NOT_IMPLEMENTED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'generateVNext is not implemented for the current version of Mastra. Please use generate instead.',
+    });
+  }
+
   async generate(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
@@ -2511,6 +2554,28 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions);
+
+    if (llm.getModel().specificationVersion !== 'v1') {
+      this.logger.error(
+        'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
+        {
+          modelId: llm.getModel().modelId,
+        },
+      );
+
+      throw new MastraError({
+        id: 'AGENT_GENERATE_V2_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          modelId: llm.getModel().modelId,
+        },
+        text: 'V2 models are not supported for the current version of generate. Please use generateVNext instead.',
+      });
+    }
+
+    let llmToUse = llm as MastraLLMV1;
+
     const beforeResult = await before();
 
     // Check for tripwire and return early if triggered
@@ -2557,7 +2622,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     }
 
     if (!output || experimental_output) {
-      const result = await llm.__text<any, EXPERIMENTAL_OUTPUT>({
+      const result = await llmToUse.__text<any, EXPERIMENTAL_OUTPUT>({
         ...llmOptions,
         agentAISpan,
         experimental_output,
@@ -2671,7 +2736,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         : GenerateObjectResult<OUTPUT>;
     }
 
-    const result = await llm.__textObject<NonNullable<OUTPUT>>({
+    const result = await llmToUse.__textObject<NonNullable<OUTPUT>>({
       ...llmOptions,
       agentAISpan,
       structuredOutput: output as NonNullable<OUTPUT>,
@@ -2809,6 +2874,23 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+
+    if (llm.getModel().specificationVersion !== 'v1') {
+      this.logger.error('V2 models are not supported for stream. Please use streamVNext instead.', {
+        modelId: llm.getModel().modelId,
+      });
+
+      throw new MastraError({
+        id: 'AGENT_STREAM_V2_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          modelId: llm.getModel().modelId,
+        },
+        text: 'V2 models are not supported for stream. Please use streamVNext instead.',
+      });
+    }
+
     const beforeResult = await before();
 
     // Check for tripwire and return early if triggered
