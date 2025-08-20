@@ -138,26 +138,10 @@ async function getTemplateRepoEnvVars({
   return {};
 }
 
-async function installTemplate(request: TemplateInstallationRequest): Promise<TemplateInstallationResult> {
-  const template = client.getTemplates();
-  const result = await template.installAsync(request.slug!, request);
-
-  if (!result?.success) {
-    throw new Error(result?.error || result?.message || 'Template installation failed');
-  }
-  return result;
-}
-
 export const useMastraTemplates = () => {
   return useQuery({
     queryKey: ['mastra-templates'],
     queryFn: getMastraTemplateRepos,
-  });
-};
-
-export const useInstallTemplate = () => {
-  return useMutation({
-    mutationFn: installTemplate,
   });
 };
 
@@ -188,28 +172,6 @@ export const useCreateTemplateInstallRun = () => {
     }) => {
       const template = client.getTemplates();
       return await template.createInstallRun(templateSlug, params, runId);
-    },
-  });
-};
-
-export const useInstallTemplateAsync = () => {
-  return useMutation({
-    mutationFn: async ({
-      templateSlug,
-      params,
-      runId,
-    }: {
-      templateSlug: string;
-      params: TemplateInstallationRequest & { runtimeContext?: RuntimeContext };
-      runId?: string;
-    }) => {
-      const template = client.getTemplates();
-      const result = await template.installAsync(templateSlug, params, runId);
-
-      if (!result?.success) {
-        throw new Error(result?.error || result?.message || 'Template installation failed');
-      }
-      return result;
     },
   });
 };
