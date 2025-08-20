@@ -7,9 +7,9 @@ import { Steps, Callout } from "nextra/components";
 
 # Building a Research Paper Assistant with RAG
 
-In this guide, we'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
+In this guide, you'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
 
-We'll use the foundational Transformer paper ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) as our example. As a database we'll use a local LibSQL database.
+You'll use the foundational Transformer paper ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) as your example. As a database you'll use a local LibSQL database.
 
 ## Prerequisites
 
@@ -19,37 +19,36 @@ We'll use the foundational Transformer paper ["Attention Is All You Need"](https
 
 ## How RAG works
 
-TODO
+Let's understand how RAG works and how you'll implement each component.
 
-Let's understand how RAG works and how we'll implement each component:
+### Knowledge Store/Index
 
-1. Knowledge Store/Index
+- Converting text into vector representations
+- Creating numerical representations of content
+- **Implementation**: You'll use OpenAI's `text-embedding-3-small` to create embeddings and store them in LibSQLVector
 
-   - Converting text into vector representations
-   - Creating numerical representations of content
-   - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in PgVector
+### Retriever
 
-2. Retriever
+- Finding relevant content via similarity search
+- Matching query embeddings with stored vectors
+- **Implementation**: You'll use LibSQLVector to perform similarity searches on the stored embeddings
 
-   - Finding relevant content via similarity search
-   - Matching query embeddings with stored vectors
-   - Implementation: We'll use PgVector to perform similarity searches on our stored embeddings
+### Generator
 
-3. Generator
-   - Processing retrieved content with an LLM
-   - Creating contextually informed responses
-   - Implementation: We'll use GPT-4o-mini to generate answers based on retrieved content
+- Processing retrieved content with an LLM
+- Creating contextually informed responses
+- **Implementation**: You'll use GPT-4o-mini to generate answers based on retrieved content
 
-Our implementation will:
+Your implementation will:
 
 1. Process the Transformer paper into embeddings
-2. Store them in PgVector for quick retrieval
+2. Store them in LibSQLVector for quick retrieval
 3. Use similarity search to find relevant sections
 4. Generate accurate responses using retrieved context
 
 ## Creating the Agent
 
-TODO
+Let's define the agent's behavior, connect it to your Mastra project, and create the vector store.
 
 <Steps>
 
@@ -106,6 +105,7 @@ export const researchAgent = new Agent({
 In the root of your project, grab the absolute path with the `pwd` command. The path might be similar to this:
 
 ```bash
+> pwd
 /Users/your-name/guides/research-assistant
 ```
 
@@ -125,6 +125,10 @@ export const mastra = new Mastra({
 ```
 
 For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
+
+<Callout>
+For the purpose of this guide you are using a hardcoded absolute path to your local LibSQL file, however for production usage this won't work. You should use a remote persistent database then.
+</Callout>
 
 ### Register the Agent with Mastra
 
@@ -267,9 +271,9 @@ If the operation was successful you should see no output/errors in your terminal
 
 Now that the vector database has all embeddings, you can test the research assistant with different types of queries.
 
-Let's test our research assistant with different types of queries:
+Create a new file `src/ask-agent.ts` and add different types of queries:
 
-```ts filename="src/index.ts" showLineNumbers copy
+```ts filename="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
@@ -284,12 +288,12 @@ console.log("Response:", response1.text);
 Run the script:
 
 ```bash copy
-npx bun src/index.ts
+npx bun src/ask-agent.ts
 ```
 
 You should see output like:
 
-```
+```bash
 Query: What problems does sequence modeling face with neural networks?
 Response: Sequence modeling with neural networks faces several key challenges:
 1. Vanishing and exploding gradients during training, especially with long sequences
@@ -298,9 +302,12 @@ Response: Sequence modeling with neural networks faces several key challenges:
 4. Challenges in parallelizing computations, resulting in longer training times
 ```
 
-Let's try another question:
+Try another question:
 
-```ts filename="src/index.ts" showLineNumbers{10} copy
+```ts filename="src/ask-agent.ts" copy
+import { mastra } from "./mastra";
+const agent = mastra.getAgent("researchAgent");
+
 // Query about specific findings
 const query2 = "What improvements were achieved in translation quality?";
 const response2 = await agent.generate(query2);

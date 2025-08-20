@@ -8,7 +8,7 @@ import YouTube from "@/components/youtube";
 
 # Building an AI Chef Assistant
 
-In this guide, we'll walk through creating a "Chef Assistant" agent that helps users cook meals with available ingredients.
+In this guide, you'll create a "Chef Assistant" agent that helps users cook meals with available ingredients.
 
 You'll learn how to create the agent and register it with Mastra. Next, you'll interact with the agent through your terminal and get to know different response formats. Lastly, you'll access the agent through Mastra's local API endpoints.
 
@@ -144,13 +144,7 @@ Great! You can make a comforting chicken curry...
 
 Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](../../docs/agents/overview.mdx#4-structured-output).
 
-As the example below uses `zod`, make sure to install it first:
-
-```bash npm2yarn copy
-npm install zod
-```
-
-Then change your `src/index.ts` to the following:
+Change your `src/index.ts` to the following:
 
 ```ts copy filename="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
