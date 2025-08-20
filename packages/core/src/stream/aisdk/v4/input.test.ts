@@ -70,7 +70,7 @@ describe('AISDKV4InputStream', () => {
     expect(capturedChunks[0]).toEqual({
       type: 'text-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         text: 'Hello',
       },
@@ -80,7 +80,7 @@ describe('AISDKV4InputStream', () => {
     expect(capturedChunks[1]).toEqual({
       type: 'text-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         text: ' from',
       },
@@ -90,7 +90,7 @@ describe('AISDKV4InputStream', () => {
     expect(capturedChunks[2]).toEqual({
       type: 'text-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         text: ' agent',
       },
@@ -100,7 +100,7 @@ describe('AISDKV4InputStream', () => {
     expect(capturedChunks[3]).toEqual({
       type: 'finish',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         usage: { completionTokens: 3, promptTokens: 10 },
         providerMetadata: undefined,

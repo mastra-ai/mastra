@@ -117,9 +117,9 @@ export function transformSteps({ steps }: { steps: StepBufferItem[] }): DefaultS
       finishReason: step.finishReason as StepResult<ToolSet>['finishReason'],
       response: {
         ...step.response,
-      },
-      request: step.request,
-      usage: step.usage,
+      } as any,
+      request: step.request as any,
+      usage: step.usage as any,
     });
   });
 }

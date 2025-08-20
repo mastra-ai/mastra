@@ -2,6 +2,7 @@ import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { createWorkflow } from '../../workflows';
 import type { LoopRun } from '../types';
 import { createOuterLLMWorkflow } from './outer-llm-step';
@@ -75,7 +76,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
             controller.enqueue({
               type: 'step-finish',
               runId: rest.runId,
-              from: 'AGENT',
+              from: ChunkFrom.AGENT,
               payload: inputData,
             });
           }
@@ -132,7 +133,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
       controller.enqueue({
         type: 'start',
         runId: rest.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {},
       });
 
@@ -165,7 +166,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
       controller.enqueue({
         type: 'finish',
         runId: rest.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: executionResult.result,
       });
 

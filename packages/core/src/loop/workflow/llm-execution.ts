@@ -7,7 +7,8 @@ import { execute } from '../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, ReasoningStartPayload, TextStartPayload } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../types';
 import { AgenticRunState } from './run-state';
@@ -67,8 +68,9 @@ async function processOutputStream({
               {
                 type: 'reasoning',
                 text: runState.state.reasoningDeltas.join(''),
-                signature: chunk.payload.signature,
-                providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                signature: (chunk.payload as ReasoningStartPayload).signature,
+                providerOptions:
+                  (chunk.payload as ReasoningStartPayload).providerMetadata ?? runState.state.providerOptions,
               },
             ],
           },
@@ -89,11 +91,12 @@ async function processOutputStream({
             id: messageId,
             role: 'assistant',
             content: [
-              (chunk.payload.providerMetadata ?? runState.state.providerOptions)
+              ((chunk.payload as TextStartPayload).providerMetadata ?? runState.state.providerOptions)
                 ? {
                     type: 'text',
                     text: runState.state.textDeltas.join(''),
-                    providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                    providerOptions:
+                      (chunk.payload as TextStartPayload).providerMetadata ?? runState.state.providerOptions,
                   }
                 : {
                     type: 'text',
@@ -158,7 +161,7 @@ async function processOutputStream({
 
       case 'tool-call-delta': {
         const tool =
-          tools?.[chunk.payload.toolName] ||
+          tools?.[chunk.payload.toolName!] ||
           Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
 
         if (tool && 'onInputDelta' in tool) {
@@ -247,7 +250,7 @@ async function processOutputStream({
                   source: {
                     sourceType: 'url',
                     id: chunk.payload.id,
-                    url: chunk.payload.url,
+                    url: chunk.payload.url || '',
                     title: chunk.payload.title,
                     providerMetadata: chunk.payload.providerMetadata,
                   },
@@ -294,9 +297,9 @@ async function processOutputStream({
           },
         });
 
-        let e = chunk.payload.error;
+        let e = chunk.payload.error as any;
         if (typeof e === 'object') {
-          e = new Error(chunk.payload.error.message);
+          e = new Error(e?.message || 'Unknown error');
           Object.assign(e, chunk.payload.error);
         }
 
@@ -396,7 +399,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
 
               controller.enqueue({
                 runId,
-                from: 'AGENT',
+                from: ChunkFrom.AGENT,
                 type: 'step-start',
                 payload: {
                   request: request || {},
@@ -456,7 +459,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
             steps: inputData?.output?.steps ?? [],
           });
 
-          controller.enqueue({ type: 'abort', runId, from: 'AGENT', payload: {} });
+          controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
           const usage = outputStream._getImmediateUsage();
           const responseMetadata = runState.state.responseMetadata;
@@ -492,7 +495,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         controller.enqueue({
           type: 'error',
           runId,
-          from: 'AGENT',
+          from: ChunkFrom.AGENT,
           payload: { error },
         });
 

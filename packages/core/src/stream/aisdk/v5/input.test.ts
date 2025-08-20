@@ -50,7 +50,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[0]).toEqual({
       type: 'response-metadata',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         type: 'response-metadata',
         id: 'id-0',
@@ -63,7 +63,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[1]).toEqual({
       type: 'reasoning-start',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: 'reasoning-1',
         providerMetadata: undefined,
@@ -74,7 +74,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[2]).toEqual({
       type: 'reasoning-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: 'reasoning-1',
         providerMetadata: undefined,
@@ -85,7 +85,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[3]).toEqual({
       type: 'reasoning-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: 'reasoning-1',
         providerMetadata: undefined,
@@ -97,7 +97,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[4]).toEqual({
       type: 'reasoning-end',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: 'reasoning-1',
         providerMetadata: undefined,
@@ -108,7 +108,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[5]).toEqual({
       type: 'source',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: 'source-1',
         sourceType: 'url',
@@ -124,7 +124,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[6]).toEqual({
       type: 'file',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
         base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -136,7 +136,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[7]).toEqual({
       type: 'tool-call',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         toolCallId: 'call-1',
         toolName: 'get_weather',
@@ -150,7 +150,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[8]).toEqual({
       type: 'tool-result',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         toolCallId: 'call-1',
         toolName: 'get_weather',
@@ -165,7 +165,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[9]).toEqual({
       type: 'tool-call-input-streaming-start',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         toolCallId: 'input-1',
         toolName: 'calculate_sum',
@@ -178,7 +178,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[10]).toEqual({
       type: 'tool-call-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         argsTextDelta: '{"a": 5, ',
         toolCallId: 'input-1',
@@ -189,7 +189,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[11]).toEqual({
       type: 'tool-call-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         argsTextDelta: '"b": 10}',
         toolCallId: 'input-1',
@@ -201,7 +201,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[12]).toEqual({
       type: 'tool-call-input-streaming-end',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         toolCallId: 'input-1',
         providerMetadata: undefined,
@@ -212,7 +212,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[13]).toEqual({
       type: 'text-start',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: '1',
         providerMetadata: undefined,
@@ -223,7 +223,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[14]).toEqual({
       type: 'text-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: '1',
         providerMetadata: undefined,
@@ -234,7 +234,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[15]).toEqual({
       type: 'text-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: '1',
         providerMetadata: undefined,
@@ -245,7 +245,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[16]).toEqual({
       type: 'text-delta',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         id: '1',
         providerMetadata: undefined,
@@ -257,7 +257,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[17]).toEqual({
       type: 'text-end',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         type: 'text-end',
         id: '1',
@@ -268,7 +268,7 @@ describe('AISDKV5InputStream', () => {
     expect(capturedChunks[18]).toEqual({
       type: 'finish',
       runId: 'test-run-123',
-      from: 'AGENT',
+      from: ChunkFrom.AGENT,
       payload: {
         stepResult: {
           reason: 'stop',
