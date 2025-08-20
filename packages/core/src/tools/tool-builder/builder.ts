@@ -242,10 +242,10 @@ export class CoreToolBuilder extends MastraBase {
 
     if (model) {
       let supportsStructuredOutputs = false;
-      if (model.specificationVersion === 'v1') {
-        supportsStructuredOutputs = model.supportsStructuredOutputs ?? false;
-      } else {
+      if (model.specificationVersion === 'v2') {
         supportsStructuredOutputs = true;
+      } else {
+        supportsStructuredOutputs = model.supportsStructuredOutputs ?? false;
       }
 
       const modelInfo = {

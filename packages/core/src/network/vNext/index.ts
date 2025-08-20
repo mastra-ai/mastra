@@ -577,10 +577,10 @@ export class NewAgentNetwork extends MastraBase {
           runtimeContext: runtimeContextToUse,
         };
 
-        if (model.specificationVersion === 'v1') {
-          result = await routingAgent.generate(prompt, options);
-        } else {
+        if (model.specificationVersion === 'v2') {
           result = await routingAgent.generateVNext(prompt, options);
+        } else {
+          result = await routingAgent.generate(prompt, options);
         }
 
         return {
