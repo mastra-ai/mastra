@@ -28,6 +28,7 @@ export function createObjectStreamTransformer({
   let textAccumulatedText = '';
   let textPreviousObject: any = undefined;
   let textPreviousFilteredArray: any[];
+  let textPreviousEnumResult: string | undefined;
 
   const responseFormat = getResponseFormat(objectOptions);
   const outputSchema = getOutputSchema({ schema: objectOptions?.schema });
@@ -93,9 +94,46 @@ export function createObjectStreamTransformer({
 
             textPreviousObject = currentObjectJson;
           }
-        }
+        } else if (outputSchema?.outputFormat === 'enum') {
+          textAccumulatedText += chunk.payload.text;
+          const { value: currentObjectJson } = await parsePartialJson(textAccumulatedText);
+          // TODO: enqueue error if partial parse state fails
+          if (
+            currentObjectJson !== undefined &&
+            currentObjectJson !== null &&
+            typeof currentObjectJson === 'object' &&
+            !Array.isArray(currentObjectJson) &&
+            'result' in currentObjectJson &&
+            typeof currentObjectJson.result === 'string' &&
+            !isDeepEqualData(textPreviousObject, currentObjectJson)
+          ) {
+            // Extract enum values from original schema
+            const originalSchema = objectOptions?.schema ? asSchema(objectOptions.schema) : null;
+            const enumValues = originalSchema?.jsonSchema?.enum || [];
+            
+            const partialResult = currentObjectJson.result as string;
+            const possibleEnumValues = enumValues
+              .filter((value: unknown): value is string => typeof value === 'string')
+              .filter((enumValue: string) => enumValue.startsWith(partialResult));
 
-        // TODO: enum schema
+            // Only emit if we have valid partial matches and the result isn't empty
+            if (partialResult.length > 0 && possibleEnumValues.length > 0) {
+              // Emit the most specific result - if there's exactly one match, use it; otherwise use partial
+              const firstMatch = possibleEnumValues[0];
+              const bestMatch: string = possibleEnumValues.length === 1 && firstMatch !== undefined ? firstMatch : partialResult;
+              
+              // Only emit if the result has changed from the last emission
+              if (bestMatch !== textPreviousEnumResult) {
+                textPreviousEnumResult = bestMatch;
+                textPreviousObject = currentObjectJson;
+                controller.enqueue({
+                  type: 'object',
+                  object: bestMatch,
+                });
+              }
+            }
+          }
+        }
       }
 
       // Always pass through the original chunk for downstream processing
@@ -129,6 +167,33 @@ export function createObjectStreamTransformer({
                 });
                 return;
               }
+              onFinish(result.value);
+            } else if (outputSchema?.outputFormat === 'enum') {
+              // For enums, unwrap from {result: "value"} and validate
+              if (
+                !finalValue ||
+                typeof finalValue !== 'object' ||
+                typeof finalValue.result !== 'string'
+              ) {
+                controller.enqueue({
+                  type: 'error',
+                  payload: { 
+                    error: new Error('Invalid enum format: expected object with result property')
+                  },
+                });
+                return;
+              }
+
+              // Validate the unwrapped enum value against original schema
+              const result = await safeValidateTypes({ value: finalValue.result, schema });
+              if (!result.success) {
+                controller.enqueue({
+                  type: 'error',
+                  payload: { error: result.error ?? new Error('Enum validation failed') },
+                });
+                return;
+              }
+              // Return the unwrapped enum value, not the wrapped object
               onFinish(result.value);
             } else {
               // For objects and no-schema, validate the entire object
