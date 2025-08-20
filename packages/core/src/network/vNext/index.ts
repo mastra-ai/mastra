@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { Mastra, MastraMessageV2, Tool } from '../..';
 import { Agent, MessageList } from '../../agent';
-import type { MastraLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { RegisteredLogger } from '../../logger';
 import type { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
@@ -485,6 +485,8 @@ export class NewAgentNetwork extends MastraBase {
 
         const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
+        const model = await routingAgent.getModel();
+
         const completionSchema = z.object({
           isComplete: z.boolean(),
           finalResult: z.string(),
@@ -507,12 +509,21 @@ export class NewAgentNetwork extends MastraBase {
                         }
                     `;
 
-          completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
-            output: completionSchema,
-            threadId: initData?.threadId ?? runId,
-            resourceId: initData?.threadResourceId ?? this.name,
-            runtimeContext: runtimeContextToUse,
-          });
+          if (model.specificationVersion === 'v2') {
+            completionResult = await routingAgent.generateVNext([{ role: 'assistant', content: completionPrompt }], {
+              output: completionSchema,
+              threadId: initData?.threadId ?? runId,
+              resourceId: initData?.threadResourceId ?? this.name,
+              runtimeContext: runtimeContextToUse,
+            });
+          } else {
+            completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+              output: completionSchema,
+              threadId: initData?.threadId ?? runId,
+              resourceId: initData?.threadResourceId ?? this.name,
+              runtimeContext: runtimeContextToUse,
+            });
+          }
 
           if (completionResult.object.isComplete) {
             return {
@@ -528,43 +539,49 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
-        const result = await routingAgent.generate(
-          [
-            {
-              role: 'assistant',
-              content: `
-                    ${inputData.isOneOff ? 'You are executing just one primitive based on the user task. Make sure to pick the primitive that is the best suited to accomplish the whole task. Primitives that execute only part of the task should be avoided.' : 'You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.'}
-
-                    The user has given you the following task: 
-                    ${inputData.task}
-                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
-
-                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
-                    If you are calling the same agent again, make sure to adjust the prompt to be more specific.
-
-                    {
-                        "resourceId": string,
-                        "resourceType": "agent" | "workflow" | "tool",
-                        "prompt": string,
-                        "selectionReason": string
-                    }
-
-                    The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
-                    `,
-            },
-          ],
+        let result;
+        const prompt: MessageListInput = [
           {
-            output: z.object({
-              resourceId: z.string(),
-              resourceType: RESOURCE_TYPES,
-              prompt: z.string(),
-              selectionReason: z.string(),
-            }),
-            threadId: initData?.threadId ?? runId,
-            resourceId: initData?.threadResourceId ?? this.name,
-            runtimeContext: runtimeContextToUse,
+            role: 'assistant',
+            content: `
+                  ${inputData.isOneOff ? 'You are executing just one primitive based on the user task. Make sure to pick the primitive that is the best suited to accomplish the whole task. Primitives that execute only part of the task should be avoided.' : 'You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.'}
+
+                  The user has given you the following task: 
+                  ${inputData.task}
+                  ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
+
+                  Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
+                  If you are calling the same agent again, make sure to adjust the prompt to be more specific.
+
+                  {
+                      "resourceId": string,
+                      "resourceType": "agent" | "workflow" | "tool",
+                      "prompt": string,
+                      "selectionReason": string
+                  }
+
+                  The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
+                  `,
           },
-        );
+        ];
+
+        const options = {
+          output: z.object({
+            resourceId: z.string(),
+            resourceType: RESOURCE_TYPES,
+            prompt: z.string(),
+            selectionReason: z.string(),
+          }),
+          threadId: initData?.threadId ?? runId,
+          resourceId: initData?.threadResourceId ?? this.name,
+          runtimeContext: runtimeContextToUse,
+        };
+
+        if (model.specificationVersion === 'v1') {
+          result = await routingAgent.generate(prompt, options);
+        } else {
+          result = await routingAgent.generateVNext(prompt, options);
+        }
 
         return {
           task: inputData.task,

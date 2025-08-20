@@ -85,11 +85,20 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
     async item => {
       let targetResult: any;
       try {
-        targetResult = await target.generate(item.input, {
-          scorers: {},
-          returnScorerData: true,
-          runtimeContext: item.runtimeContext,
-        });
+        const model = await target.getModel();
+        if (model.specificationVersion === 'v2') {
+          targetResult = await target.generateVNext(item.input, {
+            scorers: {},
+            returnScorerData: true,
+            runtimeContext: item.runtimeContext,
+          });
+        } else {
+          targetResult = await target.generate(item.input, {
+            scorers: {},
+            returnScorerData: true,
+            runtimeContext: item.runtimeContext,
+          });
+        }
       } catch (error) {
         throw new MastraError(
           {

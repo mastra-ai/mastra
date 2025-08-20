@@ -1,5 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
 import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
@@ -17,6 +16,7 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -39,8 +39,6 @@ export type AgentAISpanProperties = {
 };
 
 export type ToolsetsInput = Record<string, ToolsInput>;
-
-export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
 
 type FallbackFields<S extends ZodTypeAny> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }

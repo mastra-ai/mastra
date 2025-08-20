@@ -27,7 +27,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import type { TripwireProperties } from '../llm/model/shared.types';
+import type { TripwireProperties, MastraLanguageModel } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -38,6 +38,7 @@ import { ProcessorRunner } from '../processors/runner';
 import { RuntimeContext } from '../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
+import type { MastraModelOutput } from '../stream/base/output';
 import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
@@ -57,7 +58,6 @@ import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
-  MastraLanguageModel,
   AgentGenerateOptions,
   AgentStreamOptions,
   ToolsetsInput,
@@ -70,7 +70,8 @@ export { TripWire };
 export { MessageList };
 export * from './types';
 
-type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+export type { MastraLanguageModel } from '../llm/model/shared.types';
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -2514,7 +2515,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' = 'mastra',
-  >(_messages: MessageListInput, _options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>) {
+  >(
+    _messages: MessageListInput,
+    _options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+  ): ReturnType<MastraModelOutput['getFullOutput']> {
     throw new MastraError({
       id: 'AGENT_GENERATE_VNEXT_NOT_IMPLEMENTED',
       domain: ErrorDomain.AGENT,
