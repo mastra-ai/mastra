@@ -12,8 +12,6 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
-import type { MastraModelOutput } from '@mastra/core/stream';
-import type { AISDKV5OutputStream } from '../../../../core/dist/stream/aisdk/v5/output';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
