@@ -1,7 +1,7 @@
 import { TransformStream } from 'stream/web';
 import { asSchema, isDeepEqualData, parsePartialJson } from 'ai-v5';
-import type { ObjectOptions } from '../../../../loop/types';
-import { safeValidateTypes } from '../compat';
+import type { ObjectOptions } from '../../loop/types';
+import { safeValidateTypes } from '../aisdk/v5/compat';
 import { getTransformedSchema, getResponseFormat } from './schema';
 
 interface ProcessPartialChunkParams {

@@ -3,9 +3,9 @@ import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } 
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { ObjectOptions } from '../../../loop/types';
+import { getResponseFormat } from '../../base/schema';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
-import { getResponseFormat } from './object/schema';
 
 type ExecutionProps = {
   runId: string;

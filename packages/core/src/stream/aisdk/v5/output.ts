@@ -5,10 +5,10 @@ import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStr
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
+import { getResponseFormat } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
 import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
-import { getResponseFormat } from './object/schema';
 import { transformSteps } from './output-helpers';
 import { convertMastraChunkToAISDKv5 } from './transform';
 import type { OutputChunkType } from './transform';

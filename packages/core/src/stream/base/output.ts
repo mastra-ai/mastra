@@ -12,11 +12,11 @@ import type { ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
-import { getTransformedSchema } from '../aisdk/v5/object/schema';
-import { createJsonTextStreamTransformer, createObjectStreamTransformer } from '../aisdk/v5/object/stream-object';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import { getTransformedSchema } from './schema';
+import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './stream-object';
 
 export class JsonToSseTransformStream extends TransformStream<unknown, string> {
   constructor() {
