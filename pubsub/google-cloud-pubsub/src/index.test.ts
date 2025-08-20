@@ -40,7 +40,7 @@ describe('Workflow', () => {
   });
 
   describe('Streaming', () => {
-    it('should generate a stream', async () => {
+    it.only('should generate a stream', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 
@@ -57,23 +57,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -178,6 +177,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     // TODO: fix this test
@@ -238,17 +238,12 @@ describe('Workflow', () => {
         }),
       });
 
-      const promptEvalWorkflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({}),
-          steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
 
       promptEvalWorkflow
         .then(getUserInput)
@@ -258,10 +253,14 @@ describe('Workflow', () => {
         .then(evaluateImproved)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -326,22 +325,18 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use an agent as a step', async () => {
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({
-            prompt1: z.string(),
-            prompt2: z.string(),
-          }),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
         }),
-      );
+        outputSchema: z.object({}),
+      });
 
       const agent = new Agent({
         name: 'test-agent-1',
@@ -400,11 +395,15 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
@@ -629,6 +628,7 @@ describe('Workflow', () => {
           type: 'finish',
         },
       ]);
+      await mastra.stopEventListeners();
     });
 
     it('should handle sleep waiting flow', async () => {
@@ -648,23 +648,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -801,6 +800,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     // TODO: fix this test
@@ -821,23 +821,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
       workflow.then(step1).waitForEvent('user-event-test', step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -952,6 +951,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -978,26 +978,25 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1, step2],
+      });
 
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { value: 'bail' } });
@@ -1030,6 +1029,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should throw error when execution flow not defined', () => {
@@ -1041,19 +1041,14 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1],
+      });
 
       expect(() => workflow.createRun()).toThrowError(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -1069,19 +1064,14 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1],
+      });
 
       workflow.then(step1);
 
@@ -1099,23 +1089,25 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1],
+      });
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1128,6 +1120,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should have access to typed workflow results', async () => {
@@ -1141,23 +1134,25 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1],
+      });
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1170,6 +1165,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should execute multiple steps in parallel', async () => {
@@ -1193,21 +1189,23 @@ describe('Workflow', () => {
         outputSchema: z.object({ value: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({ value: z.string() }),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step1, step2],
+      });
 
       workflow.parallel([step1, step2]).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1233,6 +1231,7 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+      await mastra.stopEventListeners();
     });
 
     it('should have runId in the step execute function - bug #4260', async () => {
@@ -1247,21 +1246,23 @@ describe('Workflow', () => {
         outputSchema: z.object({ value: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({ value: z.string() }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step1],
+      });
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
+      });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1277,6 +1278,7 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+      await mastra.stopEventListeners();
     });
 
     describe('Variable Resolution', () => {
@@ -1296,20 +1298,22 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({ inputData: z.string() }),
-            outputSchema: z.object({}),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({ inputData: z.string() }),
+          outputSchema: z.object({}),
+        });
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        const mastra = new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
+        });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
@@ -1332,6 +1336,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
 
       it('should provide access to step results and trigger data via getStepResult helper', async () => {
@@ -1372,20 +1377,22 @@ describe('Workflow', () => {
           outputSchema: z.object({}),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({ inputValue: z.string() }),
-            outputSchema: z.object({ value: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({ inputValue: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+        });
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        const mastra = new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
+        });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputValue: 'test-input' } });
@@ -1415,6 +1422,7 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve trigger data from context', async () => {
@@ -1430,20 +1438,22 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: triggerSchema,
-            outputSchema: z.object({ result: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         workflow.then(step1).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        const mastra = new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
+        });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         await run.start({ inputData: { inputData: 'test-input' } });
@@ -1453,6 +1463,7 @@ describe('Workflow', () => {
             inputData: { inputData: 'test-input' },
           }),
         );
+        await mastra.stopEventListeners();
       });
 
       it('should resolve trigger data from getInitData', async () => {
@@ -1478,21 +1489,23 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.object({ cool: z.string() }) }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: triggerSchema,
-            outputSchema: z.object({ result: z.string() }),
-            steps: [step1, step2],
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+          steps: [step1, step2],
+        });
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
+        const mastra = new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
+        });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1513,6 +1526,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve trigger data from getInitData with workflow schema', async () => {
@@ -1538,23 +1552,22 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.object({ cool: z.string() }) }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: triggerSchema,
-            outputSchema: z.object({ result: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1573,6 +1586,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve trigger data and DI runtimeContext values via .map()', async () => {
@@ -1597,16 +1611,11 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string(), second: z.number() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: triggerSchema,
-            outputSchema: z.object({ result: z.string(), second: z.number() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
 
         workflow
           .then(step1)
@@ -1623,10 +1632,14 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const runtimeContext = new RuntimeContext<{ life: number }>();
         runtimeContext.set('life', 42);
@@ -1648,6 +1661,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve dynamic mappings via .map()', async () => {
@@ -1672,16 +1686,11 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string(), second: z.string() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: triggerSchema,
-            outputSchema: z.object({ result: z.string(), second: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.string() }),
+        });
 
         workflow
           .then(step1)
@@ -1712,10 +1721,14 @@ describe('Workflow', () => {
           })
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1742,6 +1755,7 @@ describe('Workflow', () => {
           result: 'test-input',
           second: 'success',
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve variables from previous steps', async () => {
@@ -1763,16 +1777,11 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({}),
-            outputSchema: z.object({ result: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         workflow
           .then(step1)
@@ -1785,10 +1794,14 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         await run.start({ inputData: {} });
@@ -1800,6 +1813,7 @@ describe('Workflow', () => {
             },
           }),
         );
+        await mastra.stopEventListeners();
       });
 
       it('should resolve inputs from previous steps that are not objects', async () => {
@@ -1820,23 +1834,22 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string(), input: z.string() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({}),
-            outputSchema: z.object({ result: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1860,6 +1873,7 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve inputs from previous steps that are arrays', async () => {
@@ -1880,23 +1894,22 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string(), input: z.array(z.object({ str: z.string() })) }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({}),
-            outputSchema: z.object({ result: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1920,6 +1933,7 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve inputs from previous steps that are arrays via .map()', async () => {
@@ -1940,16 +1954,11 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string(), input: z.array(z.object({ str: z.string() })) }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({}),
-            outputSchema: z.object({ result: z.string() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+        });
 
         workflow
           .then(step1)
@@ -1962,10 +1971,14 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1989,6 +2002,7 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve constant values via .map()', async () => {
@@ -2013,16 +2027,11 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string(), second: z.number() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: triggerSchema,
-            outputSchema: z.object({ result: z.string(), second: z.number() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
 
         workflow
           .then(step1)
@@ -2039,10 +2048,14 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -2061,6 +2074,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
 
       it('should resolve fully dynamic input via .map()', async () => {
@@ -2085,16 +2099,11 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string(), second: z.number() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: triggerSchema,
-            outputSchema: z.object({ result: z.string(), second: z.number() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.number() }),
+        });
 
         workflow
           .then(step1)
@@ -2107,10 +2116,14 @@ describe('Workflow', () => {
           .then(step2)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -2129,6 +2142,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
     });
 
@@ -2171,17 +2185,12 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({ status: z.string() }),
-            outputSchema: z.object({ result: z.string() }),
-            steps: [step1, step2, step3],
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({ status: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          steps: [step1, step2, step3],
+        });
 
         workflow
           .then(step1)
@@ -2208,10 +2217,14 @@ describe('Workflow', () => {
           .then(step4)
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { status: 'success' } });
@@ -2226,6 +2239,7 @@ describe('Workflow', () => {
           step2: { status: 'success', output: { result: 'step2' } },
           step4: { status: 'success', output: { result: 'step2' } },
         });
+        await mastra.stopEventListeners();
       });
 
       it('should handle failing dependencies', async () => {
@@ -2249,24 +2263,23 @@ describe('Workflow', () => {
           outputSchema: z.object({}),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({}),
-            outputSchema: z.object({}),
-            steps: [step1, step2],
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          steps: [step1, step2],
+        });
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
@@ -2289,6 +2302,7 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         });
         expect((step1Result as any)?.error).toMatch(/^Error: Failed/);
+        await mastra.stopEventListeners();
       });
 
       it('should support simple string conditions', async () => {
@@ -2314,17 +2328,12 @@ describe('Workflow', () => {
           outputSchema: z.object({ result: z.string() }),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({}),
-            outputSchema: z.object({}),
-            steps: [step1, step2, step3],
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          steps: [step1, step2, step3],
+        });
         workflow
           .then(step1)
           .branch([
@@ -2351,10 +2360,14 @@ describe('Workflow', () => {
           ])
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { status: 'success' } });
@@ -2381,6 +2394,7 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
         });
+        await mastra.stopEventListeners();
       });
 
       it('should support custom condition functions', async () => {
@@ -2400,16 +2414,11 @@ describe('Workflow', () => {
           outputSchema: z.object({}),
         });
 
-        const workflow = createWorkflow(
-          {
-            id: 'test-workflow',
-            inputSchema: z.object({}),
-            outputSchema: z.object({}),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        );
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+        });
 
         workflow
           .then(step1)
@@ -2425,10 +2434,14 @@ describe('Workflow', () => {
           ])
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'test-workflow': workflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { count: 5 } });
@@ -2450,6 +2463,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
     });
 
@@ -2470,26 +2484,25 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1],
+      });
 
       workflow.then(step1).sleep(1000).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2514,6 +2527,7 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
+      await mastra.stopEventListeners();
     });
 
     it('should execute a a sleep until step', async () => {
@@ -2533,19 +2547,14 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1],
+      });
 
       workflow
         .then(step1)
@@ -2553,10 +2562,14 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2581,6 +2594,7 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(900);
+      await mastra.stopEventListeners();
     });
 
     it('should execute a waitForEvent step', async () => {
@@ -2601,27 +2615,26 @@ describe('Workflow', () => {
         resumeSchema: z.any(),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-            resumed: z.any(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          resumed: z.any(),
         }),
-      );
+        steps: [step1],
+      });
 
       workflow.then(step1).waitForEvent('hello-event', step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2652,6 +2665,7 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(1000);
+      await mastra.stopEventListeners();
     });
 
     // timeouts not supported for now
@@ -2673,27 +2687,26 @@ describe('Workflow', () => {
         resumeSchema: z.any(),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-            resumed: z.any(),
-          }),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          resumed: z.any(),
         }),
-      );
+        steps: [step1],
+      });
 
       workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2718,6 +2731,7 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(900);
+      await mastra.stopEventListeners();
     });
   });
 
@@ -2740,26 +2754,25 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1, step2],
+      });
 
       workflow.then(step1).sleep(10000).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -2780,6 +2793,7 @@ describe('Workflow', () => {
       });
 
       expect(result.steps['step2']).toBeUndefined();
+      await mastra.stopEventListeners();
     });
 
     it('should be able to abort workflow execution immediately', async () => {
@@ -2801,26 +2815,25 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1, step2],
+      });
 
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -2840,6 +2853,7 @@ describe('Workflow', () => {
       });
 
       expect(result.steps['step2']).toBeUndefined();
+      await mastra.stopEventListeners();
     });
 
     it('should be able to abort workflow execution during a step', async () => {
@@ -2875,26 +2889,25 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
         }),
-      );
+        steps: [step1, step2],
+      });
 
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -2921,6 +2934,7 @@ describe('Workflow', () => {
       //   startedAt: expect.any(Number),
       //   endedAt: expect.any(Number),
       // });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -2938,23 +2952,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
 
       workflow.then(step1).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
 
@@ -2982,6 +2995,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
       expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
+      await mastra.stopEventListeners();
     });
 
     it('should handle variable resolution errors', async () => {
@@ -2998,16 +3012,11 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
 
       workflow
         .then(step1)
@@ -3017,10 +3026,14 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       await expect(run.start({ inputData: {} })).resolves.toMatchObject({
@@ -3044,6 +3057,7 @@ describe('Workflow', () => {
           },
         },
       });
+      await mastra.stopEventListeners();
     });
 
     // TODO: fix this test
@@ -3080,23 +3094,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
 
       workflow.parallel([step1, step2]).then(step3).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3117,6 +3130,7 @@ describe('Workflow', () => {
         },
       });
       expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
+      await mastra.stopEventListeners();
     });
 
     it('should handle step execution errors within nested workflows', async () => {
@@ -3151,36 +3165,30 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
 
       workflow.parallel([step1, step2]).then(step3).commit();
 
-      const mainWorkflow = createWorkflow(
-        {
-          id: 'main-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const mainWorkflow = createWorkflow({
+        id: 'main-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
         .then(workflow)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'main-workflow': mainWorkflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await mainWorkflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3196,6 +3204,7 @@ describe('Workflow', () => {
       });
 
       expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Step execution failed/);
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3238,16 +3247,11 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
 
       workflow
         .then(step1)
@@ -3285,10 +3289,14 @@ describe('Workflow', () => {
         })
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3307,6 +3315,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3349,22 +3358,17 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          steps: [incrementStep, finalStep],
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            target: z.number(),
-            value: z.number(),
-          }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        steps: [incrementStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          target: z.number(),
+          value: z.number(),
         }),
-      );
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
 
       counterWorkflow
         .dountil(incrementStep, async ({ inputData }) => {
@@ -3373,10 +3377,14 @@ describe('Workflow', () => {
         .then(finalStep)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
@@ -3387,6 +3395,7 @@ describe('Workflow', () => {
       expect(result.result).toEqual({ finalValue: 12 });
       // @ts-ignore
       expect(result.steps.increment.output).toEqual({ value: 12 });
+      await mastra.stopEventListeners();
     });
 
     it('should run a while loop', async () => {
@@ -3427,22 +3436,17 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          steps: [incrementStep, finalStep],
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            target: z.number(),
-            value: z.number(),
-          }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        steps: [incrementStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          target: z.number(),
+          value: z.number(),
         }),
-      );
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
 
       counterWorkflow
         .dowhile(incrementStep, async ({ inputData }) => {
@@ -3451,10 +3455,14 @@ describe('Workflow', () => {
         .then(finalStep)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
@@ -3465,6 +3473,7 @@ describe('Workflow', () => {
       expect(result.result).toEqual({ finalValue: 12 });
       // @ts-ignore
       expect(result.steps.increment.output).toEqual({ value: 12 });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3499,26 +3508,25 @@ describe('Workflow', () => {
         },
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          steps: [mapStep, finalStep],
-          id: 'counter-workflow',
-          inputSchema: z.array(z.object({ value: z.number() })),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
         }),
-      );
+      });
 
       counterWorkflow.foreach(mapStep).then(finalStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
@@ -3545,6 +3553,7 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3607,35 +3616,25 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            startValue: z.number(),
-          }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-          steps: [startStep, finalIf],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
         }),
-      );
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        steps: [startStep, finalIf],
+      });
 
-      const elseBranch = createWorkflow(
-        {
-          id: 'else-branch',
-          inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-          steps: [otherStep, finalElse],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const elseBranch = createWorkflow({
+        id: 'else-branch',
+        inputSchema: z.object({ newValue: z.number() }),
+        outputSchema: z.object({
+          finalValue: z.number(),
         }),
-      )
+        steps: [otherStep, finalElse],
+      })
         .then(otherStep)
         .then(finalElse)
         .commit();
@@ -3660,10 +3659,14 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 1 } });
@@ -3675,6 +3678,7 @@ describe('Workflow', () => {
       expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
       // @ts-ignore
       expect(result.steps.start.output).toEqual({ newValue: 2 });
+      await mastra.stopEventListeners();
     });
 
     it('should run the else branch', async () => {
@@ -3736,35 +3740,25 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            startValue: z.number(),
-          }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-          steps: [startStep, finalIf],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
         }),
-      );
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        steps: [startStep, finalIf],
+      });
 
-      const elseBranch = createWorkflow(
-        {
-          id: 'else-branch',
-          inputSchema: z.object({ newValue: z.number() }),
-          outputSchema: z.object({
-            finalValue: z.number(),
-          }),
-          steps: [otherStep, finalElse],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const elseBranch = createWorkflow({
+        id: 'else-branch',
+        inputSchema: z.object({ newValue: z.number() }),
+        outputSchema: z.object({
+          finalValue: z.number(),
         }),
-      )
+        steps: [otherStep, finalElse],
+      })
         .then(otherStep)
         .then(finalElse)
         .commit();
@@ -3789,10 +3783,14 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 6 } });
@@ -3804,6 +3802,7 @@ describe('Workflow', () => {
       expect(result.steps['else-branch'].output).toEqual({ finalValue: 26 + 6 + 1 });
       // @ts-ignore
       expect(result.steps.start.output).toEqual({ newValue: 7 });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3830,17 +3829,12 @@ describe('Workflow', () => {
         }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: triggerSchema,
-          outputSchema: z.object({}),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: triggerSchema,
+        outputSchema: z.object({}),
+        steps: [step1],
+      });
 
       workflow.then(step1).commit();
 
@@ -3899,57 +3893,46 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2, step3, step4, step5],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2, step3, step4, step5],
+      });
       workflow
         .parallel([
-          createWorkflow(
-            {
-              id: 'nested-a',
-              inputSchema: z.object({}),
-              outputSchema: z.object({}),
-              steps: [step1, step2, step3],
-            },
-            new GoogleCloudPubSub({
-              projectId: 'pubsub-test',
-            }),
-          )
+          createWorkflow({
+            id: 'nested-a',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            steps: [step1, step2, step3],
+          })
             .then(step1)
             .then(step2)
             .then(step3)
             .commit(),
-          createWorkflow(
-            {
-              id: 'nested-b',
-              inputSchema: z.object({}),
-              outputSchema: z.object({}),
-              steps: [step4, step5],
-            },
-            new GoogleCloudPubSub({
-              projectId: 'pubsub-test',
-            }),
-          )
+          createWorkflow({
+            id: 'nested-b',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            steps: [step4, step5],
+          })
             .then(step4)
             .then(step5)
             .commit(),
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
         workflows: {
           'test-workflow': workflow,
         },
         storage: testStorage,
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -3968,6 +3951,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -3990,24 +3974,23 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         workflows: {
           'test-workflow': workflow,
         },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       workflow.then(step1).then(step2).commit();
 
@@ -4033,6 +4016,7 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
+      await mastra.stopEventListeners();
     });
 
     it('should retry a step with a custom retry config', async () => {
@@ -4053,25 +4037,24 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          retryConfig: { attempts: 5, delay: 200 },
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 5, delay: 200 },
+      });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: {
           'test-workflow': workflow,
         },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       workflow.then(step1).then(step2).commit();
 
@@ -4097,6 +4080,7 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
+      await mastra.stopEventListeners();
     });
   });
 
@@ -4124,23 +4108,22 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({ name: z.string() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ name: z.string() }),
+      });
 
       workflow.then(step1).then(createStep(randomTool)).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -4163,6 +4146,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -4184,23 +4168,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
@@ -4291,6 +4274,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should watch workflow state changes and call onTransition when attaching from separate run', async () => {
@@ -4310,23 +4294,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
@@ -4417,6 +4400,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     // TODO: fix this test, second watcher doesn't get events
@@ -4437,23 +4421,22 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const onTransition = vi.fn();
       const onTransition2 = vi.fn();
@@ -4488,6 +4471,7 @@ describe('Workflow', () => {
 
       expect(onTransition).toHaveBeenCalledTimes(10);
       expect(onTransition2).toHaveBeenCalledTimes(10);
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use all action types in a workflow', async () => {
@@ -4514,23 +4498,22 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({ name: z.string() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ name: z.string() }),
+      });
 
       workflow.then(step1).then(createStep(randomTool)).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
 
@@ -4626,6 +4609,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -4646,17 +4630,12 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1],
+      })
         .then(step1)
         .commit();
       const run = await workflow.createRunAsync();
@@ -4723,17 +4702,12 @@ describe('Workflow', () => {
         }),
       });
 
-      const promptEvalWorkflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({}),
-          steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
 
       promptEvalWorkflow
         .then(getUserInput)
@@ -4746,11 +4720,15 @@ describe('Workflow', () => {
       // Create a new storage instance for initial run
       const initialStorage = new MockStore();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: initialStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -4822,6 +4800,7 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+      await mastra.stopEventListeners();
     });
 
     it('should handle parallel steps with conditional suspend', async () => {
@@ -4877,17 +4856,12 @@ describe('Workflow', () => {
         outputSchema: z.object({ improvedOutput: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({}),
-          steps: [getUserInput, promptAgent, evaluateTone, humanIntervention, explainResponse],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, humanIntervention, explainResponse],
+      });
 
       workflow
         .then(getUserInput)
@@ -4899,11 +4873,15 @@ describe('Workflow', () => {
         ])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
 
@@ -4978,6 +4956,7 @@ describe('Workflow', () => {
           suspendedAt: expect.any(Number),
         },
       });
+      await mastra.stopEventListeners();
     });
 
     // TODO: fix this test, timing issue?
@@ -5061,25 +5040,20 @@ describe('Workflow', () => {
         outputSchema: z.object({ improvedOutput: z.string() }),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({}),
-          steps: [
-            getUserInput,
-            promptAgent,
-            evaluateTone,
-            improveResponse,
-            evaluateImproved,
-            humanIntervention,
-            explainResponse,
-          ],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [
+          getUserInput,
+          promptAgent,
+          evaluateTone,
+          improveResponse,
+          evaluateImproved,
+          humanIntervention,
+          explainResponse,
+        ],
+      });
 
       workflow
         .then(getUserInput)
@@ -5100,10 +5074,14 @@ describe('Workflow', () => {
         .parallel([humanIntervention, explainResponse])
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const started = run.start({ inputData: { input: 'test' } });
@@ -5185,9 +5163,10 @@ describe('Workflow', () => {
         },
         humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
       });
+      await mastra.stopEventListeners();
     });
 
-    it.only('should handle basic suspend and resume flow with async await syntax', async () => {
+    it('should handle basic suspend and resume flow with async await syntax', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
@@ -5254,16 +5233,11 @@ describe('Workflow', () => {
         }),
       });
 
-      const promptEvalWorkflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
 
       promptEvalWorkflow
         .then(getUserInput)
@@ -5273,11 +5247,15 @@ describe('Workflow', () => {
         .then(evaluateImproved)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5443,6 +5421,7 @@ describe('Workflow', () => {
       });
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
+      await mastra.stopEventListeners();
     });
 
     it('should work with runtimeContext - bug #4442', async () => {
@@ -5482,24 +5461,23 @@ describe('Workflow', () => {
         outputSchema: z.array(z.string()),
       });
 
-      const promptEvalWorkflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
 
       promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5516,6 +5494,7 @@ describe('Workflow', () => {
       expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
       // @ts-ignore
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
+      await mastra.stopEventListeners();
     });
 
     it('should work with custom runtimeContext - bug #4442', async () => {
@@ -5555,24 +5534,23 @@ describe('Workflow', () => {
         outputSchema: z.array(z.string()),
       });
 
-      const promptEvalWorkflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
 
       promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5592,6 +5570,7 @@ describe('Workflow', () => {
       expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
       // @ts-ignore
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
+      await mastra.stopEventListeners();
     });
 
     it('should handle basic suspend and resume in a dountil workflow', async () => {
@@ -5630,28 +5609,18 @@ describe('Workflow', () => {
         },
       });
 
-      const dowhileWorkflow = createWorkflow(
-        {
-          id: 'dowhile-workflow',
-          inputSchema: z.object({ value: z.number() }),
-          outputSchema: z.object({ value: z.number() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const dowhileWorkflow = createWorkflow({
+        id: 'dowhile-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
         .dountil(
-          createWorkflow(
-            {
-              id: 'simple-resume-workflow',
-              inputSchema: z.object({ value: z.number() }),
-              outputSchema: z.object({ value: z.number() }),
-              steps: [incrementStep, resumeStep],
-            },
-            new GoogleCloudPubSub({
-              projectId: 'pubsub-test',
-            }),
-          )
+          createWorkflow({
+            id: 'simple-resume-workflow',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            steps: [incrementStep, resumeStep],
+          })
             .then(incrementStep)
             .then(resumeStep)
             .commit(),
@@ -5667,11 +5636,15 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'dowhile-workflow': dowhileWorkflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await dowhileWorkflow.createRunAsync();
       const result = await run.start({ inputData: { value: 0 } });
@@ -5698,6 +5671,7 @@ describe('Workflow', () => {
       expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
         status: 'success',
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -5709,12 +5683,7 @@ describe('Workflow', () => {
     });
 
     it('should return empty result when mastra is not initialized', async () => {
-      const workflow = createWorkflow(
-        { id: 'test', inputSchema: z.object({}), outputSchema: z.object({}) },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({ id: 'test', inputSchema: z.object({}), outputSchema: z.object({}) });
       const result = await workflow.getWorkflowRuns();
       expect(result).toEqual({ runs: [], total: 0 });
     });
@@ -5736,21 +5705,20 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        { id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'test-workflow': workflow,
         },
         logger: false,
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       // Create a few runs
       const run1 = await workflow.createRunAsync();
@@ -5766,6 +5734,7 @@ describe('Workflow', () => {
       expect(runs[0]?.workflowName).toBe('test-workflow');
       expect(runs[0]?.snapshot).toBeDefined();
       expect(runs[1]?.snapshot).toBeDefined();
+      await mastra.stopEventListeners();
     });
 
     it('should get workflow run by id from storage', async () => {
@@ -5785,21 +5754,20 @@ describe('Workflow', () => {
         outputSchema: z.object({}),
       });
 
-      const workflow = createWorkflow(
-        { id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step1).then(step2).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: {
           'test-workflow': workflow,
         },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       // Create a few runs
       const run1 = await workflow.createRunAsync();
@@ -5818,6 +5786,7 @@ describe('Workflow', () => {
       expect(run3?.runId).toBe(run1.runId);
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
+      await mastra.stopEventListeners();
     });
   });
 
@@ -5834,19 +5803,18 @@ describe('Workflow', () => {
         },
       });
 
-      const workflow = createWorkflow(
-        { id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step1).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       // Access new instance properties directly - should work without warning
       const run = await workflow.createRunAsync();
@@ -5854,24 +5822,20 @@ describe('Workflow', () => {
 
       expect(telemetry).toBeDefined();
       expect(telemetry).toBeInstanceOf(Telemetry);
+      await mastra.stopEventListeners();
     });
   });
 
   describe('Agent as step', () => {
     it('should be able to use an agent as a step', async () => {
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({
-            prompt1: z.string(),
-            prompt2: z.string(),
-          }),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
         }),
-      );
+        outputSchema: z.object({}),
+      });
 
       const agent = new Agent({
         name: 'test-agent-1',
@@ -5930,12 +5894,16 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         logger: false,
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
@@ -5981,6 +5949,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use an agent in parallel', async () => {
@@ -5997,22 +5966,17 @@ describe('Workflow', () => {
         execute,
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({
-            prompt1: z.string(),
-            prompt2: z.string(),
-          }),
-          outputSchema: z.object({
-            'nested-workflow': z.object({ text: z.string() }),
-            'nested-workflow-2': z.object({ text: z.string() }),
-          }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
         }),
-      );
+        outputSchema: z.object({
+          'nested-workflow': z.object({ text: z.string() }),
+          'nested-workflow-2': z.object({ text: z.string() }),
+        }),
+      });
 
       const agent = new Agent({
         name: 'test-agent-1',
@@ -6071,23 +6035,22 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-      });
-
-      const nestedWorkflow1 = createWorkflow(
-        {
-          id: 'nested-workflow',
-          inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
-          outputSchema: z.object({ text: z.string() }),
-        },
-        new GoogleCloudPubSub({
+        pubsub: new GoogleCloudPubSub({
           projectId: 'pubsub-test',
         }),
-      )
+      });
+      await mastra.startEventListeners();
+
+      const nestedWorkflow1 = createWorkflow({
+        id: 'nested-workflow',
+        inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -6098,16 +6061,11 @@ describe('Workflow', () => {
         .then(createStep(agent))
         .commit();
 
-      const nestedWorkflow2 = createWorkflow(
-        {
-          id: 'nested-workflow-2',
-          inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
-          outputSchema: z.object({ text: z.string() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const nestedWorkflow2 = createWorkflow({
+        id: 'nested-workflow-2',
+        inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+      })
         .then(startStep)
         .map({
           prompt: {
@@ -6162,22 +6120,18 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use an agent as a step via mastra instance', async () => {
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({
-            prompt1: z.string(),
-            prompt2: z.string(),
-          }),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
         }),
-      );
+        outputSchema: z.object({}),
+      });
 
       const agent = new Agent({
         name: 'test-agent-1',
@@ -6220,12 +6174,16 @@ describe('Workflow', () => {
         },
       });
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       workflow
         .then(startStep)
@@ -6292,22 +6250,18 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({
-            prompt1: z.string(),
-            prompt2: z.string(),
-          }),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
         }),
-      );
+        outputSchema: z.object({}),
+      });
 
       const agent = new Agent({
         name: 'test-agent-1',
@@ -6333,12 +6287,16 @@ describe('Workflow', () => {
           }),
         }),
       });
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const agentStep = createStep({
         id: 'agent-step',
@@ -6355,16 +6313,11 @@ describe('Workflow', () => {
 
       workflow
         .then(
-          createWorkflow(
-            {
-              id: 'nested-workflow',
-              inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
-              outputSchema: z.object({ text: z.string() }),
-            },
-            new GoogleCloudPubSub({
-              projectId: 'pubsub-test',
-            }),
-          )
+          createWorkflow({
+            id: 'nested-workflow',
+            inputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+            outputSchema: z.object({ text: z.string() }),
+          })
             .map({
               agentName: {
                 value: 'test-agent-1',
@@ -6416,6 +6369,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -6464,43 +6418,28 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            startValue: z.number(),
-          }),
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
         }),
-      );
+        outputSchema: z.object({ success: z.boolean() }),
+      });
 
-      const wfA = createWorkflow(
-        {
-          id: 'nested-workflow-a',
-          inputSchema: counterWorkflow.inputSchema,
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
         .then(startStep)
         .then(otherStep)
         .then(finalStep)
         .commit();
-      const wfB = createWorkflow(
-        {
-          id: 'nested-workflow-b',
-          inputSchema: counterWorkflow.inputSchema,
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
         .then(startStep)
         .then(finalStep)
         .commit();
@@ -6519,12 +6458,16 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6557,6 +6500,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should be able to nest workflows sequentially', async () => {
@@ -6599,52 +6543,41 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            startValue: z.number(),
-          }),
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
         }),
-      );
+        outputSchema: z.object({ success: z.boolean() }),
+      });
 
-      const wfA = createWorkflow(
-        {
-          id: 'nested-workflow-a',
-          inputSchema: counterWorkflow.inputSchema,
-          outputSchema: startStep.outputSchema,
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: startStep.outputSchema,
+      })
         .then(startStep)
         .commit();
-      const wfB = createWorkflow(
-        {
-          id: 'nested-workflow-b',
-          inputSchema: wfA.outputSchema,
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: wfA.outputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
         .then(otherStep)
         .then(finalStep)
         .commit();
       counterWorkflow.then(wfA).then(wfB).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6661,6 +6594,7 @@ describe('Workflow', () => {
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 28,
       });
+      await mastra.stopEventListeners();
     });
 
     it('should be able clone workflows as steps', async () => {
@@ -6708,43 +6642,28 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            startValue: z.number(),
-          }),
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
         }),
-      );
+        outputSchema: z.object({ success: z.boolean() }),
+      });
 
-      const wfA = createWorkflow(
-        {
-          id: 'nested-workflow-a',
-          inputSchema: counterWorkflow.inputSchema,
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
         .then(startStep)
         .then(cloneStep(otherStep, { id: 'other-clone' }))
         .then(finalStep)
         .commit();
-      const wfB = createWorkflow(
-        {
-          id: 'nested-workflow-b',
-          inputSchema: counterWorkflow.inputSchema,
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
         .then(startStep)
         .then(cloneStep(finalStep, { id: 'final-clone' }))
         .commit();
@@ -6766,12 +6685,16 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: {
           'counter-workflow': counterWorkflow,
         },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6804,6 +6727,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     it('should be able to nest workflows with conditions', async () => {
@@ -6850,43 +6774,28 @@ describe('Workflow', () => {
         execute: final,
       });
 
-      const counterWorkflow = createWorkflow(
-        {
-          id: 'counter-workflow',
-          inputSchema: z.object({
-            startValue: z.number(),
-          }),
-          outputSchema: z.object({ success: z.boolean() }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
         }),
-      );
+        outputSchema: z.object({ success: z.boolean() }),
+      });
 
-      const wfA = createWorkflow(
-        {
-          id: 'nested-workflow-a',
-          inputSchema: counterWorkflow.inputSchema,
-          outputSchema: finalStep.outputSchema,
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: finalStep.outputSchema,
+      })
         .then(startStep)
         .then(otherStep)
         .then(finalStep)
         .commit();
-      const wfB = createWorkflow(
-        {
-          id: 'nested-workflow-b',
-          inputSchema: counterWorkflow.inputSchema,
-          outputSchema: z.object({ other: otherStep.outputSchema, final: finalStep.outputSchema }),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: z.object({ other: otherStep.outputSchema, final: finalStep.outputSchema }),
+      })
         .then(startStep)
         .branch([
           [async () => false, otherStep],
@@ -6915,10 +6824,14 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'counter-workflow': counterWorkflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -6951,6 +6864,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
 
     describe('new if else branching syntax with nested workflows', () => {
@@ -7001,43 +6915,28 @@ describe('Workflow', () => {
           execute: final,
         });
 
-        const counterWorkflow = createWorkflow(
-          {
-            id: 'counter-workflow',
-            inputSchema: z.object({
-              startValue: z.number(),
-            }),
-            outputSchema: z.object({ success: z.boolean() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
+        const counterWorkflow = createWorkflow({
+          id: 'counter-workflow',
+          inputSchema: z.object({
+            startValue: z.number(),
           }),
-        );
+          outputSchema: z.object({ success: z.boolean() }),
+        });
 
-        const wfA = createWorkflow(
-          {
-            id: 'nested-workflow-a',
-            inputSchema: counterWorkflow.inputSchema,
-            outputSchema: finalStep.outputSchema,
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        )
+        const wfA = createWorkflow({
+          id: 'nested-workflow-a',
+          inputSchema: counterWorkflow.inputSchema,
+          outputSchema: finalStep.outputSchema,
+        })
           .then(startStep)
           .then(otherStep)
           .then(finalStep)
           .commit();
-        const wfB = createWorkflow(
-          {
-            id: 'nested-workflow-b',
-            inputSchema: counterWorkflow.inputSchema,
-            outputSchema: finalStep.outputSchema,
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        )
+        const wfB = createWorkflow({
+          id: 'nested-workflow-b',
+          inputSchema: counterWorkflow.inputSchema,
+          outputSchema: finalStep.outputSchema,
+        })
           .then(startStep)
           .then(finalStep)
           .commit();
@@ -7067,10 +6966,14 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -7107,6 +7010,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
 
       it('should execute else-branch', async () => {
@@ -7156,43 +7060,28 @@ describe('Workflow', () => {
           execute: final,
         });
 
-        const counterWorkflow = createWorkflow(
-          {
-            id: 'counter-workflow',
-            inputSchema: z.object({
-              startValue: z.number(),
-            }),
-            outputSchema: z.object({ success: z.boolean() }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
+        const counterWorkflow = createWorkflow({
+          id: 'counter-workflow',
+          inputSchema: z.object({
+            startValue: z.number(),
           }),
-        );
+          outputSchema: z.object({ success: z.boolean() }),
+        });
 
-        const wfA = createWorkflow(
-          {
-            id: 'nested-workflow-a',
-            inputSchema: counterWorkflow.inputSchema,
-            outputSchema: finalStep.outputSchema,
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        )
+        const wfA = createWorkflow({
+          id: 'nested-workflow-a',
+          inputSchema: counterWorkflow.inputSchema,
+          outputSchema: finalStep.outputSchema,
+        })
           .then(startStep)
           .then(otherStep)
           .then(finalStep)
           .commit();
-        const wfB = createWorkflow(
-          {
-            id: 'nested-workflow-b',
-            inputSchema: counterWorkflow.inputSchema,
-            outputSchema: finalStep.outputSchema,
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        )
+        const wfB = createWorkflow({
+          id: 'nested-workflow-b',
+          inputSchema: counterWorkflow.inputSchema,
+          outputSchema: finalStep.outputSchema,
+        })
           .then(startStep)
           .then(finalStep)
           .commit();
@@ -7222,10 +7111,14 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -7263,6 +7156,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
 
       it('should execute nested else and if-branch', async () => {
@@ -7338,31 +7232,21 @@ describe('Workflow', () => {
           .branch([
             [
               async () => true,
-              createWorkflow(
-                {
-                  id: 'nested-workflow-c',
-                  inputSchema: startStep.outputSchema,
-                  outputSchema: otherStep.outputSchema,
-                },
-                new GoogleCloudPubSub({
-                  projectId: 'pubsub-test',
-                }),
-              )
+              createWorkflow({
+                id: 'nested-workflow-c',
+                inputSchema: startStep.outputSchema,
+                outputSchema: otherStep.outputSchema,
+              })
                 .then(otherStep)
                 .commit(),
             ],
             [
               async () => false,
-              createWorkflow(
-                {
-                  id: 'nested-workflow-d',
-                  inputSchema: startStep.outputSchema,
-                  outputSchema: otherStep.outputSchema,
-                },
-                new GoogleCloudPubSub({
-                  projectId: 'pubsub-test',
-                }),
-              )
+              createWorkflow({
+                id: 'nested-workflow-d',
+                inputSchema: startStep.outputSchema,
+                outputSchema: otherStep.outputSchema,
+              })
                 .then(otherStep)
                 .commit(),
             ],
@@ -7410,10 +7294,14 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: { 'counter-workflow': counterWorkflow },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 1 } });
@@ -7451,6 +7339,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
     });
 
@@ -7507,31 +7396,21 @@ describe('Workflow', () => {
           execute: final,
         });
 
-        const counterWorkflow = createWorkflow(
-          {
-            id: 'counter-workflow',
-            inputSchema: z.object({
-              startValue: z.number(),
-            }),
-            outputSchema: z.object({
-              finalValue: z.number(),
-            }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
+        const counterWorkflow = createWorkflow({
+          id: 'counter-workflow',
+          inputSchema: z.object({
+            startValue: z.number(),
           }),
-        );
+          outputSchema: z.object({
+            finalValue: z.number(),
+          }),
+        });
 
-        const wfA = createWorkflow(
-          {
-            id: 'nested-workflow-a',
-            inputSchema: counterWorkflow.inputSchema,
-            outputSchema: finalStep.outputSchema,
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        )
+        const wfA = createWorkflow({
+          id: 'nested-workflow-a',
+          inputSchema: counterWorkflow.inputSchema,
+          outputSchema: finalStep.outputSchema,
+        })
           .then(startStep)
           .then(otherStep)
           .then(finalStep)
@@ -7557,11 +7436,15 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           logger: false,
           storage: testStorage,
           workflows: { 'counter-workflow': counterWorkflow },
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -7588,6 +7471,7 @@ describe('Workflow', () => {
         expect(other).toHaveBeenCalledTimes(2);
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
+        await mastra.stopEventListeners();
       });
     });
 
@@ -7638,40 +7522,30 @@ describe('Workflow', () => {
           execute: final,
         });
 
-        const wfA = createWorkflow(
-          {
-            steps: [startStep, otherStep, finalStep],
-            id: 'nested-workflow-a',
-            inputSchema: z.object({
-              startValue: z.number(),
-            }),
-            outputSchema: z.object({
-              finalValue: z.number(),
-            }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
+        const wfA = createWorkflow({
+          steps: [startStep, otherStep, finalStep],
+          id: 'nested-workflow-a',
+          inputSchema: z.object({
+            startValue: z.number(),
           }),
-        )
+          outputSchema: z.object({
+            finalValue: z.number(),
+          }),
+        })
           .then(startStep)
           .then(otherStep)
           .then(finalStep)
           .commit();
 
-        const counterWorkflow = createWorkflow(
-          {
-            id: 'counter-workflow',
-            inputSchema: z.object({
-              startValue: z.number(),
-            }),
-            outputSchema: z.object({
-              finalValue: z.number(),
-            }),
-          },
-          new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
+        const counterWorkflow = createWorkflow({
+          id: 'counter-workflow',
+          inputSchema: z.object({
+            startValue: z.number(),
           }),
-        );
+          outputSchema: z.object({
+            finalValue: z.number(),
+          }),
+        });
 
         counterWorkflow
           .then(wfA)
@@ -7685,12 +7559,16 @@ describe('Workflow', () => {
           )
           .commit();
 
-        new Mastra({
+        const mastra = new Mastra({
           workflows: {
             'counter-workflow': counterWorkflow,
           },
           storage: testStorage,
+          pubsub: new GoogleCloudPubSub({
+            projectId: 'pubsub-test',
+          }),
         });
+        await mastra.startEventListeners();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -7718,6 +7596,7 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        await mastra.stopEventListeners();
       });
     });
 
@@ -7789,60 +7668,40 @@ describe('Workflow', () => {
         }),
       });
 
-      const wfA = createWorkflow(
-        {
-          id: 'nested-workflow-a',
-          inputSchema: counterInputSchema,
-          outputSchema: finalStep.outputSchema,
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterInputSchema,
+        outputSchema: finalStep.outputSchema,
+      })
         .then(startStep)
         .then(otherStep)
         .then(finalStep)
         .commit();
 
-      const wfB = createWorkflow(
-        {
-          id: 'nested-workflow-b',
-          inputSchema: counterInputSchema,
-          outputSchema: finalStep.outputSchema,
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: counterInputSchema,
+        outputSchema: finalStep.outputSchema,
+      })
         .then(passthroughStep)
         .then(wfA)
         .commit();
 
-      const wfC = createWorkflow(
-        {
-          id: 'nested-workflow-c',
-          inputSchema: counterInputSchema,
-          outputSchema: finalStep.outputSchema,
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const wfC = createWorkflow({
+        id: 'nested-workflow-c',
+        inputSchema: counterInputSchema,
+        outputSchema: finalStep.outputSchema,
+      })
         .then(passthroughStep)
         .then(wfB)
         .commit();
 
-      const counterWorkflow = createWorkflow(
-        {
-          id: 'counter-workflow',
-          inputSchema: counterInputSchema,
-          outputSchema: counterOutputSchema,
-          steps: [wfC, passthroughStep],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: counterInputSchema,
+        outputSchema: counterOutputSchema,
+        steps: [wfC, passthroughStep],
+      });
 
       counterWorkflow
         .then(
@@ -7864,11 +7723,15 @@ describe('Workflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { 'counter-workflow': counterWorkflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -7903,6 +7766,7 @@ describe('Workflow', () => {
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(1);
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      await mastra.stopEventListeners();
     });
   });
 
@@ -7921,24 +7785,24 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
-      const workflow = createWorkflow(
-        { id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = workflow.createRun();
       const result = await run.start({ runtimeContext });
 
       // @ts-ignore
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
+      await mastra.stopEventListeners();
     });
 
     it('should inject runtimeContext dependencies into steps during resume', async () => {
@@ -7963,23 +7827,22 @@ describe('Workflow', () => {
         inputSchema: z.object({ human: z.boolean() }),
         outputSchema: z.object({}),
       });
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      );
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
       workflow.then(step).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: initialStorage,
         workflows: { 'test-workflow': workflow },
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = workflow.createRun();
       await run.start({ runtimeContext });
@@ -7997,6 +7860,7 @@ describe('Workflow', () => {
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
+      await mastra.stopEventListeners();
     });
   });
 
@@ -8067,32 +7931,31 @@ describe('Workflow', () => {
         })),
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'consecutive-parallel-workflow',
-          inputSchema: z.object({
-            input: z.string(),
-          }),
-          outputSchema: z.object({
-            result3: z.string(),
-            result4: z.string(),
-          }),
-          steps: [step1, step2, step3, step4],
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
+      const workflow = createWorkflow({
+        id: 'consecutive-parallel-workflow',
+        inputSchema: z.object({
+          input: z.string(),
         }),
-      );
+        outputSchema: z.object({
+          result3: z.string(),
+          result4: z.string(),
+        }),
+        steps: [step1, step2, step3, step4],
+      });
 
       // This tests the fix: consecutive parallel calls should work with proper type inference
       workflow.parallel([step1, step2]).parallel([step3, step4]).commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'consecutive-parallel-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { input: 'test-data' } });
 
       // Verify the final results
@@ -8131,6 +7994,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      await mastra.stopEventListeners();
     });
   });
 
@@ -8147,28 +8011,28 @@ describe('Workflow', () => {
         },
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: repeatingStep.outputSchema,
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: repeatingStep.outputSchema,
+      })
         .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const result = await workflow.createRun().start({ inputData: {} });
 
       expect(result.status).toBe('success');
       expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
+      await mastra.stopEventListeners();
     });
 
     it('multiple steps should have different run counts', async () => {
@@ -8194,26 +8058,25 @@ describe('Workflow', () => {
         },
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
         .dowhile(step1, async ({ inputData }) => {
           return inputData.count < 3;
         })
         .dountil(step2, async ({ inputData }) => inputData.count === 10)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -8221,6 +8084,7 @@ describe('Workflow', () => {
       expect(result.status).toBe('success');
       expect(result.steps.step1).toHaveProperty('output', { count: 3 });
       expect(result.steps.step2).toHaveProperty('output', { count: 10 });
+      await mastra.stopEventListeners();
     });
 
     it('runCount should exist and equal zero for the first run', async () => {
@@ -8236,29 +8100,29 @@ describe('Workflow', () => {
         execute: mockExec,
       });
 
-      const workflow = createWorkflow(
-        {
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-        },
-        new GoogleCloudPubSub({
-          projectId: 'pubsub-test',
-        }),
-      )
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
         .then(step)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
+        pubsub: new GoogleCloudPubSub({
+          projectId: 'pubsub-test',
+        }),
       });
+      await mastra.startEventListeners();
 
       const run = workflow.createRun();
       await run.start({ inputData: {} });
 
       expect(mockExec).toHaveBeenCalledTimes(1);
       expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+      await mastra.stopEventListeners();
     });
   });
 }, 100e3);

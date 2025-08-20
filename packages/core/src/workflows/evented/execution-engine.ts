@@ -80,6 +80,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     const resultData: any = await new Promise(resolve => {
       const finishCb = async (event: Event, ack: () => Promise<void>) => {
+        console.log('finish_cb', event.data.workflowId, params.runId, event.type);
         if (event.data.runId !== params.runId) {
           return;
         }
