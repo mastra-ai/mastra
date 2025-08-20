@@ -10,13 +10,15 @@ import type {
   StorageGetMessagesArg,
   PaginationInfo,
   MastraMessageV2,
+  AITrace,
 } from '@mastra/core';
 import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { AISpanRecord } from '@mastra/core/storage';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorer, MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,
@@ -505,4 +507,12 @@ export type GetScorerResponse = MastraScorerEntry & {
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
+}
+
+export interface GetAITracesResponse {
+  spans: AISpanRecord[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
 }

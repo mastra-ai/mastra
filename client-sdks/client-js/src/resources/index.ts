@@ -1,6 +1,7 @@
 export * from './agent';
 export * from './network';
 export * from './memory-thread';
+export * from './observability';
 export * from './vector';
 export * from './legacy-workflow';
 export * from './tool';

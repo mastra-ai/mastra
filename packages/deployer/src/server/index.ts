@@ -34,6 +34,7 @@ import { vectorRouter } from './handlers/routes/vector/router';
 import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
+import { observabilityRouter } from './handlers/routes/observability/router';
 
 type Bindings = {};
 
@@ -406,6 +407,8 @@ export async function createHonoServer(
   app.route('/api/memory', memoryRoutes(bodyLimitOptions));
   // Telemetry routes
   app.route('/api/telemetry', telemetryRouter());
+  // Observability routes
+  app.route('/api/observability', observabilityRouter());
   // Legacy Workflow routes
   app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
   // Log routes

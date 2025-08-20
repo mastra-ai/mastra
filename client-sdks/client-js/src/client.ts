@@ -12,6 +12,7 @@ import {
   A2A,
   MCPTool,
   LegacyWorkflow,
+  Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
 import { VNextNetwork } from './resources/vNextNetwork';
@@ -46,11 +47,16 @@ import type {
   GetScoresByEntityIdParams,
   SaveScoreParams,
   SaveScoreResponse,
+  GetAITracesResponse,
 } from './types';
+import type { AITrace } from '@mastra/core';
+import type { AISpanType } from '@mastra/core/ai-tracing';
 
 export class MastraClient extends BaseResource {
+  private observability: Observability;
   constructor(options: ClientOptions) {
     super(options);
+    this.observability = new Observability(options);
   }
 
   /**
@@ -619,6 +625,34 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  /**
+   * Retrieves a specific AI trace by ID
+   * @param traceId - ID of the trace to retrieve
+   * @returns Promise containing the AI trace with all its spans
+   */
+  public getAITrace(traceId: string): Promise<AITrace> {
+    return this.observability.getTrace(traceId);
+  }
+
+  /**
+   * Retrieves paginated list of AI traces with optional filtering
+   * @param params - Parameters for pagination and filtering
+   * @returns Promise containing paginated traces and pagination info
+   */
+  public getAITraces(params?: {
+    page?: number;
+    perPage?: number;
+    name?: string;
+    spanType?: AISpanType;
+    dateRange?: {
+      start?: string | Date;
+      end?: string | Date;
+    };
+    attributes?: Record<string, any>;
+  }): Promise<GetAITracesResponse> {
+    return this.observability.getTraces(params);
   }
 
   /**
