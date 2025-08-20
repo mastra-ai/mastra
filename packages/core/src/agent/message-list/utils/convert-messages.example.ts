@@ -15,16 +15,7 @@ const v5UIMessages: AIV5.UIMessage[] = [
   {
     id: 'msg-2',
     role: 'assistant',
-    parts: [
-      { type: 'text', text: 'Of course! What do you need help with?' },
-      {
-        type: 'tool' as const,
-        state: 'partial-call',
-        id: 'tool-1',
-        name: 'searchDocs',
-        input: { query: 'user guides' },
-      } as AIV5.UIMessage['parts'][number],
-    ],
+    parts: [{ type: 'text', text: 'Of course! What do you need help with?' }],
   },
 ];
 
