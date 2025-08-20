@@ -49,8 +49,6 @@ export type LoopOptions<Tools extends ToolSet = ToolSet> = {
 export type ObjectOptions =
   | {
       schema?: Parameters<typeof asSchema>[0];
-      schemaName?: string;
-      schemaDescription?: string;
     }
   | undefined;
 
