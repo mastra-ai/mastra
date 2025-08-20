@@ -1,10 +1,11 @@
 import babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
+import type { Config as MastraConfig } from '@mastra/core/mastra';
 import type { IMastraLogger } from '@mastra/core/logger';
 
 export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },
-  option: 'telemetry' | 'server' | 'bundler',
+  option: keyof MastraConfig,
   logger?: IMastraLogger,
 ) {
   const t = babel.types;
