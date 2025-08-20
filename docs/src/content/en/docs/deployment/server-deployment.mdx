@@ -16,9 +16,6 @@ The [getting started guide](/docs/getting-started/installation) scaffolds a proj
 <FileTree>
   <FileTree.Folder name="src" defaultOpen>
     <FileTree.Folder name="mastra" defaultOpen>
-      <FileTree.Folder name="public" defaultOpen>
-        <FileTree.File name="static-asset.xyz" />
-      </FileTree.Folder>
       <FileTree.Folder name="agents" />
       <FileTree.Folder name="tools" />
       <FileTree.Folder name="workflows" />
@@ -64,13 +61,14 @@ After building, Mastra creates a `.mastra/` directory with the following structu
 <FileTree>
   <FileTree.Folder name=".mastra" defaultOpen>
     <FileTree.Folder name=".build" />
-    <FileTree.Folder name="output" defaultOpen>
-      <FileTree.File name="index.mjs" />
-      <FileTree.File name="instrumentation.mjs" />
-      <FileTree.File name="static-asset.xyz" />
-    </FileTree.Folder>
+    <FileTree.Folder name="output" />
   </FileTree.Folder>
 </FileTree>
+
+### Mastra public directory
+
+If a `public` folder exists in `src/mastra`, its contents are copied into the `.build/output` directory during the build process.
+
 
 ## Running the Server
 
