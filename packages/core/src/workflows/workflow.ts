@@ -740,7 +740,7 @@ export class Workflow<
         }
       | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null },
-  ) {
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, any> {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       // @ts-ignore

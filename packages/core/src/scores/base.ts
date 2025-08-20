@@ -2,8 +2,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { LanguageModel } from '../llm';
-import type { MastraLanguageModel } from '../memory';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig } from './types';
 
@@ -21,7 +20,7 @@ interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput =
   name: TName;
   description: string;
   judge?: {
-    model: LanguageModel;
+    model: MastraLanguageModel;
     instructions: string;
   };
 }
@@ -501,20 +500,39 @@ class MastraScorer<
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
-      const result = await judge.generate(prompt, {
-        output: z.object({ score: z.number() }),
-      });
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt, {
+          output: z.object({ score: z.number() }),
+        });
+      } else {
+        result = await judge.generate(prompt, {
+          output: z.object({ score: z.number() }),
+        });
+      }
       return { result: result.object.score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
-      const result = await judge.generate(prompt);
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt);
+      } else {
+        result = await judge.generate(prompt);
+      }
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
-      const result = await judge.generate(prompt, {
-        output: promptStep.outputSchema,
-      });
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt, {
+          output: promptStep.outputSchema,
+        });
+      } else {
+        result = await judge.generate(prompt, {
+          output: promptStep.outputSchema,
+        });
+      }
       return { result: result.object, prompt };
     }
   }

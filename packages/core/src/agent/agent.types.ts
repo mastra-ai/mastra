@@ -1,10 +1,15 @@
-import type { LanguageModelV1ProviderMetadata } from '@ai-sdk/provider';
+import type { JSONSchema7, LanguageModelV1ProviderMetadata } from '@ai-sdk/provider';
 import type { IDGenerator, Message, TelemetrySettings } from 'ai';
+import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { z, ZodSchema } from 'zod';
 import type { CoreMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
+import type { LoopConfig, LoopOptions } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
+import type { MastraScorers } from '../scores';
+import type { ChunkType } from '../stream/types';
+import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
 
 export type CallSettings = {
@@ -94,6 +99,57 @@ A simple text prompt. You can either use `prompt` or `messages` but not both.
 A list of messages. You can either use `prompt` or `messages` but not both.
    */
   messages?: Array<CoreMessage> | Array<Omit<Message, 'id'>>;
+};
+
+export type AgentExecutionOptions<
+  OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk',
+> = {
+  instructions?: string;
+  context?: ModelMessage[];
+
+  memory?: AgentMemoryOption;
+
+  runId?: string;
+
+  savePerStep?: boolean;
+  runtimeContext?: RuntimeContext;
+  format?: FORMAT;
+  output?: OUTPUT;
+  experimental_output?: STRUCTURED_OUTPUT;
+  resourceId?: string;
+  threadId?: string;
+
+  telemetry?: TelemetrySettings;
+
+  stopWhen?: LoopOptions['stopWhen'];
+
+  options?: Omit<LoopConfig, 'onStepFinish' | 'onFinish'>;
+
+  onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
+
+  onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
+
+  /** Input processors to use for this stream call (overrides agent's default) */
+  inputProcessors?: InputProcessor[];
+  /** Output processors to use for this stream call (overrides agent's default) */
+  outputProcessors?: OutputProcessor[];
+  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+  /** Additional tool sets that can be used for this generation */
+  toolsets?: ToolsetsInput;
+  clientTools?: ToolsInput;
+  toolChoice?: ToolChoice<any>;
+
+  modelSettings?: LoopOptions['modelSettings'];
+
+  scorers?: MastraScorers;
+  returnScorerData?: boolean;
+};
+
+export type InnerAgentExecutionOptions = AgentExecutionOptions & {
+  writableStream?: WritableStream<ChunkType>;
+  messages: MessageListInput;
 };
 
 /**

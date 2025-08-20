@@ -3,7 +3,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { MastraLanguageModel } from '../../agent/types';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 /**
@@ -226,23 +226,35 @@ export class ModerationProcessor implements Processor {
     const prompt = this.createModerationPrompt(content, isStream);
 
     try {
-      const response = await this.moderationAgent.generate(prompt, {
-        output: z.object({
-          category_scores: z
-            .object(
-              this.categories.reduce(
-                (props, category) => {
-                  props[category] = z.number().min(0).max(1).optional();
-                  return props;
-                },
-                {} as Record<string, z.ZodType<number | undefined>>,
-              ),
-            )
-            .optional(),
-          reason: z.string().optional(),
-        }),
-        temperature: 0,
+      const model = await this.moderationAgent.getModel();
+      const schema = z.object({
+        category_scores: z
+          .object(
+            this.categories.reduce(
+              (props, category) => {
+                props[category] = z.number().min(0).max(1).optional();
+                return props;
+              },
+              {} as Record<string, z.ZodType<number | undefined>>,
+            ),
+          )
+          .optional(),
+        reason: z.string().optional(),
       });
+      let response;
+      if (model.specificationVersion === 'v2') {
+        response = await this.moderationAgent.generateVNext(prompt, {
+          output: schema,
+          modelSettings: {
+            temperature: 0,
+          },
+        });
+      } else {
+        response = await this.moderationAgent.generate(prompt, {
+          output: schema,
+          temperature: 0,
+        });
+      }
 
       const result = response.object as ModerationResult;
 

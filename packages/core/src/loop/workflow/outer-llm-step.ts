@@ -134,9 +134,9 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
         return {
           ...initialResult,
           messages: {
-            all: messageList.get.all.v3(),
-            user: messageList.get.input.v3(),
-            nonUser: messageList.get.response.v3(),
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
           },
         };
       }
