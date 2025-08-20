@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { ReadableStream, WritableStream } from 'stream/web';
+import type { WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, ToolExecutionOptions, UIMessage } from 'ai';
 import type { ModelMessage } from 'ai-v5';
 import deepEqual from 'fast-deep-equal';
@@ -42,7 +42,6 @@ import { RuntimeContext } from '../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { MastraModelOutput } from '../stream/base/output';
-import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
@@ -52,7 +51,8 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils'
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createStep, createWorkflow, type Workflow } from '../workflows';
+import { createStep, createWorkflow } from '../workflows';
+import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type { AgentExecutionOptions, AgentVNextStreamOptions, InnerAgentExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -2242,7 +2242,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         output: ScorerRunOutputForAgent;
       };
     }>;
-    llm: MastraLLMV1 | MastraLLMVNext;
+    llm: MastraLLM;
   }>;
   private prepareLLMOptions<
     Tools extends ToolSet,
@@ -3243,15 +3243,80 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' = 'mastra',
   >(
-    _messages: MessageListInput,
-    _options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+    messages: MessageListInput,
+    options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
   ): ReturnType<MastraModelOutput['getFullOutput']> {
-    throw new MastraError({
-      id: 'AGENT_GENERATE_VNEXT_NOT_IMPLEMENTED',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      text: 'generateVNext is not implemented for the current version of Mastra. Please use generate instead.',
+    const result = await this.streamVNext(messages, options);
+
+    if (result.tripwire) {
+      return result as unknown as ReturnType<MastraModelOutput['getFullOutput']>;
+    }
+
+    let fullOutput = await result.getFullOutput();
+
+    const error = fullOutput.error;
+
+    if (fullOutput.finishReason === 'error' && error) {
+      throw error;
+    }
+
+    return fullOutput;
+  }
+
+  async streamVNext<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk',
+  >(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+  ): Promise<MastraModelOutput> {
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+      runtimeContext: streamOptions?.runtimeContext,
     });
+
+    const mergedStreamOptions = {
+      ...defaultStreamOptions,
+      ...streamOptions,
+    };
+
+    const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });
+
+    if (llm.getModel().specificationVersion !== 'v2') {
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'V1 models are not supported for streamVNext. Please use stream instead.',
+      });
+    }
+
+    const result = await this.#execute({
+      ...mergedStreamOptions,
+      messages,
+    } as InnerAgentExecutionOptions);
+
+    if (result.status !== 'success') {
+      if (result.status === 'failed') {
+        throw new MastraError({
+          id: 'AGENT_STREAM_VNEXT_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: result.error.message,
+          details: {
+            error: result.error.message,
+          },
+        });
+      }
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'An unknown error occurred while streaming',
+      });
+    }
+
+    return result.result as unknown as MastraModelOutput;
   }
 
   async generate(
@@ -3745,261 +3810,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       },
       runId,
       structuredOutput: output,
-    });
-  }
-
-  streamVNext<
-    Output extends ZodSchema | undefined = undefined,
-    StructuredOutput extends ZodSchema | undefined = undefined,
-  >(
-    messages: MessageListInput,
-    streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
-  ): MastraAgentStream<
-    Output extends ZodSchema
-      ? z.infer<Output>
-      : StructuredOutput extends ZodSchema
-        ? z.infer<StructuredOutput>
-        : unknown
-  > {
-    type ResolvedOutput = Output extends ZodSchema
-      ? z.infer<Output>
-      : StructuredOutput extends ZodSchema
-        ? z.infer<StructuredOutput>
-        : unknown;
-    const defaultStreamOptionsPromise = this.getDefaultVNextStreamOptions<Output, StructuredOutput>({
-      runtimeContext: streamOptions?.runtimeContext,
-    });
-
-    return new MastraAgentStream<
-      Output extends ZodSchema
-        ? z.infer<Output>
-        : StructuredOutput extends ZodSchema
-          ? z.infer<StructuredOutput>
-          : unknown
-    >({
-      getOptions: async () => {
-        const defaultStreamOptions = await defaultStreamOptionsPromise;
-
-        return {
-          runId: defaultStreamOptions.runId!,
-        };
-      },
-      createStream: async (
-        writer: WritableStream<ChunkType>,
-        onResult: (result: ResolvedOutput) => void,
-      ): Promise<ReadableStream<any>> => {
-        const defaultStreamOptions = await defaultStreamOptionsPromise;
-        const mergedStreamOptions: AgentVNextStreamOptions<Output, StructuredOutput> & {
-          writableStream: WritableStream<ChunkType>;
-        } = {
-          ...defaultStreamOptions,
-          ...streamOptions,
-          writableStream: writer,
-        };
-
-        const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
-        const { onFinish, runId, output, experimental_output, agentAISpan, ...llmOptions } = await before();
-
-        // Use processor overrides if provided, otherwise fall back to agent's default
-        let effectiveOutputProcessors =
-          mergedStreamOptions.outputProcessors ||
-          (this.#outputProcessors
-            ? typeof this.#outputProcessors === 'function'
-              ? await this.#outputProcessors({
-                  runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
-                })
-              : this.#outputProcessors
-            : []);
-
-        // Handle structuredOutput option by creating an StructuredOutputProcessor
-        if (mergedStreamOptions.structuredOutput) {
-          const structuredProcessor = new StructuredOutputProcessor(mergedStreamOptions.structuredOutput);
-          effectiveOutputProcessors = effectiveOutputProcessors
-            ? [...effectiveOutputProcessors, structuredProcessor]
-            : [structuredProcessor];
-        }
-
-        if (output) {
-          const streamResult = llm.__streamObject({
-            ...llmOptions,
-            agentAISpan,
-            onFinish: async result => {
-              try {
-                const outputText = JSON.stringify(result.object);
-
-                // Process final stream result
-                const processedResult = await this.__runOutputProcessors({
-                  runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
-                  outputProcessorOverrides: effectiveOutputProcessors,
-                  messageList: new MessageList({
-                    threadId: llmOptions.threadId || '',
-                    resourceId: llmOptions.resourceId || '',
-                  }).add(
-                    {
-                      role: 'assistant',
-                      content: [{ type: 'text', text: outputText }],
-                    },
-                    'response',
-                  ),
-                });
-
-                // Extract processed text and update result object
-                const newText = processedResult.messageList.get.response
-                  .v2()
-                  .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
-                  .join('');
-
-                // Parse the processed text and update the result object
-                try {
-                  const processedObject = JSON.parse(newText);
-                  (result as any).object = processedObject;
-                  onResult(processedObject as ResolvedOutput);
-                } catch (error) {
-                  this.logger.warn('Failed to parse processed output as JSON, keeping original result', { error });
-                  onResult(result.object as ResolvedOutput);
-                }
-
-                await after({
-                  result,
-                  outputText: newText,
-                  structuredOutput: true,
-                  agentAISpan,
-                });
-              } catch (e) {
-                this.logger.error('Error saving memory on finish', {
-                  error: e,
-                  runId,
-                });
-                onResult(result.object as ResolvedOutput);
-              }
-
-              await onFinish?.({ ...result, runId } as any);
-            },
-            runId,
-            structuredOutput: output,
-          });
-
-          // If output processors are configured, transform the stream to process text chunks for structured output too
-          if (effectiveOutputProcessors?.length) {
-            const runner = await this.getProcessorRunner({
-              runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
-              outputProcessorOverrides: effectiveOutputProcessors,
-            });
-            return runner.runOutputProcessorsForStream(streamResult) as unknown as ReadableStream<any>;
-          }
-
-          return Promise.resolve(streamResult.fullStream as unknown as ReadableStream<any>);
-        } else {
-          const streamResult = llm.__stream({
-            ...llmOptions,
-            experimental_output,
-            agentAISpan,
-            onFinish: async result => {
-              try {
-                const outputText = result.text;
-
-                // Process final stream result
-                const processedResult = await this.__runOutputProcessors({
-                  runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
-                  outputProcessorOverrides: effectiveOutputProcessors,
-                  messageList: new MessageList({
-                    threadId: llmOptions.threadId || '',
-                    resourceId: llmOptions.resourceId || '',
-                  }).add(
-                    {
-                      role: 'assistant',
-                      content: [{ type: 'text', text: outputText }],
-                    },
-                    'response',
-                  ),
-                });
-
-                // Extract processed text and update result
-                const newText = processedResult.messageList.get.response
-                  .v2()
-                  .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
-                  .join('');
-
-                // Update the result text with processed output
-                (result as any).text = newText;
-
-                // Determine the final result object with proper priority
-                let finalObject: ResolvedOutput;
-
-                // Priority 1: Structured data from output processors
-                if (effectiveOutputProcessors && effectiveOutputProcessors.length > 0) {
-                  const messages = processedResult.messageList.get.response.v2();
-                  const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                  );
-
-                  if (
-                    messagesWithStructuredData[0] &&
-                    messagesWithStructuredData[0].content.metadata?.structuredOutput
-                  ) {
-                    finalObject = messagesWithStructuredData[0].content.metadata.structuredOutput as ResolvedOutput;
-                  } else if (experimental_output) {
-                    // Priority 2: Parse experimental_output from processed text
-                    try {
-                      finalObject = JSON.parse(newText) as ResolvedOutput;
-                    } catch (error) {
-                      this.logger.warn('Failed to parse processed experimental_output as JSON, using null', { error });
-                      finalObject = null as ResolvedOutput;
-                    }
-                  } else {
-                    // Priority 3: Use processed text
-                    finalObject = newText as ResolvedOutput;
-                  }
-                } else if (experimental_output) {
-                  // No output processors, but experimental_output is specified
-                  try {
-                    finalObject = JSON.parse(newText) as ResolvedOutput;
-                  } catch (error) {
-                    this.logger.warn('Failed to parse processed experimental_output as JSON, using null', { error });
-                    finalObject = null as ResolvedOutput;
-                  }
-                } else {
-                  // No structured output, use text
-                  finalObject = newText as ResolvedOutput;
-                }
-
-                // Set the result object and call onResult only once
-                (result as any).object = finalObject;
-                onResult(finalObject);
-
-                await after({
-                  result,
-                  outputText: newText,
-                  agentAISpan,
-                });
-              } catch (e) {
-                this.logger.error('Error saving memory on finish', {
-                  error: e,
-                  runId,
-                });
-                onResult(result.text as ResolvedOutput);
-              }
-              await onFinish?.({ ...result, runId } as any);
-            },
-            runId,
-          });
-
-          // If output processors are configured, transform the stream to process text chunks
-          if (effectiveOutputProcessors?.length) {
-            this.logger.debug('running output processors for stream');
-            const runner = await this.getProcessorRunner({
-              runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
-              outputProcessorOverrides: effectiveOutputProcessors,
-            });
-
-            return runner.runOutputProcessorsForStream(streamResult) as unknown as ReadableStream<any>;
-          }
-
-          this.logger.debug('no output processors for stream');
-
-          return Promise.resolve(streamResult.fullStream as unknown as ReadableStream<any>);
-        }
-      },
     });
   }
 

@@ -134,7 +134,7 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
             abortSignal: c.req.raw.signal,
           });
 
-          const reader = result.getReader();
+          const reader = (await result).fullStream.getReader();
 
           stream.onAbort(() => {
             void reader.cancel('request aborted');

@@ -422,9 +422,22 @@ export function createObjectStreamTransformer({
 
   let accumulatedText = '';
   let previousObject: any = undefined;
+  let finishReason: string | undefined;
 
   return new TransformStream({
     async transform(chunk, controller) {
+      if (chunk.type === 'finish') {
+        finishReason = chunk.payload.stepResult.reason;
+        controller.enqueue(chunk);
+        return;
+      }
+
+      if (chunk.type === 'error') {
+        finishReason = 'error';
+        controller.enqueue(chunk);
+        return;
+      }
+
       if (responseFormat?.type !== 'json') {
         // Not JSON mode - pass through original chunks and exit
         controller.enqueue(chunk);
@@ -455,6 +468,11 @@ export function createObjectStreamTransformer({
     async flush(controller) {
       if (responseFormat?.type !== 'json') {
         // Not JSON mode, no final validation needed - exit
+        return;
+      }
+
+      if (['tool-calls', 'error'].includes(finishReason ?? '')) {
+        onFinish(undefined);
         return;
       }
 

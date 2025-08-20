@@ -685,8 +685,6 @@ export class MastraModelOutput extends MastraBase {
       },
     });
 
-    const object = await this.object;
-
     const fullOutput = {
       text: await this.text,
       usage: await this.usage,
@@ -703,7 +701,7 @@ export class MastraModelOutput extends MastraBase {
       files: await this.files,
       response: await this.response,
       totalUsage: await this.totalUsage,
-      object,
+      object: await this.object,
       error: this.error,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
