@@ -55,7 +55,7 @@ describe('Memory Streaming Tests', () => {
     const resourceId = 'test-resource';
 
     // First weather check
-    const stream1 = await agent.stream_vnext('what is the weather in LA?', {
+    const stream1 = await agent.streamVNext('what is the weather in LA?', {
       threadId,
       resourceId,
     });
@@ -71,7 +71,7 @@ describe('Memory Streaming Tests', () => {
     expect(response1).toContain('70 degrees');
 
     // Second weather check
-    const stream2 = await agent.stream_vnext('what is the weather in Seattle?', {
+    const stream2 = await agent.streamVNext('what is the weather in Seattle?', {
       threadId,
       resourceId,
     });

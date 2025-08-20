@@ -685,13 +685,15 @@ export class MastraModelOutput extends MastraBase {
       },
     });
 
+    const finishReason = await this.finishReason;
+
     const object = await this.object;
 
     const fullOutput = {
       text: await this.text,
       usage: await this.usage,
       steps: await this.steps,
-      finishReason: await this.finishReason,
+      finishReason,
       warnings: await this.warnings,
       providerMetadata: await this.providerMetadata,
       request: await this.request,
