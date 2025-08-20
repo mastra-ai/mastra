@@ -286,6 +286,49 @@ export async function generateHandler({
   }
 }
 
+export async function vnext_generateHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'generate'> & {
+    runtimeContext?: Record<string, unknown>;
+    format: 'mastra' | 'aisdk';
+  };
+  abortSignal?: AbortSignal;
+}): ReturnType<Agent['generate_vnext']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const result = await agent.generate_vnext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      format: rest.format,
+      abortSignal,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error generating from agent');
+  }
+}
 export async function streamGenerateHandler({
   mastra,
   runtimeContext,

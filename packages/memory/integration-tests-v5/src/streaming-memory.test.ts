@@ -62,8 +62,10 @@ describe('Memory Streaming Tests', () => {
 
     // Collect first stream
     const chunks1: string[] = [];
-    for await (const chunk of stream1.textStream) {
-      chunks1.push(chunk);
+    for await (const chunk of stream1.fullStream) {
+      if (chunk.type === `text-delta`) {
+        chunks1.push(chunk.payload.text);
+      }
     }
     const response1 = chunks1.join('');
 
@@ -74,12 +76,15 @@ describe('Memory Streaming Tests', () => {
     const stream2 = await agent.stream_vnext('what is the weather in Seattle?', {
       threadId,
       resourceId,
+      format: 'aisdk', // use aisdk output type this time just for fun
     });
 
     // Collect second stream
     const chunks2: string[] = [];
-    for await (const chunk of stream2.textStream) {
-      chunks2.push(chunk);
+    for await (const chunk of stream2.fullStream) {
+      if (chunk.type === `text-delta`) {
+        chunks2.push(chunk.text);
+      }
     }
     const response2 = chunks2.join('');
 

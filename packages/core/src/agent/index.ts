@@ -41,7 +41,8 @@ import { ProcessorRunner } from '../processors/runner';
 import { RuntimeContext } from '../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
-import type { MastraModelOutput } from '../stream/base/output';
+import { AISDKV5OutputStream } from '../stream/aisdk/v5/output';
+import { MastraModelOutput } from '../stream/base/output';
 import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
@@ -52,7 +53,8 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils'
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createStep, createWorkflow, type Workflow } from '../workflows';
+import { createStep, createWorkflow } from '../workflows';
+import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type { AgentExecutionOptions, AgentVNextStreamOptions, InnerAgentExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -2865,7 +2867,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const executionWorkflow = createWorkflow({
       id: 'execution-workflow',
       inputSchema: z.any(),
-      outputSchema: z.record(z.string(), z.any()),
+      outputSchema: z.union([z.instanceof(MastraModelOutput), z.instanceof(AISDKV5OutputStream)]),
       steps: [prepareToolsStep, prepareMemory],
     })
       .parallel([prepareToolsStep, prepareMemory])
@@ -3252,6 +3254,64 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       category: ErrorCategory.USER,
       text: 'generateVNext is not implemented for the current version of Mastra. Please use generate instead.',
     });
+  }
+
+  async stream_vnext<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' = 'mastra',
+  >(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput> {
+    const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
+      runtimeContext: streamOptions?.runtimeContext,
+    });
+
+    const mergedStreamOptions = {
+      ...defaultStreamOptions,
+      ...streamOptions,
+      // resourceId: streamOptions?.resourceId!,
+      // threadId: streamOptions?.threadId!,
+    };
+
+    const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });
+
+    if (llm.getModel().specificationVersion !== 'v2') {
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'V1 models are not supported for stream_vnext. Please use stream instead.',
+      });
+    }
+
+    const result = await this.#execute({
+      ...mergedStreamOptions,
+      messages,
+    } as InnerAgentExecutionOptions);
+
+    if (result.status !== 'success') {
+      if (result.status === 'failed') {
+        throw new MastraError({
+          id: 'AGENT_STREAM_VNEXT_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: result.error.message,
+          details: {
+            error: result.error.message,
+          },
+        });
+      }
+      throw new MastraError({
+        id: 'AGENT_STREAM_VNEXT_UNKNOWN_ERROR',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'An unknown error occurred while streaming',
+      });
+    }
+
+    return result.result as any;
   }
 
   async generate(
