@@ -1814,7 +1814,7 @@ describe('Workflow', () => {
         });
       });
 
-      it.only('should resolve dynamic mappings via .map() with custom step id', async () => {
+      it('should resolve dynamic mappings via .map() with custom step id', async () => {
         const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
@@ -1844,20 +1844,23 @@ describe('Workflow', () => {
 
         workflow
           .then(step1)
-          .map({
-            test: mapVariable({
-              initData: workflow,
-              path: 'cool',
-            }),
-            test2: {
-              schema: z.string(),
-              fn: async ({ inputData }) => {
-                return 'Hello ' + inputData.result;
+          .map(
+            {
+              test: mapVariable({
+                initData: workflow,
+                path: 'cool',
+              }),
+              test2: {
+                schema: z.string(),
+                fn: async ({ inputData }) => {
+                  return 'Hello ' + inputData.result;
+                },
               },
             },
-          }, {
-            stepId: 'step1-mapping',
-          })
+            {
+              stepId: 'step1-mapping',
+            },
+          )
           .then(step2)
           .map({
             result: mapVariable({
