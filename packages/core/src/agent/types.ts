@@ -132,6 +132,10 @@ export type AgentGenerateOptions<
   telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
+  /** Scorers to use for this generation */
+  scorers?: MastraScorers;
+  /** Whether to return the input required to run scorers for agents, defaults to false */
+  returnScorerData?: boolean;
   /**
    * Whether to save messages incrementally on step finish
    * @default false
