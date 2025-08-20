@@ -9,13 +9,29 @@ import { mapVariable } from '@mastra/core/workflows';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '@mastra/core/workflows/evented';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { GoogleCloudPubSub } from '.';
 
 const testStorage = new MockStore();
 
 describe('Workflow', () => {
+  beforeAll(async () => {
+    const pubsub = new GoogleCloudPubSub({
+      projectId: 'pubsub-test',
+    });
+
+    await pubsub.init('workflows');
+  });
+
+  afterAll(async () => {
+    const pubsub = new GoogleCloudPubSub({
+      projectId: 'pubsub-test',
+    });
+
+    await pubsub.destroy('workflows');
+  });
+
   beforeEach(async () => {
     vi.resetAllMocks();
     testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
@@ -23,7 +39,6 @@ describe('Workflow', () => {
     const pubsub = new GoogleCloudPubSub({
       projectId: 'pubsub-test',
     });
-    await pubsub.init('workflows');
     await pubsub.init('workflows-finish');
     await pubsub.init('workflow.events.v1');
     await pubsub.init('workflow.events.v2');
@@ -33,14 +48,13 @@ describe('Workflow', () => {
     const pubsub = new GoogleCloudPubSub({
       projectId: 'pubsub-test',
     });
-    await pubsub.destroy('workflows');
     await pubsub.destroy('workflows-finish');
     await pubsub.destroy('workflow.events.v1');
     await pubsub.destroy('workflow.events.v2');
   });
 
   describe('Streaming', () => {
-    it.only('should generate a stream', async () => {
+    it('should generate a stream', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 

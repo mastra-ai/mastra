@@ -1069,5 +1069,7 @@ do:
         await this.#pubsub.unsubscribe(topic, listener);
       }
     }
+
+    await this.#pubsub.flush();
   }
 }

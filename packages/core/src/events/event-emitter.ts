@@ -21,4 +21,8 @@ export class EventEmitterPubSub extends PubSub {
   async unsubscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
     this.emitter.off(topic, cb);
   }
+
+  async flush(): Promise<void> {
+    // no-op
+  }
 }

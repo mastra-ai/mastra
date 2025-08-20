@@ -82,6 +82,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       const finishCb = async (event: Event, ack: () => Promise<void>) => {
         console.log('finish_cb', event.data.workflowId, params.runId, event.type);
         if (event.data.runId !== params.runId) {
+          console.log('got_other_run', event.data.runId, params.runId);
           return;
         }
 

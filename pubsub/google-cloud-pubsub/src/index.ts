@@ -5,6 +5,7 @@ import type { Event } from '@mastra/core/events';
 
 export class GoogleCloudPubSub extends PubSub {
   private pubsub: PubSubClient;
+  private ackBuffer: Record<string, Promise<any>> = {};
 
   constructor(config: ClientConfig) {
     super();
@@ -91,10 +92,13 @@ export class GoogleCloudPubSub extends PubSub {
 
           console.log('acking message');
           try {
-            const ackResponse = await Promise.race([
+            const ackResponse = Promise.race([
               message.ackWithResponse(),
               new Promise(resolve => setTimeout(resolve, 5000)),
             ]);
+            this.ackBuffer[topic + '-' + message.id] = ackResponse.catch(() => {});
+            await ackResponse;
+            delete this.ackBuffer[topic + '-' + message.id];
             console.log('message acked', ackResponse);
           } catch (e) {
             console.error('Error acking message', e);
@@ -127,5 +131,10 @@ export class GoogleCloudPubSub extends PubSub {
     const subscription = this.pubsub.subscription(topic);
     subscription.removeListener('message', cb);
     await subscription.close();
+  }
+
+  async flush(): Promise<void> {
+    console.log('flushing_ack', this.ackBuffer);
+    await Promise.all(Object.values(this.ackBuffer));
   }
 }
