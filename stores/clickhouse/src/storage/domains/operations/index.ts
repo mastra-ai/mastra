@@ -274,7 +274,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
       const selectClause = `SELECT *, toDateTime64(createdAt, 3) as createdAt${hasUpdatedAt ? ', toDateTime64(updatedAt, 3) as updatedAt' : ''}`;
 
       const result = await this.client.query({
-        query: `${selectClause} FROM ${tableName} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions}`,
+        query: `${selectClause} FROM ${tableName} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
         query_params: values,
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')

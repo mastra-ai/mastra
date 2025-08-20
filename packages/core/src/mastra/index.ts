@@ -1,4 +1,6 @@
 import type { Agent } from '../agent';
+import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
+import type { AITracingConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -15,12 +17,11 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
+import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
-
-type NonEmpty<T extends string> = T extends '' ? never : T;
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
@@ -43,7 +44,8 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
-  idGenerator?: () => NonEmpty<string>;
+  observability?: AITracingConfig;
+  idGenerator?: MastraIdGenerator;
   deployer?: MastraDeployer;
   server?: ServerConfig;
   mcpServers?: TMCPServers;
@@ -97,7 +99,7 @@ export class Mastra<
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
-  #idGenerator?: () => NonEmpty<string>;
+  #idGenerator?: MastraIdGenerator;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -146,7 +148,7 @@ export class Mastra<
     return crypto.randomUUID();
   }
 
-  public setIdGenerator(idGenerator: () => NonEmpty<string>) {
+  public setIdGenerator(idGenerator: MastraIdGenerator) {
     this.#idGenerator = idGenerator;
   }
 
@@ -214,6 +216,14 @@ export class Mastra<
           `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
         `If you are using a custom instrumentation file or want to disable this warning, set the globalThis.___MASTRA_TELEMETRY___ variable to true in your instrumentation file.`,
       );
+    }
+
+    /*
+    AI Tracing
+    */
+
+    if (config?.observability) {
+      setupAITracing(config.observability);
     }
 
     /*
@@ -654,6 +664,12 @@ do:
         this.#mcpServers?.[key]?.__setLogger(this.#logger);
       });
     }
+
+    // Set logger for AI tracing instances
+    const allTracingInstances = getAllAITracing();
+    allTracingInstances.forEach(instance => {
+      instance.__setLogger(this.#logger);
+    });
   }
 
   public setTelemetry(telemetry: OtelConfig) {
@@ -983,5 +999,15 @@ do:
       );
       return undefined;
     }
+  }
+
+  /**
+   * Shutdown Mastra and clean up all resources
+   */
+  async shutdown(): Promise<void> {
+    // Shutdown AI tracing registry and all instances
+    await shutdownAITracingRegistry();
+
+    this.#logger?.info('Mastra shutdown completed');
   }
 }

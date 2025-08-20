@@ -19,7 +19,7 @@ This processor normalizes Unicode text to ensure consistent formatting and remov
 
 ```typescript copy showLineNumbers {9-11}
 import { Agent } from "@mastra/core/agent";
-import { UnicodeNormalizer } from "@mastra/core/agent/input-processor/processors";
+import { UnicodeNormalizer } from "@mastra/core/processors";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
@@ -41,16 +41,16 @@ Available options:
 - `collapseWhitespace`: Collapse multiple spaces/newlines (default: true)
 - `trim`: Remove leading/trailing whitespace (default: true)
 
-### `ModerationInputProcessor`
+### `ModerationProcessor`
 
 This processor provides content moderation using an LLM to detect inappropriate content across multiple categories.
 
 ```typescript copy showLineNumbers {5-13}
-import { ModerationInputProcessor } from "@mastra/core/agent/input-processor/processors";
+import { ModerationProcessor } from "@mastra/core/processors";
 
 const agent = new Agent({
   inputProcessors: [
-    new ModerationInputProcessor({
+    new ModerationProcessor({
       model: openai("gpt-4.1-nano"), // Use a fast, cost-effective model
       threshold: 0.7, // Confidence threshold for flagging
       strategy: 'block', // Block flagged content
@@ -77,7 +77,7 @@ Strategies available:
 This processor detects and prevents prompt injection attacks, jailbreaks, and system manipulation attempts.
 
 ```typescript copy showLineNumbers {5-12}
-import { PromptInjectionDetector } from "@mastra/core/agent/input-processor/processors";
+import { PromptInjectionDetector } from "@mastra/core/processors";
 
 const agent = new Agent({
   inputProcessors: [
@@ -110,7 +110,7 @@ Strategies available:
 This processor detects and optionally redacts personally identifiable information (PII) from messages.
 
 ```typescript copy showLineNumbers {5-14}
-import { PIIDetector } from "@mastra/core/agent/input-processor/processors";
+import { PIIDetector } from "@mastra/core/processors";
 
 const agent = new Agent({
   inputProcessors: [
@@ -148,7 +148,7 @@ Strategies available:
 This processor detects the language of incoming messages and can automatically translate them to a target language.
 
 ```typescript copy showLineNumbers {5-12}
-import { LanguageDetector } from "@mastra/core/agent/input-processor/processors";
+import { LanguageDetector } from "@mastra/core/processors";
 
 const agent = new Agent({
   inputProcessors: [
@@ -186,10 +186,10 @@ You can chain multiple processors. They execute sequentially in the order they a
 import { Agent } from "@mastra/core/agent";
 import { 
   UnicodeNormalizer, 
-  ModerationInputProcessor, 
+  ModerationProcessor, 
   PromptInjectionDetector,
   PIIDetector 
-} from "@mastra/core/agent/input-processor/processors";
+} from "@mastra/core/processors";
 
 const secureAgent = new Agent({
   inputProcessors: [
@@ -198,7 +198,7 @@ const secureAgent = new Agent({
     // 2. Check for security threats
     new PromptInjectionDetector({ model: openai("gpt-4.1-nano") }),
     // 3. Moderate content
-    new ModerationInputProcessor({ model: openai("gpt-4.1-nano") }),
+    new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
     // 4. Handle PII last
     new PIIDetector({ model: openai("gpt-4.1-nano"), strategy: 'redact' }),
   ],
@@ -207,17 +207,17 @@ const secureAgent = new Agent({
 
 ## Creating Custom Processors
 
-You can create custom processors by implementing the `InputProcessor` interface.
+You can create custom processors by implementing the `Processor` interface. A Processor can be used for input processing when it implements the `processInput` method.
 
 ```typescript copy showLineNumbers {4-19,23-26}
-import type { InputProcessor, MastraMessageV2, TripWire } from "@mastra/core/agent";
+import type { Processor, MastraMessageV2, TripWire } from "@mastra/core/processors";
 
-class MessageLengthLimiter implements InputProcessor {
+class MessageLengthLimiter implements Processor {
   readonly name = 'message-length-limiter';
   
   constructor(private maxLength: number = 1000) {}
 
-  process({ messages, abort }: { 
+  processInput({ messages, abort }: { 
     messages: MastraMessageV2[]; 
     abort: (reason?: string) => never 
   }): MastraMessageV2[] {
@@ -260,17 +260,23 @@ When creating custom processors:
 
 ## Integration with Agent Methods
 
-Input processors work with both `generate()` and `stream()` methods. The entire processor pipeline completes before the agent begins generating or streaming a response.
+Input processors work with the `generate()`, `stream()`, and `streamVNext()` methods. The entire processor pipeline completes before the agent begins generating or streaming a response.
 
 ```typescript copy showLineNumbers
 // Processors run before generate()
 const result = await agent.generate('Hello');
 
-// Processors also run before stream()
-const stream = await agent.stream('Hello');
-for await (const chunk of stream.textStream) {
+// Processors also run before streamVNext()
+const stream = await agent.streamVNext('Hello');
+for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
 
-If any processor calls `abort()`, the request terminates immediately and subsequent processors are not executed. The agent returns a 200 response with details (`result.tripwireReason`) about why the request was blocked. 
+If any processor calls `abort()`, the request terminates immediately and subsequent processors are not executed. The agent returns a 200 response with details (`result.tripwireReason`) about why the request was blocked.
+
+## Output Processors
+
+While input processors handle user messages before they reach the language model, **output processors** handle the LLM's responses after generation but before they're returned to the user. This is useful for response validation, content filtering, and safety controls on LLM-generated content.
+
+See the [Output Processors documentation](/docs/agents/output-processors) for details on processing LLM responses. 
