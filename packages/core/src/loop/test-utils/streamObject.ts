@@ -1399,9 +1399,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     describe('output = "array"', () => {
       describe('array with 3 elements', () => {
         let result: any;
-
         let onFinishResult: any;
-        // let onFinishResult: Parameters<Required<Parameters<typeof streamObjectv5>[0]>['onFinish']>[0];
 
         beforeEach(async () => {
           result = loopFn({
@@ -1501,12 +1499,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       describe('array with 2 elements streamed in 1 chunk', () => {
         let result: any;
-        // let result: StreamObjectResult<
-        //   { content: string }[],
-        //   { content: string }[],
-        //   AsyncIterableStream<{ content: string }>
-        // >;
-
         let onFinishResult: any;
 
         beforeEach(async () => {
@@ -1583,7 +1575,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
       });
 
-      // TODO: enqueue error for partial array schema validation
       describe('error handling', () => {
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
@@ -1631,414 +1622,420 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
     });
 
-    // TODO: enum output
-    // TODO:
+    describe.todo('output = "enum"', () => {
+      it('should stream an enum value', async () => {
+        const mockModel = createTestModel({
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{ ' },
+            { type: 'text-delta', id: '1', delta: '"result": ' },
+            { type: 'text-delta', id: '1', delta: `"su` },
+            { type: 'text-delta', id: '1', delta: `nny` },
+            { type: 'text-delta', id: '1', delta: `"` },
+            { type: 'text-delta', id: '1', delta: ' }' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage },
+          ]),
+        });
 
-    // describe('output = "enum"', () => {
-    //   it.only('should stream an enum value', async () => {
-    //     const mockModel = createTestModel({
-    //       stream: convertArrayToReadableStream([
-    //         { type: 'text-start', id: '1' },
-    //         { type: 'text-delta', id: '1', delta: '{ ' },
-    //         { type: 'text-delta', id: '1', delta: '"result": ' },
-    //         { type: 'text-delta', id: '1', delta: `"su` },
-    //         { type: 'text-delta', id: '1', delta: `nny` },
-    //         { type: 'text-delta', id: '1', delta: `"` },
-    //         { type: 'text-delta', id: '1', delta: ' }' },
-    //         { type: 'text-end', id: '1' },
-    //         { type: 'finish', finishReason: 'stop', usage: testUsage },
-    //       ]),
-    //     });
+        const result = loopFn({
+          runId,
+          model: mockModel,
+          objectOptions: {
+            schema: z.enum(['sunny', 'rainy', 'snowy']),
+          },
+          messageList: new MessageList(),
+        });
 
-    //     const result = loopFn({
-    //       runId,
-    //       model: mockModel,
-    //       objectOptions: {
-    //         schema: z.enum(['sunny', 'rainy', 'snowy']),
-    //       },
-    //       messageList: new MessageList(),
-    //       // options: {
-    //       // output: 'enum',
-    //       // enum: ['sunny', 'rainy', 'snowy'],
-    //       // },
-    //       // prompt: 'prompt',
-    //     });
+        expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+          [
+            "sunny",
+          ]
+        `);
 
-    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
-    //       [
-    //         "sunny",
-    //       ]
-    //     `);
+        expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+          {
+            "description": undefined,
+            "name": undefined,
+            "schema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "result": {
+                  "enum": [
+                    "sunny",
+                    "rainy",
+                    "snowy",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "result",
+              ],
+              "type": "object",
+            },
+            "type": "json",
+          }
+        `);
+      });
 
-    //     // initial-loop-fn-pt4
-    //     // TODO: responseFormat is not set in the stream call
-    //     //   expect(mockModel.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
-    //     //   {
-    //     //     "description": undefined,
-    //     //     "name": undefined,
-    //     //     "schema": {
-    //     //       "$schema": "http://json-schema.org/draft-07/schema#",
-    //     //       "additionalProperties": false,
-    //     //       "properties": {
-    //     //         "result": {
-    //     //           "enum": [
-    //     //             "sunny",
-    //     //             "rainy",
-    //     //             "snowy",
-    //     //           ],
-    //     //           "type": "string",
-    //     //         },
-    //     //       },
-    //     //       "required": [
-    //     //         "result",
-    //     //       ],
-    //     //       "type": "object",
-    //     //     },
-    //     //     "type": "json",
-    //     //   }
-    //     // `);
-    //   });
+      it('should not stream incorrect values', async () => {
+        const mockModel = new MockLanguageModelV2({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: '{ ' },
+              { type: 'text-delta', id: '1', delta: '"result": ' },
+              { type: 'text-delta', id: '1', delta: `"foo` },
+              { type: 'text-delta', id: '1', delta: `bar` },
+              { type: 'text-delta', id: '1', delta: `"` },
+              { type: 'text-delta', id: '1', delta: ' }' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+              },
+            ]),
+          },
+        });
 
-    //   it('should not stream incorrect values', async () => {
-    //     const mockModel = new MockLanguageModelV2({
-    //       doStream: {
-    //         stream: convertArrayToReadableStream([
-    //           { type: 'text-start', id: '1' },
-    //           { type: 'text-delta', id: '1', delta: '{ ' },
-    //           { type: 'text-delta', id: '1', delta: '"result": ' },
-    //           { type: 'text-delta', id: '1', delta: `"foo` },
-    //           { type: 'text-delta', id: '1', delta: `bar` },
-    //           { type: 'text-delta', id: '1', delta: `"` },
-    //           { type: 'text-delta', id: '1', delta: ' }' },
-    //           { type: 'text-end', id: '1' },
-    //           {
-    //             type: 'finish',
-    //             finishReason: 'stop',
-    //             usage: testUsage,
-    //           },
-    //         ]),
-    //       },
-    //     });
+        const result = loopFn({
+          runId,
+          model: mockModel,
+          objectOptions: {
+            schema: z.enum(['sunny', 'rainy', 'snowy']),
+          },
+          messageList: new MessageList(),
+        });
 
-    //     const result = loopFn({
-    //       runId,
-    //       model: mockModel,
-    //       options: {
-    //         output: 'enum',
-    //         enum: ['sunny', 'rainy', 'snowy'],
-    //       },
-    //       prompt: 'prompt',
-    //     });
+        expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`[]`);
+      });
 
-    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`[]`);
-    //   });
+      it('should handle ambiguous values', async () => {
+        const mockModel = createTestModel({
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{ ' },
+            { type: 'text-delta', id: '1', delta: '"result": ' },
+            { type: 'text-delta', id: '1', delta: `"foo` },
+            { type: 'text-delta', id: '1', delta: `bar` },
+            { type: 'text-delta', id: '1', delta: `"` },
+            { type: 'text-delta', id: '1', delta: ' }' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        });
 
-    //   it('should handle ambiguous values', async () => {
-    //     const mockModel = createTestModel({
-    //       stream: convertArrayToReadableStream([
-    //         { type: 'text-start', id: '1' },
-    //         { type: 'text-delta', id: '1', delta: '{ ' },
-    //         { type: 'text-delta', id: '1', delta: '"result": ' },
-    //         { type: 'text-delta', id: '1', delta: `"foo` },
-    //         { type: 'text-delta', id: '1', delta: `bar` },
-    //         { type: 'text-delta', id: '1', delta: `"` },
-    //         { type: 'text-delta', id: '1', delta: ' }' },
-    //         {
-    //           type: 'finish',
-    //           finishReason: 'stop',
-    //           usage: testUsage,
-    //         },
-    //       ]),
-    //     });
+        const result = loopFn({
+          runId,
+          model: mockModel,
+          objectOptions: {
+            schema: z.enum(['foobar', 'foobar2']),
+          },
+          messageList: new MessageList(),
+        });
 
-    //     const result = loopFn({
-    //       runId,
-    //       model: mockModel,
-    //       options: {
-    //         output: 'enum',
-    //         enum: ['foobar', 'foobar2'],
-    //       },
-    //       prompt: 'prompt',
-    //     });
+        expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+        [
+          "foo",
+          "foobar",
+        ]
+      `);
+      });
 
-    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
-    //     [
-    //       "foo",
-    //       "foobar",
-    //     ]
-    //   `);
-    //   });
+      it('should handle non-ambiguous values', async () => {
+        const mockModel = createTestModel({
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{ ' },
+            { type: 'text-delta', id: '1', delta: '"result": ' },
+            { type: 'text-delta', id: '1', delta: `"foo` },
+            { type: 'text-delta', id: '1', delta: `bar` },
+            { type: 'text-delta', id: '1', delta: `"` },
+            { type: 'text-delta', id: '1', delta: ' }' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        });
 
-    //   it('should handle non-ambiguous values', async () => {
-    //     const mockModel = createTestModel({
-    //       stream: convertArrayToReadableStream([
-    //         { type: 'text-start', id: '1' },
-    //         { type: 'text-delta', id: '1', delta: '{ ' },
-    //         { type: 'text-delta', id: '1', delta: '"result": ' },
-    //         { type: 'text-delta', id: '1', delta: `"foo` },
-    //         { type: 'text-delta', id: '1', delta: `bar` },
-    //         { type: 'text-delta', id: '1', delta: `"` },
-    //         { type: 'text-delta', id: '1', delta: ' }' },
-    //         { type: 'text-end', id: '1' },
-    //         {
-    //           type: 'finish',
-    //           finishReason: 'stop',
-    //           usage: testUsage,
-    //         },
-    //       ]),
-    //     });
+        const result = loopFn({
+          runId,
+          model: mockModel,
+          objectOptions: {
+            schema: z.enum(['foobar', 'barfoo']),
+          },
+          messageList: new MessageList(),
+        });
 
-    //     const result = loopFn({
-    //       runId,
-    //       model: mockModel,
-    //       options: {
-    //         output: 'enum',
-    //         enum: ['foobar', 'barfoo'],
-    //       },
-    //       prompt: 'prompt',
-    //     });
+        expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
+        [
+          "foobar",
+        ]
+      `);
+      });
+    });
 
-    //     expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(`
-    //     [
-    //       "foobar",
-    //     ]
-    //   `);
-    //   });
-    // });
+    describe.todo('options.experimental_repairText', () => {
+      it('should be able to repair a JSONParseError', async () => {
+        const result = loopFn({
+          runId,
+          model: new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                {
+                  type: 'text-delta',
+                  id: '1',
+                  delta: '{ "content": "provider metadata test" ',
+                },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+          }),
+          objectOptions: {
+            schema: z.object({ content: z.string() }),
+          },
+          // TODO
+          // options: {
+          //   experimental_repairText: async ({ text, error }) => {
+          //     expect(error).toBeInstanceOf(JSONParseError);
+          //     expect(text).toStrictEqual('{ "content": "provider metadata test" ');
+          //     return text + '}';
+          //   },
+          // },
+          messageList: new MessageList(),
+        });
 
-    // describe.todo('options.experimental_repairText', () => {
-    //   it('should be able to repair a JSONParseError', async () => {
-    //     const result = executeFn({
-    //       runId,
-    //       model: new MockLanguageModelV2({
-    //         doStream: async () => ({
-    //           stream: convertArrayToReadableStream([
-    //             {
-    //               type: 'response-metadata',
-    //               id: 'id-0',
-    //               modelId: 'mock-model-id',
-    //               timestamp: new Date(0),
-    //             },
-    //             { type: 'text-start', id: '1' },
-    //             {
-    //               type: 'text-delta',
-    //               id: '1',
-    //               delta: '{ "content": "provider metadata test" ',
-    //             },
-    //             { type: 'text-end', id: '1' },
-    //             {
-    //               type: 'finish',
-    //               finishReason: 'stop',
-    //               usage: testUsage,
-    //             },
-    //           ]),
-    //         }),
-    //       }),
-    //       options: {
-    //         schema: z.object({ content: z.string() }),
-    //         experimental_repairText: async ({ text, error }) => {
-    //           expect(error).toBeInstanceOf(JSONParseError);
-    //           expect(text).toStrictEqual('{ "content": "provider metadata test" ');
-    //           return text + '}';
-    //         },
-    //       },
-    //       prompt: 'prompt',
-    //     });
+        // consume stream
+        void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
 
-    //     // consume stream
-    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+        expect(await result.object).toStrictEqual({
+          content: 'provider metadata test',
+        });
+      });
 
-    //     expect(await result.object).toStrictEqual({
-    //       content: 'provider metadata test',
-    //     });
-    //   });
+      it('should be able to repair a TypeValidationError', async () => {
+        const result = loopFn({
+          runId,
+          model: new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                {
+                  type: 'text-delta',
+                  id: '1',
+                  delta: '{ "content-a": "provider metadata test" }',
+                },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+          }),
+          objectOptions: {
+            schema: z.object({ content: z.string() }),
+          },
+          // TODO
+          // options: {
+          //   experimental_repairText: async ({ text, error }) => {
+          //     expect(error).toBeInstanceOf(TypeValidationError);
+          //     expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
+          //     return `{ "content": "provider metadata test" }`;
+          //   },
+          // },
+          messageList: new MessageList(),
+        });
 
-    //   it('should be able to repair a TypeValidationError', async () => {
-    //     const result = executeFn({
-    //       runId,
-    //       model: new MockLanguageModelV2({
-    //         doStream: async () => ({
-    //           stream: convertArrayToReadableStream([
-    //             {
-    //               type: 'response-metadata',
-    //               id: 'id-0',
-    //               modelId: 'mock-model-id',
-    //               timestamp: new Date(0),
-    //             },
-    //             { type: 'text-start', id: '1' },
-    //             {
-    //               type: 'text-delta',
-    //               id: '1',
-    //               delta: '{ "content-a": "provider metadata test" }',
-    //             },
-    //             { type: 'text-end', id: '1' },
-    //             {
-    //               type: 'finish',
-    //               finishReason: 'stop',
-    //               usage: testUsage,
-    //             },
-    //           ]),
-    //         }),
-    //       }),
-    //       options: {
-    //         schema: z.object({ content: z.string() }),
-    //         experimental_repairText: async ({ text, error }) => {
-    //           expect(error).toBeInstanceOf(TypeValidationError);
-    //           expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
-    //           return `{ "content": "provider metadata test" }`;
-    //         },
-    //       },
-    //       prompt: 'prompt',
-    //     });
+        // consume stream
+        await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
 
-    //     // consume stream
-    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+        expect(await result.aisdk.v5.object).toStrictEqual({
+          content: 'provider metadata test',
+        });
+      });
 
-    //     expect(await result.aisdk.v5.object).toStrictEqual({
-    //       content: 'provider metadata test',
-    //     });
-    //   });
+      it('should be able to handle repair that returns null', async () => {
+        const result = loopFn({
+          runId,
+          model: new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                {
+                  type: 'text-delta',
+                  id: '1',
+                  delta: '{ "content-a": "provider metadata test" }',
+                },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+          }),
 
-    //   it('should be able to handle repair that returns null', async () => {
-    //     const result = executeFn({
-    //       runId,
-    //       model: new MockLanguageModelV2({
-    //         doStream: async () => ({
-    //           stream: convertArrayToReadableStream([
-    //             {
-    //               type: 'response-metadata',
-    //               id: 'id-0',
-    //               modelId: 'mock-model-id',
-    //               timestamp: new Date(0),
-    //             },
-    //             { type: 'text-start', id: '1' },
-    //             {
-    //               type: 'text-delta',
-    //               id: '1',
-    //               delta: '{ "content-a": "provider metadata test" }',
-    //             },
-    //             { type: 'text-end', id: '1' },
-    //             {
-    //               type: 'finish',
-    //               finishReason: 'stop',
-    //               usage: testUsage,
-    //             },
-    //           ]),
-    //         }),
-    //       }),
-    //       options: {
-    //         schema: z.object({ content: z.string() }),
-    //         experimental_repairText: async ({ text, error }) => {
-    //           expect(error).toBeInstanceOf(TypeValidationError);
-    //           expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
-    //           return null;
-    //         },
-    //       },
-    //       prompt: 'prompt',
-    //     });
+          objectOptions: {
+            schema: z.object({ content: z.string() }),
+          },
 
-    //     // consume stream
-    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          // TODO: experimental_repairText?
+          // options: {
+          //   experimental_repairText: async ({ text, error }) => {
+          //     expect(error).toBeInstanceOf(TypeValidationError);
+          //     expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
+          //     return null;
+          //   },
+          // },
+          messageList: new MessageList(),
+        });
 
-    //     expect(result.aisdk.v5.object).rejects.toThrow('No object generated: response did not match schema.');
-    //   });
+        // consume stream
+        void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
 
-    //   it('should be able to repair JSON wrapped with markdown code blocks', async () => {
-    //     const result = executeFn({
-    //       runId,
-    //       model: new MockLanguageModelV2({
-    //         doStream: async () => ({
-    //           stream: convertArrayToReadableStream([
-    //             {
-    //               type: 'response-metadata',
-    //               id: 'id-0',
-    //               modelId: 'mock-model-id',
-    //               timestamp: new Date(0),
-    //             },
-    //             { type: 'text-start', id: '1' },
-    //             {
-    //               type: 'text-delta',
-    //               id: '1',
-    //               delta: '```json\n{ "content": "test message" }\n```',
-    //             },
-    //             { type: 'text-end', id: '1' },
-    //             {
-    //               type: 'finish',
-    //               finishReason: 'stop',
-    //               usage: testUsage,
-    //             },
-    //           ]),
-    //         }),
-    //       }),
-    //       options: {
-    //         schema: z.object({ content: z.string() }),
-    //         experimental_repairText: async ({ text, error }) => {
-    //           expect(error).toBeInstanceOf(JSONParseError);
-    //           expect(text).toStrictEqual('```json\n{ "content": "test message" }\n```');
+        await expect(await result.aisdk.v5.object).rejects.toThrow(
+          'No object generated: response did not match schema.',
+        );
+      });
 
-    //           // Remove markdown code block wrapper
-    //           const cleaned = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    //           return cleaned;
-    //         },
-    //       },
-    //       prompt: 'prompt',
-    //     });
+      it('should be able to repair JSON wrapped with markdown code blocks', async () => {
+        const result = loopFn({
+          runId,
+          model: new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                {
+                  type: 'text-delta',
+                  id: '1',
+                  delta: '```json\n{ "content": "test message" }\n```',
+                },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+          }),
+          objectOptions: {
+            schema: z.object({ content: z.string() }),
+          },
+          // TODO
+          // options: {
+          //   experimental_repairText: async ({ text, error }) => {
+          //     expect(error).toBeInstanceOf(JSONParseError);
+          //     expect(text).toStrictEqual('```json\n{ "content": "test message" }\n```');
 
-    //     // consume stream
-    //     await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          //     // Remove markdown code block wrapper
+          //     const cleaned = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          //     return cleaned;
+          //   },
+          // },
+          messageList: new MessageList(),
+        });
 
-    //     expect(await result.aisdk.v5.object).toStrictEqual({
-    //       content: 'test message',
-    //     });
-    //   });
+        // consume stream
+        await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
 
-    //   it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
-    //     const result = executeFn({
-    //       runId,
-    //       model: new MockLanguageModelV2({
-    //         doStream: async () => ({
-    //           stream: convertArrayToReadableStream([
-    //             {
-    //               type: 'response-metadata',
-    //               id: 'id-0',
-    //               modelId: 'mock-model-id',
-    //               timestamp: new Date(0),
-    //             },
-    //             { type: 'text-start', id: '1' },
-    //             { type: 'text-delta', id: '1', delta: '{ broken json' },
-    //             { type: 'text-end', id: '1' },
-    //             {
-    //               type: 'finish',
-    //               finishReason: 'stop',
-    //               usage: testUsage,
-    //             },
-    //           ]),
-    //         }),
-    //       }),
-    //       options: {
-    //         schema: z.object({ content: z.string() }),
-    //         experimental_repairText: async ({ text }) => text + '{',
-    //       },
-    //       prompt: 'prompt',
-    //     });
+        expect(await result.aisdk.v5.object).toStrictEqual({
+          content: 'test message',
+        });
+      });
 
-    //     try {
-    //       await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-    //       await result.aisdk.v5.object;
-    //       fail('must throw error');
-    //     } catch (error) {
-    //       verifyNoObjectGeneratedError(error, {
-    //         message: 'No object generated: could not parse the response.',
-    //         response: {
-    //           id: 'id-0',
-    //           timestamp: new Date(0),
-    //           modelId: 'mock-model-id',
-    //         },
-    //         usage: testUsage,
-    //         finishReason: 'stop',
-    //       });
-    //     }
-    //   });
-    // });
+      it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
+        const result = loopFn({
+          runId,
+          model: new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: '{ broken json' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            }),
+          }),
+          objectOptions: {
+            schema: z.object({ content: z.string() }),
+          },
+          // TODO
+          // options: {
+          //   experimental_repairText: async ({ text }) => text + '{',
+          // },
+          messageList: new MessageList(),
+        });
+
+        try {
+          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
+          await result.aisdk.v5.object;
+          fail('must throw error');
+        } catch (error) {
+          verifyNoObjectGeneratedError(error, {
+            message: 'No object generated: could not parse the response.',
+            response: {
+              id: 'id-0',
+              timestamp: new Date(0),
+              modelId: 'mock-model-id',
+            },
+            usage: testUsage,
+            finishReason: 'stop',
+          });
+        }
+      });
+    });
   });
 }
