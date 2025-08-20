@@ -276,20 +276,22 @@ export async function bundleExternals(
         ),
       ),
       options?.isDev
-        ? {
+        ? ({
             name: 'external-resolver',
-            resolveId(id: string, importer: string | undefined) {
+            async resolveId(id, importer, options) {
               const pathsToTranspile = [...transpilePackagesMap.values()];
               if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && !isRelativePath(id)) {
+                const resolved = await this.resolve(id, importer, { skipSelf: true, ...options });
+
                 return {
-                  id: resolveFrom(importer, id),
+                  ...resolved,
                   external: true,
                 };
               }
 
               return null;
             },
-          }
+          } as Plugin)
         : null,
       transpilePackagesMap.size
         ? esbuild({
