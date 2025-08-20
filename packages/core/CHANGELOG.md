@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.14.0-alpha.3
+
+### Patch Changes
+
+- 227c7e6: replace console.log with logger.debug in inmemory operations
+- fd3a3eb: Add runExperments to run scorers in a test suite or in CI
+- a8f129d: "initial addition of experimental ai observability tracing features."
+
 ## 0.14.0-alpha.2
 
 ## 0.14.0-alpha.1

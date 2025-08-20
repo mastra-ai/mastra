@@ -1890,6 +1890,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         messageList,
         threadExists,
         structuredOutput = false,
+        overrideScorers,
         agentAISpan,
       }: {
         runId: string;
@@ -1901,6 +1902,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         messageList: MessageList;
         threadExists: boolean;
         structuredOutput?: boolean;
+        overrideScorers?: MastraScorers;
         agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
       }) => {
         const resToLog = {
@@ -2076,7 +2078,25 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           instructions,
           runtimeContext,
           structuredOutput,
+          overrideScorers,
         });
+
+        const scoringData: {
+          input: Omit<ScorerRunInputForAgent, 'runId'>;
+          output: ScorerRunOutputForAgent;
+        } = {
+          input: {
+            inputMessages: messageList.getPersisted.input.ui(),
+            rememberedMessages: messageList.getPersisted.remembered.ui(),
+            systemMessages: messageList.getSystemMessages(),
+            taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
+          },
+          output: messageList.getPersisted.response.ui(),
+        };
+
+        return {
+          scoringData,
+        };
       },
     };
   }
@@ -2088,6 +2108,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     instructions,
     runtimeContext,
     structuredOutput,
+    overrideScorers,
   }: {
     messageList: MessageList;
     runId: string;
@@ -2095,6 +2116,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     instructions: string;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
+    overrideScorers?: MastraScorers;
   }) {
     const agentName = this.name;
     const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
@@ -2116,7 +2138,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       }
     }
 
-    const scorers = await this.getScorers({ runtimeContext });
+    const scorers = overrideScorers ?? (await this.getScorers({ runtimeContext }));
 
     const scorerInput: ScorerRunInputForAgent = {
       inputMessages: messageList.getPersisted.input.ui(),
@@ -2173,7 +2195,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
       agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-    }) => Promise<void>;
+      overrideScorers?: MastraScorers;
+    }) => Promise<{
+      scoringData: {
+        input: Omit<ScorerRunInputForAgent, 'runId'>;
+        output: ScorerRunOutputForAgent;
+      };
+    }>;
     llm: MastraLLMV1;
   }>;
   private prepareLLMOptions<
@@ -2201,7 +2229,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
       agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-    }) => Promise<void>;
+      overrideScorers?: MastraScorers;
+    }) => Promise<{
+      scoringData: {
+        input: Omit<ScorerRunInputForAgent, 'runId'>;
+        output: ScorerRunOutputForAgent;
+      };
+    }>;
     llm: MastraLLMV1;
   }>;
   private async prepareLLMOptions<
@@ -2244,12 +2278,25 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           result: GenerateReturn<any, Output, ExperimentalOutput>;
           outputText: string;
           agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-        }) => Promise<void>)
+          overrideScorers?: MastraScorers;
+        }) => Promise<{
+          scoringData: {
+            input: Omit<ScorerRunInputForAgent, 'runId'>;
+            output: ScorerRunOutputForAgent;
+          };
+        }>)
       | ((args: {
+          agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
           result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
           outputText: string;
-          agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-        }) => Promise<void>);
+          structuredOutput?: boolean;
+          overrideScorers?: MastraScorers;
+        }) => Promise<{
+          scoringData: {
+            input: Omit<ScorerRunInputForAgent, 'runId'>;
+            output: ScorerRunOutputForAgent;
+          };
+        }>);
     llm: MastraLLMV1;
   }> {
     const {
@@ -2410,7 +2457,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             structuredOutput?: boolean;
             agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
           }) => {
-        await after({
+        const afterResult = await after({
           result,
           outputText,
           threadId: thread?.id,
@@ -2422,6 +2469,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           threadExists,
           agentAISpan,
         });
+        return afterResult;
       },
     };
   }
@@ -2599,13 +2647,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
       }
 
-      await after({
+      const afterResult = await after({
         result: result as unknown as OUTPUT extends undefined
           ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
           : GenerateObjectResult<OUTPUT>,
         outputText: newText,
         agentAISpan,
+        ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
       });
+
+      if (generateOptions.returnScorerData) {
+        result.scoringData = afterResult.scoringData;
+      }
 
       return result as unknown as OUTPUT extends undefined
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
@@ -2679,14 +2732,19 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       this.logger.warn('Failed to parse processed output as JSON, keeping original result', { error });
     }
 
-    await after({
+    const afterResult = await after({
       result: result as unknown as OUTPUT extends undefined
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
         : GenerateObjectResult<OUTPUT>,
       outputText: newText,
+      ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
       structuredOutput: true,
       agentAISpan,
     });
+
+    if (generateOptions.returnScorerData) {
+      result.scoringData = afterResult.scoringData;
+    }
 
     return result as unknown as OUTPUT extends undefined
       ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
