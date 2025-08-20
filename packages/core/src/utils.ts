@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
+import type { CoreMessage } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
@@ -14,7 +14,6 @@ import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
