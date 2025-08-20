@@ -2,6 +2,7 @@ import { expect } from 'vitest';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
 import type { StorageGetMessagesArg } from '../storage';
+import { MessageList } from './message-list';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -78,9 +79,12 @@ export class MockMemory extends MastraMemory {
     }
     return this.getMessages({ threadId: messages[0].threadId, resourceId: messages[0].resourceId, format });
   }
+
   async rememberMessages() {
-    return { messages: [], messagesV2: [] };
+    const list = new MessageList().add(Array.from(this.messages.values()), `memory`);
+    return { messages: list.get.remembered.v1(), messagesV2: list.get.remembered.v2() };
   }
+
   async getThreadsByResourceId() {
     return [];
   }

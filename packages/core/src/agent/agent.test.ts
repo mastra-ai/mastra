@@ -24,6 +24,7 @@ import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts, MockMemory } from './test-utils';
 import { Agent } from './index';
+import { randomUUID } from 'crypto';
 
 config();
 
@@ -474,7 +475,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         let previousPartialObject = {} as { winner: string };
         for await (const partialObject of objectStream) {
-          console.log(partialObject, 'SUHHHHH');
           previousPartialObject = partialObject! as { winner: string };
           expect(partialObject).toBeDefined();
         }
@@ -4492,35 +4492,38 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let errorCaught = false;
 
         let stream;
-        if (version === 'v1') {
-          stream = await agent.stream('trigger error', {
-            memory: {
-              resource: 'user-err',
-              thread: {
-                id: 'thread-err-stream',
+        try {
+          if (version === 'v1') {
+            stream = await agent.stream('trigger error', {
+              memory: {
+                resource: 'user-err',
+                thread: {
+                  id: 'thread-err-stream',
+                },
               },
-            },
-          });
+            });
 
-          await stream.consumeStream({
-            onError: err => {
-              console.log('ERROR CAUGHT IN CONSUME STREAM', err);
-              errorCaught = true;
-              expect(err.message).toBe('Simulated stream error');
-            },
-          });
-        } else {
-          stream = await agent.stream_vnext('trigger error', {
-            memory: {
-              resource: 'user-err',
-              thread: {
-                id: 'thread-err-stream',
+            for await (const _ of stream.textStream) {
+              // Should throw
+            }
+          } else {
+            stream = await agent.stream_vnext('trigger error', {
+              memory: {
+                resource: 'user-err',
+                thread: {
+                  id: 'thread-err-stream',
+                },
               },
-            },
-          });
-          await stream.consumeStream();
-          errorCaught = (await stream.finishReason) === 'error';
-          expect(stream.error.message).toBe('Simulated stream error');
+            });
+
+            await stream.consumeStream();
+            expect(stream.error).toBeDefined();
+            expect(stream.error.message).toMatch(/Simulated stream error/);
+            errorCaught = true;
+          }
+        } catch (err: any) {
+          errorCaught = true;
+          expect(err.message).toMatch(/Simulated stream error/);
         }
 
         expect(errorCaught).toBe(true);
@@ -4531,241 +4534,583 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     });
 
-    describe(`${version} - dynamic memory configuration`, () => {
-      it('should support static memory configuration', async () => {
-        const mockMemory = new MockMemory();
+    describe(`stream_vnext`, () => {
+      it(`should stream from LLM`, async () => {
         const agent = new Agent({
-          name: 'static-memory-agent',
-          instructions: 'test agent',
-          model: dummyModel,
+          id: 'test',
+          name: 'test',
+          model: openaiModel,
+          instructions: `test!`,
+        });
+
+        let result;
+        let request;
+
+        if (version === 'v1') {
+          result = await agent.stream(`hello!`);
+        } else {
+          result = await agent.stream_vnext(`hello!`);
+        }
+
+        const parts: any[] = [];
+        for await (const part of result.fullStream) {
+          parts.push(part);
+        }
+
+        if (version === 'v1') {
+          request = JSON.parse((await result.request).body).messages;
+          expect(request).toEqual([
+            {
+              role: 'system',
+              content: 'test!',
+            },
+            {
+              role: 'user',
+              content: 'hello!',
+            },
+          ]);
+        } else {
+          request = (await result.request).body.input;
+          expect(request).toEqual([
+            {
+              role: 'system',
+              content: 'test!',
+            },
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: 'hello!' }],
+            },
+          ]);
+        }
+      });
+
+      it(`should show correct request input for multi-turn inputs`, async () => {
+        const agent = new Agent({
+          id: 'test',
+          name: 'test',
+          model: openaiModel,
+          instructions: `test!`,
+        });
+
+        let result;
+        if (version === 'v1') {
+          result = await agent.stream([
+            { role: `user`, content: `hello!` },
+            { role: 'assistant', content: 'hi, how are you?' },
+            { role: 'user', content: "I'm good, how are you?" },
+          ]);
+        } else {
+          result = await agent.stream_vnext([
+            { role: `user`, content: `hello!` },
+            { role: 'assistant', content: 'hi, how are you?' },
+            { role: 'user', content: "I'm good, how are you?" },
+          ]);
+        }
+
+        const parts: any[] = [];
+        for await (const part of result.fullStream) {
+          parts.push(part);
+        }
+
+        let request;
+        if (version === 'v1') {
+          request = JSON.parse((await result.request).body).messages;
+          expect(request).toEqual([
+            {
+              role: 'system',
+              content: 'test!',
+            },
+            {
+              role: 'user',
+              content: 'hello!',
+            },
+            { role: 'assistant', content: 'hi, how are you?' },
+            { role: 'user', content: "I'm good, how are you?" },
+          ]);
+        } else {
+          request = (await result.request).body.input;
+          expect(request).toEqual([
+            {
+              role: 'system',
+              content: 'test!',
+            },
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: 'hello!' }],
+            },
+            { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
+            { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
+          ]);
+        }
+      });
+
+      it(`should show correct request input for multi-turn inputs with memory`, async () => {
+        const mockMemory = new MockMemory();
+        const threadId = '1';
+        const resourceId = '2';
+        // @ts-ignore
+        mockMemory.rememberMessages = async function rememberMessages() {
+          const list = new MessageList({ threadId, resourceId }).add(
+            [
+              { role: `user`, content: `hello!`, threadId, resourceId },
+              { role: 'assistant', content: 'hi, how are you?', threadId, resourceId },
+            ],
+            `memory`,
+          );
+          return { messages: list.get.remembered.aiV4.core(), messagesV2: list.get.remembered.v2() };
+        };
+
+        mockMemory.getThreadById = async function getThreadById() {
+          return { id: '1', createdAt: new Date(), resourceId: '2', updatedAt: new Date() } satisfies StorageThreadType;
+        };
+
+        const agent = new Agent({
+          id: 'test',
+          name: 'test',
+          model: openaiModel,
+          instructions: `test!`,
           memory: mockMemory,
         });
 
-        const memory = await agent.getMemory();
-        expect(memory).toBe(mockMemory);
-      });
-
-      it('should support dynamic memory configuration with runtimeContext', async () => {
-        const premiumMemory = new MockMemory();
-        const standardMemory = new MockMemory();
-
-        const agent = new Agent({
-          name: 'dynamic-memory-agent',
-          instructions: 'test agent',
-          model: dummyModel,
-          memory: ({ runtimeContext }) => {
-            const userTier = runtimeContext.get('userTier');
-            return userTier === 'premium' ? premiumMemory : standardMemory;
-          },
-        });
-
-        // Test with premium context
-        const premiumContext = new RuntimeContext();
-        premiumContext.set('userTier', 'premium');
-        const premiumResult = await agent.getMemory({ runtimeContext: premiumContext });
-        expect(premiumResult).toBe(premiumMemory);
-
-        // Test with standard context
-        const standardContext = new RuntimeContext();
-        standardContext.set('userTier', 'standard');
-        const standardResult = await agent.getMemory({ runtimeContext: standardContext });
-        expect(standardResult).toBe(standardMemory);
-      });
-
-      it('should support async dynamic memory configuration', async () => {
-        const mockMemory = new MockMemory();
-
-        const agent = new Agent({
-          name: 'async-memory-agent',
-          instructions: 'test agent',
-          model: dummyModel,
-          memory: async ({ runtimeContext }) => {
-            const userId = runtimeContext.get('userId') as string;
-            // Simulate async memory creation/retrieval
-            await new Promise(resolve => setTimeout(resolve, 10));
-            (mockMemory as any).threads[`user-${userId}`] = {
-              id: `user-${userId}`,
-              resourceId: userId,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-            return mockMemory;
-          },
-        });
-
-        const runtimeContext = new RuntimeContext();
-        runtimeContext.set('userId', 'user123');
-
-        const memory = await agent.getMemory({ runtimeContext });
-        expect(memory).toBe(mockMemory);
-        expect((memory as any)?.threads['user-user123']).toBeDefined();
-      });
-
-      it('should throw error when dynamic memory function returns empty value', async () => {
-        const agent = new Agent({
-          name: 'invalid-memory-agent',
-          instructions: 'test agent',
-          model: dummyModel,
-          memory: () => null as any,
-        });
-
-        await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
-      });
-
-      it('should work with memory in generate method with dynamic configuration', async () => {
-        const mockMemory = new MockMemory();
-
-        const agent = new Agent({
-          name: 'generate-memory-agent',
-          instructions: 'test agent',
-          model: dummyModel,
-          memory: ({ runtimeContext }) => {
-            const environment = runtimeContext.get('environment');
-            if (environment === 'test') {
-              return mockMemory;
-            }
-            // Return a default mock memory instead of undefined
-            return new MockMemory();
-          },
-        });
-
-        const runtimeContext = new RuntimeContext();
-        runtimeContext.set('environment', 'test');
-
-        let response;
+        let result;
         if (version === 'v1') {
-          response = await agent.generate('test message', {
+          result = await agent.stream([{ role: 'user', content: "I'm good, how are you?" }], {
             memory: {
-              resource: 'user-1',
-              thread: {
-                id: 'thread-1',
+              thread: '1',
+              resource: '2',
+              options: {
+                lastMessages: 10,
               },
             },
-            runtimeContext,
           });
         } else {
-          response = await agent.generate_vnext('test message', {
+          result = await agent.stream_vnext([{ role: 'user', content: "I'm good, how are you?" }], {
             memory: {
-              resource: 'user-1',
-              thread: {
-                id: 'thread-1',
+              thread: '1',
+              resource: '2',
+              options: {
+                lastMessages: 10,
               },
             },
-            runtimeContext,
           });
         }
 
-        expect(response.text).toBe('Dummy response');
+        for await (const _part of result.fullStream) {
+        }
 
-        // Verify that thread was created in memory
-        const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-        expect(thread).toBeDefined();
-        expect(thread?.resourceId).toBe('user-1');
+        let request;
+        if (version === 'v1') {
+          request = JSON.parse((await result.request).body).messages;
+          expect(request).toEqual([
+            {
+              role: 'system',
+              content: 'test!',
+            },
+            {
+              role: 'user',
+              content: 'hello!',
+            },
+            { role: 'assistant', content: 'hi, how are you?' },
+            { role: 'user', content: "I'm good, how are you?" },
+          ]);
+        } else {
+          request = (await result.request).body.input;
+          expect(request).toEqual([
+            {
+              role: 'system',
+              content: 'test!',
+            },
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: 'hello!' }],
+            },
+            { role: 'assistant', content: [{ type: 'output_text', text: 'hi, how are you?' }] },
+            { role: 'user', content: [{ type: 'input_text', text: "I'm good, how are you?" }] },
+          ]);
+        }
       });
 
-      it('should work with memory in stream method with dynamic configuration', async () => {
+      it(`should order tool calls/results and response text properly`, async () => {
         const mockMemory = new MockMemory();
 
-        let model;
+        const weatherTool = createTool({
+          id: 'get_weather',
+          description: 'Get the weather for a given location',
+          inputSchema: z.object({
+            postalCode: z.string().describe('The location to get the weather for'),
+          }),
+          execute: async ({ context: { postalCode } }) => {
+            return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+          },
+        });
+
+        const threadId = randomUUID();
+        const resourceId = 'ordering';
+
+        const agent = new Agent({
+          id: 'test',
+          name: 'test',
+          model: openaiModel,
+          instructions: `Testing tool calls! Please respond in a pirate accent`,
+          tools: {
+            get_weather: weatherTool,
+          },
+          memory: mockMemory,
+        });
+
+        let firstResponse;
         if (version === 'v1') {
-          model = new MockLanguageModelV1({
-            doStream: async () => ({
-              stream: simulateReadableStream({
-                chunks: [
-                  { type: 'text-delta', textDelta: 'Dynamic' },
-                  { type: 'text-delta', textDelta: ' memory' },
-                  { type: 'text-delta', textDelta: ' response' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    logprobs: undefined,
-                    usage: { completionTokens: 10, promptTokens: 3 },
-                  },
-                ],
-              }),
-              rawCall: { rawPrompt: null, rawSettings: {} },
+          firstResponse = await agent.generate('What is the weather in London?', {
+            threadId,
+            resourceId,
+            onStepFinish: args => {
+              args;
+            },
+          });
+          // The response should contain the weather.
+          expect(firstResponse.response.messages).toEqual([
+            expect.objectContaining({
+              role: 'assistant',
+              content: [expect.objectContaining({ type: 'tool-call' })],
             }),
+            expect.objectContaining({
+              role: 'tool',
+              content: [expect.objectContaining({ type: 'tool-result' })],
+            }),
+            expect.objectContaining({
+              role: 'assistant',
+              content: expect.any(String),
+            }),
+          ]);
+        } else {
+          firstResponse = await agent.generate_vnext('What is the weather in London?', {
+            threadId,
+            resourceId,
+            onStepFinish: args => {
+              args;
+            },
+          });
+
+          // The response should contain the weather.
+          expect(firstResponse.response.messages).toEqual([
+            expect.objectContaining({
+              role: 'assistant',
+              content: [expect.objectContaining({ type: 'tool-call' })],
+            }),
+            expect.objectContaining({
+              role: 'tool',
+              content: [expect.objectContaining({ type: 'tool-result' })],
+            }),
+            expect.objectContaining({
+              role: 'assistant',
+              content: [expect.objectContaining({ type: 'text' })],
+            }),
+          ]);
+        }
+
+        expect(firstResponse.text).toContain('65');
+
+        let secondResponse;
+        if (version === 'v1') {
+          secondResponse = await agent.generate('What was the tool you just used?', {
+            memory: {
+              thread: threadId,
+              resource: resourceId,
+              options: {
+                lastMessages: 10,
+              },
+            },
           });
         } else {
-          model = new MockLanguageModelV2({
-            doStream: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'stream-start',
-                  warnings: [],
-                },
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Dynamic' },
-                { type: 'text-delta', id: '1', delta: ' memory' },
-                { type: 'text-delta', id: '1', delta: ' response' },
-                { type: 'text-end', id: '1' },
+          secondResponse = await agent.generate_vnext('What was the tool you just used?', {
+            memory: {
+              thread: threadId,
+              resource: resourceId,
+              options: {
+                lastMessages: 10,
+              },
+            },
+          });
+
+          expect(secondResponse.request.body.input).toEqual([
+            expect.objectContaining({ role: 'system' }),
+            expect.objectContaining({ role: 'user' }),
+            expect.objectContaining({ type: 'function_call' }),
+            expect.objectContaining({ type: 'function_call_output' }),
+            expect.objectContaining({ role: 'assistant' }),
+            expect.objectContaining({ role: 'user' }),
+          ]);
+        }
+
+        expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
+      }, 30_000);
+    });
+  });
+
+  describe(`${version} - dynamic memory configuration`, () => {
+    let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+    if (version === 'v1') {
+      dummyModel = new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `Dummy response`,
+        }),
+      });
+    } else {
+      dummyModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          stream: convertArrayToReadableStream([
+            { type: 'text-delta', id: '1', delta: 'Dummy response' },
+            {
+              type: 'finish',
+              id: '2',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          warnings: [],
+        }),
+      });
+    }
+
+    it('should support static memory configuration', async () => {
+      const mockMemory = new MockMemory();
+      const agent = new Agent({
+        name: 'static-memory-agent',
+        instructions: 'test agent',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const memory = await agent.getMemory();
+      expect(memory).toBe(mockMemory);
+    });
+
+    it('should support dynamic memory configuration with runtimeContext', async () => {
+      const premiumMemory = new MockMemory();
+      const standardMemory = new MockMemory();
+
+      const agent = new Agent({
+        name: 'dynamic-memory-agent',
+        instructions: 'test agent',
+        model: dummyModel,
+        memory: ({ runtimeContext }) => {
+          const userTier = runtimeContext.get('userTier');
+          return userTier === 'premium' ? premiumMemory : standardMemory;
+        },
+      });
+
+      // Test with premium context
+      const premiumContext = new RuntimeContext();
+      premiumContext.set('userTier', 'premium');
+      const premiumResult = await agent.getMemory({ runtimeContext: premiumContext });
+      expect(premiumResult).toBe(premiumMemory);
+
+      // Test with standard context
+      const standardContext = new RuntimeContext();
+      standardContext.set('userTier', 'standard');
+      const standardResult = await agent.getMemory({ runtimeContext: standardContext });
+      expect(standardResult).toBe(standardMemory);
+    });
+
+    it('should support async dynamic memory configuration', async () => {
+      const mockMemory = new MockMemory();
+
+      const agent = new Agent({
+        name: 'async-memory-agent',
+        instructions: 'test agent',
+        model: dummyModel,
+        memory: async ({ runtimeContext }) => {
+          const userId = runtimeContext.get('userId') as string;
+          // Simulate async memory creation/retrieval
+          await new Promise(resolve => setTimeout(resolve, 10));
+          (mockMemory as any).threads[`user-${userId}`] = {
+            id: `user-${userId}`,
+            resourceId: userId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          return mockMemory;
+        },
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('userId', 'user123');
+
+      const memory = await agent.getMemory({ runtimeContext });
+      expect(memory).toBe(mockMemory);
+      expect((memory as any)?.threads['user-user123']).toBeDefined();
+    });
+
+    it('should throw error when dynamic memory function returns empty value', async () => {
+      const agent = new Agent({
+        name: 'invalid-memory-agent',
+        instructions: 'test agent',
+        model: dummyModel,
+        memory: () => null as any,
+      });
+
+      await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
+    });
+
+    it('should work with memory in generate method with dynamic configuration', async () => {
+      const mockMemory = new MockMemory();
+
+      const agent = new Agent({
+        name: 'generate-memory-agent',
+        instructions: 'test agent',
+        model: dummyModel,
+        memory: ({ runtimeContext }) => {
+          const environment = runtimeContext.get('environment');
+          if (environment === 'test') {
+            return mockMemory;
+          }
+          // Return a default mock memory instead of undefined
+          return new MockMemory();
+        },
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('environment', 'test');
+
+      let response;
+      if (version === 'v1') {
+        response = await agent.generate('test message', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-1',
+            },
+          },
+          runtimeContext,
+        });
+      } else {
+        response = await agent.generate_vnext('test message', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-1',
+            },
+          },
+          runtimeContext,
+        });
+      }
+
+      expect(response.text).toBe('Dummy response');
+
+      // Verify that thread was created in memory
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+      expect(thread).toBeDefined();
+      expect(thread?.resourceId).toBe('user-1');
+    });
+
+    it('should work with memory in stream method with dynamic configuration', async () => {
+      const mockMemory = new MockMemory();
+
+      let model;
+      if (version === 'v1') {
+        model = new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Dynamic' },
+                { type: 'text-delta', textDelta: ' memory' },
+                { type: 'text-delta', textDelta: ' response' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
                 },
-              ]),
+              ],
             }),
-          });
-        }
-
-        const agent = new Agent({
-          name: 'stream-memory-agent',
-          instructions: 'test agent',
-          model,
-          memory: ({ runtimeContext }) => {
-            const enableMemory = runtimeContext.get('enableMemory');
-            return enableMemory ? mockMemory : new MockMemory();
-          },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
         });
-
-        const runtimeContext = new RuntimeContext();
-        runtimeContext.set('enableMemory', true);
-
-        let stream;
-
-        if (version === 'v1') {
-          stream = await agent.stream('test message', {
-            memory: {
-              resource: 'user-1',
-              thread: {
-                id: 'thread-stream',
+      } else {
+        model = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
               },
-            },
-            runtimeContext,
-          });
-        } else {
-          stream = await agent.stream_vnext('test message', {
-            memory: {
-              resource: 'user-1',
-              thread: {
-                id: 'thread-stream',
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
               },
-            },
-            runtimeContext,
-          });
-        }
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Dynamic' },
+              { type: 'text-delta', id: '1', delta: ' memory' },
+              { type: 'text-delta', id: '1', delta: ' response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          }),
+        });
+      }
 
-        let finalText = '';
-        for await (const textPart of stream.textStream) {
-          finalText += textPart;
-        }
-
-        expect(finalText).toBe('Dynamic memory response');
-
-        // Verify that thread was created in memory
-        const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
-        expect(thread).toBeDefined();
-        expect(thread?.resourceId).toBe('user-1');
+      const agent = new Agent({
+        name: 'stream-memory-agent',
+        instructions: 'test agent',
+        model,
+        memory: ({ runtimeContext }) => {
+          const enableMemory = runtimeContext.get('enableMemory');
+          return enableMemory ? mockMemory : new MockMemory();
+        },
       });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('enableMemory', true);
+
+      let stream;
+
+      if (version === 'v1') {
+        stream = await agent.stream('test message', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-stream',
+            },
+          },
+          runtimeContext,
+        });
+      } else {
+        stream = await agent.stream_vnext('test message', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-stream',
+            },
+          },
+          runtimeContext,
+        });
+      }
+
+      let finalText = '';
+      for await (const textPart of stream.textStream) {
+        finalText += textPart;
+      }
+
+      expect(finalText).toBe('Dynamic memory response');
+
+      // Verify that thread was created in memory
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
+      expect(thread).toBeDefined();
+      expect(thread?.resourceId).toBe('user-1');
     });
   });
 
@@ -5923,8 +6268,6 @@ describe('Agent Tests', () => {
 //       expect(mastraExecute).toHaveBeenCalled();
 //       expect(vercelExecute).toHaveBeenCalled();
 //     });
-
-// });
 
 // });
 

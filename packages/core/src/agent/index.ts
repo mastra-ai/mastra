@@ -2359,6 +2359,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         let threadObject: StorageThreadType | undefined = undefined;
         const existingThread = await memory.getThreadById({ threadId: thread?.id });
+
         if (existingThread) {
           if (
             (!existingThread.metadata && thread.metadata) ||
@@ -3252,8 +3253,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
-      resourceId: streamOptions?.resourceId!,
-      threadId: streamOptions?.threadId!,
+      // resourceId: streamOptions?.resourceId!,
+      // threadId: streamOptions?.threadId!,
     };
 
     const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });

@@ -14,6 +14,78 @@ const threadId = `one`;
 const resourceId = `user`;
 
 describe('MessageList', () => {
+  describe('Response message tracking', () => {
+    it('should track all response messages including tool calls and results', () => {
+      const messageList = new MessageList();
+
+      // Add user message
+      messageList.add({ role: 'user', content: 'What is the weather?' }, 'input');
+
+      // Add assistant message with tool-call
+      messageList.add(
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'get_weather',
+              args: { location: 'London' },
+            },
+          ],
+        },
+        'response',
+      );
+
+      // Add tool result message
+      messageList.add(
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'get_weather',
+              result: 'Sunny, 70°F',
+            },
+          ],
+        },
+        'response',
+      );
+
+      // Add final assistant response
+      messageList.add(
+        {
+          role: 'assistant',
+          content: 'The weather in London is sunny at 70°F.',
+        },
+        'response',
+      );
+
+      // Check what's in response messages
+      const responseMessages = messageList.get.response.aiV5.model();
+
+      // We expect 3 messages: tool-call assistant, tool result, final assistant
+      expect(responseMessages).toHaveLength(3);
+
+      // First message: assistant with tool-call
+      expect(responseMessages[0].role).toBe('assistant');
+      expect(responseMessages[0].content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'tool-call' })]),
+      );
+
+      // Second message: tool result
+      expect(responseMessages[1].role).toBe('tool');
+      expect(responseMessages[1].content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'tool-result' })]),
+      );
+
+      // Third message: final assistant response
+      expect(responseMessages[2].role).toBe('assistant');
+      expect(responseMessages[2].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text' })]));
+    });
+  });
+
   describe('add message', () => {
     it('should skip over system messages that are retrieved from the db', async () => {
       // this is to fix a bug detailed in https://github.com/mastra-ai/mastra/issues/6689

@@ -278,7 +278,7 @@ export class MastraModelOutput extends MastraBase {
 
                 response = {
                   ...otherMetadata,
-                  messages: chunk.payload.messages?.nonUser ?? [],
+                  messages: messageList.get.response.aiV5.model(),
                 };
               }
 
@@ -578,7 +578,6 @@ export class MastraModelOutput extends MastraBase {
             // to ensure all of the delayed promises had a chance to resolve or reject already
             // Avoids promises hanging forever
             Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
-              console.log(key, promise.status.type);
               if (promise.status.type === 'pending') {
                 promise.reject(new Error(`Stream ${key} terminated unexpectedly`));
               }
