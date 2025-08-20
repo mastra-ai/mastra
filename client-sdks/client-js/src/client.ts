@@ -47,6 +47,7 @@ import type {
   SaveScoreParams,
   SaveScoreResponse,
 } from './types';
+import type { ScoringSource } from '@mastra/core/scores';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
@@ -535,8 +536,13 @@ export class MastraClient extends BaseResource {
    * Retrieves all available scorers
    * @returns Promise containing list of available scorers
    */
-  public getScorers(): Promise<Record<string, GetScorerResponse>> {
-    return this.request('/api/scores/scorers');
+  public getScorers(params?: { source?: ScoringSource }): Promise<Record<string, GetScorerResponse>> {
+    const searchParams = new URLSearchParams();
+    if (params?.source) {
+      searchParams.set('source', params.source);
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/scores/scorers${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -549,7 +555,7 @@ export class MastraClient extends BaseResource {
   }
 
   public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
-    const { page, perPage, scorerId, entityId, entityType } = params;
+    const { page, perPage, scorerId, entityId, entityType, source } = params;
     const searchParams = new URLSearchParams();
 
     if (entityId) {
@@ -557,6 +563,9 @@ export class MastraClient extends BaseResource {
     }
     if (entityType) {
       searchParams.set('entityType', entityType);
+    }
+    if (source) {
+      searchParams.set('source', source);
     }
 
     if (page !== undefined) {
