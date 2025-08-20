@@ -849,11 +849,6 @@ CRITICAL INSTRUCTIONS:
 4. **Variable vs file names**: A variable name might differ from file name (e.g., filename: ./downloaderTool.ts, export const fetcherTool(...))
 5. **File copying**: Most files are already copied programmatically. Only use copyFile tool for edge cases where additional files are needed
 
-MASTRA INDEX FILE HANDLING (src/mastra/index.ts):
-- Do NOT create a new index file with writeFile.
-- If the index file is missing, use copyFile to copy src/mastra/index.ts from the template.
-- If the index file exists, update it using multiEdit (add imports and registrations). Do not overwrite.
-
 KEY RESPONSIBILITIES:
 1. Resolve any conflicts from the programmatic copy step
 2. Register components in existing Mastra index file (agents, workflows, networks, mcp-servers)
@@ -862,18 +857,6 @@ KEY RESPONSIBILITIES:
 5. Ensure TypeScript imports and exports are correct
 6. Validate integration works properly
 7. Copy additional files ONLY if needed for conflict resolution or missing dependencies
-
-MASTRA-SPECIFIC INTEGRATION:
-- Agents: Register in existing Mastra index file
-- Workflows: Register in existing Mastra index file
-- Networks: Register in existing Mastra index file
-- MCP servers: Register in existing Mastra index file
-- Tools: Copy to ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} but DO NOT register in existing Mastra index file
-
-EDGE CASE FILE COPYING:
-- IF a file for a resource does not exist in the target project AND was not programmatically copied, you can use copyFile tool
-- When taking files from template, ensure you get the right file name and path
-- Only copy files that are actually needed for the integration to work
 
 NAMING CONVENTION GUIDANCE:
 When fixing imports or understanding naming patterns, use these examples:
@@ -891,6 +874,38 @@ When fixing imports or understanding naming patterns, use these examples:
 - Files like "WeatherAgent.ts", "ChatAgent.ts" → use PascalCase
 
 **Key Rule:** Keep variable/export names unchanged - only adapt file names and import paths
+
+MASTRA INDEX FILE HANDLING (src/mastra/index.ts)
+
+1. **Verify the file exists**
+   - Call readFile.
+   - If it fails with ENOENT (or listDirectory shows it missing) -> copyFile the template version to src/mastra/index.ts, then confirm it now exists.
+
+2. **Edit the file**
+   - Always work with the full file content.
+   - Generate the complete, correct source (imports, anchors, registrations, formatting).
+
+3. **De-duplication & Anchors**
+   - When generating the new content, ensure you do not duplicate existing imports or object entries.
+   - If required anchors (e.g., agents: {) are missing, add them while generating the new content, just before the closing brace.
+
+4. **Validation**
+   - After writing, re-read the file to confirm the expected anchors and entries are present.
+
+CRITICAL: ALWAYS use writeFile to update the mastra/index.ts file when needed to register new components.
+
+MASTRA-SPECIFIC REGISTRATION:
+- Agents: Register in existing Mastra index file
+- Workflows: Register in existing Mastra index file
+- Networks: Register in existing Mastra index file
+- MCP servers: Register in existing Mastra index file
+- Tools: Copy to ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} but DO NOT register in existing Mastra index file
+- If an anchor (e.g., "agents: {") is not found, avoid complex restructuring; instead, insert the missing anchor on a new line (e.g., add "agents: {" just before the closing brace of the Mastra config) and then proceed with the other registrations.
+
+EDGE CASE FILE COPYING:
+- IF a file for a resource does not exist in the target project AND was not programmatically copied, you can use copyFile tool
+- When taking files from template, ensure you get the right file name and path
+- Only copy files that are actually needed for the integration to work
 
 Template information:
 - Slug: ${slug}
@@ -919,6 +934,13 @@ Template information:
       // Add registration tasks for successfully copied files
       const registrableKinds = new Set(['agent', 'workflow', 'network', 'mcp-server']);
       const registrableFiles = copiedFiles.filter(f => registrableKinds.has(f.unit.kind as any));
+      const targetMastraIndex = resolve(targetPath, 'src/mastra/index.ts');
+      const mastraIndexExists = existsSync(targetMastraIndex);
+      console.log(`Mastra index exists: ${mastraIndexExists} at ${targetMastraIndex}`);
+      console.log(
+        'Registrable components:',
+        registrableFiles.map(f => `${f.unit.kind}:${f.unit.id}`),
+      );
       if (registrableFiles.length > 0) {
         tasks.push({
           id: 'register-components',
