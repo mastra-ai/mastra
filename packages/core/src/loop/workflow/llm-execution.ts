@@ -86,17 +86,19 @@ async function processOutputStream({
     // Streaming
     if (chunk.type !== 'text-delta' && chunk.type !== 'tool-call' && runState.state.isStreaming) {
       if (runState.state.textDeltas.length) {
+        const textStartPayload = chunk.payload as TextStartPayload;
+        const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
+
         messageList.add(
           {
             id: messageId,
             role: 'assistant',
             content: [
-              ((chunk.payload as TextStartPayload).providerMetadata ?? runState.state.providerOptions)
+              providerMetadata
                 ? {
                     type: 'text',
                     text: runState.state.textDeltas.join(''),
-                    providerOptions:
-                      (chunk.payload as TextStartPayload).providerMetadata ?? runState.state.providerOptions,
+                    providerOptions: providerMetadata,
                   }
                 : {
                     type: 'text',
@@ -161,7 +163,7 @@ async function processOutputStream({
 
       case 'tool-call-delta': {
         const tool =
-          tools?.[chunk.payload.toolName!] ||
+          tools?.[chunk.payload.toolName || ''] ||
           Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
 
         if (tool && 'onInputDelta' in tool) {
