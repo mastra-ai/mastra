@@ -43,7 +43,6 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } f
 import { runScorer } from '../scores/hooks';
 import { AISDKV5OutputStream } from '../stream/aisdk/v5/output';
 import { MastraModelOutput } from '../stream/base/output';
-import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
@@ -3247,11 +3246,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): ReturnType<MastraModelOutput['getFullOutput']> {
+  ): Promise<
+    FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput['getFullOutput']>>
+  > {
     const result = await this.streamVNext(messages, options);
 
     if (result.tripwire) {
-      return result as unknown as ReturnType<MastraModelOutput['getFullOutput']>;
+      return result as unknown as FORMAT extends 'aisdk'
+        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+        : Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
     }
 
     let fullOutput = await result.getFullOutput();
@@ -3262,7 +3267,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       throw error;
     }
 
-    return fullOutput;
+    return fullOutput as unknown as FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
   }
 
   async streamVNext<
