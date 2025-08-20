@@ -161,64 +161,88 @@ Define the `output` shape using [Zod](https://zod.dev/):
 ```typescript showLineNumbers copy
 import { z } from "zod";
 
-const response = await testAgent.generate("Monkey, Ice Cream, Boat", {
-  experimental_output: z.object({
-    summary: z.string(),
-    keywords: z.array(z.string())
-  })
-});
+const response = await testAgent.generate(
+  [
+    {
+      role: "system",
+      content: "Provide a summary and keywords for the following text:"
+    },
+    {
+      role: "user",
+      content: "Monkey, Ice Cream, Boat"
+    }
+  ],
+  {
+    output: z.object({
+      summary: z.string(),
+      keywords: z.array(z.string())
+    })
+  }
+);
 
 console.log(response.object);
 ```
 
 ### Using Tools
 
-If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` or `structuredOutput` property instead of `output`. Here's how:
+If you need to generate structured output with agents that use tools, you'll need to use the `experimental_output` or `structuredOutput` property instead of `output`.
+
+#### `experimental_output`
+
+Define the `experimental_output` shape using [Zod](https://zod.dev/):
 
 ```typescript showLineNumbers copy
-const response = await testAgent.generate("Monkey, Ice Cream, Boat", {
-  experimental_output: z.object({
-    summary: z.string(),
-    keywords: z.array(z.string())
-  })
-});
+import { z } from "zod";
 
-const responseWithExperimentalOutput = await testAgent.generate(
+const response = await testAgent.generate(
   [
     {
-      role: "user",
-      content:
-        "Please analyze this repository and provide a summary and keywords...",
+      role: "system",
+      content: "Provide a summary and keywords for the following text:"
     },
-  ],
-  {
-    // Use experimental_output to enable both structured output and tool calls
-    experimental_output: schema,
-  },
-);
-
-console.log("Structured Output:", responseWithExperimentalOutput.object);
-
-const responseWithStructuredOutput = await testAgent.generate(
-  [
     {
       role: "user",
-      content:
-        "Please analyze this repository and provide a summary and keywords...",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string())
-      }),
-      model: openai("gpt-4o-mini"),
+      content: "Monkey, Ice Cream, Boat"
     }
-  },
+  ],
+  {
+    experimental_output: z.object({
+      summary: z.string(),
+      keywords: z.array(z.string())
+    })
+  }
 );
 
-console.log("Structured Output:", responseWithStructuredOutput.object);
+console.log(response.object);
+```
+
+#### `structuredOutput`
+
+Define the `structuredOutput` shape using [Zod](https://zod.dev/):
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+
+const response = await testAgent.generate(
+  [
+    {
+      role: "system",
+      content: "Provide a summary and keywords for the following text:"
+    },
+    {
+      role: "user",
+      content: "Monkey, Ice Cream, Boat"
+    }
+  ],
+  {
+    structuredOutput: z.object({
+      summary: z.string(),
+      keywords: z.array(z.string())
+    })
+  }
+);
+
+console.log(response.object);
 ```
 
 ## Describing images
