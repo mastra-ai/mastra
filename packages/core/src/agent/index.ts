@@ -3275,7 +3275,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   async streamVNext<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' = 'mastra',
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
