@@ -54,8 +54,8 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
             )}
             {modelVersion === 'v2' && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="generate-vnext" id="generate-vnext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="generate-vnext">
+                <RadioGroupItem value="generateVNext" id="generateVNext" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generateVNext">
                   Generate vNext
                 </Label>
               </div>
@@ -70,8 +70,8 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
             )}
             {modelVersion === 'v2' && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="stream-vnext" id="stream-vnext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="stream-vnext">
+                <RadioGroupItem value="streamVNext" id="streamVNext" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="streamVNext">
                   Stream vNext
                 </Label>
               </div>
