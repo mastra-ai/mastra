@@ -23,7 +23,13 @@ type AISDKV5OutputStreamOptions = {
 
 type FullStreamType<T> = T extends undefined
   ? ReadableStream<TextStreamPart<ToolSet>>
-  : ReadableStream<ObjectStreamPart<T extends z.ZodSchema ? Partial<z.infer<T>> : T>>;
+  : ReadableStream<
+      | TextStreamPart<ToolSet>
+      | {
+          type: 'object';
+          object: T extends z.ZodSchema ? Partial<z.infer<T>> : unknown;
+        }
+    >;
 
 export class AISDKV5OutputStream<TObjectSchema = undefined> {
   #modelOutput: MastraModelOutput;
