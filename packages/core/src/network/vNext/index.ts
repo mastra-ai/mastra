@@ -644,38 +644,80 @@ export class NewAgentNetwork extends MastraBase {
           type: 'tool-call-streaming-start',
           ...toolData,
         });
-        const { fullStream } = await agent.stream(inputData.prompt, {
-          // resourceId: inputData.resourceId,
-          // threadId: inputData.threadId,
-          runtimeContext: runtimeContextToUse,
-          onFinish: result => {
-            streamPromise.resolve(result.text);
-          },
-        });
 
-        for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
+        const model = await agent.getModel();
 
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-              break;
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
+        let result;
+
+        if (model.specificationVersion === 'v2') {
+          result = await agent.streamVNext(inputData.prompt, {
+            // resourceId: inputData.resourceId,
+            // threadId: inputData.threadId,
+            runtimeContext: runtimeContextToUse,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+          });
+
+          for await (const chunk of result.fullStream) {
+            switch (chunk.type) {
+              case 'text-delta':
+                await emitter.emit('watch-v2', {
+                  type: 'tool-call-delta',
+                  ...toolData,
+                  argsTextDelta: chunk.payload.text,
+                });
+                break;
+
+              case 'step-start':
+              case 'step-finish':
+              case 'finish':
+              case 'tool-call':
+              case 'tool-result':
+              case 'tool-call-input-streaming-start':
+              case 'tool-call-delta':
+                break;
+              case 'source':
+              case 'file':
+              default:
+                await emitter.emit('watch-v2', chunk);
+                break;
+            }
+          }
+        } else {
+          result = await agent.stream(inputData.prompt, {
+            // resourceId: inputData.resourceId,
+            // threadId: inputData.threadId,
+            runtimeContext: runtimeContextToUse,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+          });
+
+          for await (const chunk of result.fullStream) {
+            switch (chunk.type) {
+              case 'text-delta':
+                await emitter.emit('watch-v2', {
+                  type: 'tool-call-delta',
+                  ...toolData,
+                  argsTextDelta: chunk.textDelta,
+                });
+                break;
+
+              case 'step-start':
+              case 'step-finish':
+              case 'finish':
+              case 'tool-call':
+              case 'tool-result':
+              case 'tool-call-streaming-start':
+              case 'tool-call-delta':
+                break;
+              case 'source':
+              case 'file':
+              default:
+                await emitter.emit('watch-v2', chunk);
+                break;
+            }
           }
         }
 

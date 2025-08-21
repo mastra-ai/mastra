@@ -1,5 +1,17 @@
 # mastra
 
+## 0.10.22-alpha.5
+
+### Patch Changes
+
+- 9ce22c5: Fix swagger-ui link
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+  - @mastra/core@0.14.0-alpha.6
+  - @mastra/deployer@0.14.0-alpha.6
+
 ## 0.10.22-alpha.4
 
 ### Patch Changes

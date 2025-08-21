@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-loop code and tests
+Stream vnext agent-network
