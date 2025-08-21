@@ -503,6 +503,7 @@ export class EventedRun<
     };
 
     this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+      console.log('execution_results', result);
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
@@ -647,6 +648,7 @@ export class EventedRun<
   async cancel() {
     await this.mastra?.pubsub.publish('workflows', {
       type: 'workflow.cancel',
+      runId: this.runId,
       data: {
         workflowId: this.workflowId,
         runId: this.runId,
@@ -657,6 +659,7 @@ export class EventedRun<
   async sendEvent(eventName: string, data: any) {
     await this.mastra?.pubsub.publish('workflows', {
       type: `workflow.user-event.${eventName}`,
+      runId: this.runId,
       data: {
         workflowId: this.workflowId,
         runId: this.runId,

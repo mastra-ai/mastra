@@ -32,6 +32,7 @@ export async function processWorkflowWaitForEvent(
 
   await pubsub.publish('workflows', {
     type: 'workflow.step.run',
+    runId: workflowData.runId,
     data: {
       workflowId: workflowData.workflowId,
       runId: workflowData.runId,
@@ -73,6 +74,7 @@ export async function processWorkflowSleep(
   const startedAt = Date.now();
   await pubsub.publish(`workflow.events.v2.${runId}`, {
     type: 'watch',
+    runId,
     data: {
       type: 'step-waiting',
       payload: {
@@ -99,6 +101,7 @@ export async function processWorkflowSleep(
     async () => {
       await pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-result',
           payload: {
@@ -114,6 +117,7 @@ export async function processWorkflowSleep(
 
       await pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-finish',
           payload: {
@@ -125,6 +129,7 @@ export async function processWorkflowSleep(
 
       await pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           workflowId,
           runId,
@@ -180,6 +185,7 @@ export async function processWorkflowSleepUntil(
 
   await pubsub.publish(`workflow.events.v2.${runId}`, {
     type: 'watch',
+    runId,
     data: {
       type: 'step-waiting',
       payload: {
@@ -195,6 +201,7 @@ export async function processWorkflowSleepUntil(
     async () => {
       await pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-result',
           payload: {
@@ -210,6 +217,7 @@ export async function processWorkflowSleepUntil(
 
       await pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-finish',
           payload: {
@@ -221,6 +229,7 @@ export async function processWorkflowSleepUntil(
 
       await pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           workflowId,
           runId,

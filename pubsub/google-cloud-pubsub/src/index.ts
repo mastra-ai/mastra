@@ -1,5 +1,5 @@
-import { PubSub as PubSubClient, Subscription } from '@google-cloud/pubsub';
-import type { ClientConfig } from '@google-cloud/pubsub';
+import { PubSub as PubSubClient } from '@google-cloud/pubsub';
+import type { ClientConfig, Message, Subscription } from '@google-cloud/pubsub';
 import { PubSub } from '@mastra/core/events';
 import type { Event } from '@mastra/core/events';
 
@@ -7,10 +7,22 @@ export class GoogleCloudPubSub extends PubSub {
   private pubsub: PubSubClient;
   private ackBuffer: Record<string, Promise<any>> = {};
   private activeSubscriptions: Record<string, Subscription> = {};
+  private activeCbs: Record<string, Set<(event: Event, ack: () => Promise<void>) => void>> = {};
 
   constructor(config: ClientConfig) {
     super();
     this.pubsub = new PubSubClient(config);
+  }
+
+  async ackMessage(topic: string, message: Message) {
+    try {
+      const ackResponse = Promise.race([message.ackWithResponse(), new Promise(resolve => setTimeout(resolve, 5000))]);
+      this.ackBuffer[topic + '-' + message.id] = ackResponse.catch(() => {});
+      await ackResponse;
+      delete this.ackBuffer[topic + '-' + message.id];
+    } catch (e) {
+      console.error('Error acking message', e);
+    }
   }
 
   async init(topicName: string) {
@@ -24,6 +36,7 @@ export class GoogleCloudPubSub extends PubSub {
         enableMessageOrdering: true,
         enableExactlyOnceDelivery: topicName === 'workflows' ? true : false,
       });
+      this.activeSubscriptions[topicName] = sub[0];
     } catch (error) {
       console.log('subscription already exists?', error);
     }
@@ -32,6 +45,7 @@ export class GoogleCloudPubSub extends PubSub {
   async destroy(topicName: string) {
     delete this.activeSubscriptions[topicName];
     this.pubsub.subscription(topicName).removeAllListeners();
+    await this.pubsub.subscription(topicName).close();
     await this.pubsub.subscription(topicName).delete();
     await this.pubsub.topic(topicName).delete();
   }
@@ -80,28 +94,37 @@ export class GoogleCloudPubSub extends PubSub {
     const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(topic);
     this.activeSubscriptions[topic] = subscription;
 
-    subscription.on('message', message => {
+    const activeCbs = this.activeCbs[topic] ?? new Set();
+    activeCbs.add(cb);
+    this.activeCbs[topic] = activeCbs;
+
+    if (subscription.isOpen) {
+      return;
+    }
+
+    subscription.on('message', async message => {
+      console.log('message received', topic, message.id, message.data.toString());
       const event = JSON.parse(message.data.toString()) as Event;
       try {
-        cb(event, async () => {
-          if (runId) {
-            if (runId !== event.data.runId) {
-              return;
-            }
+        if (runId) {
+          if (runId !== event.runId) {
+            console.log('runId mismatch', runId, event);
+            await this.ackMessage(topic, message);
+            return;
           }
+        }
 
-          try {
-            const ackResponse = Promise.race([
-              message.ackWithResponse(),
-              new Promise(resolve => setTimeout(resolve, 5000)),
-            ]);
-            this.ackBuffer[topic + '-' + message.id] = ackResponse.catch(() => {});
-            await ackResponse;
-            delete this.ackBuffer[topic + '-' + message.id];
-          } catch (e) {
-            console.error('Error acking message', e);
-          }
-        });
+        const activeCbs = this.activeCbs[topic] ?? [];
+        console.log('activeCbs', activeCbs);
+        for (const cb of activeCbs) {
+          cb(event, async () => {
+            try {
+              await this.ackMessage(topic, message);
+            } catch (e) {
+              console.error('Error acking message', e);
+            }
+          });
+        }
       } catch (error) {
         console.error('Error processing event', error);
       }
@@ -124,8 +147,14 @@ export class GoogleCloudPubSub extends PubSub {
 
   async unsubscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
     const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(topic);
-    subscription.removeListener('message', cb);
-    await subscription.close();
+    const activeCbs = this.activeCbs[topic] ?? new Set();
+    activeCbs.delete(cb);
+    this.activeCbs[topic] = activeCbs;
+
+    if (activeCbs.size === 0) {
+      subscription.removeListener('message', cb);
+      await subscription.close();
+    }
   }
 
   async flush(): Promise<void> {

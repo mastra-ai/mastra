@@ -49,6 +49,7 @@ export async function processWorkflowLoop(
     if (loopCondition) {
       await pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        runId,
         data: {
           parentWorkflow,
           workflowId,
@@ -65,6 +66,7 @@ export async function processWorkflowLoop(
     } else {
       await pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           parentWorkflow,
           workflowId,
@@ -84,6 +86,7 @@ export async function processWorkflowLoop(
     if (loopCondition) {
       await pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           parentWorkflow,
           workflowId,
@@ -101,6 +104,7 @@ export async function processWorkflowLoop(
     } else {
       await pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        runId,
         data: {
           parentWorkflow,
           workflowId,
@@ -154,6 +158,7 @@ export async function processWorkflowForEach(
   if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
+      runId,
       data: {
         parentWorkflow,
         workflowId,
@@ -195,6 +200,7 @@ export async function processWorkflowForEach(
     for (let i = 0; i < concurrency; i++) {
       await pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           parentWorkflow,
           workflowId,
@@ -229,6 +235,7 @@ export async function processWorkflowForEach(
 
   await pubsub.publish('workflows', {
     type: 'workflow.step.run',
+    runId,
     data: {
       parentWorkflow,
       workflowId,

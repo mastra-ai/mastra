@@ -37,6 +37,7 @@ export async function processWorkflowParallel(
     step.steps.map(async (_step, idx) => {
       return pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           workflowId,
           runId,
@@ -101,6 +102,7 @@ export async function processWorkflowConditional(
         }
         return pubsub.publish('workflows', {
           type: 'workflow.step.run',
+          runId,
           data: {
             workflowId,
             runId,
@@ -117,6 +119,7 @@ export async function processWorkflowConditional(
       } else {
         return pubsub.publish('workflows', {
           type: 'workflow.step.end',
+          runId,
           data: {
             workflowId,
             runId,

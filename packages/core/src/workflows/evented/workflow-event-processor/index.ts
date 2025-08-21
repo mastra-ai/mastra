@@ -68,6 +68,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   ) {
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.fail',
+      runId,
       data: {
         workflowId,
         runId,
@@ -139,6 +140,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.run',
+      runId,
       data: {
         parentWorkflow,
         workflowId,
@@ -169,6 +171,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.mastra.pubsub.publish(`workflow.events.${runId}`, {
       type: 'watch',
+      runId,
       data: {
         type: 'watch',
         payload: {
@@ -186,6 +189,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
       type: 'watch',
+      runId,
       data: {
         type: 'finish',
         payload: {
@@ -196,17 +200,19 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.end',
+      runId,
       data: { ...args, workflow: undefined },
     });
   }
 
   protected async processWorkflowEnd(args: ProcessorArgs) {
-    const { workflowId, resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runtimeContext } = args;
+    const { resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runtimeContext, runId } = args;
 
     // handle nested workflow
     if (parentWorkflow) {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        runId,
         data: {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
@@ -225,6 +231,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.end',
+      runId,
       data: { ...args, workflow: undefined },
     });
   }
@@ -237,6 +244,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (parentWorkflow) {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        runId,
         data: {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
@@ -266,6 +274,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.suspend',
+      runId,
       data: { ...args, workflow: undefined },
     });
   }
@@ -287,6 +296,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (parentWorkflow) {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        runId,
         data: {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
@@ -305,6 +315,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.fail',
+      runId,
       data: { ...args, workflow: undefined },
     });
   }
@@ -484,6 +495,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-waiting',
           payload: {
@@ -582,6 +594,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.resume',
+          runId,
           data: {
             workflowId: step.step.id,
             parentWorkflow: {
@@ -607,6 +620,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       } else {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.start',
+          runId,
           data: {
             workflowId: step.step.id,
             parentWorkflow: {
@@ -636,6 +650,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (step.type === 'step' || step.type === 'waitForEvent') {
       await this.mastra.pubsub.publish(`workflow.events.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'watch',
           payload: {
@@ -653,6 +668,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-start',
           payload: {
@@ -669,6 +685,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     ee.on('watch-v2', async (event: any) => {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: event,
       });
     });
@@ -721,6 +738,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (runCount >= (workflow.retryConfig.attempts ?? 0)) {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
+          runId,
           data: {
             parentWorkflow,
             workflowId,
@@ -736,6 +754,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       } else {
         return this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.run',
+          runId,
           data: {
             parentWorkflow,
             workflowId,
@@ -778,6 +797,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        runId,
         data: {
           parentWorkflow,
           workflowId,
@@ -894,6 +914,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (!prevResult?.status || prevResult.status === 'failed') {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.fail',
+        runId,
         data: {
           workflowId,
           runId,
@@ -927,6 +948,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.suspend',
+        runId,
         data: {
           workflowId,
           runId,
@@ -942,6 +964,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       await this.mastra.pubsub.publish(`workflow.events.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'watch',
           payload: {
@@ -957,6 +980,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-suspended',
           payload: {
@@ -974,6 +998,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (step?.type === 'step' || step?.type === 'waitForEvent') {
       await this.mastra.pubsub.publish(`workflow.events.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'watch',
           payload: {
@@ -991,6 +1016,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'step-result',
           payload: {
@@ -1003,6 +1029,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (prevResult.status === 'success') {
         await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
           type: 'watch',
+          runId,
           data: {
             type: 'step-finish',
             payload: {
@@ -1041,6 +1068,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        runId,
         data: {
           parentWorkflow,
           workflowId,
@@ -1056,6 +1084,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else if (step?.type === 'foreach') {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           workflowId,
           runId,
@@ -1084,6 +1113,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else {
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.run',
+        runId,
         data: {
           workflowId,
           runId,
@@ -1163,6 +1193,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       const { runId } = workflowData;
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
+        runId,
         data: {
           type: 'start',
           payload: {

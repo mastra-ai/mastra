@@ -15,6 +15,8 @@ import { GoogleCloudPubSub } from '.';
 
 const testStorage = new MockStore();
 
+let testRunIdCounter = 0;
+
 describe.sequential(
   'Workflow',
   () => {
@@ -82,7 +84,7 @@ describe.sequential(
         });
         await mastra.startEventListeners();
 
-        const runId = 'test-run-id';
+        const runId = `test-run-id-${testRunIdCounter++}`;
         let watchData: StreamEvent[] = [];
         const run = await workflow.createRunAsync({
           runId,
@@ -103,7 +105,7 @@ describe.sequential(
         expect(watchData).toMatchObject([
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'start',
           },
@@ -163,7 +165,7 @@ describe.sequential(
           },
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'finish',
           },
@@ -189,7 +191,7 @@ describe.sequential(
       });
 
       // TODO: fix this test
-      it.skip('should handle basic suspend and resume flow', async () => {
+      it('should handle basic suspend and resume flow', async () => {
         const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
         const promptAgentAction = vi
           .fn()
@@ -275,21 +277,24 @@ describe.sequential(
         const { stream, getWorkflowState } = await run.streamAsync({ inputData: { input: 'test' } });
 
         for await (const data of stream) {
+          console.log('chunk', data);
           if (data.type === 'step-suspended') {
             expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
             // make it async to show that execution is not blocked
-            setImmediate(() => {
+            setTimeout(() => {
               const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
               run.resume({ resumeData: resumeData as any, step: promptAgent });
-            });
+            }, 200);
             expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
           }
         }
 
         expect(evaluateToneAction).toHaveBeenCalledTimes(1);
 
+        console.log('getWorkflowState');
         const resumeResult = await getWorkflowState();
+        console.log('resumeResult', resumeResult);
 
         expect(resumeResult.steps).toEqual({
           input: { input: 'test' },
@@ -434,8 +439,9 @@ describe.sequential(
           .then(agentStep2)
           .commit();
 
+        const runId = `test-run-id-${testRunIdCounter++}`;
         const run = await workflow.createRunAsync({
-          runId: 'test-run-id',
+          runId,
         });
         const { stream } = await run.streamAsync({
           inputData: {
@@ -445,6 +451,7 @@ describe.sequential(
         });
 
         const values: StreamEvent[] = [];
+        console.log('wf_stream');
         for await (const value of stream.values()) {
           values.push(value);
         }
@@ -452,7 +459,7 @@ describe.sequential(
         expect(values).toMatchObject([
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'start',
           },
@@ -631,7 +638,7 @@ describe.sequential(
           },
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'finish',
           },
@@ -674,7 +681,7 @@ describe.sequential(
         await mastra.startEventListeners();
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        const runId = 'test-run-id';
+        const runId = `test-run-id-${testRunIdCounter++}`;
         let watchData: StreamEvent[] = [];
         const run = await workflow.createRunAsync({
           runId,
@@ -699,7 +706,7 @@ describe.sequential(
         expect(watchData).toMatchObject([
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'start',
           },
@@ -791,7 +798,7 @@ describe.sequential(
           },
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'finish',
           },
@@ -851,7 +858,7 @@ describe.sequential(
         });
         await mastra.startEventListeners();
 
-        const runId = 'test-run-id';
+        const runId = `test-run-id-${testRunIdCounter++}`;
         let watchData: StreamEvent[] = [];
         const run = await workflow.createRunAsync({
           runId,
@@ -880,7 +887,7 @@ describe.sequential(
         expect(watchData).toMatchObject([
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'start',
           },
@@ -938,7 +945,7 @@ describe.sequential(
           },
           {
             payload: {
-              runId: 'test-run-id',
+              runId,
             },
             type: 'finish',
           },
@@ -968,7 +975,7 @@ describe.sequential(
       });
     });
 
-    describe.sequential.only('Basic Workflow Execution', () => {
+    describe.sequential('Basic Workflow Execution', () => {
       it('should be able to bail workflow execution', async () => {
         const step1 = createStep({
           id: 'step1',
@@ -3573,7 +3580,7 @@ describe.sequential(
       });
     });
 
-    describe.sequential.only('if-else branching', () => {
+    describe.sequential('if-else branching', () => {
       it('should run the if-then branch', async () => {
         const start = vi.fn().mockImplementation(async ({ inputData }) => {
           // Get the current value (either from trigger or previous increment)
