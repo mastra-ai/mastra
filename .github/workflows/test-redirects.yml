@@ -23,7 +23,9 @@ jobs:
   test-redirects:
     name: Test Redirects and Locale Handling
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      pull-requests: write
     defaults:
       run:
         working-directory: docs
