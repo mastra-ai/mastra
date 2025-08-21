@@ -1,5 +1,12 @@
 # @mastra/mcp
 
+## 0.10.12-alpha.2
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.10.12-alpha.1
 
 ### Patch Changes

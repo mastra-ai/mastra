@@ -1,5 +1,15 @@
 # @mastra/rag
 
+## 1.1.0-alpha.1
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.7
+
 ## 1.0.9-alpha.0
 
 ### Patch Changes

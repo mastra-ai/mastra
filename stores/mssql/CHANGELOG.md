@@ -1,5 +1,12 @@
 # @mastra/mssql
 
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # @mastra/lance
 
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.2.5
 
 ### Patch Changes
