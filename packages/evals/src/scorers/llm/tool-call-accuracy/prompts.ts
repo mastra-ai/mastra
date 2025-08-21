@@ -46,7 +46,7 @@ You are evaluating whether an AI agent made appropriate tool choices for a user 
 
 USER REQUEST: "${userInput}"
 AGENT RESPONSE: "${agentResponse}"
-TOOLS THE AGENT ACTUALLY CALLED: ${toolsCalled.length > 0 ? toolsCalled.join(', ') : "None"}
+TOOLS THE AGENT ACTUALLY CALLED: ${toolsCalled.length > 0 ? toolsCalled.join(', ') : 'None'}
 
 TOOL REFERENCE:
 ${availableTools}

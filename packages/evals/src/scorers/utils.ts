@@ -139,9 +139,7 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
     if (message?.toolInvocations) {
       for (let invocationIndex = 0; invocationIndex < message.toolInvocations.length; invocationIndex++) {
         const invocation = message.toolInvocations[invocationIndex];
-        if (invocation &&
-            invocation.toolName &&
-            (invocation.state === 'result' || invocation.state === 'call')) {
+        if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
           toolCalls.push(invocation.toolName);
           toolCallInfos.push({
             toolName: invocation.toolName,
@@ -162,8 +160,5 @@ export const extractInputMessages = (runInput: ScorerRunInputForAgent | undefine
 };
 
 export const extractAgentResponseMessages = (runOutput: ScorerRunOutputForAgent): string[] => {
-  return runOutput
-    .filter((msg) => msg.role === 'assistant')
-    .map((msg) => msg.content);
+  return runOutput.filter(msg => msg.role === 'assistant').map(msg => msg.content);
 };
-

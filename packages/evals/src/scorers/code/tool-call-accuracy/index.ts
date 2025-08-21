@@ -64,20 +64,16 @@ function calculateAccuracy({
 }
 
 export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOptions) {
-  const {
-    expectedTool,
-    strictMode = false,
-    expectedToolOrder,
-  } = options;
+  const { expectedTool, strictMode = false, expectedToolOrder } = options;
 
   if (!expectedTool && !expectedToolOrder) {
     throw new Error('Either expectedTool or expectedToolOrder must be provided');
   }
 
   const getDescription = () => {
-    return expectedToolOrder ?
-      `Evaluates whether the LLM called tools in the correct order: [${expectedToolOrder.join(', ')}]` :
-      `Evaluates whether the LLM selected the correct tool (${expectedTool}) from the available tools`;
+    return expectedToolOrder
+      ? `Evaluates whether the LLM called tools in the correct order: [${expectedToolOrder.join(', ')}]`
+      : `Evaluates whether the LLM selected the correct tool (${expectedTool}) from the available tools`;
   };
 
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
@@ -94,11 +90,11 @@ export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOption
 
       const { tools: actualTools, toolCallInfos } = extractToolCalls(run.output);
 
-      const correctToolCalled = expectedTool ? 
-        (strictMode ? 
-          (actualTools.length === 1 && actualTools[0] === expectedTool) : 
-          actualTools.includes(expectedTool)) : 
-        false;
+      const correctToolCalled = expectedTool
+        ? strictMode
+          ? actualTools.length === 1 && actualTools[0] === expectedTool
+          : actualTools.includes(expectedTool)
+        : false;
 
       return {
         expectedTool,
