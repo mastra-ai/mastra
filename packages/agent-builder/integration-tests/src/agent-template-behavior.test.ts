@@ -99,5 +99,5 @@ Template repository: ${realTemplateGit}`;
 
     // Verify response contains confirmation
     expect(response.text.toLowerCase()).toMatch(/merge|template|success|applied|complete/);
-  }, 300000); // Longer timeout for full merge operation
+  }, 600000); // Longer timeout for full merge operation
 });

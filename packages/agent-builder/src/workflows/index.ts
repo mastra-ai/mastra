@@ -898,54 +898,32 @@ CONFLICTS TO RESOLVE:
 ${JSON.stringify(conflicts, null, 2)}
 
 CRITICAL INSTRUCTIONS:
-1. **When committing changes**: NEVER add dependency/build directories. Use specific file paths with 'git add'
-2. **Package management**: NO need to install packages (already handled by package merge step)
-3. **Validation**: When validation fails due to import issues, check existing files and imports for correct naming conventions
-4. **Variable vs file names**: A variable name might differ from file name (e.g., filename: ./downloaderTool.ts, export const fetcherTool(...))
-5. **File copying**: Most files are already copied programmatically. Only use copyFile tool for edge cases where additional files are needed
+1. **Package management**: NO need to install packages (already handled by package merge step)
+2. **File copying**: Most files are already copied programmatically. Only use copyFile tool for edge cases where additional files are needed for conflict resolution
 
 KEY RESPONSIBILITIES:
 1. Resolve any conflicts from the programmatic copy step
 2. Register components in existing Mastra index file (agents, workflows, networks, mcp-servers)
 3. DO NOT register tools in existing Mastra index file - tools should remain standalone
-4. Fix import path issues in copied files
-5. Ensure TypeScript imports and exports are correct
-6. Validate integration works properly
-7. Copy additional files ONLY if needed for conflict resolution or missing dependencies
+4. Copy additional files ONLY if needed for conflict resolution
 
-NAMING CONVENTION GUIDANCE:
-When fixing imports or understanding naming patterns, use these examples:
-
-**Import Path Patterns:**
-- camelCase files: import { myAgent } from './myAgent'
-- snake_case files: import { myAgent } from './my_agent'
-- kebab-case files: import { myAgent } from './my-agent'
-- PascalCase files: import { MyAgent } from './MyAgent'
-
-**Naming Detection Examples:**
-- Files like "weatherAgent.ts", "chatAgent.ts" → use camelCase
-- Files like "weather_agent.ts", "chat_agent.ts" → use snake_case  
-- Files like "weather-agent.ts", "chat-agent.ts" → use kebab-case
-- Files like "WeatherAgent.ts", "ChatAgent.ts" → use PascalCase
-
-**Key Rule:** Keep variable/export names unchanged - only adapt file names and import paths
-
-MASTRA INDEX FILE HANDLING (src/mastra/index.ts)
-
+MASTRA INDEX FILE HANDLING (src/mastra/index.ts):
 1. **Verify the file exists**
-   - Call readFile.
-   - If it fails with ENOENT (or listDirectory shows it missing) -> copyFile the template version to src/mastra/index.ts, then confirm it now exists.
+   - Call readFile
+   - If it fails with ENOENT (or listDirectory shows it missing) -> copyFile the template version to src/mastra/index.ts, then confirm it now exists
+   - Always verify after copying that the file exists and is accessible
 
 2. **Edit the file**
-   - Always work with the full file content.
-   - Generate the complete, correct source (imports, anchors, registrations, formatting).
+   - Always work with the full file content
+   - Generate the complete, correct source (imports, anchors, registrations, formatting)
+   - Keep existing registrations intact and maintain file structure
+   - Ensure proper spacing and organization of new additions
 
-3. **De-duplication & Anchors**
-   - When generating the new content, ensure you do not duplicate existing imports or object entries.
-   - If required anchors (e.g., agents: {) are missing, add them while generating the new content, just before the closing brace.
-
-4. **Validation**
-   - After writing, re-read the file to confirm the expected anchors and entries are present.
+3. **Handle anchors and structure**
+   - When generating new content, ensure you do not duplicate existing imports or object entries
+   - If required anchors (e.g., agents: {}) are missing, add them while generating the new content
+   - Add missing anchors just before the closing brace of the Mastra config
+   - Do not restructure or reorder existing anchors and registrations
 
 CRITICAL: ALWAYS use writeFile to update the mastra/index.ts file when needed to register new components.
 
@@ -957,10 +935,15 @@ MASTRA-SPECIFIC REGISTRATION:
 - Tools: Copy to ${AgentBuilderDefaults.DEFAULT_FOLDER_STRUCTURE.tool} but DO NOT register in existing Mastra index file
 - If an anchor (e.g., "agents: {") is not found, avoid complex restructuring; instead, insert the missing anchor on a new line (e.g., add "agents: {" just before the closing brace of the Mastra config) and then proceed with the other registrations.
 
-EDGE CASE FILE COPYING:
-- IF a file for a resource does not exist in the target project AND was not programmatically copied, you can use copyFile tool
-- When taking files from template, ensure you get the right file name and path
-- Only copy files that are actually needed for the integration to work
+CONFLICT RESOLUTION AND FILE COPYING:
+- Only copy files if needed to resolve specific conflicts
+- When copying files from template:
+  - Ensure you get the right file name and path
+  - Verify the destination directory exists
+  - Maintain the same relative path structure
+  - Only copy files that are actually needed
+- Preserve existing functionality when resolving conflicts
+- Focus on registration and conflict resolution, validation will happen in a later step
 
 Template information:
 - Slug: ${slug}
@@ -1195,6 +1178,9 @@ const validationAndFixStep = createStep({
    - ESLint issues
    - Import/export problems
    - Missing dependencies
+   - Index file structure and exports
+   - Component registration correctness
+   - Naming convention compliance
 
 2. **Fix validation errors systematically**:
    - Use readFile to examine files with errors
@@ -1202,16 +1188,42 @@ const validationAndFixStep = createStep({
    - Use listDirectory to understand project structure when fixing import paths
    - Update file contents to resolve TypeScript and linting issues
 
-3. **Re-validate after fixes** to ensure all issues are resolved
-
-4. **Focus on template integration issues**:
-   - Files were copied with new names based on unit IDs
-   - Original template imports may reference old filenames
-   - Missing imports in index files
-   - Incorrect file paths in imports
-   - Type mismatches after integration
-   - Missing exports in barrel files
+3. **Fix ALL template integration issues**:
+   - Fix import path issues in copied files
+   - Ensure TypeScript imports and exports are correct
+   - Validate integration works properly
+   - Fix files copied with new names based on unit IDs
+   - Update original template imports that reference old filenames
+   - Fix missing imports in index files
+   - Fix incorrect file paths in imports
+   - Fix type mismatches after integration
+   - Fix missing exports in barrel files
    - Use the COPIED FILES mapping below to fix import paths
+   - Fix any missing dependencies or module resolution issues
+
+4. **Validate index file structure**:
+   - Correct imports for all components
+   - Proper anchor structure (agents: {}, etc.)
+   - No duplicate registrations
+   - Correct export names and paths
+   - Proper formatting and organization
+
+5. **Follow naming conventions**:
+   Import paths:
+   - camelCase: import { myAgent } from './myAgent'
+   - snake_case: import { myAgent } from './my_agent'
+   - kebab-case: import { myAgent } from './my-agent'
+   - PascalCase: import { MyAgent } from './MyAgent'
+
+   File names:
+   - camelCase: weatherAgent.ts, chatAgent.ts
+   - snake_case: weather_agent.ts, chat_agent.ts
+   - kebab-case: weather-agent.ts, chat-agent.ts
+   - PascalCase: WeatherAgent.ts, ChatAgent.ts
+
+   Key Rule: Keep variable/export names unchanged, only adapt file names and import paths
+
+6. **Re-validate after fixes** to ensure all issues are resolved
 
 CRITICAL: Always validate the entire project first to get a complete picture of issues, then fix them systematically, and re-validate to confirm fixes worked.
 
