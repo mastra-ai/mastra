@@ -21,7 +21,11 @@ import resolveFrom from 'resolve-from';
 import { packageDirectory } from 'package-directory';
 import { checkConfigExport } from './babel/check-config-export';
 
-// TODO: Make thie extendable or find a rollup plugin that can do this
+interface DependencyMetadata {
+  exports: string[];
+}
+
+// TODO: Make this extendable or find a rollup plugin that can do this
 const globalExternals = [
   'pino',
   'pino-pretty',
@@ -78,7 +82,7 @@ function isRelativePath(id: string): boolean {
  * @param isVirtualFile - Whether the entry is a virtual file (content string) or a file path
  * @param platform - Target platform (node or browser)
  * @param logger - Logger instance for debugging
- * @returns Map of dependencies to optimize with their exported bindings
+ * @returns Map of dependencies to optimize with their metadata (exported bindings)
  */
 async function analyze(
   entry: string,
@@ -148,7 +152,13 @@ async function analyze(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = new Map(Object.entries(output[0].importedBindings));
+  const depsToOptimize = new Map<string, DependencyMetadata>();
+
+  for (const [dep, bindings] of Object.entries(output[0].importedBindings)) {
+    depsToOptimize.set(dep, { exports: bindings });
+  }
+
+  // const depsToOptimize = new Map(Object.entries(output[0].importedBindings));
   for (const dep of depsToOptimize.keys()) {
     if (isNodeBuiltin(dep)) {
       depsToOptimize.delete(dep);
@@ -168,7 +178,7 @@ async function analyze(
 
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
-        depsToOptimize.set(dynamicImport, ['*']);
+        depsToOptimize.set(dynamicImport, { exports: ['*'] });
       }
     }
   }
@@ -186,7 +196,7 @@ async function analyze(
  * @returns Object containing bundle output and reference map for validation
  */
 export async function bundleExternals(
-  depsToOptimize: Map<string, string[]>,
+  depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   logger: IMastraLogger,
   options?: {
@@ -206,7 +216,7 @@ export async function bundleExternals(
   const allExternals = [...globalExternals, ...customExternals];
   const reverseVirtualReferenceMap = new Map<string, string>();
   const virtualDependencies = new Map();
-  for (const [dep, exports] of depsToOptimize.entries()) {
+  for (const [dep, { exports }] of depsToOptimize.entries()) {
     const name = dep.replaceAll('/', '-');
     reverseVirtualReferenceMap.set(name, dep);
 
@@ -464,18 +474,18 @@ export const mastra = new Mastra({
 If you think your configuration is valid, please open an issue.`);
   }
 
-  const depsToOptimize = new Map<string, string[]>();
+  const depsToOptimize = new Map<string, DependencyMetadata>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger, sourcemapEnabled);
 
-    for (const [dep, exports] of analyzeResult.entries()) {
+    for (const [dep, { exports }] of analyzeResult.entries()) {
       if (depsToOptimize.has(dep)) {
         // Merge with existing exports if dependency already exists
         const existingExports = depsToOptimize.get(dep)!;
-        depsToOptimize.set(dep, [...new Set([...existingExports, ...exports])]);
+        depsToOptimize.set(dep, { exports: [...new Set([...existingExports.exports, ...exports])] });
       } else {
-        depsToOptimize.set(dep, exports);
+        depsToOptimize.set(dep, { exports });
       }
     }
   }
