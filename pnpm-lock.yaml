@@ -1553,6 +1553,9 @@ importers:
       '@rollup/plugin-commonjs':
         specifier: ^28.0.6
         version: 28.0.6(rollup@4.46.2)
+      '@rollup/plugin-esm-shim':
+        specifier: ^0.1.8
+        version: 0.1.8(rollup@4.46.2)
       '@rollup/plugin-json':
         specifier: ^6.1.0
         version: 6.1.0(rollup@4.46.2)
@@ -8821,6 +8824,15 @@ packages:
     engines: {node: '>=16.0.0 || 14 >= 14.17'}
     peerDependencies:
       rollup: ^2.68.0||^3.0.0||^4.0.0
+    peerDependenciesMeta:
+      rollup:
+        optional: true
+
+  '@rollup/plugin-esm-shim@0.1.8':
+    resolution: {integrity: sha512-xEU0b/BShgDDSPjidhJd4R74J9xZ9jLVtFWNGtsUXyEsdwwwB1a3XOAwwGaNIyUHD6EhxPO21JMfUmJWoMn7SA==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      rollup: ^2.0.0||^3.0.0||^4.0.0
     peerDependenciesMeta:
       rollup:
         optional: true
@@ -22937,6 +22949,13 @@ snapshots:
       is-reference: 1.2.1
       magic-string: 0.30.17
       picomatch: 4.0.2
+    optionalDependencies:
+      rollup: 4.46.2
+
+  '@rollup/plugin-esm-shim@0.1.8(rollup@4.46.2)':
+    dependencies:
+      magic-string: 0.30.17
+      mlly: 1.7.4
     optionalDependencies:
       rollup: 4.46.2
 
