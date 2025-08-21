@@ -297,7 +297,7 @@ export async function updateAgentModelHandler(c: Context) {
     const agentId = c.req.param('agentId');
     const body = await c.req.json();
 
-    const result = getOriginalUpdateAgentModelHandler({
+    const result = await getOriginalUpdateAgentModelHandler({
       mastra,
       agentId,
       body,

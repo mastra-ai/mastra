@@ -540,7 +540,9 @@ export async function updateAgentModelHandler({
       },
     };
 
-    let model = providerMap[modelVersion][provider];
+    const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
+
+    let model = providerMap[modelVersionKey][provider];
 
     agent.__updateModel({ model });
 
