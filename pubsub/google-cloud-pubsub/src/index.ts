@@ -33,7 +33,8 @@ export class GoogleCloudPubSub extends PubSub {
 
   async init(topicName: string) {
     try {
-      const topic = await this.pubsub.createTopic(topicName);
+      await this.pubsub.createTopic(topicName);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       // no-op
     }
@@ -44,6 +45,7 @@ export class GoogleCloudPubSub extends PubSub {
       });
       this.activeSubscriptions[topicName] = sub;
       return sub;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       // no-op
     }
@@ -73,7 +75,7 @@ export class GoogleCloudPubSub extends PubSub {
     let topic = this.pubsub.topic(topicName);
 
     try {
-      const messageId = await topic.publishMessage({
+      await topic.publishMessage({
         data: Buffer.from(JSON.stringify(event)),
         orderingKey: 'workflows',
       });
