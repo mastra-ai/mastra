@@ -55,7 +55,7 @@ import { DefaultVoice } from '../voice';
 import { createStep, createWorkflow } from '../workflows';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
-import type { AgentExecutionOptions, AgentVNextStreamOptions, InnerAgentExecutionOptions } from './agent.types';
+import type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -74,7 +74,7 @@ export { TripWire };
 export { MessageList };
 export * from './types';
 
-export type { AgentExecutionOptions, AgentVNextStreamOptions, InnerAgentExecutionOptions } from './agent.types';
+export type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 export type { MastraLanguageModel } from '../llm/model/shared.types';
 
@@ -141,7 +141,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #defaultVNextStreamOptions: DynamicArgument<AgentVNextStreamOptions<any, any>>;
+  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any, any>>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -507,15 +507,16 @@ export class Agent<
     Output extends ZodSchema | undefined,
     StructuredOutput extends ZodSchema | undefined,
   >({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | AgentVNextStreamOptions<Output, StructuredOutput>
-    | Promise<AgentVNextStreamOptions<Output, StructuredOutput>> {
+    | AgentExecutionOptions<Output, StructuredOutput>
+    | Promise<AgentExecutionOptions<Output, StructuredOutput>> {
     if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      return this.#defaultVNextStreamOptions as AgentVNextStreamOptions<Output, StructuredOutput>;
+      return this.#defaultVNextStreamOptions as AgentExecutionOptions<Output, StructuredOutput>;
     }
 
     const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | AgentVNextStreamOptions<Output, StructuredOutput>
-      | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>;
+      | AgentExecutionOptions<Output, StructuredOutput>
+      | Promise<AgentExecutionOptions<Output, StructuredOutput>>;
+
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
