@@ -4,8 +4,8 @@ import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, WatchEvent, WorkflowInfo } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
-import { handleError } from './error';
 import { getWorkflowInfo } from '../utils';
+import { handleError } from './error';
 
 interface WorkflowContext extends Context {
   workflowId?: string;
