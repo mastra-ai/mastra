@@ -337,13 +337,18 @@ export async function gitAddAndCommit(
   files?: string[],
   opts?: { allowEmpty?: boolean; skipIfNoStaged?: boolean },
 ): Promise<boolean> {
-  if (!(await isInsideGitRepo(cwd))) return false;
-  if (files && files.length > 0) {
-    await gitAddFiles(cwd, files);
-  } else {
-    await gitAddAll(cwd);
+  try {
+    if (!(await isInsideGitRepo(cwd))) return false;
+    if (files && files.length > 0) {
+      await gitAddFiles(cwd, files);
+    } else {
+      await gitAddAll(cwd);
+    }
+    return gitCommit(cwd, message, opts);
+  } catch (e) {
+    console.error(`Failed to add and commit files: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
   }
-  return gitCommit(cwd, message, opts);
 }
 
 export async function gitCheckoutBranch(branchName: string, targetPath: string) {
