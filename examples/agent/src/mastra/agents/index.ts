@@ -7,7 +7,6 @@ import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
-import { MCPClient } from '@mastra/mcp';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const memory = new Memory();

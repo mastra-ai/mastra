@@ -27,7 +27,7 @@ import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
-import type { AgentVNextStreamOptions } from './agent.types';
+import type { AgentExecutionOptions } from './agent.types';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
@@ -72,7 +72,7 @@ export interface AgentConfig<
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
-  defaultVNextStreamOptions?: DynamicArgument<AgentVNextStreamOptions>;
+  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
   mastra?: Mastra;
   scorers?: DynamicArgument<MastraScorers>;
   evals?: TMetrics;
