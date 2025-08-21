@@ -72,6 +72,8 @@ import type {
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
+export { convertMessages } from './message-list';
+export type { OutputFormat } from './message-list';
 export * from './types';
 
 export type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';

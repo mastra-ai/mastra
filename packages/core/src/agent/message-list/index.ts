@@ -80,6 +80,9 @@ export type MessageInput =
   | MastraMessageV2 // <- this is how we currently store in the DB
   | MastraMessageV3; // <- this could be stored in the db but is not currently. we do accept this as an input though, and we use it to transform from aiv4->v5 types as an intermediary type
 
+export { convertMessages } from './utils/convert-messages';
+export type { OutputFormat } from './utils/convert-messages';
+
 type MessageSource =
   | 'memory'
   | 'response'
