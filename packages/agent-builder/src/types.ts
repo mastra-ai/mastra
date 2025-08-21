@@ -280,7 +280,7 @@ export const PackageMergeResultSchema = z.object({
   error: z.string().optional(),
 });
 
-// Flat install schemas and types
+// Install schemas and types
 export const InstallInputSchema = z.object({
   targetPath: z.string().describe('Path to the project to install packages in'),
 });

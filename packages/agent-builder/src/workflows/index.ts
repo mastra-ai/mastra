@@ -444,7 +444,7 @@ const installStep = createStep({
   inputSchema: InstallInputSchema,
   outputSchema: InstallResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Running install...');
+    console.log('Running install step...');
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
@@ -455,9 +455,11 @@ const installStep = createStep({
         .map(f => join(targetPath, f))
         .find(f => existsSync(f));
 
-      await gitAddAndCommit(targetPath, `chore(template): commit lockfile after install`, lock ? [lock] : undefined, {
-        skipIfNoStaged: true,
-      });
+      if (lock) {
+        await gitAddAndCommit(targetPath, `chore(template): commit lockfile after install`, [lock], {
+          skipIfNoStaged: true,
+        });
+      }
 
       return {
         success: true,

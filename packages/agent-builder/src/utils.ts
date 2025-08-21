@@ -89,20 +89,50 @@ export function spawnWithOutput(
 export async function spawnSWPM(cwd: string, command: string, packageNames: string[]) {
   // 1) Try local swpm module resolution/execution
   try {
+    console.log('Running install command with swpm');
     const swpmPath = createRequire(import.meta.filename).resolve('swpm');
     await spawn(swpmPath, [command, ...packageNames], { cwd });
     return;
-  } catch {
+  } catch (e) {
+    console.log('Failed to run install command with swpm', e);
     // ignore and try fallbacks
   }
 
   // 2) Fallback to npx -y swpm
   try {
+    console.log('Running install command with npx -y swpm');
     await spawn('npx', ['-y', 'swpm', command, ...packageNames], { cwd });
     return;
-  } catch {
+  } catch (e) {
+    console.log('Failed to run install command with npx -y swpm', e);
     // ignore and try native package manager
   }
+
+  // 3) Fallback to native package manager based on lock files
+  try {
+    // Detect package manager from lock files
+    let packageManager: string;
+    let nativeCommand: string;
+
+    if (existsSync(resolve(cwd, 'pnpm-lock.yaml'))) {
+      packageManager = 'pnpm';
+      nativeCommand = command === 'add' ? 'add' : command === 'install' ? 'install' : command;
+    } else if (existsSync(resolve(cwd, 'yarn.lock'))) {
+      packageManager = 'yarn';
+      nativeCommand = command === 'add' ? 'add' : command === 'install' ? 'install' : command;
+    } else {
+      packageManager = 'npm';
+      nativeCommand = command === 'add' ? 'install' : command === 'install' ? 'install' : command;
+    }
+
+    console.log(`Falling back to ${packageManager} ${nativeCommand}`);
+    await spawn(packageManager, [nativeCommand, ...packageNames], { cwd });
+    return;
+  } catch (nativeError) {
+    console.log(`Failed to run install command with native package manager: ${nativeError}`);
+  }
+
+  throw new Error(`Failed to run install command with swpm and native package managers`);
 }
 
 // Utility functions
