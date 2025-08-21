@@ -384,6 +384,20 @@ This guide covers Mastra-specific considerations when migrating from AI SDK v4 t
 
 > Please add any feedback or bug reports to the [AI SDK v5 mega issue in Github.](https://github.com/mastra-ai/mastra/issues/5470)
 
+### Experimental streamVNext Support
+
+Mastra's experimental `streamVNext` method now includes native AI SDK v5 support through the `format` parameter. This provides seamless integration with AI SDK v5's streaming interfaces without requiring compatibility wrappers.
+
+```typescript
+// Use streamVNext with AI SDK v5 format
+const stream = await agent.streamVNext(messages, {
+  format: 'aisdk'  // Enable AI SDK v5 compatibility
+});
+
+// The stream is now compatible with AI SDK v5 interfaces
+return stream.toUIMessageStreamResponse();
+```
+
 ### Official migration guide
 
 Follow the official [AI SDK v5 Migration Guide](https://v5.ai-sdk.dev/docs/migration-guides/migration-guide-5-0) for all AI SDK core breaking changes, package updates, and API changes.
@@ -446,21 +460,27 @@ export const mastra = new Mastra({
 
 ### Enabling stream compatibility
 
-If your frontend calls a Mastra agent using a custom API route, wrap the `toUIMessageStreamResponse()` result with `createV4CompatibleResponse` to maintain AI SDK `v4` compatibility.
-
+To enable AI SDK v5 compatibility, use the experimental `streamVNext` method with the `format` parameter:
 
 ```typescript filename="app/api/chat/route.ts" showLineNumbers copy
 import { mastra } from "../../../mastra";
-import { createV4CompatibleResponse } from "@mastra/core/agent";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
-  const stream = await myAgent.stream(messages);
+  
+  // Use streamVNext with AI SDK v5 format (experimental)
+  const stream = await myAgent.streamVNext(messages, {
+    format: 'aisdk'
+  });
 
-  return createV4CompatibleResponse(stream.toUIMessageStreamResponse().body!);
+  return stream.toUIMessageStreamResponse();
 }
 ```
+
+<Callout type="info">
+  **Note**: The `streamVNext` method with format support is experimental and may change as we refine the feature based on feedback. See the [Agent Streaming documentation](/docs/agents/streaming) for more details about streamVNext.
+</Callout>
 
 ### Frontend upgrade
 
