@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- [#6919](https://github.com/mastra-ai/mastra/pull/6919) [`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.3) (from `npm:@ai-sdk/provider-utils@3.0.0`, in `dependencies`)
+  - Updated dependency [`ai@^4.3.19` ↗︎](https://www.npmjs.com/package/ai/v/4.3.19) (from `^4.3.16`, in `dependencies`)
+  - Updated dependency [`ai-v5@npm:ai@5.0.15` ↗︎](https://www.npmjs.com/package/ai-v5/v/5.0.15) (from `npm:ai@5.0.0`, in `dependencies`)
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
 ## 0.14.0
 
 ### Minor Changes
