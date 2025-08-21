@@ -14,6 +14,78 @@ const threadId = `one`;
 const resourceId = `user`;
 
 describe('MessageList', () => {
+  describe('Response message tracking', () => {
+    it('should track all response messages including tool calls and results', () => {
+      const messageList = new MessageList();
+
+      // Add user message
+      messageList.add({ role: 'user', content: 'What is the weather?' }, 'input');
+
+      // Add assistant message with tool-call
+      messageList.add(
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'get_weather',
+              args: { location: 'London' },
+            },
+          ],
+        },
+        'response',
+      );
+
+      // Add tool result message
+      messageList.add(
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'get_weather',
+              result: 'Sunny, 70°F',
+            },
+          ],
+        },
+        'response',
+      );
+
+      // Add final assistant response
+      messageList.add(
+        {
+          role: 'assistant',
+          content: 'The weather in London is sunny at 70°F.',
+        },
+        'response',
+      );
+
+      // Check what's in response messages
+      const responseMessages = messageList.get.response.aiV5.model();
+
+      // We expect 3 messages: tool-call assistant, tool result, final assistant
+      expect(responseMessages).toHaveLength(3);
+
+      // First message: assistant with tool-call
+      expect(responseMessages[0].role).toBe('assistant');
+      expect(responseMessages[0].content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'tool-call' })]),
+      );
+
+      // Second message: tool result
+      expect(responseMessages[1].role).toBe('tool');
+      expect(responseMessages[1].content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'tool-result' })]),
+      );
+
+      // Third message: final assistant response
+      expect(responseMessages[2].role).toBe('assistant');
+      expect(responseMessages[2].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text' })]));
+    });
+  });
+
   describe('add message', () => {
     it('should skip over system messages that are retrieved from the db', async () => {
       // this is to fix a bug detailed in https://github.com/mastra-ai/mastra/issues/6689
@@ -119,7 +191,7 @@ describe('MessageList', () => {
         content: {
           format: 2,
           content: 'Hello from Core!',
-          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello from Core!' }],
+          parts: [{ type: 'text', text: 'Hello from Core!' }],
         },
         threadId,
         resourceId,
@@ -153,7 +225,7 @@ describe('MessageList', () => {
           role: `user` as const,
           experimental_attachments: [],
           createdAt: expect.any(Date),
-          parts: [{ type: 'step-start' }, { type: 'text' as const, text: messageOne.content }],
+          parts: [{ type: 'text' as const, text: messageOne.content }],
         },
         {
           id: expect.any(String),
@@ -430,7 +502,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: 'Hello from V1!',
-            parts: [{ type: 'step-start' }, { type: 'text', text: inputV1Message.content }],
+            parts: [{ type: 'text', text: inputV1Message.content }],
           },
           threadId,
           resourceId,
@@ -544,6 +616,7 @@ describe('MessageList', () => {
                   result: msg3.content[0].result,
                 },
               },
+              { type: 'step-start' },
               {
                 type: 'text',
                 text: msg4.content,
@@ -806,6 +879,7 @@ describe('MessageList', () => {
                   result: 'Result A',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Step 2: Call tool B' },
               {
                 type: 'tool-invocation',
@@ -885,7 +959,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsg.content,
-            parts: [{ type: 'step-start' }, { type: 'text', text: userMsg.content }],
+            parts: [{ type: 'text', text: userMsg.content }],
           },
           threadId,
           resourceId,
@@ -1156,7 +1230,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsgV1.content,
-            parts: [{ type: 'step-start' }, { type: 'text', text: userMsgV1.content }],
+            parts: [{ type: 'text', text: userMsgV1.content }],
           },
           threadId,
           resourceId,
@@ -1179,6 +1253,7 @@ describe('MessageList', () => {
                   result: 'Found relevant data.', // Result from the tool message
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
             ],
             toolInvocations: [
@@ -1240,7 +1315,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsg.content,
-            parts: [{ type: 'step-start' }, { type: 'text', text: userMsg.content }],
+            parts: [{ type: 'text', text: userMsg.content }],
           },
           threadId,
           resourceId,
@@ -1418,7 +1493,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsg.content,
-            parts: [{ type: 'step-start' }, { type: 'text', text: userMsg.content }],
+            parts: [{ type: 'text', text: userMsg.content }],
           },
           threadId,
           resourceId,
@@ -1442,6 +1517,7 @@ describe('MessageList', () => {
                   result: '20°C, sunny',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'And now for Paris.' },
               {
                 type: 'tool-invocation',
@@ -1675,7 +1751,7 @@ describe('MessageList', () => {
           role: 'user',
           content: 'hi',
           createdAt: expect.any(Date),
-          parts: [{ type: 'step-start' }, { type: 'text', text: 'hi' }],
+          parts: [{ type: 'text', text: 'hi' }],
           experimental_attachments: [],
         },
         {
@@ -1692,7 +1768,7 @@ describe('MessageList', () => {
           role: 'user',
           content: 'LA',
           createdAt: expect.any(Date),
-          parts: [{ type: 'step-start' }, { type: 'text', text: 'LA' }],
+          parts: [{ type: 'text', text: 'LA' }],
           experimental_attachments: [],
         },
         {
@@ -1710,6 +1786,9 @@ describe('MessageList', () => {
                 args: { memory: '<user><location>LA</location></user>' },
                 result: { success: true },
               },
+            },
+            {
+              type: 'step-start',
             },
             {
               type: 'text',
@@ -2325,9 +2404,6 @@ describe('MessageList', () => {
       expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
       expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
       expect(messages[0].content.parts).toEqual([
-        {
-          type: 'step-start',
-        },
         {
           type: 'text',
           text: '{"data": "value", "number": 42}',

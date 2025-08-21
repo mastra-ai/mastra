@@ -1814,6 +1814,105 @@ describe('Workflow', () => {
         });
       });
 
+      it('should resolve dynamic mappings via .map() with custom step id', async () => {
+        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const triggerSchema = z.object({
+          cool: z.string(),
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute,
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ inputData }) => {
+            return { result: inputData.test, second: inputData.test2 };
+          },
+          inputSchema: z.object({ test: z.string(), test2: z.string() }),
+          outputSchema: z.object({ result: z.string(), second: z.string() }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string(), second: z.string() }),
+        });
+
+        workflow
+          .then(step1)
+          .map(
+            {
+              test: mapVariable({
+                initData: workflow,
+                path: 'cool',
+              }),
+              test2: {
+                schema: z.string(),
+                fn: async ({ inputData }) => {
+                  return 'Hello ' + inputData.result;
+                },
+              },
+            },
+            {
+              id: 'step1-mapping',
+            },
+          )
+          .then(step2)
+          .map({
+            result: mapVariable({
+              step: step2,
+              path: 'result',
+            }),
+            second: {
+              schema: z.string(),
+              fn: async ({ getStepResult }) => {
+                return getStepResult(step1).result;
+              },
+            },
+          })
+          .commit();
+
+        const run = await workflow.createRunAsync();
+        const result = await run.start({ inputData: { cool: 'test-input' } });
+
+        if (result.status !== 'success') {
+          expect.fail('Workflow should have succeeded');
+        }
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            inputData: { cool: 'test-input' },
+          }),
+        );
+
+        expect(result.steps['step1-mapping']).toBeDefined();
+
+        expect(result.steps['step1-mapping']).toEqual({
+          status: 'success',
+          output: { test: 'test-input', test2: 'Hello success' },
+          payload: { result: 'success' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
+
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: 'test-input', second: 'Hello success' },
+          payload: { test: 'test-input', test2: 'Hello success' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
+
+        expect(result.result).toEqual({
+          result: 'test-input',
+          second: 'success',
+        });
+      });
+
       it('should resolve variables from previous steps', async () => {
         const step1Action = vi.fn<any>().mockResolvedValue({
           nested: { value: 'step1-data' },

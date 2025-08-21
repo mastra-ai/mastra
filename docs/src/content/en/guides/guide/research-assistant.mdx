@@ -3,105 +3,87 @@ title: "Building a Research Paper Assistant | Mastra RAG Guides"
 description: Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
 ---
 
-import { Steps } from "nextra/components";
+import { Steps, Callout } from "nextra/components";
 
 # Building a Research Paper Assistant with RAG
 
-In this guide, we'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
+In this guide, you'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
 
-We'll use the foundational Transformer paper [Attention Is All You Need](https://arxiv.org/html/1706.03762) as our example.
+You'll use the foundational Transformer paper ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) as your example. As a database you'll use a local LibSQL database.
 
-## Understanding RAG Components
+## Prerequisites
 
-Let's understand how RAG works and how we'll implement each component:
+- Node.js `v20.0` or later installed
+- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
-1. Knowledge Store/Index
+## How RAG works
 
-   - Converting text into vector representations
-   - Creating numerical representations of content
-   - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in PgVector
+Let's understand how RAG works and how you'll implement each component.
 
-2. Retriever
+### Knowledge Store/Index
 
-   - Finding relevant content via similarity search
-   - Matching query embeddings with stored vectors
-   - Implementation: We'll use PgVector to perform similarity searches on our stored embeddings
+- Converting text into vector representations
+- Creating numerical representations of content
+- **Implementation**: You'll use OpenAI's `text-embedding-3-small` to create embeddings and store them in LibSQLVector
 
-3. Generator
-   - Processing retrieved content with an LLM
-   - Creating contextually informed responses
-   - Implementation: We'll use GPT-4o-mini to generate answers based on retrieved content
+### Retriever
 
-Our implementation will:
+- Finding relevant content via similarity search
+- Matching query embeddings with stored vectors
+- **Implementation**: You'll use LibSQLVector to perform similarity searches on the stored embeddings
+
+### Generator
+
+- Processing retrieved content with an LLM
+- Creating contextually informed responses
+- **Implementation**: You'll use GPT-4o-mini to generate answers based on retrieved content
+
+Your implementation will:
 
 1. Process the Transformer paper into embeddings
-2. Store them in PgVector for quick retrieval
+2. Store them in LibSQLVector for quick retrieval
 3. Use similarity search to find relevant sections
 4. Generate accurate responses using retrieved context
 
-## Project Structure
+## Creating the Agent
 
-```
-research-assistant/
-├── src/
-│   ├── mastra/
-│   │   ├── agents/
-│   │   │   └── researchAgent.ts
-│   │   └── index.ts
-│   ├── index.ts
-│   └── store.ts
-├── package.json
-└── .env
-```
+Let's define the agent's behavior, connect it to your Mastra project, and create the vector store.
 
 <Steps>
-### Initialize Project and Install Dependencies
 
-First, create a new directory for your project and navigate into it:
+### Install additional dependencies
 
-```bash
-mkdir research-assistant
-cd research-assistant
-```
-
-Initialize a new Node.js project and install the required dependencies:
+After running the [installation guide](/docs/getting-started/installation) you'll need to install additional dependencies:
 
 ```bash copy
-npm init -y
-npm install @mastra/core@latest @mastra/rag@latest @mastra/pg@latest @ai-sdk/openai@latest ai@latest zod@latest
+npm install @mastra/rag@latest ai@^4.0.0
 ```
 
-Set up environment variables for API access and database connection:
+<Callout type="info">
+  Mastra currently does not support v5 of the AI SDK (see [support
+  thread](https://github.com/mastra-ai/mastra/issues/5470)). For this guide
+  you'll need to use v4.
+</Callout>
 
-```bash filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-POSTGRES_CONNECTION_STRING=your_connection_string
-```
+### Define the Agent
 
-Create the necessary files for our project:
+Now you'll create your RAG-enabled research assistant. The agent uses:
 
-```bash copy
-mkdir -p src/mastra/agents
-touch src/mastra/agents/researchAgent.ts
-touch src/mastra/index.ts src/store.ts src/index.ts
-```
-
-### Create the Research Assistant Agent
-
-Now we'll create our RAG-enabled research assistant. The agent uses:
-
-- A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over our vector store to find relevant content in our papers.
+- A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over the vector store to find relevant content in papers
 - GPT-4o-mini for understanding queries and generating responses
 - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
-```ts copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
+Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
+
+```ts copy filename="src/mastra/agents/researchAgent.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
 
-// Create a tool for semantic search over our paper embeddings
+// Create a tool for semantic search over the paper embeddings
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: "pgVector",
+  vectorStoreName: "libSqlVector",
   indexName: "papers",
   model: openai.embedding("text-embedding-3-small"),
 });
@@ -120,35 +102,123 @@ export const researchAgent = new Agent({
 });
 ```
 
-### Set Up the Mastra Instance and Vector Store
+### Create the Vector Store
 
-```ts copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PgVector } from "@mastra/pg";
+In the root of your project, grab the absolute path with the `pwd` command. The path might be similar to this:
 
-import { researchAgent } from "./agents/researchAgent";
+```bash
+> pwd
+/Users/your-name/guides/research-assistant
+```
 
-// Initialize Mastra instance
-const pgVector = new PgVector({
-  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
+
+```ts copy filename="src/mastra/index.ts" {2, 4-6, 9}
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLVector } from "@mastra/libsql";
+
+const libSqlVector = new LibSQLVector({
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
+
 export const mastra = new Mastra({
-  agents: { researchAgent },
-  vectors: { pgVector },
+  vectors: { libSqlVector },
 });
 ```
 
+For the `connectionUrl` use the absolute path you got from the `pwd` command. This way the `vector.db` file is created at the root of your project.
+
+<Callout>
+  For the purpose of this guide you are using a hardcoded absolute path to your
+  local LibSQL file, however for production usage this won't work. You should
+  use a remote persistent database then.
+</Callout>
+
+### Register the Agent with Mastra
+
+In the `src/mastra/index.ts` file, add the agent to Mastra:
+
+```ts copy filename="src/mastra/index.ts" {3, 10}
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLVector } from "@mastra/libsql";
+import { researchAgent } from "./agents/researchAgent";
+
+const libSqlVector = new LibSQLVector({
+  connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
+});
+
+export const mastra = new Mastra({
+  agents: { researchAgent },
+  vectors: { libSqlVector },
+});
+```
+
+</Steps>
+
+## Processing documents
+
+In the following steps you'll fetch the research paper, split it into smaller chunks, generate embeddings for them, and store these chunks of information into the vector database.
+
+<Steps>
+
 ### Load and Process the Paper
 
-This step handles the initial document processing. We:
+In this step the research paper is retrieved by providing an URL, then converted to a document object, and split into smaller, managable chunks. By splitting into chunks the processing is faster and more efficient.
 
-1. Fetch the research paper from its URL
-2. Convert it into a document object
-3. Split it into smaller, manageable chunks for better processing
+Create a new file `src/store.ts` and add the following:
 
-```ts copy showLineNumbers filename="src/store.ts"
-import { openai } from "@ai-sdk/openai";
+```ts copy filename="src/store.ts"
 import { MDocument } from "@mastra/rag";
+
+// Load the paper
+const paperUrl = "https://arxiv.org/html/1706.03762";
+const response = await fetch(paperUrl);
+const paperText = await response.text();
+
+// Create document and chunk it
+const doc = MDocument.fromText(paperText);
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  maxSize: 512,
+  overlap: 50,
+  separators: ["\n\n", "\n", " "],
+});
+
+console.log("Number of chunks:", chunks.length);
+```
+
+Run the file in your terminal:
+
+```bash copy
+npx bun src/store.ts
+```
+
+You should get back this response:
+
+```bash
+Number of chunks: 892
+```
+
+### Create and Store Embeddings
+
+Finally, you'll prepare the content for RAG by:
+
+1. Generating embeddings for each chunk of text
+2. Creating a vector store index to hold the embeddings
+3. Storing both the embeddings and metadata (original text and source information) in the vector database
+
+<Callout>
+  This metadata is crucial as it allows for returning the actual content when
+  the vector store finds relevant matches.
+</Callout>
+
+This allows the agent to efficiently search and retrieve relevant information.
+
+Open the `src/store.ts` file and add the following:
+
+```ts copy filename="src/store.ts" {2-4, 20-99}
+import { MDocument } from "@mastra/rag";
+import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
 import { mastra } from "./mastra";
 
@@ -161,28 +231,11 @@ const paperText = await response.text();
 const doc = MDocument.fromText(paperText);
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 512,
+  maxSize: 512,
   overlap: 50,
-  separator: "\n",
+  separators: ["\n\n", "\n", " "],
 });
 
-console.log("Number of chunks:", chunks.length);
-// Number of chunks: 893
-```
-
-### Create and Store Embeddings
-
-Finally, we'll prepare our content for RAG by:
-
-1. Generating embeddings for each chunk of text
-2. Creating a vector store index to hold our embeddings
-3. Storing both the embeddings and metadata (original text and source information) in our vector database
-
-> **Note**: This metadata is crucial as it allows us to return the actual content when the vector store finds relevant matches.
-
-This allows our agent to efficiently search and retrieve relevant information.
-
-```ts copy showLineNumbers{23} filename="src/store.ts"
 // Generate embeddings
 const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
@@ -190,9 +243,9 @@ const { embeddings } = await embedMany({
 });
 
 // Get the vector store instance from Mastra
-const vectorStore = mastra.getVector("pgVector");
+const vectorStore = mastra.getVector("libSqlVector");
 
-// Create an index for our paper chunks
+// Create an index for paper chunks
 await vectorStore.createIndex({
   indexName: "papers",
   dimension: 1536,
@@ -209,24 +262,23 @@ await vectorStore.upsert({
 });
 ```
 
-This will:
+Lastly, you'll now need to store the embeddings by running the script again:
 
-1. Load the paper from the URL
-2. Split it into manageable chunks
-3. Generate embeddings for each chunk
-4. Store both the embeddings and text in our vector database
-
-To run the script and store the embeddings:
-
-```bash
+```bash copy
 npx bun src/store.ts
 ```
 
-### Test the Assistant
+If the operation was successful you should see no output/errors in your terminal.
 
-Let's test our research assistant with different types of queries:
+</Steps>
 
-```ts filename="src/index.ts" showLineNumbers copy
+## Test the Assistant
+
+Now that the vector database has all embeddings, you can test the research assistant with different types of queries.
+
+Create a new file `src/ask-agent.ts` and add different types of queries:
+
+```ts filename="src/ask-agent.ts" copy
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
@@ -241,12 +293,12 @@ console.log("Response:", response1.text);
 Run the script:
 
 ```bash copy
-npx bun src/index.ts
+npx bun src/ask-agent.ts
 ```
 
 You should see output like:
 
-```
+```bash
 Query: What problems does sequence modeling face with neural networks?
 Response: Sequence modeling with neural networks faces several key challenges:
 1. Vanishing and exploding gradients during training, especially with long sequences
@@ -255,9 +307,12 @@ Response: Sequence modeling with neural networks faces several key challenges:
 4. Challenges in parallelizing computations, resulting in longer training times
 ```
 
-Let's try another question:
+Try another question:
 
-```ts filename="src/index.ts" showLineNumbers{10} copy
+```ts filename="src/ask-agent.ts" copy
+import { mastra } from "./mastra";
+const agent = mastra.getAgent("researchAgent");
+
 // Query about specific findings
 const query2 = "What improvements were achieved in translation quality?";
 const response2 = await agent.generate(query2);
@@ -299,8 +354,6 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
     ]
   }'
 ```
-
-</Steps>
 
 ## Advanced RAG Examples
 

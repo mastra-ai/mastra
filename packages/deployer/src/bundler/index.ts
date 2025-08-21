@@ -9,7 +9,6 @@ import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import { globby } from 'globby';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
-
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
@@ -272,15 +271,9 @@ export abstract class Bundler extends MastraBundler {
 
     let externalDependencies: string[];
     try {
-      const result = await writeTelemetryConfig({
-        entryFile: mastraEntryFile,
-        outputDir: join(outputDirectory, this.outputDir),
-        options: {
-          sourcemap,
-        },
-        logger: this.logger,
-      });
-      externalDependencies = result.externalDependencies;
+      const result = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+
+      externalDependencies = result?.externalDependencies ?? [];
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
@@ -337,13 +330,14 @@ export abstract class Bundler extends MastraBundler {
     const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
-        const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
-        const pkg = await readJSON(pkgPath);
-
-        if (workspaceMap.has(pkg.name)) {
-          workspaceDependencies.add(pkg.name);
+        if (workspaceMap.has(dep)) {
+          workspaceDependencies.add(dep);
           continue;
         }
+
+        // fix with better pkg root resolving
+        const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
+        const pkg = await readJSON(pkgPath);
 
         dependenciesToInstall.set(dep, pkg.version);
       } catch {

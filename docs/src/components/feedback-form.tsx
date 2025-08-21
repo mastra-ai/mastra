@@ -33,11 +33,9 @@ interface FeedbackFormProps {
 }
 
 const ratings = [
-  { rating: 5, emoji: "😊", label: "Very helpful" },
-  { rating: 4, emoji: "🙂", label: "Helpful" },
-  { rating: 3, emoji: "😐", label: "Okay" },
-  { rating: 2, emoji: "😕", label: "Not very helpful" },
-  { rating: 1, emoji: "😒", label: "Not helpful" },
+  { rating: 3, emoji: "😊", label: "Helpful" },
+  { rating: 2, emoji: "😐", label: "Somewhat helpful" },
+  { rating: 1, emoji: "😕", label: "Not helpful" },
 ];
 
 export const FeedbackForm = ({
@@ -69,7 +67,12 @@ export const FeedbackForm = ({
     setErrorMessage("");
 
     try {
-      const response = await fetch("/api/feedback", {
+      const url =
+        process.env.NODE_ENV === "production"
+          ? "/docs/api/feedback"
+          : "/api/feedback";
+
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

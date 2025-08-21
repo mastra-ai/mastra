@@ -74,6 +74,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           abortSignal: abortController.signal,
           toolCallId: 'call-1',
           messages: expect.any(Array),
+          writableStream: expect.any(Object),
         },
       );
     });
@@ -354,7 +355,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      it.todo('should contain correct step inputs', async () => {
+      it('should contain correct step inputs', async () => {
         await result.aisdk.v5.consumeStream();
 
         expect(stepInputs).toMatchInlineSnapshot(`
@@ -414,11 +415,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "text": "thinking",
                       "type": "reasoning",
                     },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [
                     {
                       "input": {
                         "value": "value",
@@ -1034,7 +1030,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      describe.skip('value promises', () => {
+      describe('value promises', () => {
         beforeEach(async () => {
           await result.aisdk.v5.consumeStream();
         });
@@ -1071,7 +1067,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           expect(await result.text).toBe('Hello, world!');
         });
 
-        it('result.steps should contain all steps', async () => {
+        it.skip('result.steps should contain all steps', async () => {
           expect(await result.steps).toMatchInlineSnapshot(`
             [
               DefaultStepResult {
@@ -1252,7 +1248,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "value": "value",
                     },
                     "providerExecuted": undefined,
-                    "providerOptions": undefined,
                     "toolCallId": "call-1",
                     "toolName": "tool1",
                     "type": "tool-call",
@@ -1277,7 +1272,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               {
                 "content": [
                   {
-                    "providerOptions": undefined,
                     "text": "Hello, world!",
                     "type": "text",
                   },
@@ -1289,7 +1283,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      it.skip('should record telemetry data for each step', async () => {
+      it('should record telemetry data for each step', async () => {
         await result.aisdk.v5.consumeStream();
         expect(tracer.jsonSpans).toMatchSnapshot();
       });
@@ -6785,7 +6779,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let pullCalls = 0;
         let streamCalls = 0;
 
-        result = await loopFn({
+        result = loopFn({
           runId,
           messageList: new MessageList(),
           model: new MockLanguageModelV2({

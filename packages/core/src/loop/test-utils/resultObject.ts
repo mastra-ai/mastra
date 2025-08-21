@@ -25,7 +25,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel({
           warnings: [{ type: 'other', message: 'test-warning' }],
@@ -35,7 +35,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.warnings).toStrictEqual([{ type: 'other', message: 'test-warning' }]);
+      expect(await result.warnings).toStrictEqual([{ type: 'other', message: 'test-warning' }]);
     });
   });
 
@@ -50,7 +50,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel({
           stream: convertArrayToReadableStream([
@@ -69,7 +69,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.usage).toMatchInlineSnapshot(`
+      expect(await result.usage).toMatchInlineSnapshot(`
             {
               "cachedInputTokens": undefined,
               "inputTokens": 3,
@@ -92,7 +92,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel({
           stream: convertArrayToReadableStream([
@@ -111,7 +111,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.finishReason).toStrictEqual('stop');
+      expect(await result.finishReason).toStrictEqual('stop');
     });
   });
 
@@ -126,7 +126,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel({
           stream: convertArrayToReadableStream([
@@ -148,7 +148,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.providerMetadata).toStrictEqual({
+      expect(await result.providerMetadata).toStrictEqual({
         testProvider: { testKey: 'testValue' },
       });
     });
@@ -158,7 +158,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it.todo('should contain reasoning', async () => {
       const messageList = new MessageList();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: modelWithReasoning,
         messageList,
@@ -167,7 +167,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      const messages = result.aisdk.v5.response.messages;
+      const messages = (await result.aisdk.v5.response).messages;
 
       expect(messages).toMatchInlineSnapshot(`
             [
@@ -241,7 +241,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel({
           stream: convertArrayToReadableStream([
@@ -267,7 +267,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.request).toStrictEqual({
+      expect(await result.request).toStrictEqual({
         body: 'test body',
       });
     });
@@ -277,7 +277,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should resolve with response information', async () => {
       const messageList = new MessageList();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel({
           stream: convertArrayToReadableStream([
@@ -304,7 +304,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.response).toMatchInlineSnapshot(`
+      expect(await result.aisdk.v5.response).toMatchInlineSnapshot(`
             {
               "headers": {
                 "call": "2",
@@ -330,7 +330,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.text', () => {
     it('should resolve with full text', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: createTestModel(),
         messageList: new MessageList(),
@@ -339,13 +339,13 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.text).toMatchSnapshot();
+      expect(await result.text).toMatchSnapshot();
     });
   });
 
   describe('result.reasoningText', () => {
     it('should contain reasoning text from model response', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList: new MessageList(),
         model: modelWithReasoning,
@@ -354,13 +354,13 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.reasoningText).toMatchSnapshot();
+      expect(await result.aisdk.v5.reasoningText).toMatchSnapshot();
     });
   });
 
   describe('result.reasoning', () => {
     it('should contain reasoning from model response', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList: new MessageList(),
         model: modelWithReasoning,
@@ -369,13 +369,13 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.reasoning).toMatchSnapshot();
+      expect(await result.aisdk.v5.reasoning).toMatchSnapshot();
     });
   });
 
   describe('result.sources', () => {
     it('should contain sources', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList: new MessageList(),
         model: modelWithSources,
@@ -384,13 +384,13 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.sources).toMatchSnapshot();
+      expect(await result.aisdk.v5.sources).toMatchSnapshot();
     });
   });
 
   describe('result.files', () => {
     it('should contain files', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList: new MessageList(),
         model: modelWithFiles,
@@ -399,13 +399,13 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.files).toMatchSnapshot();
+      expect(await result.aisdk.v5.files).toMatchSnapshot();
     });
   });
 
   describe('result.steps', () => {
     it.todo('should add the reasoning from the model response to the step result', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         model: modelWithReasoning,
         messageList: new MessageList(),
@@ -550,7 +550,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     });
 
     it.todo('should add the sources from the model response to the step result', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList: new MessageList(),
         model: modelWithSources,
@@ -628,7 +628,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     });
 
     it('should add the files from the model response to the step result', async () => {
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList: new MessageList(),
         model: modelWithFiles,
@@ -637,7 +637,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      const steps = result.aisdk.v5.steps;
+      const steps = await result.aisdk.v5.steps;
 
       expect(steps).toMatchInlineSnapshot(`
             [
@@ -721,7 +721,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList,
         model: createTestModel({
@@ -748,7 +748,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.toolCalls).toMatchInlineSnapshot(`
+      expect(await result.aisdk.v5.toolCalls).toMatchInlineSnapshot(`
             [
               {
                 "input": {
@@ -776,7 +776,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         'input',
       );
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList,
         model: createTestModel({
@@ -804,7 +804,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.toolResults).toMatchInlineSnapshot(`
+      expect(await result.aisdk.v5.toolResults).toMatchInlineSnapshot(`
             [
               {
                 "input": {

@@ -7,7 +7,7 @@ description: Example for how to call agents.
 
 There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx), and the command line for quick local testing.
 
-This page demonstrates how to call the `cityAgent` described in the [Agent System Prompt](./system-prompt.mdx) example.
+This page demonstrates how to call the `harryPotterAgent` described in the [Changing the System Prompt](./system-prompt.mdx) example.
 
 ## From a workflow step
 
@@ -21,8 +21,8 @@ const step1 = createStep({
   // ...
   execute: async ({ mastra }) => {
 
-    const agent = mastra.getAgent("cityAgent");
-    const response = await agent.generate("Tell me an interesting fact about London");
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
 
     console.log(response.text);
   }
@@ -47,8 +47,8 @@ export const testTool = createTool({
   // ...
   execute: async ({ mastra }) => {
 
-    const agent = mastra?.getAgent("cityAgent");
-    const response = await agent?.generate("Tell me an interesting fact about London");
+    const agent = mastra.getAgent("harryPotterAgent");
+    const response = await agent.generate("What is your favorite room in Hogwarts?");
 
     console.log(response!.text);
   }
@@ -62,12 +62,12 @@ The `mastraClient` instance provides access to registered agents. Use `getAgent(
 ```typescript showLineNumbers copy
 import { mastraClient } from "../lib/mastra-client";
 
-const agent = mastraClient.getAgent("cityAgent");
+const agent = mastraClient.getAgent("harryPotterAgent");
 const response = await agent.generate({
   messages: [
     {
       role: "user",
-      content: "Tell me an interesting fact about London"
+      content: "What is your favorite room in Hogwarts?"
     }
   ]
 });
@@ -88,8 +88,8 @@ import "dotenv/config";
 
 import { mastra } from "./mastra";
 
-const agent = mastra.getAgent("cityAgent");
-const response = await agent.generate("Tell me an interesting fact about London");
+const agent = mastra.getAgent("harryPotterAgent");
+const response = await agent.generate("What is your favorite room in Hogwarts?");
 
 console.log(response.text);
 ```
@@ -105,13 +105,13 @@ npx tsx src/test-agent.ts
 You can interact with a registered agent by sending a `POST` request to your Mastra application's `/generate` endpoint. Include a `messages` array of role/content pairs.
 
 ```bash
-curl -X POST http://localhost:4111/api/agents/cityAgent/generate \
+curl -X POST http://localhost:4111/api/agents/harryPotterAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
       {
         "role": "user",
-        "content": "Tell me an interesting fact about London"
+        "content": "What is your favorite room in Hogwarts?"
       }
     ]
   }'| jq -r '.text'
