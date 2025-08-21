@@ -199,3 +199,22 @@ export interface WorkflowRunState {
   suspendedPaths: Record<string, number[]>;
   timestamp: number;
 }
+
+type SerializedStep = {
+  id: string;
+  description: string;
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+  resumeSchema: string | undefined;
+  suspendSchema: string | undefined;
+};
+
+export type WorkflowInfo = {
+  steps: Record<string, SerializedStep>;
+  allSteps: Record<string, SerializedStep>;
+  name: string | undefined;
+  description: string | undefined;
+  stepGraph: SerializedStepFlowEntry[];
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+};
