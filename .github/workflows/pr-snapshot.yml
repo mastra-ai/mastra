@@ -93,6 +93,8 @@ jobs:
 
       - name: Run Changeset Version Snapshot
         run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Publish to npm
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
