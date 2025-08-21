@@ -18,8 +18,6 @@ export const AgentChat = ({
   const { settings } = useAgentSettings();
   const { runtimeContext } = usePlaygroundStore();
 
-  console.log('modelVersion', modelVersion);
-
   return (
     <MastraRuntimeProvider
       agentId={agentId}
