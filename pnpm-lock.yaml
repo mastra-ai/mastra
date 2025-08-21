@@ -2241,6 +2241,9 @@ importers:
       superjson:
         specifier: ^2.2.2
         version: 2.2.2
+      swr:
+        specifier: ^2.3.4
+        version: 2.3.4(react@19.1.1)
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.0
