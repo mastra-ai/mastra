@@ -41,12 +41,7 @@ export function WorkflowHeader({
         </HeaderGroup>
 
         <HeaderAction>
-          <Button
-            to="/swagger-ui"
-            onClick={() => {
-              window.location.href = '/swagger-ui';
-            }}
-          >
+          <Button as={Link} target="_blank" to="/swagger-ui">
             <Icon>
               <ApiIcon />
             </Icon>
