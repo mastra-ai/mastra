@@ -2,8 +2,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { LanguageModel } from '../llm';
-import type { MastraLanguageModel } from '../memory';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig } from './types';
 
@@ -17,11 +16,11 @@ interface ScorerStepDefinition {
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
 // ensuring type safety flows through all steps and contexts
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-interface ScorerConfig<TInput = any, TRunOutput = any> {
-  name: string;
+interface ScorerConfig<TName extends string = string, TInput = any, TRunOutput = any> {
+  name: TName;
   description: string;
   judge?: {
-    model: LanguageModel;
+    model: MastraLanguageModel;
     instructions: string;
   };
 }
@@ -31,6 +30,7 @@ interface ScorerRun<TInput = any, TOutput = any> {
   runId?: string;
   input?: TInput;
   output: TOutput;
+  groundTruth?: any;
   runtimeContext?: Record<string, any>;
 }
 
@@ -160,9 +160,14 @@ type GenerateReasonStepDef<TAccumulated extends Record<string, any>, TInput, TRu
   | GenerateReasonFunctionStep<TAccumulated, TInput, TRunOutput>
   | GenerateReasonPromptObject<TAccumulated, TInput, TRunOutput>;
 
-class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput = any, TRunOutput = any> {
+class MastraScorer<
+  TName extends string = string,
+  TInput = any,
+  TRunOutput = any,
+  TAccumulatedResults extends Record<string, any> = {},
+> {
   constructor(
-    public config: ScorerConfig<TInput, TRunOutput>,
+    public config: ScorerConfig<TName, TInput, TRunOutput>,
     private steps: Array<ScorerStepDefinition> = [],
     private originalPromptObjects: Map<
       string,
@@ -172,7 +177,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
     > = new Map(),
   ) {}
 
-  get name(): string {
+  get name(): TName {
     return this.config.name;
   }
 
@@ -187,9 +192,10 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
   preprocess<TPreprocessOutput>(
     stepDef: PreprocessStepDef<TAccumulatedResults, TPreprocessOutput, TInput, TRunOutput>,
   ): MastraScorer<
-    AccumulatedResults<TAccumulatedResults, 'preprocess', Awaited<TPreprocessOutput>>,
+    TName,
     TInput,
-    TRunOutput
+    TRunOutput,
+    AccumulatedResults<TAccumulatedResults, 'preprocess', Awaited<TPreprocessOutput>>
   > {
     const isPromptObj = this.isPromptObject(stepDef);
 
@@ -220,7 +226,12 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
 
   analyze<TAnalyzeOutput>(
     stepDef: AnalyzeStepDef<TAccumulatedResults, TAnalyzeOutput, TInput, TRunOutput>,
-  ): MastraScorer<AccumulatedResults<TAccumulatedResults, 'analyze', Awaited<TAnalyzeOutput>>, TInput, TRunOutput> {
+  ): MastraScorer<
+    TName,
+    TInput,
+    TRunOutput,
+    AccumulatedResults<TAccumulatedResults, 'analyze', Awaited<TAnalyzeOutput>>
+  > {
     const isPromptObj = this.isPromptObject(stepDef);
 
     if (isPromptObj) {
@@ -244,7 +255,12 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
 
   generateScore<TScoreOutput extends number = number>(
     stepDef: GenerateScoreStepDef<TAccumulatedResults, TInput, TRunOutput>,
-  ): MastraScorer<AccumulatedResults<TAccumulatedResults, 'generateScore', Awaited<TScoreOutput>>, TInput, TRunOutput> {
+  ): MastraScorer<
+    TName,
+    TInput,
+    TRunOutput,
+    AccumulatedResults<TAccumulatedResults, 'generateScore', Awaited<TScoreOutput>>
+  > {
     const isPromptObj = this.isPromptObject(stepDef);
 
     if (isPromptObj) {
@@ -269,9 +285,10 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
   generateReason<TReasonOutput = string>(
     stepDef: GenerateReasonStepDef<TAccumulatedResults, TInput, TRunOutput>,
   ): MastraScorer<
-    AccumulatedResults<TAccumulatedResults, 'generateReason', Awaited<TReasonOutput>>,
+    TName,
     TInput,
-    TRunOutput
+    TRunOutput,
+    AccumulatedResults<TAccumulatedResults, 'generateReason', Awaited<TReasonOutput>>
   > {
     const isPromptObj = this.isPromptObject(stepDef);
 
@@ -483,20 +500,39 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
-      const result = await judge.generate(prompt, {
-        output: z.object({ score: z.number() }),
-      });
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt, {
+          output: z.object({ score: z.number() }),
+        });
+      } else {
+        result = await judge.generate(prompt, {
+          output: z.object({ score: z.number() }),
+        });
+      }
       return { result: result.object.score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
-      const result = await judge.generate(prompt);
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt);
+      } else {
+        result = await judge.generate(prompt);
+      }
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
-      const result = await judge.generate(prompt, {
-        output: promptStep.outputSchema,
-      });
+      let result;
+      if (model.specificationVersion === 'v2') {
+        result = await judge.generateVNext(prompt, {
+          output: promptStep.outputSchema,
+        });
+      } else {
+        result = await judge.generate(prompt, {
+          output: promptStep.outputSchema,
+        });
+      }
       return { result: result.object, prompt };
     }
   }
@@ -526,12 +562,14 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}, TInput 
   }
 }
 
-export function createScorer<TInput = any, TRunOutput = any>({
-  name,
-  description,
-  judge,
-}: ScorerConfig<TInput, TRunOutput>): MastraScorer<{}, TInput, TRunOutput> {
-  return new MastraScorer<{}, TInput, TRunOutput>({ name, description, judge });
+export function createScorer<TInput = any, TRunOutput = any, TName extends string = string>(
+  config: ScorerConfig<TName, TInput, TRunOutput>,
+): MastraScorer<TName, TInput, TRunOutput, {}> {
+  return new MastraScorer<TName, TInput, TRunOutput, {}>({
+    name: config.name,
+    description: config.description,
+    judge: config.judge,
+  });
 }
 
 export type MastraScorerEntry = {

@@ -165,6 +165,62 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    try {
+      const sql = `
+        SELECT 
+          id, 
+          content, 
+          role, 
+          type,
+          "createdAt", 
+          thread_id,
+          "resourceId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE id IN (${messageIds.map(() => '?').join(', ')})
+        ORDER BY "createdAt" DESC
+      `;
+      const result = await this.client.execute({ sql, args: messageIds });
+      if (!result.rows) return [];
+
+      const list = new MessageList().add(result.rows.map(this.parseRow), 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
+        },
+        error,
+      );
+    }
+  }
+
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -560,7 +616,6 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    console.log('resource', resource);
     await this.operations.insert({
       tableName: TABLE_RESOURCES,
       record: {

@@ -1,5 +1,106 @@
 # @mastra/memory
 
+## 0.13.0
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- 8a41506: dependencies updates:
+  - Updated dependency [`redis@^5.8.1` ↗︎](https://www.npmjs.com/package/redis/v/5.8.1) (from `^5.8.0`, in `dependencies`)
+- 2454423: Agentic loop and streaming workflow: generateVNext and streamVNext
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0
+
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.7
+
+## 0.12.3-alpha.0
+
+### Patch Changes
+
+- 8a41506: dependencies updates:
+  - Updated dependency [`redis@^5.8.1` ↗︎](https://www.npmjs.com/package/redis/v/5.8.1) (from `^5.8.0`, in `dependencies`)
+- 2454423: generateVNext and streamVNext
+- a741dde: generateVNext plumbing
+- e2ed127: Memory tests checkin
+- Updated dependencies [0a7f675]
+- Updated dependencies [12cae67]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [1a80071]
+- Updated dependencies [36a3be8]
+- Updated dependencies [361757b]
+- Updated dependencies [2bb9955]
+- Updated dependencies [2454423]
+- Updated dependencies [a44d91e]
+- Updated dependencies [dfb91e9]
+- Updated dependencies [a741dde]
+- Updated dependencies [7cb3fc0]
+- Updated dependencies [195eabb]
+- Updated dependencies [b78b95b]
+  - @mastra/core@0.14.0-alpha.4
+
+## 0.12.2
+
+### Patch Changes
+
+- da62f49: When using a schema for working memory, make that the tools schema so the agent better understands the schema.
+- 2fff911: Fix vnext working memory tool schema when model is incompatible with schema
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+- Updated dependencies [ae2eb63]
+  - @mastra/core@0.13.2
+  - @mastra/schema-compat@0.10.7
+
+## 0.12.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+- Updated dependencies [ae2eb63]
+  - @mastra/core@0.13.2-alpha.2
+  - @mastra/schema-compat@0.10.7-alpha.1
+
 ## 0.12.2-alpha.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import type { StorageThreadType, MastraMessageV1 } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
@@ -216,6 +216,18 @@ export class UpstashStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy, format });
   }
 
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessagesById({ messageIds, format });
+  }
+
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -343,10 +355,16 @@ export class UpstashStore extends MastraStorage {
   async getScoresByScorerId({
     scorerId,
     pagination,
+    entityId,
+    entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 }

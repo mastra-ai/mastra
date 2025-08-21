@@ -44,6 +44,18 @@ export default withGT(
             destination: "/api/copilotkit",
           },
           {
+            source: "/en/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/ja/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
             source: "/:locale/docs/_next/:path+",
             destination: "/_next/:path+",
           },
@@ -733,6 +745,41 @@ export default withGT(
       {
         source: "/reference/agents/createTool",
         destination: "/reference/tools/create-tool",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/start",
+        destination: "/reference/workflows/run-methods/start",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/streamVNext",
+        destination: "/reference/workflows/run-methods/streamVNext",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/resume",
+        destination: "/reference/workflows/run-methods/resume",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/watch",
+        destination: "/reference/workflows/run-methods/watch",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/stream",
+        destination: "/reference/workflows/run-methods/stream",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/snapshots",
+        destination: "/docs/server-db/snapshots",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/hierarchical-multi-agent",
+        destination: "/examples/agents/supervisor-agent",
         permanent: true,
       },
     ],

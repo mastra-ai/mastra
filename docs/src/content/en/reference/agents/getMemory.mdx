@@ -1,16 +1,16 @@
 ---
-title: "Reference: getMemory() | Agents | Mastra Docs"
-description: "Documentation for the `.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent."
+title: "Reference: Agent.getMemory() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent."
 ---
 
-# getMemory()
+# Agent.getMemory()
 
 The `.getMemory()` method retrieves the memory system associated with an agent. This method is used to access the agent's memory capabilities for storing and retrieving information across conversations.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const memory = await agent.getMemory();
+```typescript copy
+await agent.getMemory();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const memory = await agent.getMemory();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "Promise<MastraMemory | undefined>",
+      description: "A promise that resolves to the memory system configured for the agent, or undefined if no memory system is configured.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const memory = await agent.getMemory({
+```typescript copy
+await agent.getMemory({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -49,14 +61,7 @@ const memory = await agent.getMemory({
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "memory",
-      type: "Promise<MastraMemory | undefined>",
-      description: "A promise that resolves to the memory system configured for the agent, or undefined if no memory system is configured.",
-    },
-  ]}
-/>
+- [Agent memory](../../docs/agents/agent-memory.mdx)
+- [Runtime variables](../../docs/agents/runtime-variables.mdx)

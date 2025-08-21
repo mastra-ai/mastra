@@ -1,5 +1,64 @@
 # create-mastra
 
+## 0.10.22
+
+### Patch Changes
+
+- 8f8409a: Inject analytics instance into create cmd
+- 97c1d5e: Add new `scorers` subcommand for managing scorers.
+  Refactor cli to be more modular.
+- 6313063: Implement model switcher in playground
+- 36928f0: Use right icon for anthropic in model switcher
+
+## 0.10.22-alpha.6
+
+## 0.10.22-alpha.5
+
+## 0.10.22-alpha.4
+
+## 0.10.22-alpha.3
+
+## 0.10.22-alpha.2
+
+### Patch Changes
+
+- 36928f0: Use right icon for anthropic in model switcher
+
+## 0.10.22-alpha.1
+
+### Patch Changes
+
+- 8f8409a: Inject analytics instance into create cmd
+- 6313063: Implement model switcher in playground
+
+## 0.10.22-alpha.0
+
+### Patch Changes
+
+- 97c1d5e: Add new `scorers` subcommand for managing scorers.
+  Refactor cli to be more modular.
+
+## 0.10.21
+
+### Patch Changes
+
+- 77b6cfe: Use just modelId for gpt-5 check
+- 96169cc: Create handler that returns providers user has keys for in their env
+- 33da97c: Set temperature to 1 for gpt-5 model in playground
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- 7aad750: Fix tool ui showing after message when chat is refreshed
+- ce04175: Add update agent model handler
+
+## 0.10.21-alpha.2
+
+### Patch Changes
+
+- 77b6cfe: Use just modelId for gpt-5 check
+- 96169cc: Create handler that returns providers user has keys for in their env
+- 33da97c: Set temperature to 1 for gpt-5 model in playground
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- ce04175: Add update agent model handler
+
 ## 0.10.21-alpha.1
 
 ## 0.10.21-alpha.0

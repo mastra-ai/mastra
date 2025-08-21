@@ -1,12 +1,14 @@
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as babel from '@babel/core';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { rollup, type OutputAsset, type OutputChunk, type Plugin } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
+import { esbuild } from './plugins/esbuild';
 import { isNodeBuiltin } from './isNodeBuiltin';
 import { aliasHono } from './plugins/hono-alias';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -17,6 +19,7 @@ import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
 import resolveFrom from 'resolve-from';
 import { packageDirectory } from 'package-directory';
+import { checkConfigExport } from './babel/check-config-export';
 
 // TODO: Make thie extendable or find a rollup plugin that can do this
 const globalExternals = [
@@ -57,6 +60,13 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
   }
 
   return null;
+}
+
+/**
+ * Check if a path is relative without relying on `isAbsolute()` as we want to allow package names (e.g. `@pkg/name`)
+ */
+function isRelativePath(id: string): boolean {
+  return id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../');
 }
 
 /**
@@ -119,11 +129,7 @@ async function analyze(
         },
       } satisfies Plugin,
       json(),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
+      esbuild(),
       commonjs({
         strictRequires: 'debug',
         ignoreTryCatch: false,
@@ -131,11 +137,7 @@ async function analyze(
         extensions: ['.js', '.ts'],
       }),
       removeDeployer(normalizedMastraEntry, { sourcemap: sourcemapEnabled }),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
+      esbuild(),
     ].filter(Boolean),
   });
 
@@ -265,27 +267,26 @@ export async function bundleExternals(
         ),
       ),
       options?.isDev
-        ? {
+        ? ({
             name: 'external-resolver',
-            resolveId(id: string, importer: string | undefined) {
+            async resolveId(id, importer, options) {
               const pathsToTranspile = [...transpilePackagesMap.values()];
-              if (importer && pathsToTranspile.some(p => importer?.startsWith(p))) {
+              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && !isRelativePath(id)) {
+                const resolved = await this.resolve(id, importer, { skipSelf: true, ...options });
+
                 return {
-                  id: resolveFrom(importer, id),
+                  ...resolved,
                   external: true,
                 };
               }
 
               return null;
             },
-          }
+          } as Plugin)
         : null,
       transpilePackagesMap.size
         ? esbuild({
-            target: 'node20',
-            platform: 'node',
             format: 'esm',
-            minify: false,
             include: [...transpilePackagesMap.values()].map(p => {
               // Match files from transpilePackages but exclude any nested node_modules
               // Escapes regex special characters in the path and uses negative lookahead to avoid node_modules
@@ -443,6 +444,26 @@ export async function analyzeBundle(
   logger: IMastraLogger,
   sourcemapEnabled: boolean = false,
 ) {
+  const mastraConfig = await readFile(mastraEntry, 'utf-8');
+  const mastraConfigResult = {
+    hasValidConfig: false,
+  } as const;
+
+  await babel.transformAsync(mastraConfig, {
+    filename: mastraEntry,
+    presets: [import.meta.resolve('@babel/preset-typescript')],
+    plugins: [checkConfigExport(mastraConfigResult)],
+  });
+
+  if (!mastraConfigResult.hasValidConfig) {
+    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
+export const mastra = new Mastra({
+  // your options
+})
+  
+If you think your configuration is valid, please open an issue.`);
+  }
+
   const depsToOptimize = new Map<string, string[]>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);

@@ -1,7 +1,7 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -120,7 +120,7 @@ export class PostgresStore extends MastraStorage {
       this.#db = this.#pgp(this.#config);
 
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.#db, operations });
+      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
       const traces = new TracesPG({ client: this.#db, operations, schema: this.schema });
       const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
       const legacyEvals = new LegacyEvalsPG({ client: this.#db, schema: this.schema });
@@ -302,6 +302,18 @@ export class PostgresStore extends MastraStorage {
     return this.stores.memory.getMessages(args);
   }
 
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessagesById({ messageIds, format });
+  }
+
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
@@ -421,13 +433,19 @@ export class PostgresStore extends MastraStorage {
   }
 
   async getScoresByScorerId({
-    scorerId: _scorerId,
-    pagination: _pagination,
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId: _scorerId, pagination: _pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
   async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {

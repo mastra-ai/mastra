@@ -1,5 +1,98 @@
 # @mastra/deployer-vercel
 
+## 0.11.14
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [bca2ba3]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [022f3a2]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [96518cc]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [c712849]
+- Updated dependencies [04dcd66]
+- Updated dependencies [03997ae]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [95e1330]
+- Updated dependencies [33eb340]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+- Updated dependencies [6dfc4a6]
+  - @mastra/core@0.14.0
+  - @mastra/deployer@0.14.0
+
+## 0.11.14-alpha.2
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+- Updated dependencies [03997ae]
+  - @mastra/deployer@0.14.0-alpha.7
+  - @mastra/core@0.14.0-alpha.7
+
+## 0.11.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [bca2ba3]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [6dfc4a6]
+  - @mastra/deployer@0.14.0-alpha.1
+  - @mastra/core@0.14.0-alpha.1
+
+## 0.11.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [c30bca8]
+  - @mastra/core@0.13.3-alpha.0
+  - @mastra/deployer@0.13.3-alpha.0
+
+## 0.11.13
+
+### Patch Changes
+
+- Updated dependencies [d5330bf]
+- Updated dependencies [aaf0224]
+- Updated dependencies [2e74797]
+- Updated dependencies [42cb4e9]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [96169cc]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [c6d2603]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+  - @mastra/deployer@0.13.2
+
 ## 0.11.13-alpha.0
 
 ### Patch Changes

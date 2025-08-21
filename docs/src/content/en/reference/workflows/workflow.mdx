@@ -1,42 +1,30 @@
 ---
-title: "Reference: Workflow Class | Building Workflows | Mastra Docs"
-description: Documentation for the Workflow class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
+title: "Reference: Workflow Class | Workflows | Mastra Docs"
+description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 ---
 
 # Workflow Class
 
-The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
+The `Workflow` class enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 
-## Usage
+## Usage example
 
-```typescript
-const myWorkflow = createWorkflow({
-  id: "my-workflow",
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const workflow = createWorkflow({
+  id: "test-workflow",
   inputSchema: z.object({
-    startValue: z.string(),
+    value: z.string(),
   }),
   outputSchema: z.object({
-    result: z.string(),
-  }),
-  steps: [step1, step2, step3], // Declare steps used in this workflow
+    value: z.string(),
+  })
 })
-  .then(step1)
-  .then(step2)
-  .then(step3)
-  .commit();
-
-const mastra = new Mastra({
-  workflows: {
-    myWorkflow,
-  },
-});
-
-const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
 ```
 
-## API Reference
-
-### Constructor
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -54,64 +42,13 @@ const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
       name: "outputSchema",
       type: "z.ZodType<any>",
       description: "Zod schema defining the output structure for the workflow",
-    },
-    {
-      name: "steps",
-      type: "Step[]",
-      description: "Array of steps to include in the workflow",
-    },
+    }
   ]}
 />
 
-### Core Methods
+## Workflow status
 
-#### `then()`
-
-Adds a step to the workflow sequentially. Returns the workflow instance for chaining.
-
-#### `parallel()`
-
-Executes multiple steps concurrently. Takes an array of steps and returns the workflow instance.
-
-#### `branch()`
-
-Creates conditional branching logic. Takes an array of tuples containing condition functions and steps to execute when conditions are met.
-
-#### `dowhile()`
-
-Creates a loop that executes a step repeatedly while a condition remains true. The condition is checked after each execution.
-
-#### `dountil()`
-
-Creates a loop that executes a step repeatedly until a condition becomes true. The condition is checked after each execution.
-
-#### `foreach()`
-
-Iterates over an array and executes a step for each element. Accepts optional concurrency configuration.
-
-#### `map()`
-
-Maps data between steps using either a mapping configuration object or a mapping function. Useful for transforming data between steps.
-
-#### `commit()`
-
-Validates and finalizes the workflow configuration. Must be called after adding all steps.
-
-#### `createRun()`
-
-Deprecated. Creates a new workflow run instance, allowing you to execute the workflow with specific input data. Accepts optional run ID.
-
-#### `createRunAsync()`
-
-Creates a new workflow run instance, allowing you to execute the workflow with specific input data. Accepts optional run ID. Stores a pending workflow run snapshot into storage.
-
-#### `execute()`
-
-Executes the workflow with provided input data. Handles workflow suspension, resumption and emits events during execution.
-
-## Workflow Status
-
-A workflow's status indicates its current execution state. The possible values are:
+A workflow's `status` indicates its current execution state. The possible values are:
 
 <PropertiesTable
   content={[
@@ -136,30 +73,21 @@ A workflow's status indicates its current execution state. The possible values a
   ]}
 />
 
-## Passing Context Between Steps
+## Extended usage example
 
-Steps can access data from previous steps in the workflow through the context object. Each step receives the accumulated context from all previous steps that have executed.
+```typescript filename="src/test-run.ts" showLineNumbers copy
+import { mastra } from "./mastra";
 
-```typescript
-workflow
-  .then({
-    id: "getData",
-    execute: async ({ inputData }) => {
-      return {
-        data: { id: "123", value: "example" },
-      };
-    },
-  })
-  .then({
-    id: "processData",
-    execute: async ({ inputData }) => {
-      // Access data from previous step through context.steps
-      const previousData = inputData.data;
-      // Process previousData.id and previousData.value
-    },
-  });
+const run = await mastra.getWorkflow("workflow").createRunAsync();
+
+const result = await run.start({...});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({...});
+}
 ```
 
 ## Related
 
-- [Control flow](../../docs/workflows/flow-control.mdx)
+- [Step Class](./step.mdx)
+- [Control flow](../../docs/workflows/control-flow.mdx)
