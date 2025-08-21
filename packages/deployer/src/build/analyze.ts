@@ -12,17 +12,18 @@ import { esbuild } from './plugins/esbuild';
 import { isNodeBuiltin } from './isNodeBuiltin';
 import { aliasHono } from './plugins/hono-alias';
 import { removeDeployer } from './plugins/remove-deployer';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { validate } from '../validator/validate';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
-import resolveFrom from 'resolve-from';
-import { packageDirectory } from 'package-directory';
 import { checkConfigExport } from './babel/check-config-export';
+import { getPackageName } from './utils';
+import { getPackageInfo } from 'local-pkg';
 
 interface DependencyMetadata {
   exports: string[];
+  rootPath: string | null;
 }
 
 // TODO: Make this extendable or find a rollup plugin that can do this
@@ -155,15 +156,25 @@ async function analyze(
   const depsToOptimize = new Map<string, DependencyMetadata>();
 
   for (const [dep, bindings] of Object.entries(output[0].importedBindings)) {
-    depsToOptimize.set(dep, { exports: bindings });
+    // Skip node built-in
+    if (isNodeBuiltin(dep)) {
+      continue;
+    }
+
+    const pkgName = getPackageName(dep);
+    let rootPath: string | null;
+
+    try {
+      const info = await getPackageInfo(pkgName!);
+      rootPath = info?.rootPath ?? null;
+    } catch (e) {
+      rootPath = null;
+    }
+
+    depsToOptimize.set(dep, { exports: bindings, rootPath });
   }
 
-  // const depsToOptimize = new Map(Object.entries(output[0].importedBindings));
-  for (const dep of depsToOptimize.keys()) {
-    if (isNodeBuiltin(dep)) {
-      depsToOptimize.delete(dep);
-    }
-  }
+  console.log({ depsToOptimize });
 
   for (const o of output) {
     if (o.type !== 'chunk') {
@@ -178,7 +189,7 @@ async function analyze(
 
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
-        depsToOptimize.set(dynamicImport, { exports: ['*'] });
+        depsToOptimize.set(dynamicImport, { exports: ['*'], rootPath: null });
       }
     }
   }
@@ -244,10 +255,15 @@ export async function bundleExternals(
 
   const transpilePackagesMap = new Map<string, string>();
   for (const pkg of transpilePackages) {
-    const entryPoint = dirname(resolveFrom(outputDir, pkg));
-    const dir = await packageDirectory({
-      cwd: entryPoint,
-    });
+    let dir: string | null;
+
+    try {
+      const info = await getPackageInfo(pkg);
+      dir = info?.rootPath ?? null;
+    } catch (e) {
+      dir = null;
+    }
+
     if (dir) {
       transpilePackagesMap.set(pkg, dir);
     }
@@ -483,9 +499,12 @@ If you think your configuration is valid, please open an issue.`);
       if (depsToOptimize.has(dep)) {
         // Merge with existing exports if dependency already exists
         const existingExports = depsToOptimize.get(dep)!;
-        depsToOptimize.set(dep, { exports: [...new Set([...existingExports.exports, ...exports])] });
+        depsToOptimize.set(dep, {
+          exports: [...new Set([...existingExports.exports, ...exports])],
+          rootPath: existingExports.rootPath,
+        });
       } else {
-        depsToOptimize.set(dep, { exports });
+        depsToOptimize.set(dep, { exports, rootPath: null });
       }
     }
   }

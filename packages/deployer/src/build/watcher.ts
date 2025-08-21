@@ -17,7 +17,7 @@ export async function getInputOptions(
 
   if (transpilePackages.length) {
     const { output, reverseVirtualReferenceMap } = await bundleExternals(
-      new Map(transpilePackages.map(pkg => [pkg, { exports: ['*'] }])),
+      new Map(transpilePackages.map(pkg => [pkg, { exports: ['*'], rootPath: null }])),
       '.mastra/.build',
       noopLogger,
       {
