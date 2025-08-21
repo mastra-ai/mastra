@@ -84,7 +84,7 @@ function isRelativePath(id: string): boolean {
  * @param isVirtualFile - Whether the entry is a virtual file (content string) or a file path
  * @param platform - Target platform (node or browser)
  * @param logger - Logger instance for debugging
- * @returns Map of dependencies to optimize with their metadata (exported bindings, rootPath)
+ * @returns Map of dependencies to optimize with their metadata (exported bindings, rootPath, isWorkspace)
  */
 async function analyze(
   entry: string,
@@ -200,7 +200,7 @@ async function analyze(
  * Bundles vendor dependencies identified in the analysis step.
  * Creates virtual modules for each dependency and bundles them using rollup.
  *
- * @param depsToOptimize - Map of dependencies to optimize with their metadata (exported bindings, rootPath)
+ * @param depsToOptimize - Map of dependencies to optimize with their metadata (exported bindings, rootPath, isWorkspace)
  * @param outputDir - Directory where bundled files will be written
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
@@ -375,6 +375,7 @@ export async function bundleExternals(
  * @param reverseVirtualReferenceMap - Map to resolve virtual module names back to original deps
  * @param outputDir - Directory containing the bundled files
  * @param logger - Logger instance for debugging
+ * @param workspaceMap - Map of workspace packages that gets directly passed through for later consumption
  * @returns Analysis result containing invalid chunks and dependency mappings
  */
 async function validateOutput(
@@ -505,9 +506,8 @@ If you think your configuration is valid, please open an issue.`);
         // Merge with existing exports if dependency already exists
         const existingEntry = depsToOptimize.get(dep)!;
         depsToOptimize.set(dep, {
+          ...existingEntry,
           exports: [...new Set([...existingEntry.exports, ...exports])],
-          rootPath: existingEntry.rootPath,
-          isWorkspace: existingEntry.isWorkspace,
         });
       } else {
         const isWorkspace = workspaceMap.has(dep);
