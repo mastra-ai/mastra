@@ -159,6 +159,16 @@ export const useTemplateRepoEnvVars = ({ repo, owner, branch }: { repo: string; 
   });
 };
 
+export const useAgentBuilderWorkflow = () => {
+  return useQuery({
+    queryKey: ['agent-builder-workflow'],
+    queryFn: async () => {
+      const template = client.getTemplates();
+      return await template.getAgentBuilderWorkflow();
+    },
+  });
+};
+
 export const useCreateTemplateInstallRun = () => {
   return useMutation({
     mutationFn: async ({
@@ -176,7 +186,7 @@ export const useCreateTemplateInstallRun = () => {
   });
 };
 
-export const useStreamTemplateInstall = () => {
+export const useStreamTemplateInstall = (workflowInfo?: any) => {
   const [streamResult, setStreamResult] = useState<any>({});
   const [isStreaming, setIsStreaming] = useState(false);
   const [installationResult, setInstallationResult] = useState<TemplateInstallationResult | null>(null);
@@ -210,6 +220,18 @@ export const useStreamTemplateInstall = () => {
 
           // Handle different event types from the template installation workflow
           if (value.type === 'start') {
+            // Pre-populate all workflow steps from workflowInfo if available
+            const initialSteps: any = {};
+            if (workflowInfo?.allSteps) {
+              Object.entries(workflowInfo.allSteps).forEach(([stepId, stepData]: [string, any]) => {
+                initialSteps[stepId] = {
+                  id: stepData.id,
+                  description: stepData.description,
+                  status: 'pending',
+                };
+              });
+            }
+
             setStreamResult((prev: any) => ({
               ...prev,
               runId: value.payload.runId,
@@ -220,7 +242,7 @@ export const useStreamTemplateInstall = () => {
               payload: {
                 workflowState: {
                   status: 'running',
-                  steps: {},
+                  steps: initialSteps,
                 },
                 currentStep: null,
               },

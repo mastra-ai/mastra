@@ -3,6 +3,7 @@ import {
   useTemplateRepoEnvVars,
   useStreamTemplateInstall,
   useCreateTemplateInstallRun,
+  useAgentBuilderWorkflow,
 } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import {
@@ -42,8 +43,11 @@ export default function Template() {
     branch: selectedProvider,
   });
 
+  // Fetch agent builder workflow info for step pre-population
+  const { data: workflowInfo } = useAgentBuilderWorkflow();
+
   const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
-  const { streamInstall, streamResult, isStreaming, installationResult } = useStreamTemplateInstall();
+  const { streamInstall, streamResult, isStreaming, installationResult } = useStreamTemplateInstall(workflowInfo);
 
   const providerOptions = [
     { value: 'openai', label: 'OpenAI' },
@@ -218,7 +222,12 @@ export default function Template() {
           {template && (
             <>
               {isStreaming && (
-                <TemplateInstallation name={template.title} streamResult={streamResult} runId={currentRunId} />
+                <TemplateInstallation
+                  name={template.title}
+                  streamResult={streamResult}
+                  runId={currentRunId}
+                  workflowInfo={workflowInfo}
+                />
               )}
 
               {template && success && (
