@@ -43,6 +43,7 @@ export interface AgentSettingsType {
 export interface ChatProps {
   agentId: string;
   agentName?: string;
+  modelVersion?: string;
   threadId?: string;
   initialMessages?: Message[];
   memory?: boolean;

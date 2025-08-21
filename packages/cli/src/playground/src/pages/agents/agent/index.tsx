@@ -76,6 +76,7 @@ function Agent() {
             <Chat
               agentId={agentId!}
               agentName={agent?.name}
+              modelVersion={agent?.modelVersion}
               threadId={threadId!}
               initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
               memory={memory?.result}
