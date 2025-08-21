@@ -109,6 +109,7 @@ function resolveThreadIdFromArgs(args: {
     '__registerPrimitives',
     '__runInputProcessors',
     '__runOutputProcessors',
+    '_wrapToolsWithAITracing',
     'getProcessorRunner',
     '__setTools',
     '__setLogger',
