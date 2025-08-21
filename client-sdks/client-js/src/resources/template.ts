@@ -2,6 +2,7 @@ import { BaseResource } from './base';
 import type { ClientOptions, TemplateInstallationRequest, TemplateInstallationResult } from '../types';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { parseClientRuntimeContext } from '../utils';
+import type { WorkflowInfo } from '@mastra/core/workflows';
 
 const RECORD_SEPARATOR = '\x1E';
 
@@ -160,5 +161,10 @@ export class Templates extends BaseResource {
 
     // Pipe the response body through the transform stream
     return response.body.pipeThrough(transformStream);
+  }
+
+  async getAgentBuilderWorkflow(): Promise<WorkflowInfo> {
+    const result = await this.request<WorkflowInfo>('/api/templates/agent-builder-workflow');
+    return result;
   }
 }

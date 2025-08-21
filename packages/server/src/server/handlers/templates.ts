@@ -4,6 +4,8 @@ import { agentBuilderTemplateWorkflow } from '@mastra/agent-builder';
 import type { Context } from '../types';
 import { handleError } from './error';
 import { basename, dirname } from 'path';
+import { getWorkflowInfo } from '../utils';
+import type { WorkflowInfo } from '@mastra/core/workflows';
 
 interface TemplateContext extends Context {
   runtimeContext?: RuntimeContext;
@@ -217,5 +219,13 @@ export async function streamTemplateInstallHandler({
     });
 
     return handleError(error, 'Template installation stream failed');
+  }
+}
+
+export async function getAgentBuilderWorkflow(): Promise<WorkflowInfo> {
+  try {
+    return getWorkflowInfo(agentBuilderTemplateWorkflow);
+  } catch (error) {
+    return handleError(error, 'Error getting workflow');
   }
 }

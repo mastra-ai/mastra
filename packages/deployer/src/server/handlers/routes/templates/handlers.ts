@@ -4,6 +4,7 @@ import {
   createTemplateInstallRunHandler as getOriginalCreateTemplateInstallRunHandler,
   startAsyncTemplateInstallHandler as getOriginalStartAsyncTemplateInstallHandler,
   streamTemplateInstallHandler as getOriginalStreamTemplateInstallHandler,
+  getAgentBuilderWorkflow as getOriginalGetAgentBuilderWorkflow,
   type TemplateInstallationRequest,
 } from '@mastra/server/handlers/templates';
 import type { Context } from 'hono';
@@ -105,5 +106,14 @@ export async function streamTemplateInstallHandler(c: Context) {
     );
   } catch (error) {
     return handleError(error, 'Error streaming template installation');
+  }
+}
+
+export async function getAgentBuilderWorkflow(c: Context): Promise<Response> {
+  try {
+    const result = await getOriginalGetAgentBuilderWorkflow();
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting agent builder workflow');
   }
 }

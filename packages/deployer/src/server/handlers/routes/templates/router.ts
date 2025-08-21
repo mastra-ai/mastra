@@ -4,12 +4,22 @@ import { describeRoute } from 'hono-openapi';
 import type { BodyLimitOptions } from '../../../types';
 import {
   createTemplateInstallRunHandler,
+  getAgentBuilderWorkflow,
   startAsyncTemplateInstallHandler,
   streamTemplateInstallHandler,
 } from './handlers';
 
 export function templatesRouter(bodyLimitOptions: BodyLimitOptions) {
   const router = new Hono();
+
+  router.get(
+    '/agent-builder-workflow',
+    describeRoute({
+      description: 'Get the agent builder workflow',
+      tags: ['templates'],
+    }),
+    getAgentBuilderWorkflow,
+  );
 
   router.post(
     '/:templateSlug/create-run',

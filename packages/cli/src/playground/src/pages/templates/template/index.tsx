@@ -162,6 +162,7 @@ export default function Template() {
   // Watch for installation completion
   useEffect(() => {
     if (installationResult) {
+      console.log('installationResult', installationResult);
       if (installationResult.success) {
         setSuccess(true);
       } else {
@@ -184,6 +185,8 @@ export default function Template() {
       [name]: value,
     }));
   };
+
+  console.log('streamResult', streamResult);
 
   return (
     <MainContentLayout>
@@ -215,18 +218,7 @@ export default function Template() {
           {template && (
             <>
               {isStreaming && (
-                <div className="space-y-4">
-                  <TemplateInstallation name={template.title} />
-                  {currentRunId && <div className="text-xs text-gray-500 text-center">Run ID: {currentRunId}</div>}
-                  {streamResult.message && (
-                    <div className="text-sm text-gray-600 text-center">{streamResult.message}</div>
-                  )}
-                  {streamResult.currentStep && (
-                    <div className="text-sm text-blue-600 text-center">
-                      Current step: {streamResult.currentStep.name}
-                    </div>
-                  )}
-                </div>
+                <TemplateInstallation name={template.title} streamResult={streamResult} runId={currentRunId} />
               )}
 
               {template && success && (

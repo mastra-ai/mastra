@@ -215,45 +215,84 @@ export const useStreamTemplateInstall = () => {
               runId: value.payload.runId,
               eventTimestamp: new Date(),
               status: 'running',
-              message: 'Template installation started...',
+              phase: 'initializing',
+              // Initialize like workflow structure
+              payload: {
+                workflowState: {
+                  status: 'running',
+                  steps: {},
+                },
+                currentStep: null,
+              },
             }));
           }
 
           if (value.type === 'step-start') {
+            const stepId = value.payload.id;
+
             setStreamResult((prev: any) => ({
               ...prev,
-              currentStep: {
-                id: value.payload.id,
-                name: value.payload.name || value.payload.id,
-                status: 'running',
+              phase: 'processing',
+              payload: {
+                ...prev.payload,
+                currentStep: {
+                  id: stepId,
+                  status: 'running',
+                  startTime: new Date(),
+                  ...value.payload, // Include any additional data from the stream
+                },
+                workflowState: {
+                  ...prev.payload.workflowState,
+                  steps: {
+                    ...prev.payload.workflowState.steps,
+                    [stepId]: {
+                      status: 'running',
+                      startTime: new Date(),
+                      ...value.payload, // Include any additional data from the stream
+                    },
+                  },
+                },
               },
-              eventTimestamp: new Date(),
-              message: `Starting step: ${value.payload.name || value.payload.id}`,
             }));
           }
 
           if (value.type === 'step-result') {
+            const stepId = value.payload.id || streamResult.payload?.currentStep?.id;
             setStreamResult((prev: any) => ({
               ...prev,
-              currentStep: {
-                ...prev.currentStep,
-                status: value.payload.status,
-                output: value.payload.output,
-                error: value.payload.error,
+              payload: {
+                ...prev.payload,
+                currentStep: {
+                  ...prev.payload.currentStep,
+                  status: value.payload.status,
+                  output: value.payload.output,
+                  error: value.payload.error,
+                  endTime: new Date(),
+                },
+                workflowState: {
+                  ...prev.payload.workflowState,
+                  steps: {
+                    ...prev.payload.workflowState.steps,
+                    [stepId]: {
+                      ...prev.payload.workflowState.steps[stepId],
+                      status: value.payload.status,
+                      output: value.payload.output,
+                      error: value.payload.error,
+                      endTime: new Date(),
+                    },
+                  },
+                },
               },
-              eventTimestamp: new Date(),
-              message:
-                value.payload.status === 'success'
-                  ? `Completed step: ${prev.currentStep?.name || value.payload.id}`
-                  : `Failed step: ${prev.currentStep?.name || value.payload.id}`,
             }));
           }
 
           if (value.type === 'step-finish') {
             setStreamResult((prev: any) => ({
               ...prev,
-              currentStep: undefined,
-              eventTimestamp: new Date(),
+              payload: {
+                ...prev.payload,
+                currentStep: null,
+              },
             }));
           }
 
@@ -262,12 +301,16 @@ export const useStreamTemplateInstall = () => {
             setStreamResult((prev: any) => ({
               ...prev,
               status: value.payload.status,
-              currentStep: undefined,
-              eventTimestamp: new Date(),
-              message:
-                value.payload.status === 'success'
-                  ? 'Template installation completed successfully!'
-                  : 'Template installation failed',
+              phase: 'completed',
+              payload: {
+                ...prev.payload,
+                currentStep: null,
+                workflowState: {
+                  ...prev.payload.workflowState,
+                  status: value.payload.status,
+                },
+              },
+              completedAt: new Date(),
             }));
 
             // Transform the final workflow result to TemplateInstallationResult
@@ -295,8 +338,15 @@ export const useStreamTemplateInstall = () => {
               ...prev,
               status: 'failed',
               error: value.payload.error,
-              eventTimestamp: new Date(),
-              message: `Error: ${value.payload.error}`,
+              phase: 'error',
+              payload: {
+                ...prev.payload,
+                workflowState: {
+                  ...prev.payload.workflowState,
+                  status: 'failed',
+                },
+              },
+              errorTimestamp: new Date(),
             }));
           }
         }
@@ -306,8 +356,15 @@ export const useStreamTemplateInstall = () => {
           ...prev,
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown error',
-          eventTimestamp: new Date(),
-          message: 'Template installation failed with error',
+          phase: 'error',
+          payload: {
+            ...prev.payload,
+            workflowState: {
+              ...prev.payload.workflowState,
+              status: 'failed',
+            },
+          },
+          errorTimestamp: new Date(),
         }));
       } finally {
         setIsStreaming(false);
