@@ -1,9 +1,9 @@
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 /**
@@ -181,11 +181,11 @@ export class ModerationProcessor implements Processor {
   }
 
   async processOutputStream(args: {
-    part: TextStreamPart<any> | ObjectStreamPart<any>;
-    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: ChunkType;
+    streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null | undefined> {
+  }): Promise<ChunkType | null | undefined> {
     try {
       const { part, streamParts, abort } = args;
 
@@ -363,12 +363,12 @@ Content: "${content}"`;
    * Build context string from chunks based on chunkWindow
    * streamParts includes the current part
    */
-  private buildContextFromChunks(streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[]): string {
+  private buildContextFromChunks(streamParts: ChunkType[]): string {
     if (this.chunkWindow === 0) {
       // When chunkWindow is 0, only moderate the current part (last part in streamParts)
       const currentChunk = streamParts[streamParts.length - 1];
       if (currentChunk && currentChunk.type === 'text-delta') {
-        return currentChunk.textDelta;
+        return currentChunk.payload.text;
       }
       return '';
     }
@@ -381,7 +381,7 @@ Content: "${content}"`;
       .filter(part => part.type === 'text-delta')
       .map(part => {
         if (part.type === 'text-delta') {
-          return part.textDelta;
+          return part.payload.text;
         }
         return '';
       })

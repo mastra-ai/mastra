@@ -27,7 +27,7 @@ export {
   type TranslationResult,
 } from './language-detector';
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
-export { BatchPartsProcessor, type BatchPartsOptions } from './batch-parts';
+export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export { TokenLimiterProcessor, type TokenLimiterOptions } from './token-limiter';
 export {
   SystemPromptScrubber,
