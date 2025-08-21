@@ -1,4 +1,4 @@
-import { T } from "gt-next/client";
+import { T, Var } from "gt-next/client";
 
 interface GitHubLinkProps {
   link: string;
@@ -6,11 +6,7 @@ interface GitHubLinkProps {
   outdated?: boolean;
 }
 
-export const GithubLink: React.FC<GitHubLinkProps> = ({
-  link,
-  marginTop = "",
-  outdated = false,
-}) => {
+export const GithubLink: React.FC<GitHubLinkProps> = ({ link, marginTop = "", outdated = false }) => {
   return (
     <T id="components.github_link.0" className="w-full">
       <a
@@ -44,7 +40,7 @@ export const GithubLink: React.FC<GitHubLinkProps> = ({
             </svg>
           </div>
           <div className="pr-8 leading-6 group-hover:underline">
-            View Example on GitHub {outdated ? <span>(outdated)</span> : null}
+            View Example on GitHub <Var>{outdated ? <span>(outdated)</span> : null}</Var>
           </div>
         </div>
         <div className="flex-shrink-0 mt-[4px]">
