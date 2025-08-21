@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.14.0-alpha.6",
+  "version": "0.14.0",
   "description": "",
   "type": "module",
   "files": [
@@ -100,6 +100,7 @@
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "^5.1.1",
     "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-esm-shim": "^0.1.8",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-virtual": "^3.0.2",
@@ -143,6 +144,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
+    "@mastra/core": ">=0.14.0-0 <0.15.0-0"
   }
 }

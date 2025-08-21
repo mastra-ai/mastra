@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "1.0.9-alpha.0",
+  "version": "1.1.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -37,7 +37,7 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.0-0 <0.14.0-0",
+    "@mastra/core": ">=0.14.0-0 <0.15.0-0",
     "ai": "^4.0.0"
   },
   "devDependencies": {
