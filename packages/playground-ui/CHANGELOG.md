@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 5.1.21-alpha.4
+
+### Patch Changes
+
+- dd702eb: Fix default in playground
+
 ## 5.1.21-alpha.3
 
 ### Patch Changes
