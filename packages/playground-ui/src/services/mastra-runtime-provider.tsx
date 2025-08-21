@@ -317,9 +317,6 @@ export function MastraRuntimeProvider({
             { role: 'assistant', content: [] } as ThreadMessageLike,
           );
 
-          console.log(latestMessage, '#####');
-          console.log(generatedResponse, '#####');
-
           setMessages(currentConversation => [...currentConversation, latestMessage]);
 
           if (generatedResponse.finishReason) {
