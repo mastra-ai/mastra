@@ -1,0 +1,392 @@
+---
+title: "Example: Tool Call Accuracy | Scorers | Mastra Docs"
+description: Example of using the Tool Call Accuracy scorer to evaluate whether LLMs select the correct tools for specific tasks.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Tool Call Accuracy Scorer
+
+Use `createToolCallAccuracyScorer` to evaluate whether an LLM selects the correct tool from available options for a given task.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+> For complete API documentation and configuration options, see [`createToolCallAccuracyScorer`](/reference/scorers/tool-call-accuracy).
+
+## Correct tool selection example
+
+In this example, the LLM correctly selects the weather tool when asked about weather conditions.
+
+```typescript filename="src/example-correct-tool.ts" showLineNumbers copy
+import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+
+const scorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'weather-tool' 
+});
+
+// Simulate LLM input and output with tool call
+const inputMessages = [
+  createUIMessage({ 
+    content: 'What is the weather like in New York today?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const output = [
+  createUIMessage({
+    content: 'Let me check the weather for you.',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-123',
+        toolName: 'weather-tool',
+        args: { location: 'New York' },
+        result: { temperature: '72°F', condition: 'sunny' },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result);
+```
+
+### Correct tool selection output
+
+The output receives a perfect score because the LLM selected the expected weather tool.
+
+```typescript
+{
+  score: 1,
+  preprocessStepResult: {
+    expectedTool: 'weather-tool',
+    actualTools: ['weather-tool'],
+    strictMode: false,
+    hasToolCalls: true,
+    correctToolCalled: true
+  }
+}
+```
+
+## Incorrect tool selection example
+
+In this example, the LLM selects a calculator tool when asked about weather, which is incorrect.
+
+```typescript filename="src/example-incorrect-tool.ts" showLineNumbers copy
+import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+
+const scorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'weather-tool' 
+});
+
+// Simulate LLM input and output with wrong tool call
+const inputMessages = [
+  createUIMessage({ 
+    content: 'What is the weather like in London?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const output = [
+  createUIMessage({
+    content: 'Let me calculate that for you.',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-456',
+        toolName: 'calculator-tool',
+        args: { expression: '2+2' },
+        result: { result: 4 },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result);
+```
+
+### Incorrect tool selection output
+
+The output receives a zero score because the LLM selected the wrong tool.
+
+```typescript
+{
+  score: 0,
+  preprocessStepResult: {
+    expectedTool: 'weather-tool',
+    actualTools: ['calculator-tool'],
+    strictMode: false,
+    hasToolCalls: true,
+    correctToolCalled: false
+  }
+}
+```
+
+## Multiple tools - standard mode example
+
+In standard mode, the scorer passes if the expected tool is among the tools called, even if other tools are also called.
+
+```typescript filename="src/example-multiple-tools.ts" showLineNumbers copy
+import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+
+const scorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'weather-tool',
+  strictMode: false // default
+});
+
+// Simulate LLM calling multiple tools including the expected one
+const inputMessages = [
+  createUIMessage({ 
+    content: 'What is the weather and my schedule for today?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const output = [
+  createUIMessage({
+    content: 'Let me check both the weather and your calendar.',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'weather-tool',
+        args: { location: 'San Francisco' },
+        result: { temperature: '68°F', condition: 'cloudy' },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'calendar-tool',
+        args: { date: '2024-01-15' },
+        result: { events: ['Meeting at 2pm'] },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result);
+```
+
+### Multiple tools standard mode output
+
+The output receives a perfect score because the expected tool was called, even though other tools were also called.
+
+```typescript
+{
+  score: 1,
+  preprocessStepResult: {
+    expectedTool: 'weather-tool',
+    actualTools: ['weather-tool', 'calendar-tool'],
+    strictMode: false,
+    hasToolCalls: true,
+    correctToolCalled: true
+  }
+}
+```
+
+## Multiple tools - strict mode example
+
+In strict mode, the scorer only passes if exactly one tool is called and it matches the expected tool.
+
+```typescript filename="src/example-strict-mode.ts" showLineNumbers copy
+import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+
+const scorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'weather-tool',
+  strictMode: true
+});
+
+// Same multiple tool scenario as above
+const inputMessages = [
+  createUIMessage({ 
+    content: 'What is the weather like today?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const output = [
+  createUIMessage({
+    content: 'Let me check multiple sources.',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'weather-tool',
+        args: { location: 'Boston' },
+        result: { temperature: '45°F', condition: 'rainy' },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'news-tool',
+        args: { query: 'weather' },
+        result: { articles: [] },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result);
+```
+
+### Multiple tools strict mode output
+
+The output receives a zero score because multiple tools were called, violating strict mode requirements.
+
+```typescript
+{
+  score: 0,
+  preprocessStepResult: {
+    expectedTool: 'weather-tool',
+    actualTools: ['weather-tool', 'news-tool'],
+    strictMode: true,
+    hasToolCalls: true,
+    correctToolCalled: true
+  }
+}
+```
+
+## No tools called example
+
+When the LLM doesn't call any tools, the scorer returns 0.
+
+```typescript filename="src/example-no-tools.ts" showLineNumbers copy
+import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
+import { createAgentTestRun, createUIMessage } from "@mastra/evals/utils";
+
+const scorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'weather-tool' 
+});
+
+// Simulate LLM response without any tool calls
+const inputMessages = [
+  createUIMessage({ 
+    content: 'What is the weather like?', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const output = [
+  createUIMessage({
+    content: 'I cannot check the weather right now.',
+    role: 'assistant',
+    id: 'output-1'
+    // No toolInvocations
+  })
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result);
+```
+
+### No tools called output
+
+The output receives a zero score because no tools were called when the weather tool was expected.
+
+```typescript
+{
+  score: 0,
+  preprocessStepResult: {
+    expectedTool: 'weather-tool',
+    actualTools: [],
+    strictMode: false,
+    hasToolCalls: false,
+    correctToolCalled: false
+  }
+}
+```
+
+## Scorer configuration
+
+You can configure the `ToolCallAccuracyScorer` behavior using the available options:
+
+```typescript showLineNumbers copy
+// Standard mode - passes if expected tool is called (default)
+const lenientScorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'search-tool',
+  strictMode: false
+});
+
+// Strict mode - only passes if exactly one tool is called
+const strictScorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'search-tool',
+  strictMode: true
+});
+```
+
+> See [ToolCallAccuracyScorer](/reference/scorers/tool-call-accuracy) for a full list of configuration options.
+
+## Understanding the results
+
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  preprocessStepResult: {
+    expectedTool: string,
+    actualTools: string[],
+    strictMode: boolean,
+    hasToolCalls: boolean,
+    correctToolCalled: boolean
+  },
+  score: number
+}
+```
+
+### score
+
+A binary accuracy score:
+
+- **1**: Correct tool selection according to the specified mode
+- **0**: Incorrect tool selection or no tools called
+
+### runId
+The unique identifier for this scorer run.
+
+### preprocessStepResult
+Object with tool call analysis details:
+- **expectedTool**: The tool that was expected to be called
+- **actualTools**: Array of tools that were actually called
+- **strictMode**: Whether strict mode evaluation was used
+- **hasToolCalls**: Whether any tools were called at all
+- **correctToolCalled**: Whether the expected tool was among those called
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/tool-call-accuracy"
+/>

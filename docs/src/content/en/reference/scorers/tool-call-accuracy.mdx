@@ -1,0 +1,121 @@
+---
+title: "Reference: Tool Call Accuracy | Scorers | Mastra Docs"
+description: Documentation for the Tool Call Accuracy Scorer in Mastra, which evaluates whether LLM outputs call the correct tool from available options.
+---
+
+# Tool Call Accuracy Scorer
+
+The `createToolCallAccuracyScorer()` function evaluates whether an LLM selects the correct tool from a list of available tools for a given task. It provides binary scoring based on tool selection accuracy and supports both strict and lenient evaluation modes.
+
+For a usage example, see the [Tool Call Accuracy Examples](/examples/scorers/tool-call-accuracy).
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "expectedTool",
+      type: "string",
+      description: "The name of the tool that should be called for the given task.",
+      required: true,
+    },
+    {
+      name: "strictMode",
+      type: "boolean",
+      description: "When true, only exact single tool calls are accepted. When false (default), the expected tool can be among multiple tools called.",
+      required: false,
+      default: "false",
+    },
+  ]}
+/>
+
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
+
+## .run() Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "Object with tool call analysis: { expectedTool: string, actualTools: string[], strictMode: boolean, hasToolCalls: boolean, correctToolCalled: boolean }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Tool call accuracy score (0 or 1) where 1 indicates the correct tool was called.",
+    },
+  ]}
+/>
+
+## Evaluation Modes
+
+### Standard Mode (strictMode: false)
+
+In standard mode, the scorer returns `1` if the expected tool is called, regardless of whether other tools are also called. This is useful for evaluating tool selection in multi-tool scenarios.
+
+### Strict Mode (strictMode: true)
+
+In strict mode, the scorer returns `1` only if exactly one tool is called and it matches the expected tool. This is useful for evaluating precise tool selection where calling multiple tools would be incorrect.
+
+## Tool Call Detection
+
+The scorer analyzes tool invocations in the LLM output, examining both:
+
+- Tool calls in `call` state (tools being invoked)
+- Tool calls in `result` state (tools that have completed execution)
+
+## Scoring Details
+
+The scorer provides binary evaluation of tool selection accuracy.
+
+### Scoring Process
+
+1. **Extract Tool Calls**: Identifies all tool invocations from the LLM output
+2. **Compare Against Expected**: Checks if the expected tool was called
+3. **Apply Mode Logic**: Applies strict or standard mode evaluation rules
+4. **Return Binary Score**: Returns 1 for correct tool selection, 0 otherwise
+
+### Score Interpretation
+
+- **1.0**: Correct tool selection according to the specified mode
+- **0.0**: Incorrect tool selection or no tools called
+
+### Standard Mode Examples
+
+```typescript
+// Expected: weather-tool
+// Actual: [weather-tool] → Score: 1
+// Actual: [weather-tool, calendar-tool] → Score: 1
+// Actual: [calendar-tool] → Score: 0
+// Actual: [] → Score: 0
+```
+
+### Strict Mode Examples
+
+```typescript
+// Expected: weather-tool
+// Actual: [weather-tool] → Score: 1
+// Actual: [weather-tool, calendar-tool] → Score: 0
+// Actual: [calendar-tool] → Score: 0
+// Actual: [] → Score: 0
+```
+
+## Use Cases
+
+- **Tool Selection Testing**: Verify agents call the right tools for specific tasks
+- **Multi-Tool Scenarios**: Evaluate tool selection in complex workflows
+- **Tool Training**: Assess model performance on tool selection tasks
+- **Quality Assurance**: Automated testing of tool-calling behavior
+
+## Related
+
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Completeness Scorer](./completeness)
+- [Faithfulness Scorer](./faithfulness)
+- [Custom Scorers](/docs/scorers/custom-scorers)
