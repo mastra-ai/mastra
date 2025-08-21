@@ -914,7 +914,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1310,7 +1310,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -3025,8 +3025,8 @@ importers:
   stores/lance:
     dependencies:
       '@lancedb/lancedb':
-        specifier: ^0.21.2
-        version: 0.21.2(apache-arrow@18.1.0)
+        specifier: ^0.21.3
+        version: 0.21.3(apache-arrow@18.1.0)
       apache-arrow:
         specifier: ^18.1.0
         version: 18.1.0
@@ -6818,56 +6818,56 @@ packages:
     peerDependencies:
       tslib: '2'
 
-  '@lancedb/lancedb-darwin-arm64@0.21.2':
-    resolution: {integrity: sha512-aCRc/Jrpll7AMQejK18HzNmYtEzV+oU0zTSFhYJTu1SqDTA+CoXoibj9SmXHYwY6MYlfx5y6kI8UkjtU3T8zHQ==}
+  '@lancedb/lancedb-darwin-arm64@0.21.3':
+    resolution: {integrity: sha512-8cq0t64iC2qk3MO2bRLsNPWgwli71KkJJNR47nNdDLoXHWhhkrVZbrEE1BiEkMWAO2sSp98zIyUTDdFvKvjrug==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [darwin]
 
-  '@lancedb/lancedb-darwin-x64@0.21.2':
-    resolution: {integrity: sha512-Oiiz1W9E2VwKpmPCrRF+40Hd6M1kj/ej6FNQwXaCy688+CJC0dKlz95omQU3B2WnynDiwszUyNVknyMwNI3sCQ==}
+  '@lancedb/lancedb-darwin-x64@0.21.3':
+    resolution: {integrity: sha512-Er4PMooeMTA+8LvH0H/x6Fk7rggCuYZy8UsJ+v4i6JqEFBUF+t5fkMXRk58BC5Xw7Dd0LEs2ZTJry9N7qSr1Ww==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [darwin]
 
-  '@lancedb/lancedb-linux-arm64-gnu@0.21.2':
-    resolution: {integrity: sha512-LyLlEYUDlpm2sSMzoqmVWIYbY6U5AVZhpZucX0L6a3usyuce6V/Z9UGR6Uw9284xZKsPFnYNRlLZwwUGkb2tKw==}
+  '@lancedb/lancedb-linux-arm64-gnu@0.21.3':
+    resolution: {integrity: sha512-zeKzfXZBjXW8gsIYVw48aVU4dCQ7ZKuwF0uJHvW+I0+X15rnS21XYgXiOHKSmv6aiFYm0aIowJCLMKBIuwV0IA==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-arm64-musl@0.21.2':
-    resolution: {integrity: sha512-J7fK1gzBrrBx+CnUk+BnvU3V/A+F7EfqveOw2SUbTP7Gy5bXdUL2sieVVuJlRmmhfvjLTAGxsITr2RkO9n3wZw==}
+  '@lancedb/lancedb-linux-arm64-musl@0.21.3':
+    resolution: {integrity: sha512-apE9VIW/AoAKfBFjhiS3bn2Sl7asDKasDzsAt0Ms7rNKYaADfdr2nF8Bi5fOFsajxEQRJrXHCss1eHHxI02zZw==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-x64-gnu@0.21.2':
-    resolution: {integrity: sha512-yD1lWUe/gLR4QFA3ZdWc2ukdgbfXDcRoi9iTgqedUwAj++Wld64wOFjYhZbYwzGNClXlkJJiP70jzhomBv3RIw==}
+  '@lancedb/lancedb-linux-x64-gnu@0.21.3':
+    resolution: {integrity: sha512-ybZTqtYq8tdQLfWFbmUO6EwMz+sFu5zmO5J/H31NpxrtvLTrwG2I6zkq2knJrVI4ZqTcoVb/Gi2bq0pll7PJTg==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [linux]
 
-  '@lancedb/lancedb-linux-x64-musl@0.21.2':
-    resolution: {integrity: sha512-Dq3G6KtGlxidS3mY4cebp7GHRT7rQoe6wpXTzlCankANvEOwxBI68wxid3+GDcqi4jkGHrOrHTQVZqIKZ2NXnQ==}
+  '@lancedb/lancedb-linux-x64-musl@0.21.3':
+    resolution: {integrity: sha512-6GGNMUZ3y7qm8SNO9VJw/G8JUCkekgJG4iiiKsEbpiAxtbMLgB1x/KrqdLklv5fgHfT4Wr9fJB+TqMpG0c8kmg==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [linux]
 
-  '@lancedb/lancedb-win32-arm64-msvc@0.21.2':
-    resolution: {integrity: sha512-cPxzm5G2LhiA+DjVGueEnc7K909gzH6q+UGeNXF5Ly4IsvE6BRrjSQNmTRBGflD/aQEV7VD4SqiIj/rpmIZ4Sg==}
+  '@lancedb/lancedb-win32-arm64-msvc@0.21.3':
+    resolution: {integrity: sha512-dEeiIEnoIoLxx81qbzrhjiGJwg4sEE/3o4kKUm4jGw0B5d7GRj624fVQD3p7/C35Bt23yzEKkJ1mSPEjLRowyg==}
     engines: {node: '>= 18'}
     cpu: [arm64]
     os: [win32]
 
-  '@lancedb/lancedb-win32-x64-msvc@0.21.2':
-    resolution: {integrity: sha512-jewJB5ggDi4jlZocmmjMnwQYDHHr+t0jhiZQINRs/I4tkt9RxaRVPPz7D4rP+NXILj4PgKfDqKcDVeJ/5bc4hQ==}
+  '@lancedb/lancedb-win32-x64-msvc@0.21.3':
+    resolution: {integrity: sha512-V4rieshQ0VQs+T7X8xBdCL1SDjrU111ahZFPiXs24gfegGMrKi5wLt89aY0B7Zn/QVJWZiHKz8HkKYWNeCoEAw==}
     engines: {node: '>= 18'}
     cpu: [x64]
     os: [win32]
 
-  '@lancedb/lancedb@0.21.2':
-    resolution: {integrity: sha512-3RPsGbdhFbwgy7GisQnlgf+5r6R73N4xIkPNISJfvratJ5kVoQIuswra/jJxAf8N5tKriD9UnrQyUsRbmblwFQ==}
+  '@lancedb/lancedb@0.21.3':
+    resolution: {integrity: sha512-hfzp498BfcCJ730fV1YGGoXVxRgE+W1n0D0KwanKlbt8bBPSQ6E6Tf8mPXc8rKdAXIRR3o5mTzMG3z3Fda+m3Q==}
     engines: {node: '>= 18'}
     cpu: [x64, arm64]
     os: [darwin, linux, win32]
@@ -20395,43 +20395,43 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@lancedb/lancedb-darwin-arm64@0.21.2':
+  '@lancedb/lancedb-darwin-arm64@0.21.3':
     optional: true
 
-  '@lancedb/lancedb-darwin-x64@0.21.2':
+  '@lancedb/lancedb-darwin-x64@0.21.3':
     optional: true
 
-  '@lancedb/lancedb-linux-arm64-gnu@0.21.2':
+  '@lancedb/lancedb-linux-arm64-gnu@0.21.3':
     optional: true
 
-  '@lancedb/lancedb-linux-arm64-musl@0.21.2':
+  '@lancedb/lancedb-linux-arm64-musl@0.21.3':
     optional: true
 
-  '@lancedb/lancedb-linux-x64-gnu@0.21.2':
+  '@lancedb/lancedb-linux-x64-gnu@0.21.3':
     optional: true
 
-  '@lancedb/lancedb-linux-x64-musl@0.21.2':
+  '@lancedb/lancedb-linux-x64-musl@0.21.3':
     optional: true
 
-  '@lancedb/lancedb-win32-arm64-msvc@0.21.2':
+  '@lancedb/lancedb-win32-arm64-msvc@0.21.3':
     optional: true
 
-  '@lancedb/lancedb-win32-x64-msvc@0.21.2':
+  '@lancedb/lancedb-win32-x64-msvc@0.21.3':
     optional: true
 
-  '@lancedb/lancedb@0.21.2(apache-arrow@18.1.0)':
+  '@lancedb/lancedb@0.21.3(apache-arrow@18.1.0)':
     dependencies:
       apache-arrow: 18.1.0
       reflect-metadata: 0.2.2
     optionalDependencies:
-      '@lancedb/lancedb-darwin-arm64': 0.21.2
-      '@lancedb/lancedb-darwin-x64': 0.21.2
-      '@lancedb/lancedb-linux-arm64-gnu': 0.21.2
-      '@lancedb/lancedb-linux-arm64-musl': 0.21.2
-      '@lancedb/lancedb-linux-x64-gnu': 0.21.2
-      '@lancedb/lancedb-linux-x64-musl': 0.21.2
-      '@lancedb/lancedb-win32-arm64-msvc': 0.21.2
-      '@lancedb/lancedb-win32-x64-msvc': 0.21.2
+      '@lancedb/lancedb-darwin-arm64': 0.21.3
+      '@lancedb/lancedb-darwin-x64': 0.21.3
+      '@lancedb/lancedb-linux-arm64-gnu': 0.21.3
+      '@lancedb/lancedb-linux-arm64-musl': 0.21.3
+      '@lancedb/lancedb-linux-x64-gnu': 0.21.3
+      '@lancedb/lancedb-linux-x64-musl': 0.21.3
+      '@lancedb/lancedb-win32-arm64-msvc': 0.21.3
+      '@lancedb/lancedb-win32-x64-msvc': 0.21.3
 
   '@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76))':
     dependencies:
@@ -20872,7 +20872,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20921,7 +20921,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22002,7 +22002,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
