@@ -219,7 +219,7 @@ export const ApplyResultSchema = z.object({
       orderSuccess: z.boolean().optional(),
       prepareBranchSuccess: z.boolean().optional(),
       packageMergeSuccess: z.boolean().optional(),
-      flatInstallSuccess: z.boolean().optional(),
+      installSuccess: z.boolean().optional(),
       copySuccess: z.boolean().optional(),
       mergeSuccess: z.boolean().optional(),
       validationSuccess: z.boolean().optional(),
@@ -281,14 +281,12 @@ export const PackageMergeResultSchema = z.object({
 });
 
 // Flat install schemas and types
-export const FlatInstallInputSchema = z.object({
+export const InstallInputSchema = z.object({
   targetPath: z.string().describe('Path to the project to install packages in'),
 });
 
-export const FlatInstallResultSchema = z.object({
+export const InstallResultSchema = z.object({
   success: z.boolean(),
-  message: z.string(),
-  details: z.string().optional(),
   error: z.string().optional(),
 });
 

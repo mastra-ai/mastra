@@ -20,8 +20,8 @@ import {
   OrderedUnitsSchema,
   PackageMergeInputSchema,
   PackageMergeResultSchema,
-  FlatInstallInputSchema,
-  FlatInstallResultSchema,
+  InstallInputSchema,
+  InstallResultSchema,
   FileCopyInputSchema,
   FileCopyResultSchema,
   IntelligentMergeInputSchema,
@@ -437,18 +437,18 @@ const packageMergeStep = createStep({
   },
 });
 
-// Step 7: Flat install
-const flatInstallStep = createStep({
-  id: 'flat-install',
-  description: 'Run a flat install command without specifying packages',
-  inputSchema: FlatInstallInputSchema,
-  outputSchema: FlatInstallResultSchema,
+// Step 7: Install
+const installStep = createStep({
+  id: 'install',
+  description: 'Run a install command without specifying packages',
+  inputSchema: InstallInputSchema,
+  outputSchema: InstallResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    console.log('Running flat install...');
+    console.log('Running install...');
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
     try {
-      // Run flat install using swpm (no specific packages)
+      // Run install using swpm (no specific packages)
       await spawnSWPM(targetPath, 'install', []);
 
       const lock = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock']
@@ -461,14 +461,11 @@ const flatInstallStep = createStep({
 
       return {
         success: true,
-        message: 'Successfully ran flat install command',
-        details: 'Installed all dependencies from package.json',
       };
     } catch (error) {
-      console.error('Flat install failed:', error);
+      console.error('Install failed:', error);
       return {
         success: false,
-        message: `Flat install failed: ${error instanceof Error ? error.message : String(error)}`,
         error: error instanceof Error ? error.message : String(error),
       };
     }
@@ -1377,7 +1374,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     discoverUnitsStep,
     orderUnitsStep,
     packageMergeStep,
-    flatInstallStep,
+    installStep,
     programmaticFileCopyStep,
     intelligentMergeStep,
     validationAndFixStep,
@@ -1387,8 +1384,8 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
 
-    // Check for critical failure in clone step
-    if (isCriticalFailure(cloneResult, 'clone-template')) {
+    // Check for failure in clone step
+    if (shouldAbortWorkflow(cloneResult)) {
       throw new Error(`Critical failure in clone step: ${cloneResult.error}`);
     }
 
@@ -1399,13 +1396,13 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const analyzeResult = getStepResult(analyzePackageStep);
     const discoverResult = getStepResult(discoverUnitsStep);
 
-    // Check for critical failures in parallel steps
-    if (isCriticalFailure(analyzeResult, 'analyze-package')) {
-      throw new Error(`Critical failure in analyze package step: ${analyzeResult.error || 'Package analysis failed'}`);
+    // Check for failures in parallel steps
+    if (shouldAbortWorkflow(analyzeResult)) {
+      throw new Error(`Failure in analyze package step: ${analyzeResult.error || 'Package analysis failed'}`);
     }
 
-    if (isCriticalFailure(discoverResult, 'discover-units')) {
-      throw new Error(`Critical failure in discover units step: ${discoverResult.error || 'Unit discovery failed'}`);
+    if (shouldAbortWorkflow(discoverResult)) {
+      throw new Error(`Failure in discover units step: ${discoverResult.error || 'Unit discovery failed'}`);
     }
 
     return discoverResult;
@@ -1439,12 +1436,16 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
       targetPath: initData.targetPath,
     };
   })
-  .then(flatInstallStep)
+  .then(installStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
     const orderResult = getStepResult(orderUnitsStep);
+    const installResult = getStepResult(installStep);
     const initData = getInitData();
 
+    if (shouldAbortWorkflow(installResult)) {
+      throw new Error(`Failure in install step: ${installResult.error || 'Install failed'}`);
+    }
     return {
       orderedUnits: orderResult.orderedUnits,
       templateDir: cloneResult.templateDir,
@@ -1494,7 +1495,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const orderResult = getStepResult(orderUnitsStep);
     const prepareBranchResult = getStepResult(prepareBranchStep);
     const packageMergeResult = getStepResult(packageMergeStep);
-    const flatInstallResult = getStepResult(flatInstallStep);
+    const installResult = getStepResult(installStep);
     const copyResult = getStepResult(programmaticFileCopyStep);
     const intelligentMergeResult = getStepResult(intelligentMergeStep);
     const validationResult = getStepResult(validationAndFixStep);
@@ -1509,7 +1510,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
       orderResult.error,
       prepareBranchResult.error,
       packageMergeResult.error,
-      flatInstallResult.error,
+      installResult.error,
       copyResult.error,
       intelligentMergeResult.error,
       validationResult.error,
@@ -1523,7 +1524,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
       orderResult.success !== false &&
       prepareBranchResult.success !== false &&
       packageMergeResult.success !== false &&
-      flatInstallResult.success !== false &&
+      installResult.success !== false &&
       copyResult.success !== false &&
       intelligentMergeResult.success !== false &&
       validationResult.success !== false;
@@ -1564,7 +1565,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
         orderSuccess: orderResult.success,
         prepareBranchSuccess: prepareBranchResult.success,
         packageMergeSuccess: packageMergeResult.success,
-        flatInstallSuccess: flatInstallResult.success,
+        installSuccess: installResult.success,
         copySuccess: copyResult.success,
         mergeSuccess: intelligentMergeResult.success,
         validationSuccess: validationResult.success,
@@ -1608,18 +1609,7 @@ const determineConflictStrategy = (
   // return 'backup-and-replace';
 };
 
-// Helper function to check if a step result indicates a critical failure
-const isCriticalFailure = (stepResult: any, stepName: string): boolean => {
-  // Critical steps that should stop the workflow if they fail
-  const criticalSteps = [
-    'clone-template', // Can't proceed without template
-    'analyze-package', // Can't merge dependencies without package info
-    'discover-units', // Can't copy files without knowing what units exist
-  ];
-
-  if (!criticalSteps.includes(stepName)) {
-    return false;
-  }
-
+// Helper function to check if a step result indicates a failure
+const shouldAbortWorkflow = (stepResult: any): boolean => {
   return stepResult?.success === false || stepResult?.error;
 };
