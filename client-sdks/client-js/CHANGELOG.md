@@ -1,5 +1,37 @@
 # @mastra/client-js
 
+## 0.10.22
+
+### Patch Changes
+
+- 0a7f675: Add VNext methods and `processMastraStream`
+- 6313063: Implement model switcher in playground
+- 1d59515: Add options to playground based on modelVersion
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0
+
+## 0.10.22-alpha.7
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.7
+
 ## 0.10.22-alpha.6
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # create-mastra
 
+## 0.10.22
+
+### Patch Changes
+
+- 8f8409a: Inject analytics instance into create cmd
+- 97c1d5e: Add new `scorers` subcommand for managing scorers.
+  Refactor cli to be more modular.
+- 6313063: Implement model switcher in playground
+- 36928f0: Use right icon for anthropic in model switcher
+
+## 0.10.22-alpha.6
+
 ## 0.10.22-alpha.5
 
 ## 0.10.22-alpha.4

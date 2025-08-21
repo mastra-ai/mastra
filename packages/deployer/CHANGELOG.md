@@ -1,5 +1,61 @@
 # @mastra/deployer
 
+## 0.14.0
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- bca2ba3: Fix issue where `.json` files couldn't be imported and used with deployers
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+- 6313063: Implement model switcher in playground
+- 96518cc: Bundling cleanup code improvements
+- c712849: Add handlers for VNext
+- 04dcd66: Fix babel-preset-typescript import
+- 2454423: Agentic loop and streaming workflow: generateVNext and streamVNext
+- a9916bd: Model switcher v5 support
+- 95e1330: Move to default rollup resolve from resolveFrom pkg
+- 33eb340: Optimize workspace dependency detection in bundler. Check workspace map directly before resolving package.json path
+- 6dfc4a6: In a previous release analysis of the Mastra configuration was added. A bug was fixed to properly support TypeScript.
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [03997ae]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [57f7019]
+- Updated dependencies [a8f129d]
+- Updated dependencies [4908422]
+  - @mastra/core@0.14.0
+  - @mastra/server@0.14.0
+
+## 0.14.0-alpha.7
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- Updated dependencies [03997ae]
+  - @mastra/server@0.14.0-alpha.7
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.14.0-alpha.6
 
 ### Patch Changes
