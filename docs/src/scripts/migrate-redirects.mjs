@@ -1,5 +1,9 @@
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const NEXT_CONFIG_PATH = path.join(__dirname, "../../next.config.mjs");
 
@@ -222,12 +226,8 @@ async function migrateRedirects() {
 }
 
 // Run the migration if this script is executed directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   migrateRedirects();
 }
 
-module.exports = {
-  migrateRedirects,
-  shouldBeLocaleAware,
-  convertToLocaleAware,
-};
+export { migrateRedirects, shouldBeLocaleAware, convertToLocaleAware };
