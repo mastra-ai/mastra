@@ -1,63 +1,31 @@
-import { createScorer } from '@mastra/core/scores';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/scores';
+import { extractToolCalls } from '../../utils';
 
 interface ToolCallAccuracyOptions {
-  expectedTool: string;
+  expectedTool?: string;
   strictMode?: boolean;
   expectedToolOrder?: string[];
 }
 
-interface ToolCallInfo {
-  toolName: string;
-  toolCallId: string;
-  messageIndex: number;
-  invocationIndex: number;
-}
-
-function extractToolCalls(output: ScorerRunOutputForAgent): { tools: string[]; toolCallInfos: ToolCallInfo[] } {
-  const toolCalls: string[] = [];
-  const toolCallInfos: ToolCallInfo[] = [];
-
-  for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
-    const message = output[messageIndex];
-    if (message.toolInvocations) {
-      for (let invocationIndex = 0; invocationIndex < message.toolInvocations.length; invocationIndex++) {
-        const invocation = message.toolInvocations[invocationIndex];
-        if (invocation.state === 'result' || invocation.state === 'call') {
-          toolCalls.push(invocation.toolName);
-          toolCallInfos.push({
-            toolName: invocation.toolName,
-            toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
-            messageIndex,
-            invocationIndex,
-          });
-        }
-      }
-    }
-  }
-
-  return { tools: toolCalls, toolCallInfos };
-}
-
 function checkToolOrder(actualTools: string[], expectedOrder: string[], strictMode: boolean = false): boolean {
   if (strictMode) {
-    // Strict mode: exact match - tools must match exactly in order with no extra tools
     return JSON.stringify(actualTools) === JSON.stringify(expectedOrder);
   }
 
-  // Non-strict mode: flexible matching - expected tools must appear in correct relative order (extra tools allowed)
   const expectedIndices: number[] = [];
   for (const expectedTool of expectedOrder) {
     const index = actualTools.indexOf(expectedTool);
     if (index === -1) {
-      return false; // Expected tool not found
+      return false;
     }
     expectedIndices.push(index);
   }
 
-  // Check if indices are in ascending order (maintaining relative order)
   for (let i = 1; i < expectedIndices.length; i++) {
-    if (expectedIndices[i] <= expectedIndices[i - 1]) {
+    const currentIndex = expectedIndices[i];
+    const prevIndex = expectedIndices[i - 1];
+    if (currentIndex !== undefined && prevIndex !== undefined && currentIndex <= prevIndex) {
       return false;
     }
   }
@@ -71,7 +39,7 @@ function calculateAccuracy({
   strictMode = false,
   expectedToolOrder,
 }: {
-  expectedTool: string;
+  expectedTool?: string;
   actualTools: string[];
   strictMode?: boolean;
   expectedToolOrder?: string[];
@@ -80,29 +48,36 @@ function calculateAccuracy({
     return 0;
   }
 
-  // If order checking is enabled, use strictMode for order validation
   if (expectedToolOrder && expectedToolOrder.length > 0) {
     return checkToolOrder(actualTools, expectedToolOrder, strictMode) ? 1 : 0;
   }
 
-  // Single tool checking logic
+  if (!expectedTool) {
+    return 0;
+  }
+
   if (strictMode) {
-    // Strict mode: only the expected tool should be called (no other tools)
     return actualTools.length === 1 && actualTools[0] === expectedTool ? 1 : 0;
   }
 
-  // Non-strict mode: expected tool can be among multiple tools called
   return actualTools.includes(expectedTool) ? 1 : 0;
 }
 
-export function createToolCallAccuracyScorer(options: ToolCallAccuracyOptions) {
-  const { expectedTool, strictMode = false, expectedToolOrder } = options;
+export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOptions) {
+  const {
+    expectedTool,
+    strictMode = false,
+    expectedToolOrder,
+  } = options;
+
+  if (!expectedTool && !expectedToolOrder) {
+    throw new Error('Either expectedTool or expectedToolOrder must be provided');
+  }
 
   const getDescription = () => {
-    if (expectedToolOrder) {
-      return `Evaluates whether the LLM called tools in the correct order: [${expectedToolOrder.join(', ')}]`;
-    }
-    return `Evaluates whether the LLM selected the correct tool (${expectedTool}) from the available tools`;
+    return expectedToolOrder ?
+      `Evaluates whether the LLM called tools in the correct order: [${expectedToolOrder.join(', ')}]` :
+      `Evaluates whether the LLM selected the correct tool (${expectedTool}) from the available tools`;
   };
 
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
@@ -125,7 +100,7 @@ export function createToolCallAccuracyScorer(options: ToolCallAccuracyOptions) {
         strictMode,
         expectedToolOrder,
         hasToolCalls: actualTools.length > 0,
-        correctToolCalled: actualTools.includes(expectedTool),
+        correctToolCalled: expectedTool ? actualTools.includes(expectedTool) : false,
         toolCallInfos,
         correctOrderCalled: expectedToolOrder ? checkToolOrder(actualTools, expectedToolOrder, strictMode) : null,
       };

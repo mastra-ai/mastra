@@ -1,15 +1,22 @@
 ---
 title: "Reference: Tool Call Accuracy | Scorers | Mastra Docs"
-description: Documentation for the Tool Call Accuracy Scorer in Mastra, which evaluates whether LLM outputs call the correct tool from available options.
+description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
 ---
 
-# Tool Call Accuracy Scorer
+# Tool Call Accuracy Scorers
 
-The `createToolCallAccuracyScorer()` function evaluates whether an LLM selects the correct tool from a list of available tools for a given task. It provides binary scoring based on tool selection accuracy and supports both strict and lenient evaluation modes, as well as tool calling order validation.
+Mastra provides two tool call accuracy scorers for evaluating whether an LLM selects the correct tools from available options:
 
-For a usage example, see the [Tool Call Accuracy Examples](/examples/scorers/tool-call-accuracy).
+1. **Code-based scorer** - Deterministic evaluation using exact tool matching
+2. **LLM-based scorer** - Semantic evaluation using AI to assess appropriateness
 
-## Parameters
+For usage examples, see the [Tool Call Accuracy Examples](/examples/scorers/tool-call-accuracy).
+
+## Code-Based Tool Call Accuracy Scorer
+
+The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/code` provides deterministic binary scoring based on exact tool matching and supports both strict and lenient evaluation modes, as well as tool calling order validation.
+
+### Parameters
 
 <PropertiesTable
   content={[
@@ -17,7 +24,7 @@ For a usage example, see the [Tool Call Accuracy Examples](/examples/scorers/too
       name: "expectedTool",
       type: "string",
       description: "The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.",
-      required: true,
+      required: false,
     },
     {
       name: "strictMode",
@@ -37,165 +44,191 @@ For a usage example, see the [Tool Call Accuracy Examples](/examples/scorers/too
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+### Evaluation Modes
+
+The code-based scorer operates in two distinct modes:
+
+#### Single Tool Mode
+
+When `expectedToolOrder` is not provided, the scorer evaluates single tool selection:
+
+- **Standard Mode (strictMode: false)**: Returns `1` if the expected tool is called, regardless of other tools
+- **Strict Mode (strictMode: true)**: Returns `1` only if exactly one tool is called and it matches the expected tool
+
+#### Order Checking Mode
+
+When `expectedToolOrder` is provided, the scorer validates tool calling sequence:
+
+- **Strict Order (strictMode: true)**: Tools must be called in exactly the specified order with no extra tools
+- **Flexible Order (strictMode: false)**: Expected tools must appear in correct relative order (extra tools allowed)
+
+### Examples
+
+```typescript
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
+
+// Single tool validation
+const scorer = createToolCallAccuracyScorerCode({ 
+  expectedTool: 'weather-tool' 
+});
+
+// Strict single tool (no other tools allowed)
+const strictScorer = createToolCallAccuracyScorerCode({ 
+  expectedTool: 'calculator-tool', 
+  strictMode: true 
+});
+
+// Tool order validation
+const orderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'search-tool', // ignored when order is specified
+  expectedToolOrder: ['search-tool', 'weather-tool'],
+  strictMode: true // exact match required
+});
+```
+
+## LLM-Based Tool Call Accuracy Scorer
+
+The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/llm` uses an LLM to evaluate whether the tools called by an agent are appropriate for the given user request, providing semantic evaluation rather than exact matching.
+
+### Parameters
 
 <PropertiesTable
   content={[
     {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "The LLM model to use for evaluating tool appropriateness",
+      required: true,
     },
     {
-      name: "preprocessStepResult",
-      type: "object",
-      description: "Object with tool call analysis: { expectedTool: string, actualTools: string[], strictMode: boolean, expectedToolOrder?: string[], hasToolCalls: boolean, correctToolCalled: boolean, correctOrderCalled: boolean | null, toolCallInfos: ToolCallInfo[] }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Tool call accuracy score (0 or 1) where 1 indicates the correct tool was called.",
+      name: "availableTools",
+      type: "Array<{name: string, description: string}>",
+      description: "List of available tools with their descriptions for context",
+      required: true,
     },
   ]}
 />
 
-## Evaluation Modes
+### Features
 
-The scorer operates in two distinct modes: **Single Tool Mode** and **Order Checking Mode**.
+The LLM-based scorer provides:
 
-### Single Tool Mode
+- **Semantic Evaluation**: Understands context and user intent
+- **Appropriateness Assessment**: Distinguishes between "helpful" and "appropriate" tools
+- **Clarification Handling**: Recognizes when agents appropriately ask for clarification
+- **Missing Tool Detection**: Identifies tools that should have been called
+- **Reasoning Generation**: Provides explanations for scoring decisions
 
-When `expectedToolOrder` is not provided, the scorer evaluates single tool selection:
+### Evaluation Process
 
-#### Standard Mode (strictMode: false)
+1. **Extract Tool Calls**: Identifies tools mentioned in agent output
+2. **Analyze Appropriateness**: Evaluates each tool against user request
+3. **Generate Score**: Calculates score based on appropriate vs total tool calls
+4. **Generate Reasoning**: Provides human-readable explanation
 
-In standard mode, the scorer returns `1` if the expected tool is called, regardless of whether other tools are also called. This is useful for evaluating tool selection in multi-tool scenarios.
+### Examples
 
-#### Strict Mode (strictMode: true)
+```typescript
+import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
+import { openai } from '@ai-sdk/openai';
 
-In strict mode, the scorer returns `1` only if exactly one tool is called and it matches the expected tool. This is useful for evaluating precise tool selection where calling multiple tools would be incorrect.
+const llmScorer = createToolCallAccuracyScorerLLM({
+  model: openai('gpt-4o-mini'),
+  availableTools: [
+    { 
+      name: 'weather-tool', 
+      description: 'Get current weather information for any location' 
+    },
+    { 
+      name: 'search-tool', 
+      description: 'Search the web for information' 
+    },
+    { 
+      name: 'calendar-tool', 
+      description: 'Check calendar events and scheduling' 
+    }
+  ]
+});
 
-### Order Checking Mode
+const result = await llmScorer.run(agentRun);
+console.log(result.score); // 0.0 to 1.0
+console.log(result.reason); // Explanation of the score
+```
 
-When `expectedToolOrder` is provided, the scorer validates tool calling sequence and ignores the `expectedTool` parameter. The `strictMode` parameter controls the order validation behavior:
+## Choosing Between Scorers
 
-#### Strict Order Mode (strictMode: true)
+### Use the Code-Based Scorer When:
 
-- **Pass Condition**: Tools are called in exactly the specified order with no extra tools
-- **Use Case**: Workflows requiring precise sequential execution
-- **Example**: `['search-tool', 'weather-tool']` passes only if exactly these two tools are called in this order
+- You need **deterministic, reproducible** results
+- You want to test **exact tool matching**
+- You need to validate **specific tool sequences**
+- Speed and cost are priorities (no LLM calls)
+- You're running automated tests
 
-#### Flexible Order Mode (strictMode: false)
+### Use the LLM-Based Scorer When:
 
-- **Pass Condition**: Expected tools appear in the correct relative order (extra tools allowed)
-- **Use Case**: Flexible workflows where additional tools may be called
-- **Example**: `['search-tool', 'weather-tool']` passes for `['search-tool', 'calendar-tool', 'weather-tool']`
-
-## Tool Call Detection
-
-The scorer analyzes tool invocations in the LLM output, examining both:
-
-- Tool calls in `call` state (tools being invoked)
-- Tool calls in `result` state (tools that have completed execution)
+- You need **semantic understanding** of appropriateness
+- Tool selection depends on **context and intent**
+- You want to handle **edge cases** like clarification requests
+- You need **explanations** for scoring decisions
+- You're evaluating **production agent behavior**
 
 ## Scoring Details
 
-The scorer provides binary evaluation of tool selection accuracy.
+### Code-Based Scoring
 
-### Scoring Process
+- **Binary scores**: Always returns 0 or 1
+- **Deterministic**: Same input always produces same output
+- **Fast**: No external API calls
 
-1. **Extract Tool Calls**: Identifies all tool invocations from the LLM output
-2. **Compare Against Expected**: Checks if the expected tool was called
-3. **Apply Mode Logic**: Applies strict or standard mode evaluation rules
-4. **Return Binary Score**: Returns 1 for correct tool selection, 0 otherwise
+### LLM-Based Scoring
 
-### Score Interpretation
-
-- **1.0**: Correct tool selection according to the specified mode
-- **0.0**: Incorrect tool selection or no tools called
-
-### Standard Mode Examples
-
-```typescript
-// Expected: weather-tool
-// Actual: [weather-tool] → Score: 1
-// Actual: [weather-tool, calendar-tool] → Score: 1
-// Actual: [calendar-tool] → Score: 0
-// Actual: [] → Score: 0
-```
-
-### Single Tool Mode Examples
-
-```typescript
-// Standard Mode (strictMode: false)
-// Expected: weather-tool
-// Actual: [weather-tool] → Score: 1
-// Actual: [weather-tool, calendar-tool] → Score: 1 (tool found among others)
-// Actual: [calendar-tool] → Score: 0
-// Actual: [] → Score: 0
-
-// Strict Mode (strictMode: true)  
-// Expected: weather-tool
-// Actual: [weather-tool] → Score: 1
-// Actual: [weather-tool, calendar-tool] → Score: 0 (extra tools not allowed)
-// Actual: [calendar-tool] → Score: 0
-// Actual: [] → Score: 0
-```
-
-### Order Checking Mode Examples
-
-```typescript
-// Flexible Order (strictMode: false)
-// Expected: ['auth-tool', 'fetch-tool']
-// Actual: ['auth-tool', 'fetch-tool'] → Score: 1
-// Actual: ['auth-tool', 'log-tool', 'fetch-tool'] → Score: 1 (extra tools OK)
-// Actual: ['fetch-tool', 'auth-tool'] → Score: 0 (wrong order)
-// Actual: ['auth-tool'] → Score: 0 (missing fetch-tool)
-
-// Strict Order (strictMode: true)
-// Expected: ['auth-tool', 'fetch-tool'] 
-// Actual: ['auth-tool', 'fetch-tool'] → Score: 1
-// Actual: ['auth-tool', 'log-tool', 'fetch-tool'] → Score: 0 (extra tools not allowed)
-// Actual: ['fetch-tool', 'auth-tool'] → Score: 0 (wrong order)
-// Actual: ['auth-tool'] → Score: 0 (missing fetch-tool)
-```
+- **Fractional scores**: Returns values between 0.0 and 1.0
+- **Context-aware**: Considers user intent and appropriateness
+- **Explanatory**: Provides reasoning for scores
 
 ## Use Cases
 
-### Single Tool Evaluation
-- **Tool Selection Testing**: Verify agents call the right tools for specific tasks
-- **Multi-Tool Scenarios**: Evaluate tool selection in complex workflows
-- **Tool Training**: Assess model performance on tool selection tasks
-- **Quality Assurance**: Automated testing of tool-calling behavior
+### Code-Based Scorer Use Cases
 
-### Sequential Tool Evaluation
-- **Workflow Validation**: Ensure tools are called in the correct sequence for multi-step processes
-- **Dependency Management**: Verify tools with dependencies are called in proper order
-- **Process Compliance**: Test that agents follow specified operational procedures
-- **Chain-of-Thought Evaluation**: Validate reasoning sequences that require specific tool ordering
+- **Unit Testing**: Verify specific tool selection behavior
+- **Regression Testing**: Ensure tool selection doesn't change
+- **Workflow Validation**: Check tool sequences in multi-step processes
+- **CI/CD Pipelines**: Fast, deterministic validation
 
-### Example Scenarios
+### LLM-Based Scorer Use Cases
+
+- **Quality Assurance**: Evaluate production agent behavior
+- **A/B Testing**: Compare different agent implementations
+- **User Intent Alignment**: Ensure tools match user needs
+- **Edge Case Handling**: Evaluate clarification and error scenarios
+
+## Migration Guide
+
+If you were using the previous hybrid scorer with `enableAppropriatenessEval`:
 
 ```typescript
-// Single tool validation (flexible)
-createToolCallAccuracyScorer({ expectedTool: 'weather-tool' })
+// Old approach (deprecated)
+const scorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'weather-tool',
+  enableAppropriatenessEval: true,
+  model: openai('gpt-4o-mini'),
+  availableTools: [...]
+});
 
-// Strict single tool (no other tools allowed)
-createToolCallAccuracyScorer({ expectedTool: 'calculator-tool', strictMode: true })
+// New approach - use separate scorers
+// For deterministic evaluation:
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
+const codeScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'weather-tool'
+});
 
-// Flexible sequence validation (allows extra tools)
-createToolCallAccuracyScorer({ 
-  expectedTool: 'search-tool', // ignored when order is specified
-  expectedToolOrder: ['search-tool', 'weather-tool'],
-  strictMode: false // default - extra tools allowed
-})
-
-// Strict sequence validation (no extra tools)
-createToolCallAccuracyScorer({ 
-  expectedTool: 'search-tool', // ignored when order is specified
-  expectedToolOrder: ['authenticate-tool', 'fetch-data-tool', 'process-tool'],
-  strictMode: true // exact match required
-})
+// For LLM evaluation:
+import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
+const llmScorer = createToolCallAccuracyScorerLLM({
+  model: openai('gpt-4o-mini'),
+  availableTools: [...]
+});
 ```
 
 ## Related

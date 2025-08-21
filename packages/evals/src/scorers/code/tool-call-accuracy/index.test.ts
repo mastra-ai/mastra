@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { createAgentTestRun, createUIMessage, createToolInvocation } from '../../utils';
-import { createToolCallAccuracyScorer } from './index';
+import { createToolCallAccuracyScorerCode } from './index';
 
-describe('createToolCallAccuracyScorer', () => {
+describe('createToolCallAccuracyScorerCode', () => {
   test('should return 1 when the expected tool is called', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool' });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [
@@ -33,7 +33,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 0 when the wrong tool is called', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool' });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [
@@ -62,7 +62,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 0 when no tools are called', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool' });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [
@@ -82,7 +82,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 1 when expected tool is among multiple tools (non-strict mode)', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool', strictMode: false });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool', strictMode: false });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [
@@ -125,7 +125,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 0 when expected tool is among multiple tools (strict mode)', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool', strictMode: true });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool', strictMode: true });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [
@@ -167,7 +167,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 1 when only the expected tool is called (strict mode)', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool', strictMode: true });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool', strictMode: true });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [
@@ -196,7 +196,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should handle tool calls with "call" state', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool' });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [
@@ -224,7 +224,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should throw error for invalid input', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool' });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
     const run = createAgentTestRun({
       inputMessages: [],
       output: [createUIMessage({ content: 'test', role: 'assistant', id: 'output-1' })],
@@ -234,7 +234,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should throw error for empty output', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool' });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const run = createAgentTestRun({ inputMessages, output: [] });
 
@@ -243,7 +243,7 @@ describe('createToolCallAccuracyScorer', () => {
 
   // Order checking tests
   test('should return 1 when tools are called in correct order (strict mode)', async () => {
-    const scorer = createToolCallAccuracyScorer({
+    const scorer = createToolCallAccuracyScorerCode({
       expectedTool: 'search-tool', // This will be ignored when expectedToolOrder is provided
       expectedToolOrder: ['search-tool', 'weather-tool'],
       strictMode: true, // Exact order - no extra tools allowed
@@ -285,7 +285,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 0 when tools are called in wrong order (strict mode)', async () => {
-    const scorer = createToolCallAccuracyScorer({
+    const scorer = createToolCallAccuracyScorerCode({
       expectedTool: 'search-tool',
       expectedToolOrder: ['search-tool', 'weather-tool'],
       strictMode: true, // Exact order required
@@ -327,7 +327,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 1 when expected tools appear in correct order with extra tools (non-strict mode)', async () => {
-    const scorer = createToolCallAccuracyScorer({
+    const scorer = createToolCallAccuracyScorerCode({
       expectedTool: 'search-tool',
       expectedToolOrder: ['search-tool', 'weather-tool'],
       strictMode: false, // Flexible order - allows extra tools
@@ -374,7 +374,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 0 when expected tools appear in wrong relative order (non-strict mode)', async () => {
-    const scorer = createToolCallAccuracyScorer({
+    const scorer = createToolCallAccuracyScorerCode({
       expectedTool: 'search-tool',
       expectedToolOrder: ['search-tool', 'weather-tool'],
       strictMode: false, // Even in flexible mode, order must be correct
@@ -421,7 +421,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 0 when not all expected tools are called in order checking', async () => {
-    const scorer = createToolCallAccuracyScorer({
+    const scorer = createToolCallAccuracyScorerCode({
       expectedTool: 'search-tool',
       expectedToolOrder: ['search-tool', 'weather-tool', 'calendar-tool'],
       strictMode: false, // Flexible mode but still requires all expected tools
@@ -462,7 +462,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should return 0 when extra tools are called in strict order mode', async () => {
-    const scorer = createToolCallAccuracyScorer({
+    const scorer = createToolCallAccuracyScorerCode({
       expectedTool: 'search-tool',
       expectedToolOrder: ['search-tool', 'weather-tool'],
       strictMode: true, // Strict mode - no extra tools allowed
@@ -509,7 +509,7 @@ describe('createToolCallAccuracyScorer', () => {
   });
 
   test('should fall back to original logic when expectedToolOrder is not provided', async () => {
-    const scorer = createToolCallAccuracyScorer({ expectedTool: 'weather-tool' });
+    const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather-tool' });
 
     const inputMessages = [createUIMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const output = [

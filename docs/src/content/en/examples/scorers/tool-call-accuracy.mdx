@@ -1,13 +1,15 @@
 ---
 title: "Example: Tool Call Accuracy | Scorers | Mastra Docs"
-description: Example of using the Tool Call Accuracy scorer to evaluate whether LLMs select the correct tools for specific tasks.
+description: Examples of using the Tool Call Accuracy scorers to evaluate whether LLMs select the correct tools for specific tasks.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Tool Call Accuracy Scorer
+# Tool Call Accuracy Scorer Examples
 
-Use `createToolCallAccuracyScorer` to evaluate whether an LLM selects the correct tool from available options for a given task.
+Mastra provides two tool call accuracy scorers:
+- **Code-based scorer** for deterministic evaluation
+- **LLM-based scorer** for semantic evaluation
 
 ## Installation
 
@@ -15,17 +17,23 @@ Use `createToolCallAccuracyScorer` to evaluate whether an LLM selects the correc
 npm install @mastra/evals
 ```
 
-> For complete API documentation and configuration options, see [`createToolCallAccuracyScorer`](/reference/scorers/tool-call-accuracy).
+> For complete API documentation and configuration options, see [`Tool Call Accuracy Scorers`](/reference/scorers/tool-call-accuracy).
 
-## Correct tool selection example
+## Code-Based Scorer Examples
 
-In this example, the LLM correctly selects the weather tool when asked about weather conditions.
+The code-based scorer provides deterministic, binary scoring (0 or 1) based on exact tool matching.
+
+### Import
+
+```typescript
+import { createToolCallAccuracyScorerCode } from "@mastra/evals/scorers/code";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+```
+
+### Correct tool selection
 
 ```typescript filename="src/example-correct-tool.ts" showLineNumbers copy
-import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
-import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
-
-const scorer = createToolCallAccuracyScorer({ 
+const scorer = createToolCallAccuracyScorerCode({ 
   expectedTool: 'weather-tool' 
 });
 
@@ -58,173 +66,169 @@ const output = [
 const run = createAgentTestRun({ inputMessages, output });
 const result = await scorer.run(run);
 
-console.log(result);
+console.log(result.score); // 1
+console.log(result.preprocessStepResult?.correctToolCalled); // true
 ```
 
-### Correct tool selection output
+### Strict mode evaluation
 
-The output receives a perfect score because the LLM selected the expected weather tool.
-
-```typescript
-{
-  score: 1,
-  preprocessStepResult: {
-    expectedTool: 'weather-tool',
-    actualTools: ['weather-tool'],
-    strictMode: false,
-    hasToolCalls: true,
-    correctToolCalled: true
-  }
-}
-```
-
-## Incorrect tool selection example
-
-In this example, the LLM selects a calculator tool when asked about weather, which is incorrect.
-
-```typescript filename="src/example-incorrect-tool.ts" showLineNumbers copy
-import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
-import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
-
-const scorer = createToolCallAccuracyScorer({ 
-  expectedTool: 'weather-tool' 
-});
-
-// Simulate LLM input and output with wrong tool call
-const inputMessages = [
-  createUIMessage({ 
-    content: 'What is the weather like in London?', 
-    role: 'user', 
-    id: 'input-1' 
-  })
-];
-
-const output = [
-  createUIMessage({
-    content: 'Let me calculate that for you.',
-    role: 'assistant',
-    id: 'output-1',
-    toolInvocations: [
-      createToolInvocation({
-        toolCallId: 'call-456',
-        toolName: 'calculator-tool',
-        args: { expression: '2+2' },
-        result: { result: 4 },
-        state: 'result'
-      })
-    ]
-  })
-];
-
-const run = createAgentTestRun({ inputMessages, output });
-const result = await scorer.run(run);
-
-console.log(result);
-```
-
-### Incorrect tool selection output
-
-The output receives a zero score because the LLM selected the wrong tool.
-
-```typescript
-{
-  score: 0,
-  preprocessStepResult: {
-    expectedTool: 'weather-tool',
-    actualTools: ['calculator-tool'],
-    strictMode: false,
-    hasToolCalls: true,
-    correctToolCalled: false
-  }
-}
-```
-
-## Multiple tools - standard mode example
-
-In standard mode, the scorer passes if the expected tool is among the tools called, even if other tools are also called.
-
-```typescript filename="src/example-multiple-tools.ts" showLineNumbers copy
-import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
-import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
-
-const scorer = createToolCallAccuracyScorer({ 
-  expectedTool: 'weather-tool',
-  strictMode: false // default
-});
-
-// Simulate LLM calling multiple tools including the expected one
-const inputMessages = [
-  createUIMessage({ 
-    content: 'What is the weather and my schedule for today?', 
-    role: 'user', 
-    id: 'input-1' 
-  })
-];
-
-const output = [
-  createUIMessage({
-    content: 'Let me check both the weather and your calendar.',
-    role: 'assistant',
-    id: 'output-1',
-    toolInvocations: [
-      createToolInvocation({
-        toolCallId: 'call-1',
-        toolName: 'weather-tool',
-        args: { location: 'San Francisco' },
-        result: { temperature: '68°F', condition: 'cloudy' },
-        state: 'result'
-      }),
-      createToolInvocation({
-        toolCallId: 'call-2',
-        toolName: 'calendar-tool',
-        args: { date: '2024-01-15' },
-        result: { events: ['Meeting at 2pm'] },
-        state: 'result'
-      })
-    ]
-  })
-];
-
-const run = createAgentTestRun({ inputMessages, output });
-const result = await scorer.run(run);
-
-console.log(result);
-```
-
-### Multiple tools standard mode output
-
-The output receives a perfect score because the expected tool was called, even though other tools were also called.
-
-```typescript
-{
-  score: 1,
-  preprocessStepResult: {
-    expectedTool: 'weather-tool',
-    actualTools: ['weather-tool', 'calendar-tool'],
-    strictMode: false,
-    hasToolCalls: true,
-    correctToolCalled: true
-  }
-}
-```
-
-## Multiple tools - strict mode example
-
-In strict mode, the scorer only passes if exactly one tool is called and it matches the expected tool.
+Only passes if exactly one tool is called:
 
 ```typescript filename="src/example-strict-mode.ts" showLineNumbers copy
-import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
-import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
-
-const scorer = createToolCallAccuracyScorer({ 
+const strictScorer = createToolCallAccuracyScorerCode({ 
   expectedTool: 'weather-tool',
   strictMode: true
 });
 
-// Same multiple tool scenario as above
+// Multiple tools called - fails in strict mode
+const output = [
+  createUIMessage({
+    content: 'Let me help you with that.',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'search-tool',
+        args: {},
+        result: {},
+        state: 'result',
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'weather-tool',
+        args: { location: 'New York' },
+        result: { temperature: '20°C' },
+        state: 'result',
+      })
+    ]
+  })
+];
+
+const result = await strictScorer.run(run);
+console.log(result.score); // 0 - fails because multiple tools were called
+```
+
+### Tool order validation
+
+Validates that tools are called in a specific sequence:
+
+```typescript filename="src/example-order-validation.ts" showLineNumbers copy
+const orderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'auth-tool', // ignored when order is specified
+  expectedToolOrder: ['auth-tool', 'fetch-tool'],
+  strictMode: true // no extra tools allowed
+});
+
+const output = [
+  createUIMessage({
+    content: 'I will authenticate and fetch the data.',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'auth-tool',
+        args: { token: 'abc123' },
+        result: { authenticated: true },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'fetch-tool',
+        args: { endpoint: '/data' },
+        result: { data: ['item1'] },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const result = await orderScorer.run(run);
+console.log(result.score); // 1 - correct order
+```
+
+### Flexible order mode
+
+Allows extra tools as long as expected tools maintain relative order:
+
+```typescript filename="src/example-flexible-order.ts" showLineNumbers copy
+const flexibleOrderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'auth-tool',
+  expectedToolOrder: ['auth-tool', 'fetch-tool'],
+  strictMode: false // allows extra tools
+});
+
+const output = [
+  createUIMessage({
+    content: 'Performing comprehensive operation.',
+    role: 'assistant',
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-1',
+        toolName: 'auth-tool',
+        args: { token: 'abc123' },
+        result: { authenticated: true },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-2',
+        toolName: 'log-tool', // Extra tool - OK in flexible mode
+        args: { message: 'Starting fetch' },
+        result: { logged: true },
+        state: 'result'
+      }),
+      createToolInvocation({
+        toolCallId: 'call-3',
+        toolName: 'fetch-tool',
+        args: { endpoint: '/data' },
+        result: { data: ['item1'] },
+        state: 'result'
+      })
+    ]
+  })
+];
+
+const result = await flexibleOrderScorer.run(run);
+console.log(result.score); // 1 - auth-tool comes before fetch-tool
+```
+
+## LLM-Based Scorer Examples
+
+The LLM-based scorer uses AI to evaluate whether tool selections are appropriate for the user's request.
+
+### Import
+
+```typescript
+import { createToolCallAccuracyScorerLLM } from "@mastra/evals/scorers/llm";
+import { openai } from "@ai-sdk/openai";
+```
+
+### Basic LLM evaluation
+
+```typescript filename="src/example-llm-basic.ts" showLineNumbers copy
+const llmScorer = createToolCallAccuracyScorerLLM({
+  model: openai('gpt-4o-mini'),
+  availableTools: [
+    { 
+      name: 'weather-tool', 
+      description: 'Get current weather information for any location' 
+    },
+    { 
+      name: 'calendar-tool', 
+      description: 'Check calendar events and scheduling' 
+    },
+    { 
+      name: 'search-tool', 
+      description: 'Search the web for general information' 
+    }
+  ]
+});
+
 const inputMessages = [
   createUIMessage({ 
-    content: 'What is the weather like today?', 
+    content: 'What is the weather like in San Francisco today?', 
     role: 'user', 
     id: 'input-1' 
   })
@@ -232,22 +236,15 @@ const inputMessages = [
 
 const output = [
   createUIMessage({
-    content: 'Let me check multiple sources.',
+    content: 'Let me check the current weather for you.',
     role: 'assistant',
     id: 'output-1',
     toolInvocations: [
       createToolInvocation({
-        toolCallId: 'call-1',
+        toolCallId: 'call-123',
         toolName: 'weather-tool',
-        args: { location: 'Boston' },
-        result: { temperature: '45°F', condition: 'rainy' },
-        state: 'result'
-      }),
-      createToolInvocation({
-        toolCallId: 'call-2',
-        toolName: 'news-tool',
-        args: { query: 'weather' },
-        result: { articles: [] },
+        args: { location: 'San Francisco', date: 'today' },
+        result: { temperature: '68°F', condition: 'foggy' },
         state: 'result'
       })
     ]
@@ -255,281 +252,185 @@ const output = [
 ];
 
 const run = createAgentTestRun({ inputMessages, output });
-const result = await scorer.run(run);
+const result = await llmScorer.run(run);
 
-console.log(result);
+console.log(result.score); // 1.0 - appropriate tool usage
+console.log(result.reason); // "The agent correctly used the weather-tool to address the user's request for weather information."
 ```
 
-### Multiple tools strict mode output
+### Handling inappropriate tool usage
 
-The output receives a zero score because multiple tools were called, violating strict mode requirements.
-
-```typescript
-{
-  score: 0,
-  preprocessStepResult: {
-    expectedTool: 'weather-tool',
-    actualTools: ['weather-tool', 'news-tool'],
-    strictMode: true,
-    hasToolCalls: true,
-    correctToolCalled: true
-  }
-}
-```
-
-## No tools called example
-
-When the LLM doesn't call any tools, the scorer returns 0.
-
-```typescript filename="src/example-no-tools.ts" showLineNumbers copy
-import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
-import { createAgentTestRun, createUIMessage } from "@mastra/evals/utils";
-
-const scorer = createToolCallAccuracyScorer({ 
-  expectedTool: 'weather-tool' 
-});
-
-// Simulate LLM response without any tool calls
+```typescript filename="src/example-llm-inappropriate.ts" showLineNumbers copy
 const inputMessages = [
   createUIMessage({ 
-    content: 'What is the weather like?', 
+    content: 'What is the weather in Tokyo?', 
     role: 'user', 
     id: 'input-1' 
   })
 ];
 
-const output = [
+const inappropriateOutput = [
   createUIMessage({
-    content: 'I cannot check the weather right now.',
-    role: 'assistant',
-    id: 'output-1'
-    // No toolInvocations
+    content: 'Let me search for that information.',
+    role: 'assistant', 
+    id: 'output-1',
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: 'call-456',
+        toolName: 'search-tool', // Less appropriate than weather-tool
+        args: { query: 'Tokyo weather' },
+        result: { results: ['Tokyo weather data...'] },
+        state: 'result'
+      })
+    ]
   })
 ];
 
-const run = createAgentTestRun({ inputMessages, output });
-const result = await scorer.run(run);
+const run = createAgentTestRun({ inputMessages, output: inappropriateOutput });
+const result = await llmScorer.run(run);
 
-console.log(result);
+console.log(result.score); // 0.5 - partially appropriate
+console.log(result.reason); // "The agent used search-tool when weather-tool would have been more appropriate for a direct weather query."
 ```
 
-### No tools called output
+### Evaluating clarification requests
 
-The output receives a zero score because no tools were called when the weather tool was expected.
+The LLM scorer recognizes when agents appropriately ask for clarification:
 
-```typescript
-{
-  score: 0,
-  preprocessStepResult: {
-    expectedTool: 'weather-tool',
-    actualTools: [],
-    strictMode: false,
-    hasToolCalls: false,
-    correctToolCalled: false
-  }
-}
+```typescript filename="src/example-llm-clarification.ts" showLineNumbers copy
+const vagueInput = [
+  createUIMessage({ 
+    content: 'I need help with something', 
+    role: 'user', 
+    id: 'input-1' 
+  })
+];
+
+const clarificationOutput = [
+  createUIMessage({
+    content: 'I'd be happy to help! Could you please provide more details about what you need assistance with?',
+    role: 'assistant',
+    id: 'output-1',
+    // No tools called - asking for clarification instead
+  })
+];
+
+const run = createAgentTestRun({ 
+  inputMessages: vagueInput, 
+  output: clarificationOutput 
+});
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 1.0 - appropriate to ask for clarification
+console.log(result.reason); // "The agent appropriately asked for clarification rather than calling tools with insufficient information."
 ```
 
-## Tool order checking examples
+## Comparing Both Scorers
 
-The scorer can validate that tools are called in a specific order, which is useful for workflows that require sequential execution.
+Here's an example using both scorers on the same data:
 
-### Strict order validation
+```typescript filename="src/example-comparison.ts" showLineNumbers copy
+import { createToolCallAccuracyScorerCode as createCodeScorer } from '@mastra/evals/scorers/code';
+import { createToolCallAccuracyScorerLLM as createLLMScorer } from '@mastra/evals/scorers/llm';
+import { openai } from '@ai-sdk/openai';
 
-```typescript filename="src/example-strict-order.ts" showLineNumbers copy
-import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
-import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
-
-const scorer = createToolCallAccuracyScorer({ 
-  expectedTool: 'auth-tool', // This will be ignored when expectedToolOrder is provided
-  expectedToolOrder: ['auth-tool', 'fetch-tool', 'process-tool'],
-  strictMode: true // Exact match - no extra tools allowed
+// Setup both scorers
+const codeScorer = createCodeScorer({
+  expectedTool: 'weather-tool',
+  strictMode: false
 });
 
-// Test correct order
-const inputMessages = [createUIMessage({ 
-  content: 'Authenticate, fetch data, then process it', 
-  role: 'user', 
-  id: 'input-1' 
-})];
+const llmScorer = createLLMScorer({
+  model: openai('gpt-4o-mini'),
+  availableTools: [
+    { name: 'weather-tool', description: 'Get weather information' },
+    { name: 'search-tool', description: 'Search the web' }
+  ]
+});
 
-const correctOrderOutput = [createUIMessage({
-  content: 'I will authenticate, fetch data, and process it.',
-  role: 'assistant',
-  id: 'output-1',
-  toolInvocations: [
-    createToolInvocation({
-      toolCallId: 'call-1',
-      toolName: 'auth-tool',
-      args: { token: 'abc123' },
-      result: { authenticated: true },
-      state: 'result'
-    }),
-    createToolInvocation({
-      toolCallId: 'call-2', 
-      toolName: 'fetch-tool',
-      args: { endpoint: '/data' },
-      result: { data: ['item1', 'item2'] },
-      state: 'result'
-    }),
-    createToolInvocation({
-      toolCallId: 'call-3',
-      toolName: 'process-tool',
-      args: { data: ['item1', 'item2'] },
-      result: { processed: true },
-      state: 'result'
+// Test data
+const run = createAgentTestRun({
+  inputMessages: [
+    createUIMessage({ 
+      content: 'What is the weather?', 
+      role: 'user', 
+      id: 'input-1' 
+    })
+  ],
+  output: [
+    createUIMessage({
+      content: 'Let me find that information.',
+      role: 'assistant',
+      id: 'output-1',
+      toolInvocations: [
+        createToolInvocation({
+          toolCallId: 'call-1',
+          toolName: 'search-tool',
+          args: { query: 'weather' },
+          result: { results: ['weather data'] },
+          state: 'result'
+        })
+      ]
     })
   ]
-})];
-
-const run = createAgentTestRun({ inputMessages, output: correctOrderOutput });
-const result = await scorer.run(run);
-
-console.log(result.score); // 1 - correct strict order
-console.log(result.preprocessStepResult?.correctOrderCalled); // true
-```
-
-### Flexible order validation
-
-```typescript filename="src/example-flexible-order.ts" showLineNumbers copy
-import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
-import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
-
-const scorer = createToolCallAccuracyScorer({ 
-  expectedTool: 'auth-tool', // Ignored when expectedToolOrder is provided
-  expectedToolOrder: ['auth-tool', 'fetch-tool'],
-  strictMode: false // Flexible mode - allows extra tools as long as expected ones are in order
 });
 
-// Test with extra tools that don't break the expected order
-const inputMessages = [createUIMessage({ 
-  content: 'Do a comprehensive data operation', 
-  role: 'user', 
-  id: 'input-1' 
-})];
+// Run both scorers
+const codeResult = await codeScorer.run(run);
+const llmResult = await llmScorer.run(run);
 
-const flexibleOrderOutput = [createUIMessage({
-  content: 'I will perform a comprehensive operation.',
-  role: 'assistant',
-  id: 'output-1',
-  toolInvocations: [
-    createToolInvocation({
-      toolCallId: 'call-1',
-      toolName: 'auth-tool',
-      args: { token: 'abc123' },
-      result: { authenticated: true },
-      state: 'result'
-    }),
-    createToolInvocation({
-      toolCallId: 'call-2',
-      toolName: 'log-tool', // Extra tool - this is OK in contains mode
-      args: { message: 'Starting fetch' },
-      result: { logged: true },
-      state: 'result'
-    }),
-    createToolInvocation({
-      toolCallId: 'call-3',
-      toolName: 'fetch-tool',
-      args: { endpoint: '/data' },
-      result: { data: ['item1'] },
-      state: 'result'
-    }),
-    createToolInvocation({
-      toolCallId: 'call-4',
-      toolName: 'cleanup-tool', // Extra tool at end - also OK
-      args: {},
-      result: { cleaned: true },
-      state: 'result'
-    })
-  ]
-})];
-
-const run = createAgentTestRun({ inputMessages, output: flexibleOrderOutput });
-const result = await scorer.run(run);
-
-console.log(result.score); // 1 - auth-tool comes before fetch-tool
-console.log(result.preprocessStepResult?.actualTools); 
-// ['auth-tool', 'log-tool', 'fetch-tool', 'cleanup-tool']
+console.log('Code Scorer:', codeResult.score); // 0 - wrong tool
+console.log('LLM Scorer:', llmResult.score);   // 0.3 - partially appropriate
+console.log('LLM Reason:', llmResult.reason);   // Explains why search-tool is less appropriate
 ```
 
-### Wrong order example
+## Configuration Options
 
-```typescript filename="src/example-wrong-order.ts" showLineNumbers copy
-const wrongOrderScorer = createToolCallAccuracyScorer({ 
-  expectedTool: 'auth-tool',
-  expectedToolOrder: ['auth-tool', 'fetch-tool'],
-  strictMode: false // Even in flexible mode, order must be correct
-});
-
-const wrongOrderOutput = [createUIMessage({
-  content: 'Let me fetch first then authenticate.',
-  role: 'assistant',
-  id: 'output-1',
-  toolInvocations: [
-    createToolInvocation({
-      toolCallId: 'call-1',
-      toolName: 'fetch-tool', // Called before auth-tool (wrong order)
-      args: { endpoint: '/data' },
-      result: { error: 'unauthorized' },
-      state: 'result'
-    }),
-    createToolInvocation({
-      toolCallId: 'call-2',
-      toolName: 'auth-tool', // Should have been called first
-      args: { token: 'abc123' },
-      result: { authenticated: true },
-      state: 'result'
-    })
-  ]
-})];
-
-const wrongRun = createAgentTestRun({ 
-  inputMessages: [createUIMessage({ content: 'Authenticate then fetch', role: 'user', id: 'input-1' })], 
-  output: wrongOrderOutput 
-});
-const wrongResult = await wrongOrderScorer.run(wrongRun);
-
-console.log(wrongResult.score); // 0 - wrong order
-console.log(wrongResult.preprocessStepResult?.correctOrderCalled); // false
-```
-
-## Scorer configuration
-
-You can configure the `ToolCallAccuracyScorer` behavior using the available options:
+### Code-Based Scorer Options
 
 ```typescript showLineNumbers copy
-// Standard mode - passes if expected tool is called (default)
-const lenientScorer = createToolCallAccuracyScorer({ 
+// Standard mode - passes if expected tool is called
+const lenientScorer = createCodeScorer({ 
   expectedTool: 'search-tool',
   strictMode: false
 });
 
 // Strict mode - only passes if exactly one tool is called
-const strictScorer = createToolCallAccuracyScorer({ 
+const strictScorer = createCodeScorer({ 
   expectedTool: 'search-tool',
   strictMode: true
 });
 
-// Strict order checking - tools must match exactly
-const strictOrderScorer = createToolCallAccuracyScorer({
-  expectedTool: 'step1-tool', // ignored when order is specified
+// Order checking with strict mode
+const strictOrderScorer = createCodeScorer({
+  expectedTool: 'step1-tool',
   expectedToolOrder: ['step1-tool', 'step2-tool', 'step3-tool'],
   strictMode: true // no extra tools allowed
 });
+```
 
-// Flexible order checking - allows extra tools
-const flexibleOrderScorer = createToolCallAccuracyScorer({
-  expectedTool: 'step1-tool', // ignored when order is specified
-  expectedToolOrder: ['auth-tool', 'process-tool'],
-  strictMode: false // extra tools allowed (default)
+### LLM-Based Scorer Options
+
+```typescript showLineNumbers copy
+// Basic configuration
+const basicLLMScorer = createLLMScorer({
+  model: openai('gpt-4o-mini'),
+  availableTools: [
+    { name: 'tool1', description: 'Description 1' },
+    { name: 'tool2', description: 'Description 2' }
+  ]
+});
+
+// With different model
+const customModelScorer = createLLMScorer({
+  model: openai('gpt-4'), // More powerful model for complex evaluations
+  availableTools: [...]
 });
 ```
 
-> See [ToolCallAccuracyScorer](/reference/scorers/tool-call-accuracy) for a full list of configuration options.
+## Understanding the Results
 
-## Understanding the results
-
-`.run()` returns a result in the following shape:
+### Code-Based Scorer Results
 
 ```typescript
 {
@@ -544,30 +445,43 @@ const flexibleOrderScorer = createToolCallAccuracyScorer({
     correctOrderCalled: boolean | null,
     toolCallInfos: ToolCallInfo[]
   },
-  score: number
+  score: number // Always 0 or 1
 }
 ```
 
-### score
+### LLM-Based Scorer Results
 
-A binary accuracy score:
+```typescript
+{
+  runId: string,
+  score: number,  // 0.0 to 1.0
+  reason: string, // Human-readable explanation
+  analyzeStepResult: {
+    evaluations: Array<{
+      toolCalled: string,
+      wasAppropriate: boolean,
+      reasoning: string
+    }>,
+    missingTools?: string[]
+  }
+}
+```
 
-- **1**: Correct tool selection or order according to the specified mode
-- **0**: Incorrect tool selection/order or no tools called
+## When to Use Each Scorer
 
-### runId
-The unique identifier for this scorer run.
+### Use Code-Based Scorer For:
+- Unit testing
+- CI/CD pipelines
+- Regression testing
+- Exact tool matching requirements
+- Tool sequence validation
 
-### preprocessStepResult
-Object with tool call analysis details:
-- **expectedTool**: The tool that was expected to be called (ignored when order checking)
-- **actualTools**: Array of tools that were actually called in order
-- **strictMode**: Whether strict mode evaluation was used (applies to both single tool and order checking modes)
-- **expectedToolOrder**: Array of tools in expected order (when order checking is enabled)
-- **hasToolCalls**: Whether any tools were called at all
-- **correctToolCalled**: Whether the expected tool was among those called (single tool mode)
-- **correctOrderCalled**: Whether tools were called in correct order (null when order checking disabled)
-- **toolCallInfos**: Detailed information about each tool call including call IDs and positions
+### Use LLM-Based Scorer For:
+- Production evaluation
+- Quality assurance
+- User intent alignment
+- Context-aware evaluation
+- Handling edge cases
 
 <GithubLink
   marginTop='mt-16'
