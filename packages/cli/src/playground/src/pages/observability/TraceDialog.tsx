@@ -12,143 +12,7 @@ import { CalendarIcon, ClockIcon, PanelLeftIcon, PanelTopIcon, SquareSplitVertic
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
-// Recursive component to render spans as nested elements
-function SpanTree({
-  span,
-  depth = 0,
-  onSpanClick,
-  selectedSpanId,
-}: {
-  span: any;
-  depth?: number;
-  onSpanClick?: (span: any) => void;
-  selectedSpanId?: string;
-}) {
-  return (
-    <div
-      className="border-l border-dashed border-gray-500 pl-[1.5rem]"
-      // style={{ marginLeft: `${indent}px` }}
-    >
-      <button
-        onClick={() => onSpanClick(span.id)}
-        type="button"
-        aria-label={`View details for span ${span.name}`}
-        className={cn('flex items-center p-[0.5rem] rounded-md  transition-colors cursor-pointer ', 'hover:bg-icon2', {
-          'bg-icon1 text-white': selectedSpanId === span.id,
-        })}
-        //   style={{ marginLeft: `${indent}px` }}
-      >
-        {/* Span name and details */}
-        <div className="flex text-[0.875rem]">
-          <div className="truncate">{span.name}</div>
-          <div className="flex items-center gap-[1rem]">
-            <span>{span.type}</span>
-            <span>{span.latency}ms</span>
-            {span.model && <span>Model: {span.model}</span>}
-            {span.totalCost > 0 && <span>Cost: ${span.totalCost.toFixed(4)}</span>}
-          </div>
-        </div>
-
-        {/* Expand/collapse indicator if has children */}
-        {span.spans && span.spans.length > 0 && (
-          <div className="">
-            {span.spans.length} child{span.spans.length !== 1 ? 'ren' : ''}
-          </div>
-        )}
-      </button>
-
-      {/* Recursively render child spans */}
-      {span.spans && span.spans.length > 0 && (
-        <div className="">
-          {span.spans.map((childSpan: any) => (
-            <SpanTree
-              key={childSpan.id}
-              span={childSpan}
-              depth={depth + 1}
-              onSpanClick={onSpanClick}
-              selectedSpanId={selectedSpanId}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SpanTimeline({
-  span,
-  depth = 0,
-  onSpanClick,
-  selectedSpanId,
-  overallLatency,
-}: {
-  span: any;
-  depth?: number;
-  onSpanClick?: (span: any) => void;
-  selectedSpanId?: string;
-  overallLatency?: number;
-}) {
-  // 16px indent per level
-
-  let overallStartTime;
-  let overallEndTime;
-  let overallDuration;
-
-  const startTimeDate = span?.startTime ? new Date(span.startTime) : null;
-  const endTimeDate = span?.endTime ? new Date(span.endTime) : null;
-  const duration = startTimeDate && endTimeDate ? endTimeDate.getTime() - startTimeDate.getTime() : 0;
-  const latency = span?.latency;
-
-  // console.log({ duration });
-
-  if (depth === 0) {
-    overallLatency = latency;
-    // overallStartTime = startTimeDate;
-    // overallEndTime = endTimeDate;
-    // overallDuration = duration;
-    // console.log('Overall Span:', {
-    //   start: overallStartTime,
-    //   end: overallEndTime,
-    //   duration: overallDuration,
-    // });
-  }
-
-  // console.log('Span Timeline:', {
-  //   startTimeDate,
-  //   duration,
-  // });
-
-  // const startShift = overallStartTime && startTimeDate ? startTimeDate.getTime() - overallStartTime.getTime() : 0;
-
-  return (
-    <div>
-      <div
-        className={cn('flex items-center p-[0.5rem] rounded-md  transition-colors cursor-pointer ', 'hover:bg-icon2')}
-      >
-        {latency}
-        <div
-          className="w-full bg-green-500 h-[2px]"
-          style={{ width: overallLatency ? `${(duration / overallLatency) * 100}%` : '0%' }}
-        ></div>
-      </div>
-      {/* Recursively render child spans */}
-      {span.spans && span.spans.length > 0 && (
-        <div className="">
-          {span.spans.map((childSpan: any) => (
-            <SpanTimeline
-              key={childSpan.id}
-              span={childSpan}
-              depth={depth + 1}
-              onSpanClick={onSpanClick}
-              selectedSpanId={selectedSpanId}
-              overallLatency={overallLatency}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+import { TraceSpanTree } from './trace-span-tree';
 
 type TraceDialogProps = {
   trace?: any;
@@ -177,8 +41,6 @@ export function TraceDialog({
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const [combinedViewProportion, setCombinedViewProportion] = useState<'1/1' | '1/2' | '1/3'>('1/1');
 
-  console.log({ selectedSpan, combinedViewProportion });
-
   // Handler to toggle combined view proportion
   const toggleCombinedViewProportion = () => {
     setCombinedViewProportion(prev => {
@@ -196,7 +58,7 @@ export function TraceDialog({
   };
 
   const handleSpanClick = (id: string) => {
-    console.log('Selected span:', id);
+    // console.log('Selected span:', id);
 
     setSelectedSpanId(id);
     setDialogIsOpen(true);
@@ -323,18 +185,19 @@ export function TraceDialog({
             <h2>Trace</h2>
           </SideDialogHeader>
 
-          <div className="grid grid-cols-[3fr_1fr] gap-[1.5rem] overflow-y-auto">
-            <div className="space-y-[1.5rem] overflow-y-auto">
-              {nestedSpans?.map((span: any) => (
-                <SpanTree key={span.id} span={span} onSpanClick={handleSpanClick} selectedSpanId={selectedSpanId} />
-              ))}
-            </div>
-            <div className="space-y-[1.5rem] overflow-y-auto">
-              {nestedSpans?.map((span: any) => (
-                <SpanTimeline key={span.id} span={span} onSpanClick={handleSpanClick} selectedSpanId={selectedSpanId} />
-              ))}
-            </div>
+          <div className="space-y-[1.5rem] overflow-y-auto pr-[1.5rem]">
+            {nestedSpans?.map((span: any) => (
+              <TraceSpanTree
+                key={span.id}
+                span={span}
+                onSpanClick={handleSpanClick}
+                selectedSpanId={selectedSpanId}
+                overallLatency={nestedSpans?.[0].latency}
+                overallStartTime={nestedSpans?.[0].startTime}
+              />
+            ))}
           </div>
+
           {combinedView && (
             <div className="overflow-y-auto border-t-2 border-gray-500 grid grid-rows-[auto_1fr]">
               <div className="flex items-center justify-between py-[.5rem] border-b border-border1 pr-[1rem]">
