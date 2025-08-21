@@ -7,13 +7,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import virtual from '@rollup/plugin-virtual';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
 import { globby } from 'globby';
-import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { writeCustomInstrumentation } from '../build/customInstrumentation';
 import { writeTelemetryConfig } from '../build/telemetry';
+import { getPackageRootPath } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import {
@@ -335,9 +335,8 @@ export abstract class Bundler extends MastraBundler {
           continue;
         }
 
-        // fix with better pkg root resolving
-        const pkgPath = resolveFrom(mastraEntryFile, `${dep}/package.json`);
-        const pkg = await readJSON(pkgPath);
+        const rootPath = await getPackageRootPath(dep);
+        const pkg = await readJSON(`${rootPath}/package.json`);
 
         dependenciesToInstall.set(dep, pkg.version);
       } catch {
