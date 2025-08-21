@@ -1,6 +1,6 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.2.12",
+  "version": "1.2.13-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
