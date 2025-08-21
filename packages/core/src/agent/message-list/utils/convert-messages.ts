@@ -1,7 +1,7 @@
 import type * as AIV4 from 'ai';
 import type * as AIV5 from 'ai-v5';
 import { MessageList } from '../index';
-import type { MessageInput, MastraMessageV2, UIMessageWithMetadata } from '../index';
+import type { MastraMessageV2, UIMessageWithMetadata, MessageListInput } from '../index';
 
 /**
  * Available output formats for message conversion.
@@ -18,7 +18,7 @@ export type OutputFormat = 'Mastra.V2' | 'AIV4.UI' | 'AIV4.Core' | 'AIV5.UI' | '
 class MessageConverter {
   private messageList: MessageList;
 
-  constructor(messages: MessageInput | MessageInput[]) {
+  constructor(messages: MessageListInput) {
     this.messageList = new MessageList();
     // Use 'memory' source to preserve messages exactly as provided
     // without any transformations or combinations
@@ -36,7 +36,7 @@ class MessageConverter {
    * @param format - The format 'AIV4.UI'
    * @returns Array of UIMessages for use with AI SDK v4 frontend components
    */
-  to(format: 'AIV4.UI'): UIMessageWithMetadata[];
+  to(format: 'AIV4.UI'): UIMessageWithMetadata[] | AIV4.UIMessage[];
   /**
    * Convert messages to AI SDK v4 CoreMessage format.
    * @param format - The format 'AIV4.Core'
@@ -113,6 +113,6 @@ class MessageConverter {
  * - System messages
  * - Metadata preservation where possible
  */
-export function convertMessages(messages: MessageInput | MessageInput[]): MessageConverter {
+export function convertMessages(messages: MessageListInput): MessageConverter {
   return new MessageConverter(messages);
 }
