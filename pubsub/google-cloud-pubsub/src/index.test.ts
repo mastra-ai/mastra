@@ -799,8 +799,7 @@ describe.sequential(
         await mastra.stopEventListeners();
       });
 
-      // TODO: fix this test
-      it.skip('should handle waitForEvent waiting flow', async () => {
+      it('should handle waitForEvent waiting flow', async () => {
         const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
         const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 
@@ -2668,7 +2667,7 @@ describe.sequential(
       });
 
       // timeouts not supported for now
-      it.skip('should execute a waitForEvent step after timeout', async () => {
+      it.todo('should execute a waitForEvent step after timeout', async () => {
         const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
         const step1 = createStep({
           id: 'step1',
@@ -3059,13 +3058,12 @@ describe.sequential(
         await mastra.stopEventListeners();
       });
 
-      // TODO: fix this test
-      it.skip('should handle step execution errors within branches', async () => {
+      it('should handle step execution errors within branches', async () => {
         const error = new Error('Step execution failed');
-        const failingAction = vi.fn<any>().mockRejectedValue(async () => {
+        const failingAction = async () => {
           await new Promise(resolve => setTimeout(resolve, 2e3));
           throw error;
-        });
+        };
 
         const successAction = vi.fn<any>().mockResolvedValue({});
 
@@ -3112,6 +3110,7 @@ describe.sequential(
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
+        console.log('rezzie', result);
 
         expect(result.steps).toMatchObject({
           step1: {
@@ -3802,60 +3801,6 @@ describe.sequential(
         // @ts-ignore
         expect(result.steps.start.output).toEqual({ newValue: 7 });
         await mastra.stopEventListeners();
-      });
-    });
-
-    describe.sequential('Schema Validation', () => {
-      it.skip('should validate trigger data against schema', async () => {
-        const triggerSchema = z.object({
-          required: z.string(),
-          nested: z.object({
-            value: z.number(),
-          }),
-        });
-
-        const step1 = createStep({
-          id: 'step1',
-          execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
-          inputSchema: z.object({
-            required: z.string(),
-            nested: z.object({
-              value: z.number(),
-            }),
-          }),
-          outputSchema: z.object({
-            result: z.string(),
-          }),
-        });
-
-        const workflow = createWorkflow({
-          id: 'test-workflow',
-          inputSchema: triggerSchema,
-          outputSchema: z.object({}),
-          steps: [step1],
-        });
-
-        workflow.then(step1).commit();
-
-        // Should fail validation
-        await expect(
-          workflow.execute({
-            inputData: {
-              required: 'test',
-              // @ts-expect-error
-              nested: { value: 'not-a-number' },
-            },
-          }),
-        ).rejects.toThrow();
-
-        // Should pass validation
-        const run = await workflow.createRunAsync();
-        await run.start({
-          inputData: {
-            required: 'test',
-            nested: { value: 42 },
-          },
-        });
       });
     });
 

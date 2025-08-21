@@ -1146,6 +1146,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   async process(event: Event, ack?: () => Promise<void>) {
     const { type, data } = event;
+    console.log('event', type);
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
 
