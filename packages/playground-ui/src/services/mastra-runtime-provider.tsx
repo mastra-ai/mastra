@@ -17,6 +17,7 @@ import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
+import { MastraModelOutput } from '@mastra/core/stream';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -105,6 +106,8 @@ export function MastraRuntimeProvider({
     topP,
     instructions,
     chatWithGenerate,
+    chatWithGenerateVNext,
+    chatWithStreamVNext,
     providerOptions,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
@@ -211,9 +214,150 @@ export function MastraRuntimeProvider({
       ...baseClient.options,
       abortSignal: controller.signal,
     });
+
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
+      function handleGenerateResponse(generatedResponse: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>) {
+        if (generatedResponse.response && 'messages' in generatedResponse.response) {
+          const latestMessage = generatedResponse.response.messages.reduce(
+            (acc: ThreadMessageLike, message: any) => {
+              const _content = Array.isArray(acc.content) ? acc.content : [];
+
+              if (typeof message.content === 'string') {
+                return {
+                  ...acc,
+                  content: [
+                    ..._content,
+                    ...(generatedResponse.reasoning ? [{ type: 'reasoning', text: generatedResponse.reasoning }] : []),
+                    {
+                      type: 'text',
+                      text: message.content,
+                    },
+                  ],
+                } as ThreadMessageLike;
+              }
+
+              if (message.role === 'assistant') {
+                const toolCallContent = Array.isArray(message.content)
+                  ? message.content.find((content: any) => content.type === 'tool-call')
+                  : undefined;
+
+                const reasoningContent = Array.isArray(message.content)
+                  ? message.content.find((content: any) => content.type === 'reasoning')
+                  : undefined;
+
+                if (toolCallContent) {
+                  const newContent = message.content.map((c: any) => {
+                    if (c.type === 'tool-call' && c.toolCallId === toolCallContent?.toolCallId) {
+                      return {
+                        ...c,
+                        toolCallId: toolCallContent.toolCallId,
+                        toolName: toolCallContent.toolName,
+                        args: toolCallContent.input,
+                      };
+                    }
+                    return c;
+                  });
+
+                  const containsToolCall = newContent.some((c: any) => c.type === 'tool-call');
+
+                  return {
+                    ...acc,
+                    content: containsToolCall
+                      ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
+                      : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
+                  } as ThreadMessageLike;
+                }
+
+                const textContent = Array.isArray(message.content)
+                  ? message.content.find((content: any) => content.type === 'text' && content.text)
+                  : undefined;
+
+                if (textContent) {
+                  return {
+                    ...acc,
+                    content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
+                  } as ThreadMessageLike;
+                }
+              }
+
+              if (message.role === 'tool') {
+                const toolResult = Array.isArray(message.content)
+                  ? message.content.find((content: any) => content.type === 'tool-result')
+                  : undefined;
+
+                if (toolResult) {
+                  const newContent = _content.map(c => {
+                    if (c.type === 'tool-call' && c.toolCallId === toolResult?.toolCallId) {
+                      return { ...c, result: toolResult.output?.value };
+                    }
+                    return c;
+                  });
+                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
+
+                  return {
+                    ...acc,
+                    content: containsToolCall
+                      ? newContent
+                      : [
+                          ..._content,
+                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output?.value },
+                        ],
+                  } as ThreadMessageLike;
+                }
+
+                return {
+                  ...acc,
+                  content: [..._content, toolResult],
+                } as ThreadMessageLike;
+              }
+              return acc;
+            },
+            { role: 'assistant', content: [] } as ThreadMessageLike,
+          );
+
+          console.log(latestMessage, '#####');
+          console.log(generatedResponse, '#####');
+
+          setMessages(currentConversation => [...currentConversation, latestMessage]);
+
+          if (generatedResponse.finishReason) {
+            handleFinishReason(generatedResponse.finishReason);
+          }
+        }
+      }
+
+      if (chatWithGenerateVNext) {
+        const response = await agent.generateVNext({
+          messages: [
+            {
+              role: 'user',
+              content: input,
+            },
+            ...attachments,
+          ],
+          runId: agentId,
+          modelSettings: {
+            frequencyPenalty,
+            presencePenalty,
+            maxRetries,
+            temperature,
+            topK,
+            topP,
+            maxOutputTokens: maxTokens,
+          },
+          providerOptions: providerOptions as any,
+          instructions,
+          runtimeContext: runtimeContextInstance,
+          ...(memory ? { threadId, resourceId: agentId } : {}),
+        });
+
+        handleGenerateResponse(response);
+        setIsRunning(false);
+        return;
+      }
+
       if (chatWithGenerate) {
         const generateResponse = await agent.generate({
           messages: [

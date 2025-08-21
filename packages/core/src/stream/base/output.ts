@@ -182,6 +182,7 @@ export class MastraModelOutput extends MastraBase {
               };
               break;
             case 'reasoning-delta': {
+              console.log(chunk.payload.text, 'REASONING DELTA #####');
               self.#bufferedReasoning.push(chunk.payload.text);
               self.#bufferedByStep.reasoning += chunk.payload.text;
 
