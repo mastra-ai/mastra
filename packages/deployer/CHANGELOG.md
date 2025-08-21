@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- [#6914](https://github.com/mastra-ai/mastra/pull/6914) [`4c8956f`](https://github.com/mastra-ai/mastra/commit/4c8956f3110ccf39595e022f127a44a0a5c09c86) Thanks [@LekoArts](https://github.com/LekoArts)! - Add the `@rollup/plugin-esm-shim` plugin to the bundler. If your code (or dependencies) uses things like `__dirname` you might see an error during `mastra dev` which is fixed now.
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+  - @mastra/server@0.14.1-alpha.0
+
 ## 0.14.0
 
 ### Minor Changes
