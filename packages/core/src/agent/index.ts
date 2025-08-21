@@ -2789,7 +2789,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             ?.map(m => m.content)
             ?.join(`\n`) ?? undefined;
 
-        const processedMemoryMessages = memory.processMessages({
+        const processedMemoryMessages = await memory.processMessages({
           // these will be processed
           messages: messageList.get.remembered.v1() as CoreMessage[],
           // these are here for inspecting but shouldn't be returned by the processor
