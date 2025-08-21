@@ -2,6 +2,7 @@ import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect } from 'vitest';
 import { RegisteredLogger } from '../../../logger';
+import { ChunkFrom } from '../../types';
 import { AISDKV4InputStream } from './input';
 
 describe('AISDKV4InputStream', () => {
