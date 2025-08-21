@@ -6216,7 +6216,7 @@ describe('MastraInngestWorkflow', () => {
   });
 
   // TODO: can we support this on inngest?
-  describe.skip('Dependency Injection', () => {
+  describe('Dependency Injection', () => {
     it('should inject runtimeContext dependencies into steps during run', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -6276,7 +6276,114 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
-    it.skip('should inject runtimeContext dependencies into steps during resume', async ctx => {
+    it('should persist runtime context between multiple steps', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ runtimeContext }) => {
+          // Set initial value in step1
+          runtimeContext.set('step1Value', 'from-step-1');
+          runtimeContext.set('sharedValue', 'initial');
+          return { step: 'step1-complete' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ step: z.string() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ runtimeContext }) => {
+          const step1Value = runtimeContext.get('step1Value') as string;
+
+          runtimeContext.set('step2Value', 'from-step-2');
+          runtimeContext.set('sharedValue', 'modified-by-step2');
+
+          return { step: 'step2-complete', receivedFromStep1: step1Value || 'MISSING' };
+        },
+        inputSchema: z.object({ step: z.string() }),
+        outputSchema: z.object({ step: z.string(), receivedFromStep1: z.string() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ runtimeContext }) => {
+          const step1Value = runtimeContext.get('step1Value') as string;
+          const step2Value = runtimeContext.get('step2Value') as string;
+          const sharedValue = runtimeContext.get('sharedValue') as string;
+
+          expect(step1Value).toBe('from-step-1');
+          expect(step2Value).toBe('from-step-2');
+          expect(sharedValue).toBe('modified-by-step2');
+
+          return {
+            step: 'step3-complete',
+            allValues: { step1Value, step2Value, sharedValue },
+          };
+        },
+        inputSchema: z.object({ step: z.string(), receivedFromStep1: z.string() }),
+        outputSchema: z.object({
+          step: z.string(),
+          allValues: z.object({
+            step1Value: z.string(),
+            step2Value: z.string(),
+            sharedValue: z.string(),
+          }),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'multi-step-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          step: z.string(),
+          allValues: z.object({
+            step1Value: z.string(),
+            step2Value: z.string(),
+            sharedValue: z.string(),
+          }),
+        }),
+      });
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'multi-step-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      await run.start({ inputData: {} });
+
+      srv.close();
+    });
+
+    it('should inject runtimeContext dependencies into steps during resume', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -6291,11 +6398,6 @@ describe('MastraInngestWorkflow', () => {
       const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';
       runtimeContext.set('testKey', testValue);
-
-      const mastra = new Mastra({
-        logger: false,
-        storage: initialStorage,
-      });
 
       const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {
         if (!resumeData?.human) {
@@ -6314,11 +6416,35 @@ describe('MastraInngestWorkflow', () => {
       });
       const workflow = createWorkflow({
         id: 'test-workflow',
-        mastra,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       workflow.then(step).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: initialStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
 
       const run = await workflow.createRunAsync();
       await run.start({ runtimeContext });
@@ -6333,6 +6459,8 @@ describe('MastraInngestWorkflow', () => {
         },
         runtimeContext: resumeruntimeContext,
       });
+
+      srv.close();
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
@@ -6403,11 +6531,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
 
       const run = await incrementWorkflow.createRunAsync();
       const result = await run.start({ inputData: { value: 0 } });
@@ -6417,6 +6564,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });
@@ -6490,11 +6639,30 @@ describe('MastraInngestWorkflow', () => {
         )
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
-        storage: testStorage,
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
         workflows: { incrementWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
       });
+
+      const app = await createHonoServer(mastra);
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
 
       const run = await incrementWorkflow.createRunAsync();
       const result = await run.start({ inputData: { value: 0 } });
@@ -6504,6 +6672,8 @@ describe('MastraInngestWorkflow', () => {
         resumeData: { value: 21 },
         step: ['resume'],
       });
+
+      srv.close();
 
       expect(resumeResult.status).toBe('success');
     });

@@ -146,10 +146,19 @@ export class InngestRun<
 
   async start({
     inputData,
+    runtimeContext,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    // Serialize runtime context to plain object if provided
+    const runtimeContextObj: Record<string, any> = {};
+    if (runtimeContext) {
+      runtimeContext.forEach((value, key) => {
+        runtimeContextObj[key] = value;
+      });
+    }
+
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -158,6 +167,7 @@ export class InngestRun<
         serializedStepGraph: this.serializedStepGraph,
         value: {},
         context: {} as any,
+        runtimeContext: runtimeContextObj,
         activePaths: [],
         suspendedPaths: {},
         timestamp: Date.now(),
@@ -226,6 +236,28 @@ export class InngestRun<
       workflowName: this.workflowId,
       runId: this.runId,
     });
+
+    // If runtime context is provided in resume, update the snapshot with the new runtime context
+    if (params.runtimeContext) {
+      const runtimeContextObj: Record<string, any> = {};
+      params.runtimeContext.forEach((value, key) => {
+        runtimeContextObj[key] = value;
+      });
+
+      // Update the snapshot with the new runtime context
+      if (snapshot) {
+        const updatedSnapshot = {
+          ...snapshot,
+          runtimeContext: runtimeContextObj,
+        };
+
+        await this.#mastra?.storage?.persistWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          snapshot: updatedSnapshot,
+        });
+      }
+    }
 
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
@@ -545,6 +577,23 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
+
+        // Create or restore runtime context from snapshot
+        let runtimeContextToUse = new RuntimeContext();
+
+        // Load existing snapshot to restore runtime context if available
+        const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+          workflowName: this.id,
+          runId,
+        });
+
+        // Restore runtime context from snapshot if it exists
+        if (existingSnapshot?.runtimeContext) {
+          Object.entries(existingSnapshot.runtimeContext).forEach(([key, value]) => {
+            runtimeContextToUse.set(key, value);
+          });
+        }
+
         const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
           workflowId: this.id,
           runId,
@@ -553,7 +602,7 @@ export class InngestWorkflow<
           input: inputData,
           emitter,
           retryConfig: this.retryConfig,
-          runtimeContext: new RuntimeContext(), // TODO
+          runtimeContext: runtimeContextToUse,
           resume,
           abortController: new AbortController(),
         });
@@ -1516,6 +1565,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         };
       }
 
+      const runtimeContextAfterExecution: Record<string, any> = {};
+      runtimeContext.forEach((value, key) => {
+        runtimeContextAfterExecution[key] = value;
+      });
+
       if (suspended) {
         execResults = {
           status: 'suspended',
@@ -1579,7 +1633,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
       }
 
-      return { result: execResults, executionContext, stepResults };
+      return { result: execResults, executionContext, stepResults, runtimeContextAfterExecution };
     });
 
     // @ts-ignore
@@ -1587,11 +1641,74 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     // @ts-ignore
     Object.assign(stepResults, stepRes.stepResults);
 
+    // Apply runtime context changes back to the original runtime context
+    // @ts-ignore
+    if (stepRes.runtimeContextAfterExecution) {
+      // Clear the current runtime context and apply the changes
+      runtimeContext.clear();
+      // @ts-ignore
+      Object.entries(stepRes.runtimeContextAfterExecution).forEach(([key, value]) => {
+        runtimeContext.set(key, value);
+      });
+    }
+
     // @ts-ignore
     return stepRes.result;
   }
 
-  async persistStepUpdate({
+  override async executeEntry(params: {
+    workflowId: string;
+    runId: string;
+    entry: StepFlowEntry;
+    prevStep: StepFlowEntry;
+    serializedStepGraph: SerializedStepFlowEntry[];
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    resume?: {
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      resumePayload: any;
+      resumePath: number[];
+    };
+    executionContext: ExecutionContext;
+    emitter: Emitter;
+    abortController: AbortController;
+    runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
+  }): Promise<{
+    result: StepResult<any, any, any, any>;
+    stepResults?: Record<string, StepResult<any, any, any, any>>;
+    executionContext?: ExecutionContext;
+  }> {
+    // Only restore runtime context from snapshot in multi-step scenarios or resume scenarios
+    // Don't interfere with initial single-step execution or suspend/resume flows
+    const isMultiStepExecution = Object.keys(params.stepResults).length > 1; // Has more than just 'input'
+    const isResumeExecution = !!params.resume;
+
+    if (isMultiStepExecution && !isResumeExecution) {
+      // Only for continuing multi-step workflows (not resume scenarios)
+      try {
+        const existingSnapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+          workflowName: params.workflowId,
+          runId: params.runId,
+        });
+
+        if (existingSnapshot?.runtimeContext) {
+          // Clear existing runtime context and restore from snapshot
+          params.runtimeContext.clear();
+          Object.entries(existingSnapshot.runtimeContext).forEach(([key, value]) => {
+            params.runtimeContext.set(key, value);
+          });
+        }
+      } catch (error) {
+        // If snapshot loading fails, continue with existing runtime context
+        this.logger.warn('Failed to load runtime context from snapshot:', error);
+      }
+    }
+
+    return super.executeEntry(params);
+  }
+
+  protected override async persistStepUpdate({
     workflowId,
     runId,
     stepResults,
@@ -1600,6 +1717,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowStatus,
     result,
     error,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -1614,6 +1732,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
       async () => {
+        // Serialize runtime context to plain object
+        const runtimeContextObj: Record<string, any> = {};
+        runtimeContext.forEach((value, key) => {
+          runtimeContextObj[key] = value;
+        });
+
         await this.mastra?.getStorage()?.persistWorkflowSnapshot({
           workflowName: workflowId,
           runId,
@@ -1621,6 +1745,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId,
             value: {},
             context: stepResults as any,
+            runtimeContext: runtimeContextObj,
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
             serializedStepGraph,
