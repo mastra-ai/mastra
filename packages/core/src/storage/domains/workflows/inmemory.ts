@@ -146,8 +146,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       updatedAt: new Date(),
     };
 
-    console.log('[persistWorkflowSnapshot] args:', { workflowName, runId, snapshot });
-    console.log('[persistWorkflowSnapshot] data:', data);
     await this.operations.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,
@@ -186,9 +184,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     offset?: number;
     resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
-    console.log(`[getWorkflowRuns] called with`, { workflowName, fromDate, toDate, limit, offset, resourceId });
     let runs = Array.from(this.collection.values());
-    console.log(`[getWorkflowRuns] initial runs:`, runs);
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
     if (fromDate && toDate) {
@@ -204,7 +200,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     }
     if (resourceId) runs = runs.filter((run: any) => run.resourceId === resourceId);
 
-    console.log(`[getWorkflowRuns] after filtering:`, runs);
     const total = runs.length;
 
     // Sort by createdAt
@@ -227,7 +222,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       workflowName: run.workflow_name,
     }));
 
-    console.log(`[getWorkflowRuns] parsedRuns:`, parsedRuns);
     return { runs: parsedRuns as WorkflowRun[], total };
   }
 
@@ -238,7 +232,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    console.log(`[getWorkflowRunById] called for runId ${runId}, workflowName ${workflowName}`);
     let run = Array.from(this.collection.values()).find((r: any) => r.run_id === runId);
 
     if (run && workflowName && run.workflow_name !== workflowName) {
@@ -257,7 +250,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       workflowName: run.workflow_name,
     };
 
-    console.log(`[getWorkflowRunById] parsedRun:`, parsedRun);
     return parsedRun as WorkflowRun;
   }
 }

@@ -1118,7 +1118,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     const { type, data } = event;
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
-    console.log('processing event', type, workflowData.workflowId, workflowData.runId, workflowData.executionPath);
 
     const currentState = await this.loadData({
       workflowId: workflowData.workflowId,

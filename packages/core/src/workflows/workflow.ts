@@ -1532,6 +1532,16 @@ export class Run<
     };
   }
 
+  async streamAsync({
+    inputData,
+    runtimeContext,
+  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
+    stream: ReadableStream<StreamEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+  }> {
+    return this.stream({ inputData, runtimeContext });
+  }
+
   /**
    * Starts the workflow execution with the provided input as a stream
    * @param input The input data for the workflow

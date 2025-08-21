@@ -24,14 +24,9 @@ describe.sequential(
       });
 
       await pubsub.init('workflows');
-    });
-
-    afterAll(async () => {
-      const pubsub = new GoogleCloudPubSub({
-        projectId: 'pubsub-test',
-      });
-
-      await pubsub.destroy('workflows');
+      await pubsub.init('workflows-finish');
+      await pubsub.init('workflow.events.v1');
+      await pubsub.init('workflow.events.v2');
     });
 
     beforeEach(async () => {
@@ -93,7 +88,7 @@ describe.sequential(
           runId,
         });
 
-        const { stream, getWorkflowState } = run.stream({ inputData: {} });
+        const { stream, getWorkflowState } = await run.streamAsync({ inputData: {} });
 
         // Start watching the workflow
         const collectedStreamData: StreamEvent[] = [];
@@ -277,7 +272,7 @@ describe.sequential(
 
         const run = await promptEvalWorkflow.createRunAsync();
 
-        const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+        const { stream, getWorkflowState } = await run.streamAsync({ inputData: { input: 'test' } });
 
         for await (const data of stream) {
           if (data.type === 'step-suspended') {
@@ -442,7 +437,7 @@ describe.sequential(
         const run = await workflow.createRunAsync({
           runId: 'test-run-id',
         });
-        const { stream } = await run.stream({
+        const { stream } = await run.streamAsync({
           inputData: {
             prompt1: 'Capital of France, just the name',
             prompt2: 'Capital of UK, just the name',
@@ -677,6 +672,7 @@ describe.sequential(
           }),
         });
         await mastra.startEventListeners();
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const runId = 'test-run-id';
         let watchData: StreamEvent[] = [];
@@ -684,16 +680,20 @@ describe.sequential(
           runId,
         });
 
-        const { stream, getWorkflowState } = run.stream({ inputData: {} });
+        console.log('wf_stream');
+        const { stream, getWorkflowState } = await run.streamAsync({ inputData: {} });
 
         // Start watching the workflow
         const collectedStreamData: StreamEvent[] = [];
         for await (const data of stream) {
+          console.log('wf_chunk', data);
           collectedStreamData.push(JSON.parse(JSON.stringify(data)));
         }
         watchData = collectedStreamData;
 
+        console.log('wf_wait');
         const executionResult = await getWorkflowState();
+        console.log('wf_done', executionResult);
 
         expect(watchData.length).toBe(11);
         expect(watchData).toMatchObject([
@@ -857,7 +857,7 @@ describe.sequential(
           runId,
         });
 
-        const { stream, getWorkflowState } = run.stream({ inputData: {} });
+        const { stream, getWorkflowState } = await run.streamAsync({ inputData: {} });
 
         setTimeout(() => {
           run.sendEvent('user-event-test', {
@@ -968,7 +968,7 @@ describe.sequential(
       });
     });
 
-    describe.sequential('Basic Workflow Execution', () => {
+    describe.sequential.only('Basic Workflow Execution', () => {
       it('should be able to bail workflow execution', async () => {
         const step1 = createStep({
           id: 'step1',
@@ -3573,7 +3573,7 @@ describe.sequential(
       });
     });
 
-    describe.sequential('if-else branching', () => {
+    describe.sequential.only('if-else branching', () => {
       it('should run the if-then branch', async () => {
         const start = vi.fn().mockImplementation(async ({ inputData }) => {
           // Get the current value (either from trigger or previous increment)

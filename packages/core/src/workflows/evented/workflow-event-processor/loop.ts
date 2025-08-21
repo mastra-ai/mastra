@@ -32,7 +32,6 @@ export async function processWorkflowLoop(
     stepResult: StepResult<any, any, any, any>;
   },
 ) {
-  console.log('loop found', step.step.id, stepResult, runCount);
   const loopCondition = await stepExecutor.evaluateCondition({
     workflowId,
     condition: step.condition,
@@ -176,7 +175,6 @@ export async function processWorkflowForEach(
   }
 
   if (executionPath.length === 1 && idx === 0) {
-    console.log('foreach first iteration', step.step.id, idx, prevResult);
     // on first iteratation we need to kick off up to the set concurrency
     const concurrency = Math.min(step.opts.concurrency ?? 1, targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);

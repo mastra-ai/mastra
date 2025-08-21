@@ -77,7 +77,6 @@ export async function processWorkflowConditional(
     step: Extract<StepFlowEntry, { type: 'conditional' }>;
   },
 ) {
-  console.log('conditional found');
   const idxs = await stepExecutor.evaluateConditions({
     workflowId,
     step,
@@ -88,7 +87,6 @@ export async function processWorkflowConditional(
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
-  console.log('conditional idxs', idxs);
 
   const truthyIdxs: Record<number, boolean> = {};
   for (let i = 0; i < idxs.length; i++) {
@@ -98,7 +96,6 @@ export async function processWorkflowConditional(
   await Promise.all(
     step.steps.map(async (step, idx) => {
       if (truthyIdxs[idx]) {
-        console.log('suhh: running conditional step', executionPath.concat([idx]));
         if (step?.type === 'step') {
           activeSteps[step.step.id] = true;
         }
@@ -118,7 +115,6 @@ export async function processWorkflowConditional(
           },
         });
       } else {
-        console.log('suhh: skipping conditional step', executionPath.concat([idx]));
         return pubsub.publish('workflows', {
           type: 'workflow.step.end',
           data: {

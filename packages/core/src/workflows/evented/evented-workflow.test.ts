@@ -167,7 +167,6 @@ describe('Workflow', () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          console.log('suspend');
           await suspend();
           return undefined;
         })
@@ -3481,7 +3480,6 @@ describe('Workflow', () => {
     it('should run a all item concurrency for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
-        console.log('stepping', inputData.value);
         await new Promise(resolve => setTimeout(resolve, 1e3));
         return { value: inputData.value + 11 };
       });
@@ -3559,7 +3557,6 @@ describe('Workflow', () => {
     it('should run a partial item concurrency for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
-        console.log('stepping', inputData.value);
         await new Promise(resolve => setTimeout(resolve, 1e3));
         return { value: inputData.value + 11 };
       });
@@ -4552,7 +4549,6 @@ describe('Workflow', () => {
 
       // @ts-ignore
       const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        console.log('tool call context', context);
         return { name: context.name };
       });
 
@@ -5046,7 +5042,6 @@ describe('Workflow', () => {
           await suspend();
         })
         .mockImplementationOnce(({ resumeData }) => {
-          console.log('resumeData', resumeData);
           return { improvedOutput: 'human intervention output' };
         });
       const explainResponseAction = vi.fn().mockResolvedValue({
@@ -5719,8 +5714,6 @@ describe('Workflow', () => {
         resumeData: { value: 21 },
         step: ['simple-resume-workflow', 'resume'],
       });
-
-      console.log('lastResumeResult', lastResumeResult);
 
       expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
         status: 'success',
@@ -6676,7 +6669,6 @@ describe('Workflow', () => {
         return { finalValue: startVal + otherVal };
       });
       const last = vi.fn().mockImplementation(async ({ inputData }) => {
-        console.log('inputData', inputData);
         return { success: true };
       });
       const finalStep = createStep({
@@ -7655,7 +7647,6 @@ describe('Workflow', () => {
       });
 
       const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
-        console.log('step_other', resumeData);
         if (!resumeData) {
           return await suspend();
         }
@@ -7788,7 +7779,6 @@ describe('Workflow', () => {
         expect.fail('Workflow should be suspended');
       }
       expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
-      console.log('resuming');
       const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
       console.dir({ resumedResults }, { depth: null });
 
@@ -7943,7 +7933,6 @@ describe('Workflow', () => {
           result3: z.string(),
         }),
         execute: vi.fn<any>().mockImplementation(async ({ inputData }) => {
-          console.log('!!inputData', inputData);
           return { result3: `combined-${inputData.step1.result1}-${inputData.step2.result2}` };
         }),
       });

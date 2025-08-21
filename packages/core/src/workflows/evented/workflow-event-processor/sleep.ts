@@ -20,7 +20,6 @@ export async function processWorkflowWaitForEvent(
 ) {
   const executionPath = currentState?.waitingPaths[eventName];
   if (!executionPath) {
-    console.log('user event not found in', eventName, currentState?.waitingPaths);
     return;
   }
 
@@ -30,7 +29,6 @@ export async function processWorkflowWaitForEvent(
     output: currentState?.context[currentStep?.id ?? 'input']?.payload,
   };
   console.dir({ currentStep, currentState }, { depth: null });
-  console.log('user event', eventName, executionPath, prevResult);
 
   await pubsub.publish('workflows', {
     type: 'workflow.step.run',

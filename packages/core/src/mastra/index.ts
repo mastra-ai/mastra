@@ -212,7 +212,6 @@ export class Mastra<
     const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
       try {
         await workflowEventProcessor.process(event, cb);
-        console.log('event processed', event?.type, event?.data.workflowId, event?.data?.runId);
       } catch (e) {
         console.error('Error processing event', e);
       }

@@ -15,7 +15,6 @@ export class GoogleCloudPubSub extends PubSub {
   async init(topicName: string) {
     try {
       const topic = await this.pubsub.createTopic(topicName);
-      console.log('topic created', topic);
     } catch (error) {
       console.log('topic already exists?', error);
     }
@@ -24,13 +23,13 @@ export class GoogleCloudPubSub extends PubSub {
         enableMessageOrdering: true,
         enableExactlyOnceDelivery: topicName === 'workflows' ? true : false,
       });
-      console.log('subscription created', sub);
     } catch (error) {
       console.log('subscription already exists?', error);
     }
   }
 
   async destroy(topicName: string) {
+    this.pubsub.subscription(topicName).removeAllListeners();
     await this.pubsub.subscription(topicName).delete();
     await this.pubsub.topic(topicName).delete();
   }
@@ -47,16 +46,13 @@ export class GoogleCloudPubSub extends PubSub {
 
     let topic = this.pubsub.topic(topicName);
 
-    console.log('publishing message', topicName, event);
     try {
       const messageId = await topic.publishMessage({
         data: Buffer.from(JSON.stringify(event)),
         orderingKey: 'workflows',
       });
-      console.log('message sent', topicName, event, messageId);
     } catch (e: any) {
       if (e.code === 5) {
-        console.log('topic does not exist, creating it', topicName);
         await this.pubsub.createTopic(topicName);
         await this.publish(topicName, event);
       } else {
@@ -81,7 +77,6 @@ export class GoogleCloudPubSub extends PubSub {
     let subscription = this.pubsub.subscription(topic);
     subscription.on('message', message => {
       const event = JSON.parse(message.data.toString()) as Event;
-      console.log('message received', event, cb);
       try {
         cb(event, async () => {
           if (runId) {
@@ -90,7 +85,6 @@ export class GoogleCloudPubSub extends PubSub {
             }
           }
 
-          console.log('acking message');
           try {
             const ackResponse = Promise.race([
               message.ackWithResponse(),
@@ -99,7 +93,6 @@ export class GoogleCloudPubSub extends PubSub {
             this.ackBuffer[topic + '-' + message.id] = ackResponse.catch(() => {});
             await ackResponse;
             delete this.ackBuffer[topic + '-' + message.id];
-            console.log('message acked', ackResponse);
           } catch (e) {
             console.error('Error acking message', e);
           }
@@ -112,11 +105,8 @@ export class GoogleCloudPubSub extends PubSub {
     subscription.on('error', async error => {
       if (error.code === 5) {
         subscription.removeListener('message', cb);
-        console.log('subscription not found, creating it');
         await this.init(topic);
-        console.log('subscription created, resubscribing');
         await this.subscribe(topic, cb);
-        console.log('subscription resubscribed');
       } else {
         // TODO: determine if other errors require re-subscription
         // console.error('subscription error, retrying in 5 seconds', error);
@@ -134,7 +124,6 @@ export class GoogleCloudPubSub extends PubSub {
   }
 
   async flush(): Promise<void> {
-    console.log('flushing_ack', this.ackBuffer);
     await Promise.all(Object.values(this.ackBuffer));
   }
 }

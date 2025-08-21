@@ -301,7 +301,6 @@ export class EventedWorkflow<
 
   async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
-    console.log('creating run', runIdToUse);
 
     // Return a new Run instance with object parameters
     const run: Run<TEngineType, TSteps, TInput, TOutput> =
@@ -443,15 +442,56 @@ export class EventedRun<
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
       try {
-        console.log('writing', event);
         // watch-v2 events are data stream events, so we need to cast them to the correct type
         await writer.write(event as any);
       } catch {}
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
-      console.log('closing stream');
       unwatch();
+
+      try {
+        await writer.close();
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
+      }
+    };
+
+    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+      if (result.status !== 'suspended') {
+        this.closeStreamAction?.().catch(() => {});
+      }
+
+      return result;
+    });
+
+    return {
+      stream: readable as ReadableStream<StreamEvent>,
+      getWorkflowState: () => this.executionResults!,
+    };
+  }
+
+  async streamAsync({
+    inputData,
+    runtimeContext,
+  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
+    stream: ReadableStream<StreamEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+  }> {
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = await this.watchAsync(async event => {
+      try {
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
+      } catch {}
+    }, 'watch-v2');
+
+    this.closeStreamAction = async () => {
+      await unwatch();
 
       try {
         await writer.close();
@@ -561,7 +601,6 @@ export class EventedRun<
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const watchCb = async (event: any, ack?: () => Promise<void>) => {
-      console.log('watch cb', type, event);
       cb(event.data);
       await ack?.();
     };
@@ -581,8 +620,31 @@ export class EventedRun<
     };
   }
 
+  async watchAsync(
+    cb: (event: WatchEvent) => void,
+    type: 'watch' | 'watch-v2' = 'watch',
+  ): Promise<() => Promise<void>> {
+    const watchCb = async (event: any, ack?: () => Promise<void>) => {
+      cb(event.data);
+      await ack?.();
+    };
+
+    if (type === 'watch-v2') {
+      await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+    } else {
+      await this.mastra?.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
+    }
+
+    return async () => {
+      if (type === 'watch-v2') {
+        await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+      } else {
+        await this.mastra?.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
+      }
+    };
+  }
+
   async cancel() {
-    console.log('sending cancel event');
     await this.mastra?.pubsub.publish('workflows', {
       type: 'workflow.cancel',
       data: {
@@ -593,7 +655,6 @@ export class EventedRun<
   }
 
   async sendEvent(eventName: string, data: any) {
-    console.log('sending user event');
     await this.mastra?.pubsub.publish('workflows', {
       type: `workflow.user-event.${eventName}`,
       data: {

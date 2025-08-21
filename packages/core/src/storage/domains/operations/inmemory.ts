@@ -24,7 +24,6 @@ export class StoreOperationsInMemory extends StoreOperations {
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    console.log(`[insert] tableName: ${tableName}, record:`, record);
     const table = this.data[tableName];
     let key = record.id;
     if ([TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS].includes(tableName) && !record.id && record.run_id) {
@@ -34,12 +33,10 @@ export class StoreOperationsInMemory extends StoreOperations {
       key = `auto-${Date.now()}-${Math.random()}`;
       record.id = key;
     }
-    console.log(`[insert] Using key: ${key}`);
     table.set(key, record);
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    console.log(`[batchInsert] tableName: ${tableName}, records:`, records);
     const table = this.data[tableName];
     for (const record of records) {
       let key = record.id;
@@ -50,7 +47,6 @@ export class StoreOperationsInMemory extends StoreOperations {
         key = `auto-${Date.now()}-${Math.random()}`;
         record.id = key;
       }
-      console.log(`[batchInsert] Using key: ${key}`);
       table.set(key, record);
     }
   }
