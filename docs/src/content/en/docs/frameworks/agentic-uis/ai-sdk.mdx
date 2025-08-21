@@ -411,6 +411,25 @@ This guide covers only the Mastra-specific aspects of the migration.
 
 Mastra automatically handles AI SDK v4 data using its internal `MessageList` class, which manages format conversion—including v4 to v5. No database migrations are required; your existing messages are translated on the fly and continue working after you upgrade.
 
+### Message Format Conversion
+
+For cases where you need to manually convert messages between AI SDK and Mastra formats, use the `convertMessages` utility:
+
+```typescript
+import { convertMessages } from '@mastra/core';
+
+// Convert AI SDK v4 messages to v5
+const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI');
+
+// Convert Mastra messages to AI SDK v5
+const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core');
+
+// Supported output formats:
+// 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
+```
+
+This utility is helpful when you want to fetch messages directly from your storage DB and convert them for use in AI SDK.
+
 ### Enabling stream compatibility
 
 To enable AI SDK v5 compatibility, use the experimental `streamVNext` method with the `format` parameter:
