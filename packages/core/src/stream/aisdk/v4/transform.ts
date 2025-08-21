@@ -101,9 +101,9 @@ export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string 
           providerMetadata: value.providerMetadata,
         },
         messages: {
-          all: value.messages.all,
-          user: value.messages.user,
-          nonUser: value.messages.nonUser,
+          all: value.messages?.all || [],
+          user: value.messages?.user || [],
+          nonUser: value.messages?.nonUser || [],
         },
       },
     };
