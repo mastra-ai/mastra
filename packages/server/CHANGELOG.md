@@ -1,5 +1,15 @@
 # @mastra/server
 
+## 0.14.0-alpha.6
+
+### Patch Changes
+
+- a9916bd: Model switcher v5 support
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [194e395]
+  - @mastra/core@0.14.0-alpha.6
+
 ## 0.14.0-alpha.5
 
 ### Patch Changes

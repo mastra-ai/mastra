@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.21-alpha.5
+
+### Patch Changes
+
+- 9ce22c5: Fix swagger-ui link
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [194e395]
+  - @mastra/core@0.14.0-alpha.6
+  - @mastra/client-js@0.10.22-alpha.6
+
 ## 5.1.21-alpha.4
 
 ### Patch Changes
