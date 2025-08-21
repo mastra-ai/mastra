@@ -1,5 +1,11 @@
 # @mastra/longmemeval
 
+## 0.1.9-alpha.5
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.5
+
 ## 0.1.9-alpha.4
 
 ### Patch Changes

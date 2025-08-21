@@ -1,5 +1,12 @@
 # @mastra/server
 
+## 0.14.0-alpha.5
+
+### Patch Changes
+
+- 4908422: Fix agent scorers page by correctly passing in agent name
+  - @mastra/core@0.14.0-alpha.5
+
 ## 0.14.0-alpha.4
 
 ### Patch Changes
