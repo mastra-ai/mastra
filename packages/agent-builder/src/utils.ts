@@ -1,5 +1,5 @@
 import { exec as execNodejs, spawn as nodeSpawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { copyFile } from 'fs/promises';
 import { createRequire } from 'module';
 import { dirname, basename, extname, resolve } from 'path';
@@ -9,24 +9,80 @@ import type { UnitKind } from './types';
 
 export const exec = promisify(execNodejs);
 
+// Helper function to detect if we're in a workspace subfolder
+function isInWorkspaceSubfolder(cwd: string): boolean {
+  try {
+    // First, check if current directory has package.json (it's a package)
+    const currentPackageJson = resolve(cwd, 'package.json');
+    if (!existsSync(currentPackageJson)) {
+      return false; // Not a package, so not a workspace subfolder
+    }
+
+    // Walk up the directory tree looking for workspace indicators
+    let currentDir = cwd;
+    let previousDir = '';
+
+    // Keep going up until we reach the filesystem root or stop making progress
+    while (currentDir !== previousDir && currentDir !== '/') {
+      previousDir = currentDir;
+      currentDir = dirname(currentDir);
+
+      // Skip if we're back at the original directory
+      if (currentDir === cwd) {
+        continue;
+      }
+
+      console.log(`Checking for workspace indicators in: ${currentDir}`);
+
+      // Check for pnpm workspace
+      if (existsSync(resolve(currentDir, 'pnpm-workspace.yaml'))) {
+        console.log(`Found pnpm-workspace.yaml in: ${currentDir}`);
+        return true;
+      }
+
+      // Check for npm/yarn workspaces in package.json
+      const parentPackageJson = resolve(currentDir, 'package.json');
+      if (existsSync(parentPackageJson)) {
+        try {
+          const parentPkg = JSON.parse(readFileSync(parentPackageJson, 'utf-8'));
+          if (parentPkg.workspaces) {
+            console.log(`Found workspaces config in: ${parentPackageJson}`);
+            return true; // Found workspace config
+          }
+        } catch {
+          // Ignore JSON parse errors
+        }
+      }
+
+      // Check for lerna
+      if (existsSync(resolve(currentDir, 'lerna.json'))) {
+        console.log(`Found lerna.json in: ${currentDir}`);
+        return true;
+      }
+    }
+
+    console.log(`No workspace indicators found for: ${cwd}`);
+    return false;
+  } catch (error) {
+    console.log(`Error in workspace detection: ${error}`);
+    return false; // Default to false on any error
+  }
+}
+
 export function spawn(command: string, args: string[], options: any) {
   return new Promise((resolve, reject) => {
     const childProcess = nodeSpawn(command, args, {
-      // stdio: 'inherit',
+      stdio: 'inherit', // Enable proper stdio handling
       ...options,
     });
     childProcess.on('error', error => {
       reject(error);
     });
-    let stderr = '';
-    childProcess.stderr?.on('data', message => {
-      stderr += message;
-    });
     childProcess.on('close', code => {
       if (code === 0) {
         resolve(void 0);
       } else {
-        reject(new Error(stderr));
+        reject(new Error(`Command failed with exit code ${code}`));
       }
     });
   });
@@ -87,6 +143,7 @@ export function spawnWithOutput(
 }
 
 export async function spawnSWPM(cwd: string, command: string, packageNames: string[]) {
+  console.log(`Running install in directory: ${cwd}`);
   // 1) Try local swpm module resolution/execution
   try {
     console.log('Running install command with swpm');
@@ -102,24 +159,45 @@ export async function spawnSWPM(cwd: string, command: string, packageNames: stri
   try {
     // Detect package manager from lock files
     let packageManager: string;
-    let nativeCommand: string;
 
     if (existsSync(resolve(cwd, 'pnpm-lock.yaml'))) {
       packageManager = 'pnpm';
-      nativeCommand = command === 'add' ? 'add' : command === 'install' ? 'install' : command;
     } else if (existsSync(resolve(cwd, 'yarn.lock'))) {
       packageManager = 'yarn';
-      nativeCommand = command === 'add' ? 'add' : command === 'install' ? 'install' : command;
     } else {
       packageManager = 'npm';
-      nativeCommand = command === 'add' ? 'install' : command === 'install' ? 'install' : command;
     }
 
-    console.log(`Falling back to ${packageManager} ${nativeCommand}`);
-    await spawn(packageManager, [nativeCommand, ...packageNames], { cwd });
+    // Normalize command
+    let nativeCommand = command === 'add' ? 'add' : command === 'install' ? 'install' : command;
+
+    // Build args with non-interactive flags for install commands
+    const args = [nativeCommand];
+    if (nativeCommand === 'install') {
+      const inWorkspace = isInWorkspaceSubfolder(cwd);
+      if (packageManager === 'pnpm') {
+        args.push('--force'); // pnpm install --force
+
+        // Check if we're in a workspace subfolder
+        if (inWorkspace) {
+          args.push('--ignore-workspace');
+        }
+      } else if (packageManager === 'npm') {
+        args.push('--yes'); // npm install --yes
+
+        // Check if we're in a workspace subfolder
+        if (inWorkspace) {
+          args.push('--ignore-workspaces');
+        }
+      }
+    }
+    args.push(...packageNames);
+
+    console.log(`Falling back to ${packageManager} ${args.join(' ')}`);
+    await spawn(packageManager, args, { cwd });
     return;
-  } catch (nativeError) {
-    console.log(`Failed to run install command with native package manager: ${nativeError}`);
+  } catch (e) {
+    console.log(`Failed to run install command with native package manager: ${e}`);
   }
 
   throw new Error(`Failed to run install command with swpm and native package managers`);
