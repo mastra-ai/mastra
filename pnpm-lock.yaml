@@ -2102,7 +2102,7 @@ importers:
         specifier: ^3.4.7
         version: 3.4.7
       redis:
-        specifier: ^5.8.1
+        specifier: ^5.8.2
         version: 5.8.2
       xxhash-wasm:
         specifier: ^1.1.0
