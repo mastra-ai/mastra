@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.22-alpha.2",
+  "version": "0.10.22",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -117,6 +117,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.2-0 <0.14.0-0"
+    "@mastra/core": ">=0.10.2-0 <0.15.0-0"
   }
 }

@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core/agent';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { PromptTemplate, defaultQuestionExtractPrompt } from '../prompts';
 import type { QuestionExtractPrompt } from '../prompts';
@@ -69,27 +70,29 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
       numQuestions: this.questions.toString(),
     });
 
-    const questions = await this.llm.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
-      prompt: [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: prompt }],
-        },
-      ],
+    const miniAgent = new Agent({
+      model: this.llm,
+      name: 'question-extractor',
+      instructions:
+        'You are a question extractor. You are given a node and you need to extract the questions from the node.',
     });
 
-    let result = '';
-    try {
-      if (typeof questions.text === 'string') {
-        result = questions.text.replace(STRIP_REGEX, '').trim();
-      } else {
-        console.warn('Question extraction LLM output was not a string:', questions.text);
-      }
-    } catch (err) {
-      console.warn('Question extraction failed:', err);
+    let questionsText = '';
+    if (this.llm.specificationVersion === 'v2') {
+      const result = await miniAgent.generateVNext([{ role: 'user', content: prompt }], { format: 'mastra' });
+      questionsText = result.text;
+    } else {
+      const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
+      questionsText = result.text;
     }
+
+    if (!questionsText) {
+      console.warn('Question extraction LLM output returned empty');
+      return { questionsThisExcerptCanAnswer: '' };
+    }
+
+    const result = questionsText.replace(STRIP_REGEX, '').trim();
+
     return {
       questionsThisExcerptCanAnswer: result,
     };

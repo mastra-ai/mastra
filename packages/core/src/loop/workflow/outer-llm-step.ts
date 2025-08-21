@@ -1,6 +1,8 @@
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
+import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { OuterLLMRun } from '../types';
 import { createLLMExecutionStep } from './llm-execution';
@@ -46,16 +48,15 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
 
         if (errorResults?.length) {
           errorResults.forEach(toolCall => {
-            const chunk = {
+            const chunk: ChunkType = {
               type: 'tool-error',
               runId: rest.runId,
-              from: 'AGENT',
+              from: ChunkFrom.AGENT,
               payload: {
                 error: toolCall.error,
                 args: toolCall.args,
                 toolCallId: toolCall.toolCallId,
                 toolName: toolCall.toolName,
-                result: toolCall.result,
                 providerMetadata: toolCall.providerMetadata,
               },
             };
@@ -88,10 +89,10 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
 
       if (inputData?.length) {
         for (const toolCall of inputData) {
-          const chunk = {
+          const chunk: ChunkType = {
             type: 'tool-result',
             runId: rest.runId,
-            from: 'AGENT',
+            from: ChunkFrom.AGENT,
             payload: {
               args: toolCall.args,
               toolCallId: toolCall.toolCallId,
@@ -134,9 +135,9 @@ export function createOuterLLMWorkflow<Tools extends ToolSet = ToolSet>({
         return {
           ...initialResult,
           messages: {
-            all: messageList.get.all.v3(),
-            user: messageList.get.input.v3(),
-            nonUser: messageList.get.response.v3(),
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
           },
         };
       }

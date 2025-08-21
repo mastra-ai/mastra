@@ -7,9 +7,8 @@ import virtual from '@rollup/plugin-virtual';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { isAbsolute } from 'node:path';
 import { rollup, type OutputAsset, type OutputChunk, type Plugin } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
+import { esbuild } from './plugins/esbuild';
 import { isNodeBuiltin } from './isNodeBuiltin';
 import { aliasHono } from './plugins/hono-alias';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -130,11 +129,7 @@ async function analyze(
         },
       } satisfies Plugin,
       json(),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
+      esbuild(),
       commonjs({
         strictRequires: 'debug',
         ignoreTryCatch: false,
@@ -142,11 +137,7 @@ async function analyze(
         extensions: ['.js', '.ts'],
       }),
       removeDeployer(normalizedMastraEntry, { sourcemap: sourcemapEnabled }),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
+      esbuild(),
     ].filter(Boolean),
   });
 
@@ -276,27 +267,26 @@ export async function bundleExternals(
         ),
       ),
       options?.isDev
-        ? {
+        ? ({
             name: 'external-resolver',
-            resolveId(id: string, importer: string | undefined) {
+            async resolveId(id, importer, options) {
               const pathsToTranspile = [...transpilePackagesMap.values()];
               if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && !isRelativePath(id)) {
+                const resolved = await this.resolve(id, importer, { skipSelf: true, ...options });
+
                 return {
-                  id: resolveFrom(importer, id),
+                  ...resolved,
                   external: true,
                 };
               }
 
               return null;
             },
-          }
+          } as Plugin)
         : null,
       transpilePackagesMap.size
         ? esbuild({
-            target: 'node20',
-            platform: 'node',
             format: 'esm',
-            minify: false,
             include: [...transpilePackagesMap.values()].map(p => {
               // Match files from transpilePackages but exclude any nested node_modules
               // Escapes regex special characters in the path and uses negative lookahead to avoid node_modules

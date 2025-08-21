@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
 import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
@@ -16,6 +16,7 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -26,7 +27,7 @@ import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
-import type { AgentVNextStreamOptions } from './agent.types';
+import type { AgentExecutionOptions } from './agent.types';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
@@ -38,8 +39,6 @@ export type AgentAISpanProperties = {
 };
 
 export type ToolsetsInput = Record<string, ToolsInput>;
-
-export type MastraLanguageModel = LanguageModelV1;
 
 type FallbackFields<S extends ZodTypeAny> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
@@ -73,7 +72,7 @@ export interface AgentConfig<
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
-  defaultVNextStreamOptions?: DynamicArgument<AgentVNextStreamOptions>;
+  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
   mastra?: Mastra;
   scorers?: DynamicArgument<MastraScorers>;
   evals?: TMetrics;
