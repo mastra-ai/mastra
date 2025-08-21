@@ -197,6 +197,9 @@ describe('Agent Memory Tests', () => {
       await agent.generateVNext([{ role: 'user', content: 'What is 2+2?' }], {
         threadId,
         resourceId,
+        modelSettings: {
+          temperature: 0,
+        },
       });
 
       // 2. Object/output mode
@@ -206,6 +209,9 @@ describe('Agent Memory Tests', () => {
         output: z.object({
           result: z.string(),
         }),
+        modelSettings: {
+          temperature: 0,
+        },
       });
 
       // Fetch messages from memory

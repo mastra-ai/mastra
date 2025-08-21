@@ -537,7 +537,10 @@ export function MastraRuntimeProvider({
               }
 
               case 'error': {
-                throw new Error(chunk.payload.error);
+                if (typeof chunk.payload.error === 'string') {
+                  throw new Error(chunk.payload.error);
+                }
+                break;
               }
 
               case 'finish': {

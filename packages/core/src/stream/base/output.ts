@@ -1,5 +1,6 @@
 import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
+import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import { consumeStream } from 'ai-v5';
 import type { TelemetrySettings } from 'ai-v5';
@@ -36,23 +37,23 @@ type MastraModelOutputOptions = {
   rootSpan?: Span;
   telemetry_settings?: TelemetrySettings;
   toolCallStreaming?: boolean;
-  onFinish?: (event: any) => Promise<void> | void;
-  onStepFinish?: (event: any) => Promise<void> | void;
+  onFinish?: (event: Record<string, any>) => Promise<void> | void;
+  onStepFinish?: (event: Record<string, any>) => Promise<void> | void;
   includeRawChunks?: boolean;
   objectOptions?: ObjectOptions;
   outputProcessors?: OutputProcessor[];
 };
-export class MastraModelOutput extends MastraBase {
-  #aisdkv5: AISDKV5OutputStream;
+export class MastraModelOutput<TObjectSchema = unknown> extends MastraBase {
+  #aisdkv5: AISDKV5OutputStream<TObjectSchema>;
   #error: Error | string | { message: string; stack: string } | undefined;
-  #baseStream: ReadableStream<any>;
+  #baseStream: ReadableStream<ChunkType<TObjectSchema>>;
   #bufferedSteps: StepBufferItem[] = [];
   #bufferedReasoningDetails: Record<
     string,
     {
       type: string;
       text: string;
-      providerMetadata: any;
+      providerMetadata: SharedV2ProviderMetadata;
     }
   > = {};
   #bufferedByStep: BufferedByStep = {
@@ -73,9 +74,9 @@ export class MastraModelOutput extends MastraBase {
   #toolCallDeltaIdNameMap: Record<string, string> = {};
   #toolCalls: any[] = [];
   #toolResults: any[] = [];
-  #warnings: any[] = [];
+  #warnings: LanguageModelV2CallWarning[] = [];
   #finishReason: string | undefined;
-  #request: any | undefined;
+  #request: Record<string, any> | undefined;
   #usageCount: Record<string, number> = {};
   #tripwire = false;
   #tripwireReason = '';
@@ -84,10 +85,10 @@ export class MastraModelOutput extends MastraBase {
     object: new DelayedPromise<any>(),
     finishReason: new DelayedPromise<string | undefined>(),
     usage: new DelayedPromise<Record<string, number>>(),
-    warnings: new DelayedPromise<any[]>(),
+    warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
     providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
-    response: new DelayedPromise<any>(),
-    request: new DelayedPromise<any>(),
+    response: new DelayedPromise<Record<string, any>>(),
+    request: new DelayedPromise<Record<string, any>>(),
     text: new DelayedPromise<string>(),
     reasoning: new DelayedPromise<string>(),
     reasoningText: new DelayedPromise<string | undefined>(),
@@ -119,7 +120,7 @@ export class MastraModelOutput extends MastraBase {
       provider: string;
       version: 'v1' | 'v2';
     };
-    stream: ReadableStream<ChunkType>;
+    stream: ReadableStream<ChunkType<TObjectSchema>>;
     messageList: MessageList;
     options: MastraModelOutputOptions;
   }) {
@@ -143,7 +144,7 @@ export class MastraModelOutput extends MastraBase {
     const self = this;
 
     this.#baseStream = stream.pipeThrough(
-      new TransformStream<ChunkType, ChunkType>({
+      new TransformStream<ChunkType<TObjectSchema>, ChunkType<TObjectSchema>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
             case 'source':
@@ -178,7 +179,7 @@ export class MastraModelOutput extends MastraBase {
               self.#bufferedReasoningDetails[chunk.payload.id] = {
                 type: 'reasoning',
                 text: '',
-                providerMetadata: chunk.payload.providerMetadata,
+                providerMetadata: chunk.payload.providerMetadata || {},
               };
               break;
             case 'reasoning-delta': {
@@ -215,9 +216,9 @@ export class MastraModelOutput extends MastraBase {
               self.#bufferedByStep.toolResults.push(chunk);
               break;
             case 'step-finish': {
-              self.updateUsageCount(chunk.payload.output.usage);
+              self.updateUsageCount(chunk.payload.output.usage as Record<string, number>);
               // chunk.payload.totalUsage = self.totalUsage;
-              self.#warnings = chunk.payload.stepResult.warnings;
+              self.#warnings = chunk.payload.stepResult.warnings || [];
 
               if (chunk.payload.metadata.request) {
                 self.#request = chunk.payload.metadata.request;
@@ -244,7 +245,7 @@ export class MastraModelOutput extends MastraBase {
                 isContinued: chunk.payload.stepResult.isContinued,
                 logprobs: chunk.payload.stepResult.logprobs,
                 finishReason: chunk.payload.stepResult.reason,
-                response: { ...otherMetadata, messages: chunk.payload.messages.nonUser },
+                response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
                 request: request,
                 usage: chunk.payload.output.usage,
                 // TODO: need to be able to pass a step id into this fn to get the content for a specific step id
@@ -282,9 +283,9 @@ export class MastraModelOutput extends MastraBase {
                 };
               }
 
-              this.populateUsageCount(chunk.payload.output.usage);
+              this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
 
-              chunk.payload.output.usage = self.#usageCount;
+              chunk.payload.output.usage = self.#usageCount as any;
 
               try {
                 if (self.processorRunner) {
@@ -335,7 +336,7 @@ export class MastraModelOutput extends MastraBase {
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
               self.#delayedPromises.response.resolve(response);
-              self.#delayedPromises.request.resolve(self.#request);
+              self.#delayedPromises.request.resolve(self.#request || {});
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
               self.#delayedPromises.reasoning.resolve(self.#bufferedReasoning.join(''));
               const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
@@ -391,29 +392,29 @@ export class MastraModelOutput extends MastraBase {
 
               if (options?.rootSpan) {
                 options.rootSpan.setAttributes({
-                  ...(baseFinishStep?.usage.reasoningTokens
+                  ...(baseFinishStep?.usage?.reasoningTokens
                     ? {
                         'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
                       }
                     : {}),
 
-                  ...(baseFinishStep?.usage.totalTokens
+                  ...(baseFinishStep?.usage?.totalTokens
                     ? {
                         'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
                       }
                     : {}),
 
-                  ...(baseFinishStep?.usage.inputTokens
+                  ...(baseFinishStep?.usage?.inputTokens
                     ? {
                         'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
                       }
                     : {}),
-                  ...(baseFinishStep?.usage.outputTokens
+                  ...(baseFinishStep?.usage?.outputTokens
                     ? {
                         'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
                       }
                     : {}),
-                  ...(baseFinishStep?.usage.cachedInputTokens
+                  ...(baseFinishStep?.usage?.cachedInputTokens
                     ? {
                         'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
                       }
@@ -450,7 +451,7 @@ export class MastraModelOutput extends MastraBase {
               break;
 
             case 'error':
-              self.#error = chunk.payload.error;
+              self.#error = chunk.payload.error as any;
 
               // Reject all delayed promises on error
               const error =
@@ -564,7 +565,7 @@ export class MastraModelOutput extends MastraBase {
         }),
       )
       .pipeThrough(
-        new TransformStream<ChunkType, ChunkType>({
+        new TransformStream<ChunkType<TObjectSchema>, ChunkType<TObjectSchema>>({
           transform(chunk, controller) {
             if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
               return;
@@ -741,7 +742,7 @@ export class MastraModelOutput extends MastraBase {
     }
 
     return this.fullStream.pipeThrough(
-      new TransformStream<ChunkType | any, ChunkType>({
+      new TransformStream<ChunkType<TObjectSchema> | any, ChunkType<TObjectSchema>>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
             controller.enqueue(chunk.object);
@@ -787,7 +788,7 @@ export class MastraModelOutput extends MastraBase {
     }
 
     return this.teeStream().pipeThrough(
-      new TransformStream<ChunkType, string>({
+      new TransformStream<ChunkType<TObjectSchema>, string>({
         transform(chunk, controller) {
           if (chunk.type === 'text-delta') {
             controller.enqueue(chunk.payload.text);

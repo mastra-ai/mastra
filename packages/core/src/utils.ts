@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import type { WritableStream } from 'stream/web';
 import type { CoreMessage } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';

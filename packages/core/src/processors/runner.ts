@@ -180,8 +180,11 @@ export class ProcessorRunner {
             }
 
             // Process all stream parts through output processors
-            // @ts-expect-error - TODO: fix this
-            const { part: processedPart, blocked, reason } = await this.processPart(value, processorStates);
+            const {
+              part: processedPart,
+              blocked,
+              reason,
+            } = await this.processPart(value as TextStreamPart<any> | ObjectStreamPart<any>, processorStates);
 
             if (blocked) {
               // Log that part was blocked
