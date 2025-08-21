@@ -1,9 +1,7 @@
-#!/usr/bin/env node
-
 const fs = require("fs");
 const path = require("path");
 
-const NEXT_CONFIG_PATH = path.join(__dirname, "../next.config.mjs");
+const NEXT_CONFIG_PATH = path.join(__dirname, "../../next.config.mjs");
 
 /**
  * Check if a redirect should be locale-aware
