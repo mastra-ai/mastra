@@ -1,5 +1,31 @@
 # @mastra/mcp
 
+## 0.10.12
+
+### Patch Changes
+
+- 895d3b2: Update the MCP SDK version and update elicitation to match new spec (reject becomes decline)
+- e1aed55: Fixed an issue where keep-alive messages were interfering with endpoint messages on initial SSE connection
+- 03997ae: Update peerdeps
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0
+
 ## 0.10.12-alpha.2
 
 ### Patch Changes

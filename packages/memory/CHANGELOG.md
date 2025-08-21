@@ -1,5 +1,35 @@
 # @mastra/memory
 
+## 0.13.0
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- 8a41506: dependencies updates:
+  - Updated dependency [`redis@^5.8.1` ↗︎](https://www.npmjs.com/package/redis/v/5.8.1) (from `^5.8.0`, in `dependencies`)
+- 2454423: Agentic loop and streaming workflow: generateVNext and streamVNext
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0
+
 ## 0.13.0-alpha.1
 
 ### Minor Changes
