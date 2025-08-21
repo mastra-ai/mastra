@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RegisteredLogger } from '../../../logger';
+import { ChunkFrom } from '../../types';
 import { AISDKV5InputStream } from './input';
 import { createTestModel } from './test-utils';
 
