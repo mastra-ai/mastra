@@ -62,7 +62,7 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.14.0-0",
+    "@mastra/core": ">=0.14.0-0 <0.15.0-0",
     "zod": "^3.0.0"
   },
   "devDependencies": {
