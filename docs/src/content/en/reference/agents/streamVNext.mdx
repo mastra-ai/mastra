@@ -3,11 +3,13 @@ title: "Reference: Agent.streamVNext() (Experimental) | Agents | Mastra Docs"
 description: "Documentation for the `Agent.streamVNext()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
 ---
 
+import { Callout } from "nextra/components";
+
 # Agent.streamVNext() (Experimental)
 
-<Note type="warning">
+<Callout type="warning">
   **Experimental Feature**: This is a new streaming implementation that will replace the existing `stream()` method once battle-tested. The API may change as we refine the feature based on feedback.
-</Note>
+</Callout>
 
 The `.streamVNext()` method enables real-time streaming of responses from an agent with enhanced capabilities. This method accepts messages and optional streaming options, providing a next-generation streaming experience that will eventually replace the current `stream()` method.
 
@@ -28,7 +30,7 @@ await agent.streamVNext("message for agent");
     },
     {
       name: "options",
-      type: "AgentVNextStreamOptions<Output, StructuredOutput>",
+      type: "AgentExecutionOptions<Output, StructuredOutput>",
       isOptional: true,
       description: "Optional configuration for the streaming process.",
     },
@@ -53,11 +55,71 @@ await agent.streamVNext("message for agent");
       description: "Additional context messages to provide to the agent.",
     },
     {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
+      isOptional: true,
+      description: "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
+      properties: [
+        {
+          parameters: [{
+            name: "schema",
+            type: "z.ZodSchema<S>",
+            isOptional: false,
+            description: "Zod schema to validate the output against."
+          }]
+        },
+        {
+          parameters: [{
+            name: "model",
+            type: "MastraLanguageModel",
+            isOptional: false,
+            description: "Model to use for the internal structuring agent."
+          }]
+        },
+        {
+          parameters: [{
+            name: "errorStrategy",
+            type: "'strict' | 'warn' | 'fallback'",
+            isOptional: true,
+            description: "Strategy when parsing or validation fails. Defaults to 'strict'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "fallbackValue",
+            type: "<S extends ZodTypeAny>",
+            isOptional: true,
+            description: "Fallback value when errorStrategy is 'fallback'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "instructions",
+            type: "string",
+            isOptional: true,
+            description: "Custom instructions for the structuring agent."
+          }]
+        },
+      ]
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+    },
+    {
+      name: "inputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+    },
+    {
       name: "experimental_output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
       description:
-        "Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
+        "Note, the preferred route is to use the `structuredOutput` property. Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
     },
     {
       name: "instructions",
@@ -395,6 +457,9 @@ await agent.streamVNext("message for agent");
 ## Extended usage example
 
 ```typescript showLineNumbers copy
+import { z } from "zod";
+import { ModerationProcessor, BatchPartsProcessor } from "@mastra/core/processors";
+
 await agent.streamVNext("message for agent", {
   temperature: 0.7,
   maxSteps: 3,
@@ -402,6 +467,20 @@ await agent.streamVNext("message for agent", {
     thread: "user-123",
     resource: "test-app"
   },
-  toolChoice: "auto"
+  toolChoice: "auto",
+  // Structured output with better DX
+  structuredOutput: {
+    schema: z.object({
+      sentiment: z.enum(['positive', 'negative', 'neutral']),
+      confidence: z.number(),
+    }),
+    model: openai("gpt-4o-mini"),
+    errorStrategy: 'warn',
+  },
+  // Output processors for streaming response validation
+  outputProcessors: [
+    new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
+    new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
+  ],
 });
 ```

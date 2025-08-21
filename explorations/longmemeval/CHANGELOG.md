@@ -1,5 +1,34 @@
 # @mastra/longmemeval
 
+## 0.1.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [227c7e6]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0-alpha.3
+
+## 0.1.9-alpha.2
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.2
+
+## 0.1.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [d6e39da]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+  - @mastra/libsql@0.13.3-alpha.0
+
 ## 0.1.9-alpha.0
 
 ### Patch Changes

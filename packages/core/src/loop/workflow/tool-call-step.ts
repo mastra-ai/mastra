@@ -1,10 +1,16 @@
-import type { ModelMessage } from 'ai-v5';
+import type { ToolCallOptions, ToolSet } from 'ai-v5';
 import { createStep } from '../../workflows';
-import { getRootSpan } from '../telemetry';
+import { assembleOperationName, getTracer } from '../telemetry';
 import type { OuterLLMRun } from '../types';
 import { toolCallInputSchema, toolCallOutputSchema } from './schema';
 
-export function createToolCallStep({ tools, model, messageList, options, telemetry_settings }: OuterLLMRun) {
+export function createToolCallStep<Tools extends ToolSet = ToolSet>({
+  tools,
+  messageList,
+  options,
+  telemetry_settings,
+  writer,
+}: OuterLLMRun<Tools>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -18,21 +24,12 @@ export function createToolCallStep({ tools, model, messageList, options, telemet
         throw new Error(`Tool ${inputData.toolName} not found`);
       }
 
-      // const initialResult = getStepResult({
-      //   id: 'generateText',
-      // } as any);
-
-      // messageList.add(initialResult.messages.user, 'input');
-
       if (tool && 'onInputAvailable' in tool) {
         try {
           await tool?.onInputAvailable?.({
             toolCallId: inputData.toolCallId,
             input: inputData.args,
-            messages: messageList.get.input.core()?.map(message => ({
-              role: message.role,
-              content: message.content,
-            })) as ModelMessage[],
+            messages: messageList.get.input.aiV5.model(),
             abortSignal: options?.abortSignal,
           });
         } catch (error) {
@@ -44,16 +41,16 @@ export function createToolCallStep({ tools, model, messageList, options, telemet
         return inputData;
       }
 
-      const { rootSpan } = getRootSpan({
-        operationId: 'mastra.stream.toolCall',
-        model: {
-          modelId: model.modelId,
-          provider: model.provider,
-        },
-        telemetry_settings: telemetry_settings,
+      const tracer = getTracer({
+        isEnabled: telemetry_settings?.isEnabled,
+        tracer: telemetry_settings?.tracer,
       });
 
-      const span = rootSpan.setAttributes({
+      const span = tracer.startSpan('mastra.stream.toolCall').setAttributes({
+        ...assembleOperationName({
+          operationId: 'mastra.stream.toolCall',
+          telemetry: telemetry_settings,
+        }),
         'stream.toolCall.toolName': inputData.toolName,
         'stream.toolCall.toolCallId': inputData.toolCallId,
         'stream.toolCall.args': JSON.stringify(inputData.args),
@@ -63,8 +60,9 @@ export function createToolCallStep({ tools, model, messageList, options, telemet
         const result = await tool.execute(inputData.args, {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          messages: messageList.get.input.core() as ModelMessage[],
-        });
+          messages: messageList.get.input.aiV5.model(),
+          writableStream: writer,
+        } as ToolCallOptions);
 
         span.setAttributes({
           'stream.toolCall.result': JSON.stringify(result),

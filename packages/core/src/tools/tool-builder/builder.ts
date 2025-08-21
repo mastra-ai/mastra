@@ -1,3 +1,4 @@
+import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -18,7 +19,6 @@ import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
 import type { CoreTool, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
-import type { FlexibleSchema, ToolCallOptions, ToolExecuteFunction } from '@ai-sdk/provider-utils-v5';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
@@ -141,7 +141,7 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.writableStream,
+              options.writableStream || (execOptions as any).writableStream,
             ),
           },
           execOptions as ToolExecutionOptions & ToolCallOptions,
@@ -241,9 +241,16 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
+      let supportsStructuredOutputs = false;
+      if (model.specificationVersion === 'v2') {
+        supportsStructuredOutputs = true;
+      } else {
+        supportsStructuredOutputs = model.supportsStructuredOutputs ?? false;
+      }
+
       const modelInfo = {
         modelId: model.modelId,
-        supportsStructuredOutputs: model.supportsStructuredOutputs ?? false,
+        supportsStructuredOutputs,
         provider: model.provider,
       };
       schemaCompatLayers.push(
@@ -274,6 +281,7 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
+      id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedSchema,
       outputSchema: processedOutputSchema,
     };

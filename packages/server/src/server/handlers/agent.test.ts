@@ -109,6 +109,7 @@ describe('Agent Handlers', () => {
           workflows: {},
           provider: 'openai.chat',
           modelId: 'gpt-4o',
+          modelVersion: 'v1',
           defaultGenerateOptions: {},
           defaultStreamOptions: {},
         },
@@ -171,6 +172,7 @@ describe('Agent Handlers', () => {
         },
         provider: 'openai.chat',
         modelId: 'gpt-4o',
+        modelVersion: 'v1',
         defaultGenerateOptions: {},
         defaultStreamOptions: {},
       });
@@ -321,19 +323,46 @@ describe('Agent Handlers', () => {
 
   describe('updateAgentModelHandler', () => {
     it('should update agent model', async () => {
-      const result = updateAgentModelHandler({
+      const mockStreamResult = {
+        toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
+        toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+      };
+      (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
+      const updateResult = updateAgentModelHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {
-          model: openai('gpt-5'),
+          modelId: 'gpt-4o-mini',
+          provider: 'openai',
         },
       });
 
       const agent = mockMastra.getAgent('test-agent');
       const llm = await agent.getLLM();
       const modelId = llm.getModelId();
-      expect(result).toEqual({ message: 'Agent model updated' });
-      expect(modelId).toEqual('gpt-5');
+      expect(updateResult).toEqual({ message: 'Agent model updated' });
+      expect(modelId).toEqual('gpt-4o-mini');
+      //confirm that stream works fine after the model update
+
+      const result = await streamGenerateHandler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        body: {
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+          // @ts-expect-error
+          runtimeContext: {
+            user: {
+              name: 'test-user',
+            },
+          },
+        },
+        runtimeContext: new RuntimeContext(),
+      });
+
+      expect(result).toBeInstanceOf(Response);
     });
   });
 });

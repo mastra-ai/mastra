@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
+import type { AnyAISpan } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -738,12 +739,13 @@ export class Workflow<
             | DynamicMapping<TPrevSchema, z.ZodType<any>>;
         }
       | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
-  ) {
+    stepOptions?: { id?: string | null },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, any> {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+        id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         execute: mappingConfig as any,
@@ -784,7 +786,7 @@ export class Workflow<
     );
 
     const mappingStep: any = createStep({
-      id: `mapping_${this.#mastra?.generateId() || randomUUID()}`,
+      id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async ctx => {
@@ -1181,6 +1183,7 @@ export class Workflow<
     abort,
     abortSignal,
     runCount,
+    parentAISpan,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1201,12 +1204,12 @@ export class Workflow<
     bail: (result: any) => any;
     abort: () => any;
     runCount?: number;
+    parentAISpan?: AnyAISpan;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    const run = resume?.steps?.length
-      ? await this.createRunAsync({ runId: resume.runId })
-      : await this.createRunAsync();
+    const isResume = !!(resume?.steps && resume.steps.length > 0);
+    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync();
     const nestedAbortCb = () => {
       abort();
     };
@@ -1227,14 +1230,9 @@ export class Workflow<
       runtimeContext.set('__mastraWorflowInputData', inputData);
     }
 
-    const res = resume?.steps?.length
-      ? await run.resume({
-          resumeData,
-          step: resume.steps as any,
-          runtimeContext,
-          runCount,
-        })
-      : await run.start({ inputData, runtimeContext });
+    const res = isResume
+      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, parentAISpan })
+      : await run.start({ inputData, runtimeContext, parentAISpan });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1436,10 +1434,12 @@ export class Run<
     inputData,
     runtimeContext,
     writableStream,
+    parentAISpan,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    parentAISpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1465,6 +1465,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
+      parentAISpan,
     });
 
     if (result.status !== 'suspended') {
@@ -1696,6 +1697,7 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
+    parentAISpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1813,6 +1815,7 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
+        parentAISpan: params.parentAISpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {

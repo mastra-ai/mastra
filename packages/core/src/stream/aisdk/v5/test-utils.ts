@@ -1,7 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 
-const testUsage = {
+export const testUsage = {
   inputTokens: 3,
   outputTokens: 10,
   totalTokens: 13,

@@ -1,8 +1,10 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import type { CallSettings, IdGenerator, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { asSchema, CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
+import type { OutputProcessor } from '../processors';
+import type { ChunkType } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
 export type StreamInternal = {
@@ -11,29 +13,54 @@ export type StreamInternal = {
   currentDate?: () => Date;
 };
 
-export type LoopOptions = {
+export type LoopConfig = {
+  onChunk?: (chunk: ChunkType) => Promise<void> | void;
+  onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
+  onFinish?: (event: any) => Promise<void> | void;
+  onStepFinish?: (event: any) => Promise<void> | void;
+  onAbort?: (event: any) => Promise<void> | void;
+  activeTools?: Array<keyof ToolSet> | undefined;
+  abortSignal?: AbortSignal;
+};
+
+export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   model: LanguageModelV2;
   logger?: IMastraLogger;
+  mode?: 'generate' | 'stream';
   runId?: string;
   idGenerator?: MastraIdGenerator;
+  toolCallStreaming?: boolean;
   telemetry_settings?: TelemetrySettings;
   messageList: MessageList;
   includeRawChunks?: boolean;
   modelSettings?: CallSettings;
   headers?: Record<string, string>;
   toolChoice?: ToolChoice<any>;
-  options?: {
-    abortSignal?: AbortSignal;
-  };
-  tools: ToolSet;
+  options?: LoopConfig;
+  providerOptions?: SharedV2ProviderOptions;
+  tools?: Tools;
+  outputProcessors?: OutputProcessor[];
+  experimental_generateMessageId?: () => string;
+  stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
+  _internal?: StreamInternal;
+  objectOptions?: ObjectOptions;
 };
 
-export type LoopRun = LoopOptions & {
+export type ObjectOptions =
+  | {
+      schema?: Parameters<typeof asSchema>[0];
+    }
+  | undefined;
+
+export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
+  runId: string;
   startTimestamp: number;
+  modelStreamSpan: Span;
   _internal: StreamInternal;
 };
 
-export type OuterLLMRun = {
+export type OuterLLMRun<Tools extends ToolSet = ToolSet> = {
   messageId: string;
-  modelStreamSpan?: Span;
-} & LoopRun;
+  controller: ReadableStreamDefaultController<ChunkType>;
+  writer: WritableStream<ChunkType>;
+} & LoopRun<Tools>;

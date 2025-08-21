@@ -32,6 +32,8 @@ export interface ModelSettings {
   instructions?: string;
   providerOptions?: Record<string, unknown>;
   chatWithGenerate?: boolean;
+  chatWithGenerateVNext?: boolean;
+  chatWithStreamVNext?: boolean;
 }
 
 export interface AgentSettingsType {

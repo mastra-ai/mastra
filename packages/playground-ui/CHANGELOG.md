@@ -1,5 +1,31 @@
 # @mastra/playground-ui
 
+## 5.1.21-alpha.2
+
+### Patch Changes
+
+- 36928f0: Use right icon for anthropic in model switcher
+- Updated dependencies [227c7e6]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0-alpha.3
+  - @mastra/client-js@0.10.22-alpha.3
+
+## 5.1.21-alpha.1
+
+### Patch Changes
+
+- 6313063: Implement model switcher in playground
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+  - @mastra/client-js@0.10.22-alpha.1
+
 ## 5.1.21-alpha.0
 
 ### Patch Changes
