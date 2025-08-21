@@ -1,5 +1,29 @@
 # @mastra/libsql
 
+## 0.13.4
+
+### Patch Changes
+
+- [#6920](https://github.com/mastra-ai/mastra/pull/6920) [`64ad21f`](https://github.com/mastra-ai/mastra/commit/64ad21ff4f58ce8b344d163d800d9e4f84d82f6f) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.12` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.12) (from `^0.15.10`, in `dependencies`)
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1
+
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- [#6920](https://github.com/mastra-ai/mastra/pull/6920) [`64ad21f`](https://github.com/mastra-ai/mastra/commit/64ad21ff4f58ce8b344d163d800d9e4f84d82f6f) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.12` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.12) (from `^0.15.10`, in `dependencies`)
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+
 ## 0.13.3
 
 ### Patch Changes
