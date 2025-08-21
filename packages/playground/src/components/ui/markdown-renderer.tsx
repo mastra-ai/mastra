@@ -109,7 +109,7 @@ function childrenTakeAllStringContents(element: any): string {
   }
 
   if (element?.props?.children) {
-    let children = element.props.children;
+    const children = element.props.children;
 
     if (Array.isArray(children)) {
       return children.map(child => childrenTakeAllStringContents(child)).join('');

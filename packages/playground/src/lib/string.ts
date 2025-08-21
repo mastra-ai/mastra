@@ -58,7 +58,7 @@ export const keepOnlyLetters = (input: string): string => {
 export const removeHTMLTagsFromText = (html: string): string => {
   const regex = /<\/?[a-z]+(?=[\s>])(?:[^>=]|=(?:'[^']*'|"[^"]*"|[^'"\s]*))*\s?\/?>/;
   const htmlText = html.replace(regex, '').replace(/<[^>]*>?/gm, '');
-  let text = htmlText.split('&nbsp;'); // remove nbsp
+  const text = htmlText.split('&nbsp;'); // remove nbsp
   return text.join(' ');
 };
 
