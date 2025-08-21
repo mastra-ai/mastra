@@ -1,5 +1,15 @@
 # @mastra/server
 
+## 0.14.0-alpha.7
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.7
+
 ## 0.14.0-alpha.6
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @mastra/chroma
 
+## 0.11.4-alpha.1
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.11.4-alpha.0
 
 ### Patch Changes

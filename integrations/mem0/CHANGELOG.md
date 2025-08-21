@@ -1,5 +1,12 @@
 # @mastra/mem0
 
+## 0.1.8-alpha.0
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.1.7
 
 ### Patch Changes

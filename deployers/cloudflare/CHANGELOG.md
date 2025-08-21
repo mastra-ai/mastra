@@ -1,5 +1,14 @@
 # @mastra/deployer-cloudflare
 
+## 0.12.1-alpha.2
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+- Updated dependencies [03997ae]
+  - @mastra/deployer@0.14.0-alpha.7
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.12.1-alpha.1
 
 ### Patch Changes

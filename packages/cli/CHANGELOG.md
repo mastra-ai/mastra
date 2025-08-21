@@ -1,5 +1,17 @@
 # mastra
 
+## 0.10.22-alpha.6
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+- Updated dependencies [03997ae]
+- Updated dependencies [03997ae]
+  - @mastra/loggers@0.10.7-alpha.0
+  - @mastra/mcp@0.10.12-alpha.2
+  - @mastra/deployer@0.14.0-alpha.7
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.10.22-alpha.5
 
 ### Patch Changes

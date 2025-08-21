@@ -1,5 +1,15 @@
 # @mastra/memory
 
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.7
+
 ## 0.12.3-alpha.0
 
 ### Patch Changes

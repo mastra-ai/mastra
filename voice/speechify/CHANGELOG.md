@@ -1,5 +1,12 @@
 # @mastra/voice-speechify
 
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.10.7
 
 ### Patch Changes

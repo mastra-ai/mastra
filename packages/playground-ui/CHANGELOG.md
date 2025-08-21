@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.2.0-alpha.6
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.7
+- @mastra/client-js@0.10.22-alpha.7
+
 ## 5.1.21-alpha.5
 
 ### Patch Changes
