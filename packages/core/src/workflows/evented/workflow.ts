@@ -503,7 +503,6 @@ export class EventedRun<
     };
 
     this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
-      console.log('execution_results', result);
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }

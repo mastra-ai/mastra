@@ -82,16 +82,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     const resultData: any = await new Promise(resolve => {
       const finishCb = async (event: Event, ack: () => Promise<void>) => {
-        if (event.data.runId !== params.runId) {
+        if (event.runId !== params.runId) {
           await ack?.();
           return;
         }
-        console.log('finishCb', event.type);
 
         if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
-          console.log('acking');
           await ack?.();
-          console.log('acked', event);
           await pubsub.unsubscribe('workflows-finish', finishCb);
           resolve(event.data);
           return;

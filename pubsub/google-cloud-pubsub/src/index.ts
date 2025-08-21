@@ -4,6 +4,7 @@ import { PubSub } from '@mastra/core/events';
 import type { Event } from '@mastra/core/events';
 
 export class GoogleCloudPubSub extends PubSub {
+  private instanceId: string;
   private pubsub: PubSubClient;
   private ackBuffer: Record<string, Promise<any>> = {};
   private activeSubscriptions: Record<string, Subscription> = {};
@@ -12,6 +13,11 @@ export class GoogleCloudPubSub extends PubSub {
   constructor(config: ClientConfig) {
     super();
     this.pubsub = new PubSubClient(config);
+    this.instanceId = crypto.randomUUID();
+  }
+
+  getSubscriptionName(topic: string) {
+    return `${topic}-${this.instanceId}`;
   }
 
   async ackMessage(topic: string, message: Message) {
@@ -29,24 +35,28 @@ export class GoogleCloudPubSub extends PubSub {
     try {
       const topic = await this.pubsub.createTopic(topicName);
     } catch (error) {
-      console.log('topic already exists?', error);
+      // no-op
     }
     try {
-      const sub = await this.pubsub.topic(topicName).createSubscription(topicName, {
+      const [sub] = await this.pubsub.topic(topicName).createSubscription(this.getSubscriptionName(topicName), {
         enableMessageOrdering: true,
         enableExactlyOnceDelivery: topicName === 'workflows' ? true : false,
       });
-      this.activeSubscriptions[topicName] = sub[0];
+      this.activeSubscriptions[topicName] = sub;
+      return sub;
     } catch (error) {
-      console.log('subscription already exists?', error);
+      // no-op
     }
+
+    return undefined;
   }
 
   async destroy(topicName: string) {
+    const subName = this.getSubscriptionName(topicName);
     delete this.activeSubscriptions[topicName];
-    this.pubsub.subscription(topicName).removeAllListeners();
-    await this.pubsub.subscription(topicName).close();
-    await this.pubsub.subscription(topicName).delete();
+    this.pubsub.subscription(subName).removeAllListeners();
+    await this.pubsub.subscription(subName).close();
+    await this.pubsub.subscription(subName).delete();
     await this.pubsub.topic(topicName).delete();
   }
 
@@ -91,7 +101,11 @@ export class GoogleCloudPubSub extends PubSub {
     }
 
     // Update tracked callbacks
-    const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(topic);
+    const subscription = this.activeSubscriptions[topic] ?? (await this.init(topic));
+    if (!subscription) {
+      throw new Error(`Failed to subscribe to topic: ${topic}`);
+    }
+
     this.activeSubscriptions[topic] = subscription;
 
     const activeCbs = this.activeCbs[topic] ?? new Set();
@@ -103,19 +117,16 @@ export class GoogleCloudPubSub extends PubSub {
     }
 
     subscription.on('message', async message => {
-      console.log('message received', topic, message.id, message.data.toString());
       const event = JSON.parse(message.data.toString()) as Event;
       try {
         if (runId) {
           if (runId !== event.runId) {
-            console.log('runId mismatch', runId, event);
             await this.ackMessage(topic, message);
             return;
           }
         }
 
         const activeCbs = this.activeCbs[topic] ?? [];
-        console.log('activeCbs', activeCbs);
         for (const cb of activeCbs) {
           cb(event, async () => {
             try {
@@ -131,22 +142,21 @@ export class GoogleCloudPubSub extends PubSub {
     });
 
     subscription.on('error', async error => {
-      if (error.code === 5) {
-        subscription.removeListener('message', cb);
-        await this.init(topic);
-        await this.subscribe(topic, cb);
-      } else {
-        // TODO: determine if other errors require re-subscription
-        // console.error('subscription error, retrying in 5 seconds', error);
-        // await new Promise(resolve => setTimeout(resolve, 5000));
-        // await this.subscribe(topic, cb);
-        console.error('subscription error', error);
-      }
+      // if (error.code === 5) {
+      //   await this.init(topic);
+      // } else {
+      //   // TODO: determine if other errors require re-subscription
+      //   // console.error('subscription error, retrying in 5 seconds', error);
+      //   // await new Promise(resolve => setTimeout(resolve, 5000));
+      //   // await this.subscribe(topic, cb);
+      //   console.error('subscription error', error);
+      // }
+      console.error('subscription error', error);
     });
   }
 
   async unsubscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
-    const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(topic);
+    const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(this.getSubscriptionName(topic));
     const activeCbs = this.activeCbs[topic] ?? new Set();
     activeCbs.delete(cb);
     this.activeCbs[topic] = activeCbs;

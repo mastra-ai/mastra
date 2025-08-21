@@ -20,33 +20,9 @@ let testRunIdCounter = 0;
 describe.sequential(
   'Workflow',
   () => {
-    beforeAll(async () => {
-      const pubsub = new GoogleCloudPubSub({
-        projectId: 'pubsub-test',
-      });
-
-      await pubsub.init('workflows');
-      await pubsub.init('workflows-finish');
-      await pubsub.init('workflow.events.v1');
-      await pubsub.init('workflow.events.v2');
-    });
-
     beforeEach(async () => {
       vi.resetAllMocks();
       testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-
-      const pubsub = new GoogleCloudPubSub({
-        projectId: 'pubsub-test',
-      });
-      await pubsub.destroy('workflows');
-      await pubsub.destroy('workflows-finish');
-      await pubsub.destroy('workflow.events.v1');
-      await pubsub.destroy('workflow.events.v2');
-
-      await pubsub.init('workflows');
-      await pubsub.init('workflows-finish');
-      await pubsub.init('workflow.events.v1');
-      await pubsub.init('workflow.events.v2');
     });
 
     describe.sequential('Streaming', () => {
