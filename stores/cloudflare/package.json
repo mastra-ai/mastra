@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "0.11.5",
+  "version": "0.11.7",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -32,7 +32,7 @@
     "cloudflare": "^4.5.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250816.0",
+    "@cloudflare/workers-types": "^4.20250821.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -47,6 +47,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
+    "@mastra/core": ">=0.13.0-0 <0.15.0-0"
   }
 }

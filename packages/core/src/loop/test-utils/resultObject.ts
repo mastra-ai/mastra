@@ -640,73 +640,75 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const steps = await result.aisdk.v5.steps;
 
       expect(steps).toMatchInlineSnapshot(`
-            [
-              DefaultStepResult {
-                "content": [
-                  {
-                    "file": DefaultGeneratedFileWithType {
-                      "base64Data": "Hello World",
+        [
+          DefaultStepResult {
+            "content": [
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "base64Data": "Hello World",
+                  "mediaType": "text/plain",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "file": DefaultGeneratedFileWithType {
+                  "base64Data": "QkFVRw==",
+                  "mediaType": "image/jpeg",
+                  "type": "file",
+                  "uint8ArrayData": undefined,
+                },
+                "type": "file",
+              },
+            ],
+            "finishReason": "stop",
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "data": "Hello World",
+                      "filename": undefined,
                       "mediaType": "text/plain",
                       "type": "file",
-                      "uint8ArrayData": undefined,
                     },
-                    "type": "file",
-                  },
-                  {
-                    "text": "Hello!",
-                    "type": "text",
-                  },
-                  {
-                    "file": DefaultGeneratedFileWithType {
-                      "base64Data": "QkFVRw==",
+                    {
+                      "text": "Hello!",
+                      "type": "text",
+                    },
+                    {
+                      "data": "QkFVRw==",
+                      "filename": undefined,
                       "mediaType": "image/jpeg",
                       "type": "file",
-                      "uint8ArrayData": undefined,
-                    },
-                    "type": "file",
-                  },
-                ],
-                "finishReason": "stop",
-                "providerMetadata": undefined,
-                "request": {},
-                "response": {
-                  "headers": undefined,
-                  "id": "id-0",
-                  "messages": [
-                    {
-                      "content": [
-                        {
-                          "data": "Hello World",
-                          "mediaType": "text/plain",
-                          "type": "file",
-                        },
-                        {
-                          "text": "Hello!",
-                          "type": "text",
-                        },
-                        {
-                          "data": "QkFVRw==",
-                          "mediaType": "image/jpeg",
-                          "type": "file",
-                        },
-                      ],
-                      "role": "assistant",
                     },
                   ],
-                  "modelId": "mock-model-id",
-                  "timestamp": 1970-01-01T00:00:00.000Z,
+                  "role": "assistant",
                 },
-                "usage": {
-                  "cachedInputTokens": undefined,
-                  "inputTokens": 3,
-                  "outputTokens": 10,
-                  "reasoningTokens": undefined,
-                  "totalTokens": 13,
-                },
-                "warnings": [],
-              },
-            ]
-          `);
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "usage": {
+              "cachedInputTokens": undefined,
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "reasoningTokens": undefined,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+        ]
+      `);
     });
   });
 

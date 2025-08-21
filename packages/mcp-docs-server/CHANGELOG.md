@@ -1,5 +1,99 @@
 # @mastra/mcp-docs-server
 
+## 0.13.13
+
+### Patch Changes
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1
+
+## 0.13.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236)]:
+  - @mastra/core@0.14.1-alpha.1
+
+## 0.13.13-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+
+## 0.13.12
+
+### Patch Changes
+
+- Updated dependencies [895d3b2]
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [e1aed55]
+- Updated dependencies [cf4f357]
+- Updated dependencies [03997ae]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+  - @mastra/mcp@0.10.12
+  - @mastra/core@0.14.0
+
+## 0.13.12-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [03997ae]
+  - @mastra/mcp@0.10.12-alpha.2
+  - @mastra/core@0.14.0-alpha.7
+
+## 0.13.12-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [194e395]
+  - @mastra/core@0.14.0-alpha.6
+
+## 0.13.12-alpha.5
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.5
+
+## 0.13.12-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [0a7f675]
+- Updated dependencies [12cae67]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [e1aed55]
+- Updated dependencies [1a80071]
+- Updated dependencies [36a3be8]
+- Updated dependencies [361757b]
+- Updated dependencies [2bb9955]
+- Updated dependencies [2454423]
+- Updated dependencies [a44d91e]
+- Updated dependencies [dfb91e9]
+- Updated dependencies [a741dde]
+- Updated dependencies [7cb3fc0]
+- Updated dependencies [195eabb]
+- Updated dependencies [b78b95b]
+  - @mastra/core@0.14.0-alpha.4
+  - @mastra/mcp@0.10.12-alpha.1
+
 ## 0.13.12-alpha.3
 
 ### Patch Changes

@@ -14,7 +14,7 @@ import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOpti
 export type AgentExecutionOptions<
   OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk',
+  FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
   instructions?: string;
   context?: ModelMessage[];

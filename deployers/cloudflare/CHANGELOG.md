@@ -1,5 +1,66 @@
 # @mastra/deployer-cloudflare
 
+## 0.12.2
+
+### Patch Changes
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`4c8956f`](https://github.com/mastra-ai/mastra/commit/4c8956f3110ccf39595e022f127a44a0a5c09c86), [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1
+  - @mastra/deployer@0.14.1
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`4c8956f`](https://github.com/mastra-ai/mastra/commit/4c8956f3110ccf39595e022f127a44a0a5c09c86), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+  - @mastra/deployer@0.14.1-alpha.0
+
+## 0.12.1
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [bca2ba3]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [022f3a2]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [96518cc]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [c712849]
+- Updated dependencies [04dcd66]
+- Updated dependencies [03997ae]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [95e1330]
+- Updated dependencies [33eb340]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+- Updated dependencies [6dfc4a6]
+  - @mastra/core@0.14.0
+  - @mastra/deployer@0.14.0
+
+## 0.12.1-alpha.2
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+- Updated dependencies [03997ae]
+  - @mastra/deployer@0.14.0-alpha.7
+  - @mastra/core@0.14.0-alpha.7
+
 ## 0.12.1-alpha.1
 
 ### Patch Changes

@@ -1,7 +1,9 @@
+import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
 import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
 import type { ObjectOptions } from '../../../loop/types';
 import type { MastraModelOutput } from '../../base/output';
@@ -19,8 +21,18 @@ type AISDKV5OutputStreamOptions = {
   objectOptions?: ObjectOptions;
 };
 
-export class AISDKV5OutputStream {
-  #modelOutput: MastraModelOutput;
+export type AIV5FullStreamPart<T = undefined> = T extends undefined
+  ? TextStreamPart<ToolSet>
+  :
+      | TextStreamPart<ToolSet>
+      | {
+          type: 'object';
+          object: T extends z.ZodSchema ? Partial<z.infer<T>> : unknown;
+        };
+export type AIV5FullStreamType<T> = ReadableStream<AIV5FullStreamPart<T>>;
+
+export class AISDKV5OutputStream<TObjectSchema = undefined> {
+  #modelOutput: MastraModelOutput<TObjectSchema>;
   #options: AISDKV5OutputStreamOptions;
   #messageList: MessageList;
   constructor({
@@ -28,7 +40,7 @@ export class AISDKV5OutputStream {
     options,
     messageList,
   }: {
-    modelOutput: MastraModelOutput;
+    modelOutput: MastraModelOutput<TObjectSchema>;
     options: AISDKV5OutputStreamOptions;
     messageList: MessageList;
   }) {
@@ -135,7 +147,7 @@ export class AISDKV5OutputStream {
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
     try {
       await consumeStream({
-        stream: this.fullStream.pipeThrough(
+        stream: (this.fullStream as any).pipeThrough(
           new TransformStream({
             transform(chunk, controller) {
               controller.enqueue(chunk);
@@ -257,7 +269,7 @@ export class AISDKV5OutputStream {
     return this.#modelOutput.elementStream;
   }
 
-  get fullStream() {
+  get fullStream(): AIV5FullStreamType<TObjectSchema> {
     let startEvent: OutputChunkType;
     let hasStarted: boolean = false;
 
@@ -265,15 +277,18 @@ export class AISDKV5OutputStream {
     const responseFormat = getResponseFormat(this.#options.objectOptions?.schema);
     const fullStream = this.#modelOutput.fullStream;
 
-    return fullStream.pipeThrough(
-      new TransformStream<ChunkType | NonNullable<OutputChunkType>>({
+    const transformedStream = fullStream.pipeThrough(
+      new TransformStream<
+        ChunkType | NonNullable<OutputChunkType>,
+        TextStreamPart<ToolSet> | ObjectStreamPart<TObjectSchema>
+      >({
         transform(chunk, controller) {
           if (responseFormat?.type === 'json' && chunk.type === 'object') {
             /**
              * Pass through 'object' chunks that were created by
              * createObjectStreamTransformer in base/output.ts.
              */
-            controller.enqueue(chunk as ObjectStreamPart<any>);
+            controller.enqueue(chunk as TextStreamPart<ToolSet> | ObjectStreamPart<TObjectSchema>);
             return;
           }
 
@@ -288,7 +303,7 @@ export class AISDKV5OutputStream {
           }
 
           if (startEvent && hasStarted) {
-            controller.enqueue(startEvent as any);
+            controller.enqueue(startEvent as TextStreamPart<ToolSet> | ObjectStreamPart<TObjectSchema>);
             startEvent = undefined;
           }
 
@@ -303,12 +318,14 @@ export class AISDKV5OutputStream {
               //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
               // }
 
-              controller.enqueue(transformedChunk);
+              controller.enqueue(transformedChunk as TextStreamPart<ToolSet> | ObjectStreamPart<TObjectSchema>);
             }
           }
         },
       }),
     );
+
+    return transformedStream as any as AIV5FullStreamType<TObjectSchema>;
   }
 
   async getFullOutput() {

@@ -72,6 +72,8 @@ import type {
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
+export { convertMessages } from './message-list';
+export type { OutputFormat } from './message-list';
 export * from './types';
 
 export type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';
@@ -109,6 +111,7 @@ function resolveThreadIdFromArgs(args: {
     '__registerPrimitives',
     '__runInputProcessors',
     '__runOutputProcessors',
+    '_wrapToolsWithAITracing',
     'getProcessorRunner',
     '__setTools',
     '__setLogger',
@@ -2868,7 +2871,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const executionWorkflow = createWorkflow({
       id: 'execution-workflow',
       inputSchema: z.any(),
-      outputSchema: z.record(z.string(), z.any()),
+      outputSchema: z.any(),
       steps: [prepareToolsStep, prepareMemory],
     })
       .parallel([prepareToolsStep, prepareMemory])
@@ -3249,14 +3252,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
   ): Promise<
-    ReturnType<FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']>
+    FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     const result = await this.streamVNext(messages, options);
 
     if (result.tripwire) {
-      return result as ReturnType<
-        FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']
-      >;
+      return result as unknown as FORMAT extends 'aisdk'
+        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
     let fullOutput = await result.getFullOutput();
@@ -3267,19 +3272,19 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       throw error;
     }
 
-    return fullOutput as ReturnType<
-      FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']
-    >;
+    return fullOutput as unknown as FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
   async streamVNext<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk',
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'mastra' ? MastraModelOutput : AISDKV5OutputStream> {
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
@@ -3325,7 +3330,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       });
     }
 
-    return result.result as FORMAT extends 'mastra' ? MastraModelOutput : AISDKV5OutputStream;
+    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
   async generate(

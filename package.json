@@ -3,7 +3,8 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.5",
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.6",
     "@types/node": "^20.19.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.4",

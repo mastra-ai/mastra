@@ -432,12 +432,6 @@ export function createObjectStreamTransformer({
         return;
       }
 
-      if (chunk.type === 'error') {
-        finishReason = 'error';
-        controller.enqueue(chunk);
-        return;
-      }
-
       if (responseFormat?.type !== 'json') {
         // Not JSON mode - pass through original chunks and exit
         controller.enqueue(chunk);
@@ -471,7 +465,7 @@ export function createObjectStreamTransformer({
         return;
       }
 
-      if (['tool-calls', 'error'].includes(finishReason ?? '')) {
+      if (['tool-calls'].includes(finishReason ?? '')) {
         onFinish(undefined);
         return;
       }

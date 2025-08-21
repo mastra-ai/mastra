@@ -2,6 +2,7 @@ import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
+import esmShim from '@rollup/plugin-esm-shim';
 import { fileURLToPath } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions } from 'rollup';
 import { esbuild } from './plugins/esbuild';
@@ -116,6 +117,7 @@ export async function getInputOptions(
           return externals.includes(id);
         },
       }),
+      esmShim(),
       nodeResolvePlugin,
       // for debugging
       // {

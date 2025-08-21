@@ -1,7 +1,7 @@
 {
   "name": "@mastra/memory-integration-tests-v5",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.2",
   "scripts": {
     "test": "pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors",
     "test:agent-memory": "vitest run ./src/agent-memory.test.ts",
@@ -28,7 +28,7 @@
     "@testing-library/react": "^16.2.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",
-    "ai": "^5.0.0",
+    "ai": "^5.0.15",
     "jsdom": "^26.0.0",
     "mastra": "workspace:*",
     "next": "^15.2.4",
@@ -38,6 +38,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.14.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
   }
 }
