@@ -74,7 +74,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async updateWorkflowState({
-    workflowName,
     runId,
     opts,
   }: {

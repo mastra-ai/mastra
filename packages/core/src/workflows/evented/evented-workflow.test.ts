@@ -5041,7 +5041,7 @@ describe('Workflow', () => {
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
         })
-        .mockImplementationOnce(({ resumeData }) => {
+        .mockImplementationOnce(() => {
           return { improvedOutput: 'human intervention output' };
         });
       const explainResponseAction = vi.fn().mockResolvedValue({
@@ -6668,7 +6668,7 @@ describe('Workflow', () => {
         const otherVal = getStepResult(cloneStep(otherStep, { id: 'other-clone' }))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       });
-      const last = vi.fn().mockImplementation(async ({ inputData }) => {
+      const last = vi.fn().mockImplementation(async () => {
         return { success: true };
       });
       const finalStep = createStep({

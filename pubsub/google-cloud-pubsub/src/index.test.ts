@@ -9,7 +9,7 @@ import { mapVariable } from '@mastra/core/workflows';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '@mastra/core/workflows/evented';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { GoogleCloudPubSub } from '.';
 
@@ -4916,7 +4916,7 @@ describe.sequential(
           .mockImplementationOnce(async ({ suspend }) => {
             await suspend();
           })
-          .mockImplementationOnce(({ resumeData }) => {
+          .mockImplementationOnce(() => {
             return { improvedOutput: 'human intervention output' };
           });
         const explainResponseAction = vi.fn().mockResolvedValue({
@@ -6563,7 +6563,7 @@ describe.sequential(
           const otherVal = getStepResult(cloneStep(otherStep, { id: 'other-clone' }))?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({ inputData }) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const finalStep = createStep({
