@@ -1,12 +1,14 @@
 import { createHash } from 'crypto';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
+import type { WritableStream } from 'stream/web';
+import type { CoreMessage } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { AnyAISpan } from './ai-tracing';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraMemory } from './memory';
+import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
 import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
@@ -224,8 +226,9 @@ export interface ToolOptions {
   runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
-  model?: LanguageModelV1;
+  model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
+  agentAISpan?: AnyAISpan;
 }
 
 /**

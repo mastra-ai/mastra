@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai-v5';
+import type { ToolCallOptions, ToolSet } from 'ai-v5';
 import { createStep } from '../../workflows';
 import { assembleOperationName, getTracer } from '../telemetry';
 import type { OuterLLMRun } from '../types';
@@ -9,6 +9,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet>({
   messageList,
   options,
   telemetry_settings,
+  writer,
 }: OuterLLMRun<Tools>) {
   return createStep({
     id: 'toolCallStep',
@@ -60,7 +61,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet>({
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
-        });
+          writableStream: writer,
+        } as ToolCallOptions);
 
         span.setAttributes({
           'stream.toolCall.result': JSON.stringify(result),

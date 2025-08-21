@@ -7,7 +7,8 @@ import { execute } from '../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, ReasoningStartPayload, TextStartPayload } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../types';
 import { AgenticRunState } from './run-state';
@@ -67,8 +68,9 @@ async function processOutputStream({
               {
                 type: 'reasoning',
                 text: runState.state.reasoningDeltas.join(''),
-                signature: chunk.payload.signature,
-                providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                signature: (chunk.payload as ReasoningStartPayload).signature,
+                providerOptions:
+                  (chunk.payload as ReasoningStartPayload).providerMetadata ?? runState.state.providerOptions,
               },
             ],
           },
@@ -84,16 +86,19 @@ async function processOutputStream({
     // Streaming
     if (chunk.type !== 'text-delta' && chunk.type !== 'tool-call' && runState.state.isStreaming) {
       if (runState.state.textDeltas.length) {
+        const textStartPayload = chunk.payload as TextStartPayload;
+        const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
+
         messageList.add(
           {
             id: messageId,
             role: 'assistant',
             content: [
-              (chunk.payload.providerMetadata ?? runState.state.providerOptions)
+              providerMetadata
                 ? {
                     type: 'text',
                     text: runState.state.textDeltas.join(''),
-                    providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
+                    providerOptions: providerMetadata,
                   }
                 : {
                     type: 'text',
@@ -143,10 +148,7 @@ async function processOutputStream({
           try {
             await tool?.onInputStart?.({
               toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model()?.map(message => ({
-                role: message.role,
-                content: message.content,
-              })) as any,
+              messages: messageList.get.input.aiV5.model(),
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
@@ -161,7 +163,7 @@ async function processOutputStream({
 
       case 'tool-call-delta': {
         const tool =
-          tools?.[chunk.payload.toolName] ||
+          tools?.[chunk.payload.toolName || ''] ||
           Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
 
         if (tool && 'onInputDelta' in tool) {
@@ -169,10 +171,7 @@ async function processOutputStream({
             await tool?.onInputDelta?.({
               inputTextDelta: chunk.payload.argsTextDelta,
               toolCallId: chunk.payload.toolCallId,
-              messages: messageList.get.input.aiV5.model()?.map(message => ({
-                role: message.role,
-                content: message.content,
-              })) as any,
+              messages: messageList.get.input.aiV5.model(),
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
@@ -253,7 +252,7 @@ async function processOutputStream({
                   source: {
                     sourceType: 'url',
                     id: chunk.payload.id,
-                    url: chunk.payload.url,
+                    url: chunk.payload.url || '',
                     title: chunk.payload.title,
                     providerMetadata: chunk.payload.providerMetadata,
                   },
@@ -293,8 +292,6 @@ async function processOutputStream({
           hasErrored: true,
         });
 
-        controller.enqueue(chunk);
-
         runState.setState({
           stepResult: {
             isContinued: false,
@@ -302,7 +299,14 @@ async function processOutputStream({
           },
         });
 
-        await options?.onError?.({ error: chunk.payload.error });
+        let e = chunk.payload.error as any;
+        if (typeof e === 'object') {
+          e = new Error(e?.message || 'Unknown error');
+          Object.assign(e, chunk.payload.error);
+        }
+
+        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error: e } });
+        await options?.onError?.({ error: e });
 
         break;
       default:
@@ -354,6 +358,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
   toolCallStreaming,
   controller,
   objectOptions,
+  headers,
 }: OuterLLMRun<Tools>) {
   return createStep({
     id: 'llm-execution',
@@ -364,8 +369,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         _internal: _internal!,
         model,
       });
-
-      console.log('Starting LLM Execution Step');
 
       let modelResult;
       let warnings: any;
@@ -386,6 +389,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
             telemetry_settings,
             includeRawChunks,
             objectOptions,
+            headers,
             onResult: ({
               warnings: warningsFromStream,
               request: requestFromStream,
@@ -397,7 +401,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
 
               controller.enqueue({
                 runId,
-                from: 'AGENT',
+                from: ChunkFrom.AGENT,
                 type: 'step-start',
                 payload: {
                   request: request || {},
@@ -457,11 +461,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
             steps: inputData?.output?.steps ?? [],
           });
 
-          controller.enqueue({ type: 'abort', runId, from: 'AGENT', payload: {} });
+          controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
-          const usage = outputStream.usage;
+          const usage = outputStream._getImmediateUsage();
           const responseMetadata = runState.state.responseMetadata;
-          const text = outputStream.text;
+          const text = outputStream._getImmediateText();
 
           return bail({
             messageId,
@@ -483,12 +487,19 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
               steps: [],
             },
             messages: {
-              all: messageList.get.all.v3(),
-              user: messageList.get.input.v3(),
-              nonUser: messageList.get.response.v3(),
+              all: messageList.get.all.aiV5.model(),
+              user: messageList.get.input.aiV5.model(),
+              nonUser: messageList.get.response.aiV5.model(),
             },
           });
         }
+
+        controller.enqueue({
+          type: 'error',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { error },
+        });
 
         runState.setState({
           hasErrored: true,
@@ -503,7 +514,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
        * Add tool calls to the message list
        */
 
-      const toolCalls = outputStream.toolCalls?.map(chunk => {
+      const toolCalls = outputStream._getImmediateToolCalls()?.map(chunk => {
         return chunk.payload;
       });
 
@@ -529,24 +540,24 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         );
       }
 
-      const finishReason = runState?.state?.stepResult?.reason ?? outputStream.finishReason;
+      const finishReason = runState?.state?.stepResult?.reason ?? outputStream._getImmediateFinishReason();
       const hasErrored = runState.state.hasErrored;
-      const usage = outputStream.usage;
+      const usage = outputStream._getImmediateUsage();
       const responseMetadata = runState.state.responseMetadata;
-      const text = outputStream.text;
+      const text = outputStream._getImmediateText();
 
       const steps = inputData.output?.steps || [];
 
       steps.push(
         new DefaultStepResult({
-          warnings: outputStream.warnings,
+          warnings: outputStream._getImmediateWarnings(),
           providerMetadata: providerOptions,
           finishReason: runState.state.stepResult?.reason,
           content: messageList.get.response.aiV5.modelContent(),
           // @ts-ignore this is how it worked internally for transformResponse which was removed TODO: how should this actually work?
-          response: { ...responseMetadata, messages: messageList.get.response.aiV5.model() },
+          response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
           request: request,
-          usage: outputStream.usage as LanguageModelV2Usage,
+          usage: outputStream._getImmediateUsage() as LanguageModelV2Usage,
         }),
       );
 
@@ -566,6 +577,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
         metadata: {
           providerMetadata: runState.state.providerOptions,
           ...responseMetadata,
+          ...rawResponse,
           headers: rawResponse?.headers,
           request,
         },

@@ -93,6 +93,7 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
 export interface ToolCallAttributes extends AIBaseAttributes {
   toolId?: string;
   toolType?: string;
+  toolDescription?: string;
   success?: boolean;
 }
 
@@ -302,7 +303,7 @@ export interface AITracingInstanceConfig {
  */
 export interface AITracingConfig {
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  instances: Record<string, AITracingInstanceConfig | MastraAITracing>;
+  instances: Record<string, Omit<AITracingInstanceConfig, 'instanceName'> | MastraAITracing>;
   /** Optional selector function to choose which tracing instance to use */
   selector?: TracingSelector;
 }

@@ -13,13 +13,16 @@ export const AgentChat = ({
   memory,
   refreshThreadList,
   onInputChange,
+  modelVersion,
 }: ChatProps) => {
   const { settings } = useAgentSettings();
   const { runtimeContext } = usePlaygroundStore();
+
   return (
     <MastraRuntimeProvider
       agentId={agentId}
       agentName={agentName}
+      modelVersion={modelVersion}
       threadId={threadId}
       initialMessages={initialMessages}
       memory={memory}

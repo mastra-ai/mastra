@@ -2,7 +2,7 @@ import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
-import type { MastraLanguageModel } from '../../agent/types';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 export interface SystemPromptScrubberOptions {
@@ -223,23 +223,33 @@ export class SystemPromptScrubber implements Processor {
    */
   private async detectSystemPrompts(text: string): Promise<SystemPromptDetectionResult> {
     try {
-      const result = await this.detectionAgent.generate(text, {
-        output: z.object({
-          detections: z
-            .array(
-              z.object({
-                type: z.string(),
-                value: z.string(),
-                confidence: z.number().min(0).max(1),
-                start: z.number(),
-                end: z.number(),
-                redacted_value: z.string().optional(),
-              }),
-            )
-            .optional(),
-          redacted_content: z.string().optional(),
-        }),
+      const model = await this.detectionAgent.getModel();
+      let result: any;
+      const schema = z.object({
+        detections: z
+          .array(
+            z.object({
+              type: z.string(),
+              value: z.string(),
+              confidence: z.number().min(0).max(1),
+              start: z.number(),
+              end: z.number(),
+              redacted_value: z.string().optional(),
+            }),
+          )
+          .optional(),
+        redacted_content: z.string().optional(),
       });
+
+      if (model.specificationVersion === 'v2') {
+        result = await this.detectionAgent.generateVNext(text, {
+          output: schema,
+        });
+      } else {
+        result = await this.detectionAgent.generate(text, {
+          output: schema,
+        });
+      }
 
       return result.object as SystemPromptDetectionResult;
     } catch (error) {

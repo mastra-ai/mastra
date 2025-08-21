@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
+import { CoreToolBuilder } from './builder';
 import 'dotenv/config';
 
 type Result = {
@@ -424,6 +425,91 @@ describe.skip('Tool Schema Compatibility', () => {
         });
       });
     });
+  });
+});
+
+describe('CoreToolBuilder ID Preservation', () => {
+  it('should preserve tool ID when building regular tools', () => {
+    const originalTool = createTool({
+      id: 'test-tool-id',
+      description: 'A test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ context }) => ({ result: context.value }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool,
+      options: {
+        name: 'test-tool-id',
+        logger: console as any,
+        description: 'A test tool',
+        runtimeContext: new RuntimeContext(),
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.id).toBe('test-tool-id');
+  });
+
+  it('should handle tools without ID gracefully', () => {
+    // Create a tool-like object without an ID (like a VercelTool)
+    const toolWithoutId = {
+      description: 'A tool without ID',
+      parameters: z.object({ value: z.string() }),
+      execute: async (args: any) => ({ result: args.value }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithoutId as any,
+      options: {
+        name: 'tool-without-id',
+        logger: console as any,
+        description: 'A tool without ID',
+        runtimeContext: new RuntimeContext(),
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.id).toBeUndefined();
+  });
+
+  it('should preserve provider-defined tool IDs correctly', () => {
+    const providerTool = {
+      type: 'provider-defined' as const,
+      id: 'provider.tool-id',
+      description: 'A provider-defined tool',
+      parameters: z.object({ value: z.string() }),
+      execute: async (args: any) => ({ result: args.value }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: providerTool as any,
+      options: {
+        name: 'provider.tool-id',
+        logger: console as any,
+        description: 'A provider-defined tool',
+        runtimeContext: new RuntimeContext(),
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.id).toBe('provider.tool-id');
+    expect(builtTool.type).toBe('provider-defined');
+  });
+
+  it('should verify tool ID exists in original createTool', () => {
+    const tool = createTool({
+      id: 'verify-id-exists',
+      description: 'A test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ context }) => ({ result: context.value }),
+    });
+
+    // Verify that the tool created with createTool() has an ID
+    expect(tool.id).toBe('verify-id-exists');
   });
 });
 
