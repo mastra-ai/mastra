@@ -170,8 +170,6 @@ async function analyze(
     depsToOptimize.set(dep, { exports: bindings, rootPath });
   }
 
-  console.log({ depsToOptimize });
-
   for (const o of output) {
     if (o.type !== 'chunk') {
       continue;
@@ -493,7 +491,14 @@ If you think your configuration is valid, please open an issue.`);
           rootPath: existingEntry.rootPath,
         });
       } else {
-        depsToOptimize.set(dep, { exports, rootPath: null });
+        const pkgName = getPackageName(dep);
+        let rootPath: string | null = null;
+
+        if (pkgName && pkgName !== '#tools') {
+          rootPath = await getPackageRootPath(pkgName);
+        }
+
+        depsToOptimize.set(dep, { exports, rootPath });
       }
     }
   }
