@@ -28,7 +28,7 @@
     "@testing-library/react": "^16.2.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",
-    "ai": "^5.0.0",
+    "ai": "^5.0.15",
     "jsdom": "^26.0.0",
     "mastra": "workspace:*",
     "next": "^15.2.4",
