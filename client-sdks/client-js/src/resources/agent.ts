@@ -803,7 +803,9 @@ export class Agent extends BaseResource {
 
     await processMastraStream({
       stream,
-      onChunk: async chunk => {
+      // TODO: casting as any here because the stream types were all typed as any before in core.
+      // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
+      onChunk: async (chunk: any) => {
         switch (chunk.type) {
           case 'step-start': {
             // keep message id stable when we are updating an existing message:
