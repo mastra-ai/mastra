@@ -6,7 +6,11 @@ interface GitHubLinkProps {
   outdated?: boolean;
 }
 
-export const GithubLink: React.FC<GitHubLinkProps> = ({ link, marginTop = "", outdated = false }) => {
+export const GithubLink: React.FC<GitHubLinkProps> = ({
+  link,
+  marginTop = "",
+  outdated = false,
+}) => {
   return (
     <T id="components.github_link.0" className="w-full">
       <a
@@ -40,7 +44,8 @@ export const GithubLink: React.FC<GitHubLinkProps> = ({ link, marginTop = "", ou
             </svg>
           </div>
           <div className="pr-8 leading-6 group-hover:underline">
-            View Example on GitHub <Var>{outdated ? <span>(outdated)</span> : null}</Var>
+            View Example on GitHub{" "}
+            <Var>{outdated ? <span>(outdated)</span> : null}</Var>
           </div>
         </div>
         <div className="flex-shrink-0 mt-[4px]">
