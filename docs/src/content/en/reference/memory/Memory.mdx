@@ -291,7 +291,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
     },
     {
       name: "threads",
-      type: "{ generateTitle?: boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>), instructions?: string | ((ctx: RuntimeContext) => string | Promise<string>) } }",
+      type: "{ generateTitle?: boolean | { model: MastraLanguageModel | ((ctx: RuntimeContext) => MastraLanguageModel | Promise<MastraLanguageModel>), instructions?: string | ((ctx: RuntimeContext) => string | Promise<string>) } }",
       description:
         "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object specifying a custom model or custom instructions for title generation (useful for cost optimization or title customization). Example: { generateTitle: { model: openai('gpt-4.1-nano'), instructions: 'Concise title based on the initial user message.' } }",
       isOptional: true,

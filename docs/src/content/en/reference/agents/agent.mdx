@@ -80,7 +80,7 @@ export const agent = new Agent({
     },
     {
       name: "defaultVNextStreamOptions",
-      type: "AgentVNextStreamOptions | ({ runtimeContext: RuntimeContext }) => AgentVNextStreamOptions | Promise<AgentVNextStreamOptions>",
+      type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
       isOptional: true,
       description: "Default options used when calling `stream()` in vNext mode.",
     },

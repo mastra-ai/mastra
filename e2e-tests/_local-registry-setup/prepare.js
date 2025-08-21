@@ -94,6 +94,15 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       }
     })();
 
+    // Because it requires a GITHUB_TOKEN
+    console.log('Updating .changeset/config.json to not use @changesets/changelog-github');
+    await (async function updateChangesetConfig() {
+      const content = readFileSync(join(monorepoDir, '.changeset/config.json'), 'utf8');
+      const parsed = JSON.parse(content);
+      parsed.changelog = '@changesets/cli/changelog';
+      writeFileSync(join(monorepoDir, '.changeset/config.json'), JSON.stringify(parsed, null, 2));
+    })();
+
     console.log('Running pnpm changeset pre exit');
     await retryWithTimeout(
       async () => {

@@ -1,5 +1,92 @@
 # @mastra/core
 
+## 0.14.0
+
+### Minor Changes
+
+- 3b5fec7: Added AIV5 support to internal MessageList, precursor to full AIV5 support in latest Mastra
+
+### Patch Changes
+
+- 227c7e6: replace console.log with logger.debug in inmemory operations
+- 12cae67: fix: add threadId and resourceId to scorers
+- fd3a3eb: Add runExperments to run scorers in a test suite or in CI
+- 6faaee5: Reworks agent Processor API to include output processors. Adds structuredOutput property in agent.streamVNext and agent.generate to replace experimental_output. Move imports for processors to @mastra/core/processors. Adds 6 new output processors, BatchParts, StructuredOutputProcessor, TokenLimiter, SystemPromptScrubber, ModerationProcessor, PiiDetectorProcessor.
+- 4232b14: Fix provider metadata preservation during V5 message conversions
+
+  Provider metadata (providerMetadata and callProviderMetadata) is now properly preserved when converting messages between AI SDK V5 and internal V2 formats. This ensures provider-specific information isn't lost during message transformations.
+
+- a89de7e: Adding a new agentic loop and streaming workflow system while working towards AI SDK v5 support.
+- 5a37d0c: Fix dev server bug related to p-map imports
+- 4bde0cb: Allow renaming .map functions in workflows
+- cf4f357: When using the Cloudflare deployer you might see a `[duplicate-case]` warning. The internal cause for this was fixed.
+- ad888a2: Stream vnext agent-network
+- 481751d: Tests `mitt.off` event handler removal
+- 2454423: Agentic loop and streaming workflow: generateVNext and streamVNext
+- 194e395: exclude \_wrapToolsWithAITracing from agent trace
+- a722c0b: Added a patch to filter out system messages that were stored in the db via an old memory bug that was patched long ago (see issue 6689). Users upgrading from the old version that still had the bug would see errors when the memory messages were retrieved from the db
+- c30bca8: Fix do while resume-suspend in simple workflow losing data
+- a8f129d: initial addition of experimental ai observability tracing features.
+
+## 0.14.0-alpha.7
+
+## 0.14.0-alpha.6
+
+### Patch Changes
+
+- ad888a2: Stream vnext agent-network
+- 481751d: Tests `mitt.off` event handler removal
+- 194e395: exclude \_wrapToolsWithAITracing from agent trace
+
+## 0.14.0-alpha.5
+
+## 0.14.0-alpha.4
+
+### Patch Changes
+
+- 0a7f675: Client JS vnext methods
+- 12cae67: fix: add threadId and resourceId to scorers
+- 5a37d0c: Fix dev server bug related to p-map imports
+- 4bde0cb: Allow renaming .map functions in workflows
+- 1a80071: loop code and tests
+- 36a3be8: Agent processors tests
+- 361757b: Execute method
+- 2bb9955: Model loop changes
+- 2454423: generateVNext and streamVNext
+- a44d91e: Message list changes
+- dfb91e9: Server handlers
+- a741dde: generateVNext plumbing
+- 7cb3fc0: Fix loop test
+- 195eabb: Process Mastra Stream
+- b78b95b: Support generateVNext in playground
+
+## 0.14.0-alpha.3
+
+### Patch Changes
+
+- 227c7e6: replace console.log with logger.debug in inmemory operations
+- fd3a3eb: Add runExperments to run scorers in a test suite or in CI
+- a8f129d: "initial addition of experimental ai observability tracing features."
+
+## 0.14.0-alpha.2
+
+## 0.14.0-alpha.1
+
+### Minor Changes
+
+- 3b5fec7: Added AIV5 support to internal MessageList, precursor to full AIV5 support in latest Mastra
+
+### Patch Changes
+
+- 6faaee5: Reworks agent Processor API to include output processors. Adds structuredOutput property in agent.streamVNext and agent.generate to replace experimental_output. Move imports for processors to @mastra/core/processors. Adds 6 new output processors, BatchParts, StructuredOutputProcessor, TokenLimiter, SystemPromptScrubber, ModerationProcessor, PiiDetectorProcessor.
+- 4232b14: Fix provider metadata preservation during V5 message conversions
+
+  Provider metadata (providerMetadata and callProviderMetadata) is now properly preserved when converting messages between AI SDK V5 and internal V2 formats. This ensures provider-specific information isn't lost during message transformations.
+
+- a89de7e: Adding a new agentic loop and streaming workflow system while working towards AI SDK v5 support.
+- cf4f357: When using the Cloudflare deployer you might see a `[duplicate-case]` warning. The internal cause for this was fixed.
+- a722c0b: Added a patch to filter out system messages that were stored in the db via an old memory bug that was patched long ago (see issue 6689). Users upgrading from the old version that still had the bug would see errors when the memory messages were retrieved from the db
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes

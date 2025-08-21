@@ -13,6 +13,8 @@ export function runScorer({
   structuredOutput,
   source,
   entityType,
+  threadId,
+  resourceId,
 }: {
   scorerId: string;
   scorerObject: MastraScorerEntry;
@@ -24,6 +26,8 @@ export function runScorer({
   structuredOutput: boolean;
   source: ScoringSource;
   entityType: ScoringEntityType;
+  threadId?: string;
+  resourceId?: string;
 }) {
   let shouldExecute = false;
 
@@ -59,6 +63,8 @@ export function runScorer({
     entity,
     structuredOutput,
     entityType,
+    threadId,
+    resourceId,
   };
 
   executeHook(AvailableHooks.ON_SCORER_RUN, payload);

@@ -415,7 +415,7 @@ export class MessageList {
               }),
             };
           }
-          return c;
+          return { ...c };
         });
       },
     },
@@ -432,7 +432,7 @@ export class MessageList {
         this.messages.filter(m => this.newResponseMessagesPersisted.has(m)).map(this.mastraMessageV2ToMastraMessageV3),
       ),
     v2: (): MastraMessageV2[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
-    ui: (): UIMessageWithMetadata[] => this.inputPersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
+    ui: (): UIMessageWithMetadata[] => this.responsePersisted.v2().map(MessageList.mastraMessageV2ToAIV4UIMessage),
   };
 
   public drainUnsavedMessages(): MastraMessageV2[] {
@@ -635,10 +635,13 @@ export class MessageList {
       }
       return uiMessage;
     } else if (m.role === `assistant`) {
+      const isSingleTextContentArray =
+        Array.isArray(m.content.content) && m.content.content.length === 1 && m.content.content[0].type === `text`;
+
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: m.content.content || contentString,
+        content: isSingleTextContentArray ? contentString : m.content.content || contentString,
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
@@ -898,9 +901,29 @@ export class MessageList {
     ).length;
     // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
     if (latestPartCount < newPartCount) {
+      // Check if we need to add a step-start before text parts when merging assistant messages
+      // Only add after tool invocations, and only if the incoming message doesn't already have step-start
+      const partIndex = newMessage.content.parts.indexOf(part);
+      const hasStepStartBefore = partIndex > 0 && newMessage.content.parts[partIndex - 1]?.type === 'step-start';
+
+      const needsStepStart =
+        latestMessage.role === 'assistant' &&
+        part.type === 'text' &&
+        !hasStepStartBefore &&
+        latestMessage.content.parts.length > 0 &&
+        latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
+
       if (typeof insertAt === 'number') {
-        latestMessage.content.parts.splice(insertAt, 0, part);
+        if (needsStepStart) {
+          latestMessage.content.parts.splice(insertAt, 0, { type: 'step-start' });
+          latestMessage.content.parts.splice(insertAt + 1, 0, part);
+        } else {
+          latestMessage.content.parts.splice(insertAt, 0, part);
+        }
       } else {
+        if (needsStepStart) {
+          latestMessage.content.parts.push({ type: 'step-start' });
+        }
         latestMessage.content.parts.push(part);
       }
     }
@@ -1162,8 +1185,20 @@ export class MessageList {
     const experimentalAttachments: AIV4Type.UIMessage['experimental_attachments'] = [];
     const toolInvocations: AIV4Type.ToolInvocation[] = [];
 
+    const isSingleTextContent =
+      messageSource === `response` &&
+      Array.isArray(coreMessage.content) &&
+      coreMessage.content.length === 1 &&
+      coreMessage.content[0] &&
+      coreMessage.content[0].type === `text` &&
+      `text` in coreMessage.content[0] &&
+      coreMessage.content[0].text;
+
+    if (isSingleTextContent && messageSource === `response`) {
+      coreMessage.content = isSingleTextContent;
+    }
+
     if (typeof coreMessage.content === 'string') {
-      parts.push({ type: 'step-start' });
       parts.push({
         type: 'text',
         text: coreMessage.content,
@@ -1172,6 +1207,11 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            // Add step-start only after tool invocations, not at the beginning
+            const prevPart = parts.at(-1);
+            if (coreMessage.role === 'assistant' && prevPart && prevPart.type === 'tool-invocation') {
+              parts.push({ type: 'step-start' });
+            }
             parts.push({
               type: 'text',
               text: part.text,
@@ -1399,7 +1439,7 @@ export class MessageList {
     return key;
   }
 
-  private static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
+  static coreContentToString(content: AIV4Type.CoreMessage['content']): string {
     if (typeof content === `string`) return content;
 
     return content.reduce((p, c) => {
@@ -2086,7 +2126,21 @@ export class MessageList {
   }
 
   private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    return AIV5.convertToModelMessages(this.sanitizeV5UIMessages(messages));
+    return AIV5.convertToModelMessages(this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages)));
+  }
+  private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+    for (const message of messages) {
+      if (message.role !== `assistant`) continue;
+      for (const [index, part] of message.parts.entries()) {
+        if (!AIV5.isToolUIPart(part)) continue;
+        // If we don't insert step-start between tools and other parts, AIV5.convertToModelMessages will incorrectly add extra tool parts in the wrong order
+        // ex: ui message with parts: [tool-result, text] becomes [assistant-message-with-both-parts, tool-result-message], when it should become [tool-call-message, tool-result-message, text-message]
+        if (message.parts.at(index + 1)?.type !== `step-start`) {
+          message.parts.splice(index + 1, 0, { type: 'step-start' });
+        }
+      }
+    }
+    return messages;
   }
   private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     const msgs = messages
@@ -2207,10 +2261,7 @@ export class MessageList {
     const id = `id` in coreMessage && typeof coreMessage.id === `string` ? coreMessage.id : this.newMessageId();
     const parts: AIV5Type.UIMessage['parts'] = [];
 
-    // Add step-start for input messages
-    if (messageSource === 'input' && coreMessage.role === 'user') {
-      parts.push({ type: 'step-start' });
-    }
+    // Note: step-start should only be added after tool invocations for assistant messages, never for user messages
 
     if (typeof coreMessage.content === 'string') {
       parts.push({
@@ -2221,6 +2272,18 @@ export class MessageList {
       for (const part of coreMessage.content) {
         switch (part.type) {
           case 'text':
+            // Add step-start only after tool results for assistant messages
+            const prevPart = parts.at(-1);
+            if (
+              coreMessage.role === 'assistant' &&
+              prevPart &&
+              AIV5.isToolUIPart(prevPart) &&
+              prevPart.state === 'output-available'
+            ) {
+              parts.push({
+                type: 'step-start',
+              });
+            }
             parts.push({
               type: 'text',
               text: part.text,
@@ -2230,8 +2293,7 @@ export class MessageList {
 
           case 'tool-call':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'input-available',
               toolCallId: part.toolCallId,
               input: part.input,
@@ -2240,8 +2302,7 @@ export class MessageList {
 
           case 'tool-result':
             parts.push({
-              type: 'dynamic-tool',
-              toolName: part.toolName,
+              type: `tool-${part.toolName}`,
               state: 'output-available',
               toolCallId: part.toolCallId,
               output:

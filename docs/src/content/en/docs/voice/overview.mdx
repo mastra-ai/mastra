@@ -625,7 +625,7 @@ const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
 ```
 
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Gemini Live voice provider.
+Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </Tabs.Tab>
 </Tabs>
@@ -663,40 +663,6 @@ const voice = new OpenAIVoice({
 ```
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
-
-  </Tabs.Tab>
-  <Tabs.Tab>
-```typescript
-// Google Gemini Live Voice Configuration
-import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
-
-const voice = new GeminiLiveVoice({
-  // Live API
-  apiKey: process.env.GOOGLE_API_KEY,
-  model: 'gemini-2.0-flash-exp',
-  speaker: 'Puck',
-  debug: true,
-  // Vertex AI alternative:
-  // vertexAI: true,
-  // project: 'your-gcp-project',
-  // location: 'us-central1',
-  // serviceAccountKeyFile: '/path/to/service-account.json',
-  // sessionConfig: {
-  //   vad: { enabled: true, sensitivity: 0.5, silenceDurationMs: 1000 },
-  //   interrupts: { enabled: true, allowUserInterruption: true },
-  //   contextCompression: false,
-  // }
-});
-
-// Per-turn overrides
-await voice.speak('Hello', {
-  languageCode: 'en-US',
-  responseModalities: ['AUDIO'] as any,
-  speaker: 'Puck',
-});
-```
-
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Gemini Live voice provider.
 
   </Tabs.Tab>
   <Tabs.Tab>
@@ -778,7 +744,7 @@ const voice = new GoogleVoice({
 });
 ```
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
 
   </Tabs.Tab>
   <Tabs.Tab>
@@ -893,6 +859,22 @@ const voice = new OpenAIRealtimeVoice({
 For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
 
   </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Google Gemini Live Voice Configuration
+const voice = new GeminiLiveVoice({
+  speechModel: {
+    name: "gemini-2.0-flash-exp", // Example model name
+    apiKey: process.env.GOOGLE_API_KEY,
+  },
+  speaker: "Puck", // Example speaker name
+  // Google Gemini Live is a realtime bidirectional API without separate speech and listening models
+});
+```
+
+Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+
+  </Tabs.Tab>
 </Tabs>
 
 ### Using Multiple Voice Providers
@@ -953,8 +935,10 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [CompositeVoice](../../reference/voice/composite-voice.mdx)
 - [MastraVoice](../../reference/voice/mastra-voice.mdx)
 - [OpenAI Voice](../../reference/voice/openai.mdx)
+- [OpenAI Realtime Voice](../../reference/voice/openai-realtime.mdx)
 - [Azure Voice](../../reference/voice/azure.mdx)
 - [Google Voice](../../reference/voice/google.mdx)
+- [Google Gemini Live Voice](../../reference/voice/google-gemini-live.mdx)
 - [Deepgram Voice](../../reference/voice/deepgram.mdx)
 - [PlayAI Voice](../../reference/voice/playai.mdx)
 - [Voice Examples](../../examples/voice/text-to-speech.mdx)

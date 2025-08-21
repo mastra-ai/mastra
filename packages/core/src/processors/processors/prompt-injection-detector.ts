@@ -2,7 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { MastraLanguageModel } from '../../agent/types';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
 
 /**
@@ -165,26 +165,39 @@ export class PromptInjectionDetector implements Processor {
    */
   private async detectPromptInjection(content: string): Promise<PromptInjectionResult> {
     const prompt = this.createDetectionPrompt(content);
-
     try {
-      const response = await this.detectionAgent.generate(prompt, {
-        output: z.object({
-          categories: z
-            .object(
-              this.detectionTypes.reduce(
-                (props, type) => {
-                  props[type] = z.number().min(0).max(1).optional();
-                  return props;
-                },
-                {} as Record<string, z.ZodType<number | undefined>>,
-              ),
-            )
-            .optional(),
-          reason: z.string().optional(),
-          rewritten_content: z.string().optional(),
-        }),
-        temperature: 0,
+      const model = await this.detectionAgent.getModel();
+      let response;
+
+      const schema = z.object({
+        categories: z
+          .object(
+            this.detectionTypes.reduce(
+              (props, type) => {
+                props[type] = z.number().min(0).max(1).optional();
+                return props;
+              },
+              {} as Record<string, z.ZodType<number | undefined>>,
+            ),
+          )
+          .optional(),
+        reason: z.string().optional(),
+        rewritten_content: z.string().optional(),
       });
+
+      if (model.specificationVersion === 'v2') {
+        response = await this.detectionAgent.generateVNext(prompt, {
+          output: schema,
+          modelSettings: {
+            temperature: 0,
+          },
+        });
+      } else {
+        response = await this.detectionAgent.generate(prompt, {
+          output: schema,
+          temperature: 0,
+        });
+      }
 
       const result = response.object as PromptInjectionResult;
 

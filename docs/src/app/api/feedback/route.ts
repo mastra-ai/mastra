@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 interface FeedbackData {
   feedback: string;
   rating?: number;
-  email?: string;
   page: string;
   userAgent?: string;
   timestamp: string;
@@ -29,8 +28,6 @@ function toErrorWithMessage(maybeError: unknown): ErrorWithMessage {
   try {
     return new Error(JSON.stringify(maybeError));
   } catch {
-    // fallback in case there's an error stringifying the maybeError
-    // like with circular references for example.
     return new Error(String(maybeError));
   }
 }
@@ -57,25 +54,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const clientIP =
-      request.headers.get("x-forwarded-for") ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const timeStr = now.toTimeString().split(" ")[0].replace(/:/g, ""); // HHMMSS
+    const randomId = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4 char random
 
     const feedbackEntry = {
-      id: `feedback_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      id: `FEEDBACK-${dateStr}-${timeStr}-${randomId}`,
       feedback: body.feedback.trim(),
       rating: body.rating || null,
-      email: body.email?.trim() || null,
       page: body.page,
       userAgent:
         body.userAgent || request.headers.get("user-agent") || "unknown",
-      clientIP,
       timestamp: body.timestamp || new Date().toISOString(),
       source: "docs",
     };
 
-    await sendToAirtable(feedbackEntry);
+    await sendToNotion(feedbackEntry);
+    await sendToSlack(feedbackEntry);
 
     return NextResponse.json(
       {
@@ -86,6 +82,7 @@ export async function POST(request: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Internal server error", message: getErrorMessage(error) },
       { status: 500 },
@@ -93,44 +90,81 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function sendToAirtable(feedback: any) {
-  const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
-  const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
-  const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME || "Feedback";
+async function sendToNotion(feedback: any) {
+  const NOTION_API_KEY = process.env.NOTION_API_KEY;
+  const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
-  if (!AIRTABLE_API_KEY || !AIRTABLE_BASE_ID) {
+  if (!NOTION_DATABASE_ID) {
     throw new Error(
-      "Airtable configuration missing: AIRTABLE_API_KEY and AIRTABLE_BASE_ID are required",
+      "Notion configuration missing: NOTION_DATABASE_ID is required",
     );
   }
 
-  const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}`;
+  if (!NOTION_API_KEY) {
+    throw new Error("Notion configuration missing: NOTION_API_KEY is required");
+  }
 
-  const payload = {
-    records: [
-      {
-        fields: {
-          "Feedback ID": feedback.id,
-          "Feedback Text": feedback.feedback,
-          Rating: feedback.rating,
-          Email: feedback.email || "",
-          "Page URL": feedback.page,
-          "User Agent": feedback.userAgent,
-          "Client IP": feedback.clientIP,
-          Timestamp: feedback.timestamp.split("T")[0], // Convert to YYYY-MM-DD format
-          Source: feedback.source,
-          Status: "New",
-          "Created Date": new Date().toISOString().split("T")[0], // YYYY-MM-DD format
-        },
+  const notionUrl = `https://api.notion.com/v1/pages`;
+
+  const payload: any = {
+    parent: {
+      type: "database_id",
+      database_id: NOTION_DATABASE_ID,
+    },
+    properties: {
+      "Feedback ID": {
+        title: [
+          {
+            type: "text",
+            text: { content: feedback.id },
+          },
+        ],
       },
-    ],
+      "Feedback Text": {
+        rich_text: [
+          {
+            type: "text",
+            text: { content: feedback.feedback },
+          },
+        ],
+      },
+      "Page URL": {
+        url: feedback.page,
+      },
+      "User Agent": {
+        rich_text: [
+          {
+            type: "text",
+            text: { content: feedback.userAgent },
+          },
+        ],
+      },
+
+      Timestamp: {
+        date: { start: feedback.timestamp },
+      },
+      Source: {
+        select: { name: feedback.source },
+      },
+      Status: {
+        select: { name: "New" },
+      },
+    },
   };
 
-  const response = await fetch(airtableUrl, {
+  // Add optional properties if they exist
+  if (feedback.rating) {
+    payload.properties["Rating"] = {
+      number: feedback.rating,
+    };
+  }
+
+  const response = await fetch(notionUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${AIRTABLE_API_KEY}`,
+      Authorization: `Bearer ${NOTION_API_KEY}`,
       "Content-Type": "application/json",
+      "Notion-Version": "2022-06-28",
     },
     body: JSON.stringify(payload),
   });
@@ -138,10 +172,117 @@ async function sendToAirtable(feedback: any) {
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `Airtable API error: ${response.status} ${response.statusText} - ${errorText}`,
+      `Notion API error: ${response.status} ${response.statusText} - ${errorText}`,
     );
   }
 
   const result = await response.json();
   return result;
+}
+
+async function sendToSlack(feedback: any) {
+  const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+
+  if (!SLACK_WEBHOOK_URL) {
+    console.warn(
+      "SLACK_WEBHOOK_URL not configured, skipping Slack notification",
+    );
+    return;
+  }
+
+  const getRatingText = (rating: number | null) => {
+    if (!rating) return "No rating";
+    switch (rating) {
+      case 3:
+        return "😊 Helpful";
+      case 2:
+        return "😐 Somewhat helpful";
+      case 1:
+        return "😕 Not helpful";
+      default:
+        return "No rating";
+    }
+  };
+
+  const ratingText = getRatingText(feedback.rating);
+
+  const page = `${process.env.NEXT_PUBLIC_APP_URL}${feedback.page}`;
+
+  const slackMessage = {
+    blocks: [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "📝 New Docs Feedback Received",
+          emoji: true,
+        },
+      },
+      {
+        type: "section",
+        fields: [
+          {
+            type: "mrkdwn",
+            text: `*Feedback ID:*\n\`${feedback.id}\``,
+          },
+          {
+            type: "mrkdwn",
+            text: `*Rating:*\n${ratingText}`,
+          },
+          {
+            type: "mrkdwn",
+            text: `*Page:*\n<${page}|View Docs Page>`,
+          },
+          {
+            type: "mrkdwn",
+            text: `*Source:*\n${feedback.source}`,
+          },
+        ],
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Feedback:*\n> ${feedback.feedback}`,
+        },
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent.split(" ")[0] ?? "Unknown"}`,
+          },
+        ],
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `💡 <https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>`,
+          },
+        ],
+      },
+    ],
+  };
+
+  try {
+    const response = await fetch(SLACK_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(slackMessage),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `Slack webhook error: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+  } catch (error) {
+    console.error("Failed to send Slack notification:", error);
+  }
 }
