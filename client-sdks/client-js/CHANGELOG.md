@@ -1,5 +1,540 @@
 # @mastra/client-js
 
+## 0.10.22-alpha.5
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.5
+
+## 0.10.22-alpha.4
+
+### Patch Changes
+
+- 0a7f675: Client JS vnext methods
+- 1d59515: Add options to playground based on modelVersion
+- 195eabb: Process Mastra Stream
+- Updated dependencies [0a7f675]
+- Updated dependencies [12cae67]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [1a80071]
+- Updated dependencies [36a3be8]
+- Updated dependencies [361757b]
+- Updated dependencies [2bb9955]
+- Updated dependencies [2454423]
+- Updated dependencies [a44d91e]
+- Updated dependencies [dfb91e9]
+- Updated dependencies [a741dde]
+- Updated dependencies [7cb3fc0]
+- Updated dependencies [195eabb]
+- Updated dependencies [b78b95b]
+  - @mastra/core@0.14.0-alpha.4
+
+## 0.10.22-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [227c7e6]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0-alpha.3
+
+## 0.10.22-alpha.2
+
+### Patch Changes
+
+- @mastra/core@0.14.0-alpha.2
+
+## 0.10.22-alpha.1
+
+### Patch Changes
+
+- 6313063: Implement model switcher in playground
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+
+## 0.10.22-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [c30bca8]
+  - @mastra/core@0.13.3-alpha.0
+
+## 0.10.21
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+
+## 0.10.21-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+
+## 0.10.21-alpha.2
+
+### Patch Changes
+
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
+## 0.10.21-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [2e74797]
+- Updated dependencies [63449d0]
+  - @mastra/core@0.13.2-alpha.1
+
+## 0.10.21-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+  - @mastra/core@0.13.2-alpha.0
+
+## 0.10.20
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1
+
+## 0.10.20-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1-alpha.0
+
+## 0.10.19
+
+### Patch Changes
+
+- 42dfc48: Fix tool messages structure in agui adapter
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+
+## 0.10.19-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [d0496e6]
+  - @mastra/core@0.13.0-alpha.3
+
+## 0.10.19-alpha.2
+
+### Patch Changes
+
+- 42dfc48: Fix tool messages structure in agui adapter
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
+## 0.10.19-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
+## 0.10.19-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+
+## 0.10.18
+
+### Patch Changes
+
+- 6690a16: dependencies updates:
+  - Updated dependency [`@ag-ui/client@^0.0.35` ↗︎](https://www.npmjs.com/package/@ag-ui/client/v/0.0.35) (from `^0.0.27`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 0.10.18-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [d0d9500]
+  - @mastra/core@0.12.1-alpha.1
+
+## 0.10.18-alpha.0
+
+### Patch Changes
+
+- 6690a16: dependencies updates:
+  - Updated dependency [`@ag-ui/client@^0.0.35` ↗︎](https://www.npmjs.com/package/@ag-ui/client/v/0.0.35) (from `^0.0.27`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
+## 0.10.17
+
+### Patch Changes
+
+- aa2715b: process stream response error handling
+- 6bd354c: Should not send content type if body instance of FormData
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- b641ba3: fix: save score params
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- 1ac8f6b: deduplicate message
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.10.17-alpha.5
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.5
+
+## 0.10.17-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ad0a58b]
+  - @mastra/core@0.12.0-alpha.4
+
+## 0.10.17-alpha.3
+
+### Patch Changes
+
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- 1ac8f6b: deduplicate message
+  - @mastra/core@0.12.0-alpha.3
+
+## 0.10.17-alpha.2
+
+### Patch Changes
+
+- aa2715b: process stream response error handling
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
+## 0.10.17-alpha.1
+
+### Patch Changes
+
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+
+## 0.10.17-alpha.0
+
+### Patch Changes
+
+- 6bd354c: Should not send content type if body instance of FormData
+- b641ba3: fix: save score params
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
+## 0.10.16
+
+### Patch Changes
+
+- @mastra/core@0.11.1
+
+## 0.10.15
+
+### Patch Changes
+
+- 4832752: Do not set content-type header when making POST/PUT requests without a body
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 032cb66: ClientJS
+- 7827943: Handle streaming large data
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- 6f6e651: Alias createRun -> createRunAsync to match Mastra Workflow class
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
+## 0.10.15-alpha.3
+
+### Patch Changes
+
+- @mastra/core@0.11.0-alpha.3
+
+## 0.10.15-alpha.2
+
+### Patch Changes
+
+- 4832752: Do not set content-type header when making POST/PUT requests without a body
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 032cb66: ClientJS
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- 6f6e651: Alias createRun -> createRunAsync to match Mastra Workflow class
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+
+## 0.10.15-alpha.1
+
+### Patch Changes
+
+- @mastra/core@0.11.0-alpha.1
+
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- 7827943: Handle streaming large data
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/core@0.11.0-alpha.0
+
+## 0.10.14
+
+### Patch Changes
+
+- 31f9f6b: Replace crypto randomUUID in client SDK"
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15
+
+## 0.10.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+
+## 0.10.14-alpha.0
+
+### Patch Changes
+
+- 31f9f6b: Replace crypto randomUUID in client SDK"
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [db5cc15]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15-alpha.0
+
+## 0.10.13
+
+### Patch Changes
+
+- @mastra/core@0.10.14
+
+## 0.10.11
+
+### Patch Changes
+
+- 9468be4: Fix error on agent generate while using antropic
+- 44731a4: Client SDK - Expose processTextStream util for agent textstream with structured output
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12
+
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12-alpha.1
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- 9468be4: Fix error on agent generate while using antropic
+- 44731a4: Client SDK - Expose processTextStream util for agent textstream with structured output
+- Updated dependencies [b4a9811]
+  - @mastra/core@0.10.12-alpha.0
+
 ## 0.10.10
 
 ### Patch Changes

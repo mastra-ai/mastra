@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 import nextra from "nextra";
 import { initGT } from "gt-next/config";
+import { transformerNotationDiff } from "@shikijs/transformers";
+import path from "path";
+import { readFileSync } from "fs";
 
 const withNextra = nextra({
   search: {
@@ -8,199 +11,10 @@ const withNextra = nextra({
   },
   mdxOptions: {
     rehypePrettyCodeOptions: {
-      theme: {
-        light: {
-          displayName: "Mastra Light",
-          name: "mastra-light",
-          semanticHighlighting: true,
-          tokenColors: [
-            {
-              scope: ["string.unquoted.argument.shell"],
-              settings: {
-                foreground: "var(--light-color-text-6)",
-              },
-            },
-            {
-              scope: "constant",
-              settings: {
-                foreground: "var(--light-green-accent)",
-              },
-            },
-            {
-              scope: [
-                "string",
-                "string.expression",
-                "punctuation.definition.string.template.begin.ts",
-                "punctuation.definition.string.template.end.ts",
-              ],
-              settings: {
-                foreground: "#158D29",
-              },
-            },
-            {
-              scope: ["comment", "punctuation.definition.comment"],
-              settings: {
-                foreground: "#939393",
-              },
-            },
-            {
-              scope: [
-                "keyword",
-                "storage.type",
-                "support.type",
-                "storage.type.interface",
-                "entity.name.type.interface",
-                "storage.modifier.async",
-                "storage.type.async",
-                "keyword.control.loop",
-                "keyword.control.from",
-                "keyword.control.flow",
-                "entity.name.type.ts",
-              ],
-              settings: {
-                foreground: "#D81717",
-              },
-            },
-            {
-              scope: "parameter",
-              settings: {
-                foreground: "#D81717",
-              },
-            },
-            {
-              scope: ["function", "meta.function-call"],
-              settings: {
-                foreground: "#9829C7",
-              },
-            },
-            {
-              scope: [
-                "punctuation",
-                "meta.brace",
-                "meta.array",
-                "punctuation.definition",
-                "meta.import",
-                "meta.object.member",
-                "meta.object.literal",
-                "variable.object.property",
-                "meta.interface",
-                "variable.other.property",
-                "variable.other.object",
-                "variable.other.readwrite",
-                "variable",
-                "meta.statement.command.shell",
-              ],
-              settings: {
-                foreground: "var(--light-color-text-6)",
-              },
-            },
-            {
-              scope: "token.link",
-              settings: {
-                foreground: "#158D29",
-              },
-            },
-          ],
-          type: "light",
-        },
-        dark: {
-          displayName: "Mastra Dark",
-          name: "mastra-dark",
-          semanticHighlighting: true,
-          tokenColors: [
-            {
-              scope: "constant",
-              settings: {
-                //green
-                foreground: "#46f488",
-              },
-            },
-            {
-              scope: "string",
-              settings: {
-                //green
-                foreground: "#46f488",
-              },
-            },
-            {
-              scope: ["comment", "punctuation.definition.comment"],
-              //subtle gray
-              settings: {
-                foreground: "#939393",
-              },
-            },
-            {
-              scope: [
-                "keyword",
-                "storage.type",
-                "support.type",
-                "storage.type.interface",
-                "entity.name.type.interface",
-                "storage.modifier.async",
-                "storage.type.async",
-                "keyword.control.loop",
-                "keyword.control.from",
-                "keyword.control.flow",
-                "entity.name.type.ts",
-              ],
-              settings: {
-                //orange
-                foreground: "#fa7b6a",
-              },
-            },
-            {
-              scope: "parameter",
-              settings: {
-                foreground: "#fa7b6a",
-              },
-            },
-            {
-              scope: ["function", "entity.name.function", "meta.function-call"],
-              //purple
-              settings: {
-                foreground: "#d06bee",
-              },
-            },
-            {
-              scope: "string.expression",
-              //green
-              settings: {
-                foreground: "#46f488",
-              },
-            },
-            {
-              scope: [
-                "punctuation",
-                "meta.brace",
-                "meta.array",
-                "punctuation.definition",
-                "meta.import",
-                "meta.object.member",
-                "meta.object.literal",
-                "variable.object.property",
-                "meta.interface",
-                "variable.other.constant",
-                "variable.other.property",
-                "variable.other.object",
-                "variable.other.readwrite",
-                "variable",
-                "meta.statement.command.shell",
-              ],
-              //white
-              settings: {
-                foreground: "#fff",
-              },
-            },
-            {
-              scope: "token.link",
-              settings: {
-                foreground: "#fff",
-              },
-            },
-          ],
-          type: "dark",
-        },
-      },
+      theme: JSON.parse(
+        readFileSync(path.join(process.cwd(), "theme.json"), "utf-8"),
+      ),
+      transformers: [transformerNotationDiff()],
     },
   },
 });
@@ -230,6 +44,18 @@ export default withGT(
             destination: "/api/copilotkit",
           },
           {
+            source: "/en/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/ja/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
+            source: "/docs/api/feedback",
+            destination: "/api/feedback",
+          },
+          {
             source: "/:locale/docs/_next/:path+",
             destination: "/_next/:path+",
           },
@@ -241,11 +67,6 @@ export default withGT(
       };
     },
     redirects: () => [
-      {
-        source: "/examples/memory/short-term-working-memory",
-        destination: "/examples/memory/memory-with-libsql",
-        permanent: true,
-      },
       {
         source: "/docs/08-running-evals",
         destination: "/docs/evals/overview",
@@ -318,13 +139,18 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/deployment/deployment",
-        destination: "/docs/deployment/serverless-platforms",
+        source: "/:locale/docs/deployment/deployment",
+        destination: "/:locale/docs/deployment/serverless-platforms",
         permanent: true,
       },
       {
         source: "/docs/deployment/client",
         destination: "/docs/client-js/overview",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/ai-sdk-v5",
+        destination: "/docs/frameworks/agentic-uis/ai-sdk#vercel-ai-sdk-v5",
         permanent: true,
       },
       {
@@ -430,27 +256,7 @@ export default withGT(
       },
       {
         source: "/examples/rag/rerank",
-        destination: "/examples/rag/rerank/rerank-rag",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/rerank-rag",
-        destination: "/examples/rag/rerank/rerank-rag",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/chunking",
-        destination: "/examples/rag/chunking/chunk-text",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/chunk-json",
-        destination: "/examples/rag/chunking/chunk-json",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/hybrid-vector-search",
-        destination: "/examples/rag/query/hybrid-vector-search",
+        destination: "/examples/rag/rerank/rerank",
         permanent: true,
       },
       {
@@ -459,43 +265,28 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/retrieve-results",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/basic-rag",
-        destination: "/examples/rag/query/hybrid-vector-search",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/embed-chunk-array",
-        destination: "/examples/rag/chunking/chunk-json",
+        destination: "/examples/rag/embedding/embed-chunk-array",
         permanent: true,
       },
       {
         source: "/examples/rag/embed-text-chunk",
-        destination: "/examples/rag/chunking/chunk-text",
+        destination: "/examples/rag/embedding/embed-text-chunk",
         permanent: true,
       },
       {
         source: "/examples/rag/filter-rag",
-        destination: "/docs/rag/retrieval#metadata-filtering",
+        destination: "/examples/rag/usage/filter-rag",
         permanent: true,
       },
       {
         source: "/workflows",
-        destination: "/docs/workflows/steps",
+        destination: "/docs/workflows/overview",
         permanent: true,
       },
       {
         source: "/workflows/:path*",
         destination: "/docs/workflows/:path*",
-        permanent: true,
-      },
-      {
-        source: "/docs/workflows/data-flow",
-        destination: "/docs/workflows/variables",
         permanent: true,
       },
       {
@@ -519,23 +310,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/usage/rerank-rag",
-        destination: "/examples/rag/rerank/rerank-rag",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/reranking-with-cohere",
-        destination: "/examples/rag/rerank/reranking-with-cohere",
-        permanent: true,
-      },
-      {
         source: "/examples/memory/short-term-working-memory",
         destination: "/examples/memory/memory-with-libsql",
-        permanent: true,
-      },
-      {
-        source: "/docs/showcase",
-        destination: "/showcase",
         permanent: true,
       },
       {
@@ -565,7 +341,7 @@ export default withGT(
       },
       {
         source: "/docs/guide/deployment/deployment",
-        destination: "/docs/deployment/deployment",
+        destination: "/docs/deployment/serverless-platforms",
         permanent: true,
       },
       {
@@ -600,7 +376,7 @@ export default withGT(
       },
       {
         source: "/docs/guide/local-dev/integrations",
-        destination: "/docs/local-dev/mastra-dev",
+        destination: "/docs/server-db/local-dev-playground",
         permanent: true,
       },
       {
@@ -620,7 +396,7 @@ export default withGT(
       },
       {
         source: "/docs/reference/workflows/step-retries",
-        destination: "/reference/workflows/step-retries",
+        destination: "/reference/workflows/workflow",
         permanent: true,
       },
       {
@@ -675,11 +451,6 @@ export default withGT(
       },
       {
         source: "/docs/reference/tts/providers-and-models",
-        destination: "/reference/voice/mastra-voice",
-        permanent: true,
-      },
-      {
-        source: "/docs/reference/tts/stream",
         destination: "/reference/voice/mastra-voice",
         permanent: true,
       },
@@ -755,7 +526,7 @@ export default withGT(
       },
       {
         source: "/docs/local-dev/syncing-projects",
-        destination: "/docs/local-dev/syncing-projects",
+        destination: "/docs/server-db/local-dev-playground",
         permanent: true,
       },
       {
@@ -849,23 +620,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/embed-chunk-array",
-        destination: "/examples/rag/embedding/embed-chunk-array",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/embed-text-chunk",
-        destination: "/examples/rag/embedding/embed-text-chunk",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/embed-text-with-cohere",
         destination: "/examples/rag/embedding/embed-text-with-cohere",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/filter-rag",
-        destination: "/examples/rag/usage/filter-rag",
         permanent: true,
       },
       {
@@ -879,28 +635,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/insert-embedding-in-astra",
-        destination: "/reference/rag/astra",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/insert-embedding-in-pgvector",
-        destination: "/reference/rag/pg",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/insert-embedding-in-chroma",
-        destination: "/reference/rag/chroma",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/insert-embedding-in-libsql",
         destination: "/reference/rag/libsql",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/insert-embedding-in-pinecone",
-        destination: "/reference/rag/pinecone",
         permanent: true,
       },
       {
@@ -924,18 +660,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/metadata-extraction",
-        destination: "/examples/rag/embedding/metadata-extraction",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/query/metadata-extraction",
         destination: "/examples/rag/embedding/metadata-extraction",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/rerank",
-        destination: "/examples/rag/rerank/rerank",
         permanent: true,
       },
       {
@@ -948,16 +674,7 @@ export default withGT(
         destination: "/examples/rag/rerank/reranking-with-cohere",
         permanent: true,
       },
-      {
-        source: "/examples/rag/retrieve-results",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/retrieve-results",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
+
       {
         source: "/examples/rag/usage/rerank-rag",
         destination: "/examples/rag/rerank/rerank",
@@ -975,7 +692,7 @@ export default withGT(
       },
       {
         source: "/examples/workflows/subscribed-steps",
-        destination: "/examples/workflows/sequential-steps",
+        destination: "/examples/workflows/agent-and-tool-interop",
         permanent: true,
       },
       {
@@ -1008,6 +725,61 @@ export default withGT(
       {
         source: "/:locale/docs/frameworks/agentic-uis",
         destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
+        permanent: true,
+      },
+      {
+        source: "/examples/evals/word-inclusion",
+        destination: "/examples/evals/custom-native-javascript-eval",
+        permanent: true,
+      },
+      {
+        source: "/examples/evals/custom-eval",
+        destination: "/examples/evals/custom-llm-judge-eval",
+        permanent: true,
+      },
+      {
+        source: "/examples/workflows/agent-and-tool-interop",
+        destination: "/examples/workflows/agent-as-step",
+        permanent: true,
+      },
+      {
+        source: "/reference/agents/createTool",
+        destination: "/reference/tools/create-tool",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/start",
+        destination: "/reference/workflows/run-methods/start",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/streamVNext",
+        destination: "/reference/workflows/run-methods/streamVNext",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/resume",
+        destination: "/reference/workflows/run-methods/resume",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/watch",
+        destination: "/reference/workflows/run-methods/watch",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/stream",
+        destination: "/reference/workflows/run-methods/stream",
+        permanent: true,
+      },
+      {
+        source: "/reference/workflows/snapshots",
+        destination: "/docs/server-db/snapshots",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/hierarchical-multi-agent",
+        destination: "/examples/agents/supervisor-agent",
         permanent: true,
       },
     ],

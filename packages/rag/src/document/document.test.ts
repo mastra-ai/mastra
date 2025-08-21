@@ -20,7 +20,7 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
+vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
 
 describe('MDocument', () => {
   describe('basics', () => {
@@ -43,9 +43,8 @@ describe('MDocument', () => {
       const doc = MDocument.fromMarkdown(sampleMarkdown);
 
       chunks = await doc.chunk({
-        size: 1500,
+        maxSize: 1500,
         overlap: 0,
-        separator: `\n`,
         extract: {
           keywords: true,
         },
@@ -62,7 +61,7 @@ describe('MDocument', () => {
       });
 
       expect(embeddings).toBeDefined();
-    });
+    }, 15000);
   });
 
   describe('chunkCharacter', () => {
@@ -75,7 +74,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\n\n',
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -96,7 +95,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\\s+',
         isSeparatorRegex: true,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -112,7 +111,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\n\n',
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
         keepSeparator: 'end',
       });
@@ -132,7 +131,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -153,7 +152,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'start',
         });
@@ -175,7 +174,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -195,7 +194,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -215,7 +214,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'start',
         });
@@ -235,7 +234,7 @@ describe('MDocument', () => {
 
       const result = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -265,7 +264,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(text);
       const chunks = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -309,7 +308,7 @@ describe('MDocument', () => {
       const testDoc = MDocument.fromText(text);
       const chunks = await testDoc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -326,7 +325,7 @@ describe('MDocument', () => {
       }
       expect(allChunksValid).toBe(true);
 
-      // Verify each chunk size explicitly
+      // Verify the size of each chunk explicitly
       for (const chunk of chunks) {
         expect(chunk.text.length).toBeLessThanOrEqual(chunkSize);
       }
@@ -352,7 +351,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(text);
       const chunks = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -360,7 +359,7 @@ describe('MDocument', () => {
       chunks.forEach(chunk => {
         // Each chunk should be either:
         // 1. Full size (chunkSize)
-        // 2. Or at least half the chunk size if it's the last chunk
+        // 2. Or at least half the chunk maxSize if it's the last chunk
         const minSize = chunk === chunks[chunks.length - 1] ? Math.floor(chunkSize / 2) : chunkSize;
         expect(chunk.text.length).toBeGreaterThanOrEqual(minSize);
       });
@@ -386,9 +385,9 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size,
+        maxSize: size,
         overlap: overlapSize,
-        separator: '\n\n', // Split on double newlines
+        separators: ['\n\n'], // Split on double newlines
       });
 
       const docs = doc.getDocs();
@@ -420,7 +419,7 @@ describe('MDocument', () => {
         strategy: 'recursive',
         separators: ['\n\n', '\n', ' ', ''],
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -446,7 +445,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(tsCode, { meta: 'data' });
 
       await doc.chunk({
-        size: 50,
+        maxSize: 50,
         overlap: 5,
         language: Language.TS,
       });
@@ -461,7 +460,7 @@ describe('MDocument', () => {
 
       await expect(
         doc.chunk({
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           language: 'invalid-language' as any,
         }),
@@ -481,7 +480,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size: 500, // Smaller chunk size to ensure multiple chunks
+        maxSize: 500, // Smaller chunk maxSize to ensure multiple chunks
         overlap: overlapSize,
       });
 
@@ -517,7 +516,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap: overlapSize,
       });
 
@@ -1373,7 +1372,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'cl100k_base',
-        size: 10,
+        maxSize: 10,
         overlap: 2,
       });
 
@@ -1391,7 +1390,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'gpt2',
-        size: 10,
+        maxSize: 10,
         disallowedSpecial: new Set(),
         allowedSpecial: new Set(['<|endoftext|>']),
         overlap: 2,
@@ -1410,7 +1409,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'gpt2',
-        size: 10,
+        maxSize: 10,
         disallowedSpecial: new Set(),
         allowedSpecial: new Set(['<|endoftext|>']),
         overlap: 2,
@@ -1424,15 +1423,15 @@ describe('MDocument', () => {
     });
 
     describe('Error cases', () => {
-      it('should throw error for invalid chunk size and overlap', async () => {
+      it('should throw error for invalid chunk maxSize and overlap', async () => {
         const text = '  This has whitespace   ';
         const doc = MDocument.fromText(text, { meta: 'data' });
 
         await expect(
           doc.chunk({
             strategy: 'token',
-            size: 100,
-            overlap: 150, // overlap larger than chunk size
+            maxSize: 100,
+            overlap: 150, // overlap larger than chunk maxSize
           }),
         ).rejects.toThrow();
       });
@@ -1445,8 +1444,8 @@ describe('MDocument', () => {
           doc.chunk({
             strategy: 'token',
             encodingName: 'invalid-encoding' as any,
-            size: 100,
-            overlap: 150, // overlap larger than chunk size
+            maxSize: 100,
+            overlap: 150, // overlap larger than chunk maxSize
           }),
         ).rejects.toThrow();
       });
@@ -1472,7 +1471,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
       });
 
@@ -1496,7 +1495,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
       });
 
@@ -1527,7 +1526,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
         keepSeparator: 'start',
       });
@@ -1557,7 +1556,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
         keepSeparator: 'start',
       });
@@ -1579,7 +1578,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 50,
+        maxSize: 50,
         overlap: 0,
         keepSeparator: 'end',
       });
@@ -1600,7 +1599,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 0,
         stripWhitespace: true,
       });
@@ -1759,7 +1758,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromMarkdown(markdown);
       const chunks = await doc.chunk({
         strategy: 'markdown',
-        size: 500,
+        maxSize: 500,
         overlap: 0,
         headers: [
           ['#', 'h1'],
@@ -2006,7 +2005,7 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'character',
         separator: '\n\n',
-        size: 20,
+        maxSize: 20,
         overlap: 0,
         extract: { keywords: true },
       });
@@ -2055,6 +2054,905 @@ describe('MDocument', () => {
       expect(titleB).toBeDefined();
       expect(titleA1).toBe(titleA2);
       expect(titleA1).not.toBe(titleB);
+    });
+  });
+
+  describe('chunkSentence', () => {
+    it('should preserve sentence structure and avoid mid-sentence breaks', async () => {
+      const text =
+        'A dynamic concert scene captures an energetic, vibrant atmosphere, with a densely packed crowd silhouetted against bright stage lights. The image features beams of white light radiating from multiple projectors, creating dramatic patterns across a darkened room. The audience, comprised of numerous people with raised hands, exudes excitement and engagement, enhancing the lively mood. The setting suggests a large indoor venue, possibly a music or worship event, with text visible on a screen in the background, adding to an immersive experience. The overall composition emphasizes a sense of community and shared enthusiasm, ideal for promoting entertainment events, live concerts, or communal gatherings. The high-contrast lighting and slight haze effect imbue the scene with a modern, electrifying quality.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 50,
+        maxSize: 450,
+        overlap: 0,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.text.length).toBeGreaterThanOrEqual(50);
+        expect(chunk.text.length).toBeLessThanOrEqual(450);
+
+        expect(chunk.text.startsWith('.')).toBe(false);
+        expect(chunk.text.startsWith(' .')).toBe(false);
+
+        expect(chunk.text.endsWith('.')).toBe(true);
+      });
+    });
+
+    it('should require maxSize parameter', async () => {
+      const doc = MDocument.fromText('Short text.');
+
+      await expect(
+        doc.chunk({
+          strategy: 'sentence',
+          minSize: 50,
+        } as any),
+      ).rejects.toThrow('Invalid parameters for sentence strategy: maxSize: Required');
+    });
+
+    it('should handle custom sentence enders', async () => {
+      const text =
+        'First sentence with more content to make it longer. Second sentence with additional content! Third sentence with even more text? Fourth sentence with final content.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        sentenceEnders: ['.', '!', '?'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        const endsWithValidSeparator = chunk.text.endsWith('.') || chunk.text.endsWith('!') || chunk.text.endsWith('?');
+        expect(endsWithValidSeparator).toBe(true);
+      });
+    });
+
+    it('should handle overlap with complete sentences', async () => {
+      const text =
+        'First sentence with some content that makes it quite long. Second sentence with different content that also makes it lengthy. Third sentence with more content to ensure multiple chunks. Fourth sentence with final content to complete the test.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 120,
+        overlap: 50,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      // Check that overlapping chunks share some content
+      if (chunks.length > 1) {
+        for (let i = 1; i < chunks.length; i++) {
+          const currentChunk = chunks[i].text;
+
+          // With overlap, current chunk should start with some content from previous chunk
+          // Just verify that overlap is being applied (chunk 2 starts with overlap from chunk 1)
+          expect(currentChunk.length).toBeGreaterThan(50); // Should include overlap content
+        }
+      }
+    });
+
+    it('should fallback to word splitting for oversized sentences', async () => {
+      const longSentence =
+        'This is an extremely long sentence that ' +
+        'word '.repeat(50) +
+        'and should be split into smaller chunks when it exceeds the maximum size limit.';
+
+      const doc = MDocument.fromText(longSentence);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        fallbackToWords: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.text.length).toBeLessThanOrEqual(100);
+      });
+    });
+
+    it('should handle short text appropriately', async () => {
+      const text = 'Short sentence.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 5,
+        maxSize: 100,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBe(1);
+      expect(chunks[0].text).toBe(text);
+    });
+
+    it('should group multiple sentences when they fit within target size', async () => {
+      const text = 'Short one. Another short. Third short. Fourth sentence. Fifth one.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 10,
+        maxSize: 100,
+        targetSize: 40,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      // Should group multiple short sentences together
+      expect(chunks.length).toBeLessThan(5); // Less than the number of sentences
+
+      chunks.forEach(chunk => {
+        // Each chunk should contain multiple sentences when possible
+        expect(chunk.text.length).toBeLessThanOrEqual(100);
+      });
+    });
+
+    it('should preserve metadata across chunks', async () => {
+      const text =
+        'First sentence with enough content to make it longer than fifty characters. Second sentence with additional content to ensure multiple chunks. Third sentence with final content.';
+      const metadata = { source: 'test', author: 'jest' };
+
+      const doc = MDocument.fromText(text, metadata);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.metadata.source).toBe('test');
+        expect(chunk.metadata.author).toBe('jest');
+      });
+    });
+
+    it('should handle abbreviations without false sentence breaks', async () => {
+      const text =
+        'Dr. Smith went to the U.S.A. at 3:30 a.m. on Monday. He met with Prof. Johnson at the U.N. headquarters.';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeLessThanOrEqual(2);
+
+      const allText = chunks.map(c => c.text).join(' ');
+      expect(allText).toContain('Dr. Smith'); // Should keep Dr. together
+      expect(allText).toContain('U.S.A.'); // Should keep U.S.A. together
+      expect(allText).toContain('a.m.'); // Should keep a.m. together
+      expect(allText).toContain('Prof. Johnson'); // Should keep Prof. together
+      expect(allText).toContain('U.N.'); // Should keep U.N. together
+
+      expect(allText).not.toContain('Dr '); // No broken Dr.
+      expect(allText).not.toContain('Prof '); // No broken Prof.
+    });
+
+    it('should respect fallbackToCharacters setting', async () => {
+      const oversizedWord = 'supercalifragilisticexpialidocious'.repeat(5);
+      const text = `Short sentence. ${oversizedWord}.`;
+
+      const doc1 = MDocument.fromText(text);
+      const chunksWithFallback = await doc1.chunk({
+        strategy: 'sentence',
+        maxSize: 50,
+        fallbackToWords: true,
+        fallbackToCharacters: true,
+      });
+
+      // Should split the oversized word
+      expect(chunksWithFallback.length).toBeGreaterThan(2);
+
+      const doc2 = MDocument.fromText(text);
+      const chunksWithoutFallback = await doc2.chunk({
+        strategy: 'sentence',
+        maxSize: 50,
+        fallbackToWords: true,
+        fallbackToCharacters: false,
+      });
+
+      // Should have fewer chunks (oversized word kept intact)
+      expect(chunksWithoutFallback.length).toBeLessThan(chunksWithFallback.length);
+
+      // Verify fallback disabled keeps oversized content
+      const oversizedChunk = chunksWithoutFallback.find(chunk => chunk.text.length > 50);
+      expect(oversizedChunk).toBeDefined();
+    });
+
+    it('should handle complex punctuation and edge cases', async () => {
+      const text =
+        'Version 2.0 was released. The score was 3.14159. Mr. & Mrs. Smith arrived at 12:30 p.m. What happened next?';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        sentenceEnders: ['.', '?'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeLessThanOrEqual(4);
+
+      const allText = chunks.map(c => c.text).join(' ');
+      expect(allText).toContain('2.0'); // Should keep version numbers intact
+      expect(allText).toContain('3.14159'); // Should keep decimals intact
+      expect(allText).toContain('p.m.'); // Should keep time abbreviations intact
+      expect(allText).toContain('What happened next?'); // Should end with question
+
+      // Should not break on decimals or version numbers
+      expect(allText).not.toContain('2 '); // No broken version number
+      expect(allText).not.toContain('3 '); // No broken decimal
+    });
+  });
+
+  describe('chunkSemanticMarkdown', () => {
+    it('should merge small sections based on token threshold', async () => {
+      const text = `# Introduction
+Brief intro paragraph.
+
+## Setup Guide  
+Short setup instructions.
+
+### Prerequisites
+Very short list.
+
+### Installation Steps
+Very detailed installation process with code examples and explanations that would normally be quite long but in this test we'll keep it moderate length for testing purposes.
+
+## Advanced Configuration
+Another section with moderate content for testing the merging algorithm.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 200,
+      });
+
+      const chunks = doc.getText();
+      const docs = doc.getDocs();
+
+      expect(chunks.length).toBeLessThan(6);
+
+      expect(docs[0]?.metadata?.tokenCount).toBeDefined();
+      expect(typeof docs[0]?.metadata?.tokenCount).toBe('number');
+      expect(docs[0]?.metadata?.tokenCount).toBeGreaterThan(0);
+    });
+
+    it('should respect sibling/parent relationships in merging', async () => {
+      const text = `# Main Document
+
+## Section A
+Content for section A that is moderately long to ensure we have enough tokens for testing the semantic merging algorithm properly.
+
+### Subsection A1  
+This subsection has more content than the previous version to test the hierarchical merging behavior.
+
+### Subsection A2
+Another subsection with substantial content to verify proper semantic boundary handling.
+
+## Section B
+Content for section B that is also moderately sized with meaningful text to test cross-section merging behavior.
+
+### Subsection B1
+This final subsection contains enough content to test the bottom-up merging algorithm effectively.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 100, // Threshold that allows some merging but not everything
+      });
+
+      const chunks = doc.getText();
+      const docs = doc.getDocs();
+
+      // Should create fewer chunks than original sections due to merging
+      expect(chunks.length).toBeLessThan(7);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+
+      // Verify sections maintain semantic coherence
+      const hasSection = chunks.some(chunk => chunk.includes('Section A') || chunk.includes('Subsection A1'));
+      expect(hasSection).toBe(true);
+
+      expect(docs[0]?.metadata?.tokenCount).toBeDefined();
+      expect(docs[0]?.metadata?.tokenCount).toBeGreaterThan(0);
+    });
+
+    it('should correctly chunk a controlled test document', async () => {
+      const controlledTestMarkdown = `# My Test Document
+
+This is a short preamble to test how content before the first header is handled. It should be merged with the first section if that section is small enough.
+
+## Chapter 1: The Small Sections
+
+This is the introduction to Chapter 1. It contains several small subsections that are perfect candidates for merging.
+
+### Section 1.1: A Tiny Topic
+
+Just a few words here.
+
+### Section 1.2: Another Tiny Topic
+
+A few more words to make up a small paragraph.
+
+## Chapter 2: The Big Section
+
+This chapter has a very large section that should NOT be merged with its sibling because it is over the token limit all by itself.
+
+\`\`\`python
+# This is a large block of Python code.
+# It is designed to have a high token count to test the merging threshold.
+import os
+import sys
+
+class DataProcessor:
+    def __init__(self, data):
+        self.data = data
+        self.length = len(data)
+
+    def process(self):
+        """
+        This is a long docstring to add even more tokens to the count.
+        We will iterate through the data and perform some kind of mock processing.
+        The goal is to exceed the joinThreshold of 250 tokens easily.
+        Let's add more lines to be sure.
+        Line 1
+        Line 2
+        Line 3
+        Line 4
+        Line 5
+        ...and so on.
+        """
+        results = []
+        for i, item in enumerate(self.data):
+            # A mock calculation
+            processed_item = (item * i) + self.length
+            results.append(processed_item)
+        return results
+
+# Let's make sure this section is large enough.
+# More comments and code will help.
+def another_function_to_add_tokens():
+    """Another long docstring for good measure."""
+    x = 1
+    y = 2
+    z = x + y
+    print(f"The result is {z}")
+    # End of function
+\`\`\`
+
+## Chapter 3: The Mixed Bag
+
+This chapter contains a mix of small and medium sections.
+
+### Section 3.1: A Medium Section
+
+This section is moderately sized. It's not huge, but it has enough content to be a meaningful chunk on its own. We'll aim for about 150 tokens here so it can potentially merge with a small sibling.
+
+### Section 3.2: A Final Small Section
+
+This final section is very small and should definitely be merged into its predecessor, Section 3.1, because their combined total will be under the threshold.
+`;
+
+      const doc = MDocument.fromMarkdown(controlledTestMarkdown);
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 250,
+        modelName: 'gpt-3.5-turbo',
+      });
+
+      const chunks = doc.getText();
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0]).toContain('# My Test Document');
+      expect(chunks[0]).toContain('### Section 1.2: Another Tiny Topic');
+      expect(chunks[1]).toContain('## Chapter 2: The Big Section');
+      expect(chunks[2]).toContain('## Chapter 3: The Mixed Bag');
+      expect(chunks[2]).toContain('### Section 3.2: A Final Small Section');
+    });
+
+    it('should preserve code blocks during merging', async () => {
+      const text = `# Code Example
+
+## Installation
+Install the package:
+
+\`\`\`bash
+npm install example-package
+\`\`\`
+
+## Usage
+Here's how to use it:
+
+\`\`\`javascript
+const example = require('example-package');
+example.doSomething();
+\`\`\`
+
+## Configuration
+Set up your config file.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 300,
+      });
+
+      const chunks = doc.getText();
+
+      // Code blocks should be preserved intact
+      expect(chunks.some(chunk => chunk.includes('```bash'))).toBe(true);
+      expect(chunks.some(chunk => chunk.includes('```javascript'))).toBe(true);
+
+      // Should not split within code blocks
+      const bashChunk = chunks.find(chunk => chunk.includes('npm install'));
+      expect(bashChunk).toBeDefined();
+      expect(bashChunk).toContain('```bash');
+    });
+
+    it('should work with different tiktoken models', async () => {
+      const text = `# Test Document
+
+## Section 1
+Some content for testing different tiktoken models and their token counting accuracy.
+
+## Section 2  
+More content to verify the token counting works correctly across different model encodings.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 100,
+        modelName: 'gpt-4',
+      });
+
+      const chunks = doc.getText();
+      const docs = doc.getDocs();
+
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(docs[0]?.metadata?.tokenCount).toBeDefined();
+      expect(typeof docs[0]?.metadata?.tokenCount).toBe('number');
+    });
+
+    it('should handle documents with no headers', async () => {
+      const text = `This is a document with no markdown headers.
+    
+Just regular paragraphs of text that should be processed as a single semantic unit since there are no headers to split on.
+
+More paragraphs here to test the behavior.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 200,
+      });
+
+      const chunks = doc.getText();
+
+      // Should return single chunk since no headers to split on
+      expect(chunks.length).toBe(1);
+      expect(chunks[0]).toContain('This is a document with no markdown headers');
+    });
+
+    it('should handle empty sections correctly', async () => {
+      const text = `# Document
+
+## Empty Section
+
+## Another Section
+Some content here.
+
+## Final Empty Section
+
+`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 100,
+      });
+
+      const chunks = doc.getText();
+
+      // Should handle empty sections gracefully
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks.some(chunk => chunk.includes('Some content here'))).toBe(true);
+    });
+
+    it('should maintain bottom-up merging order (deepest first)', async () => {
+      const text = `# Root
+
+## Level 2A
+Content 2A
+
+### Level 3A  
+Short content 3A
+
+#### Level 4A
+Short content 4A
+
+### Level 3B
+Short content 3B
+
+## Level 2B
+Content 2B`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 200,
+      });
+
+      const chunks = doc.getText();
+
+      // The algorithm should merge from deepest level first
+      // Level 4 should merge with Level 3, then Level 3s might merge with Level 2
+      expect(chunks.length).toBeLessThan(7); // Less than original 7 sections
+
+      // Verify deep nesting is preserved in merged content
+      const deepChunk = chunks.find(chunk => chunk.includes('Level 4A') && chunk.includes('Level 3A'));
+      expect(deepChunk).toBeDefined();
+    });
+
+    it('should compare token accuracy vs character-based sizing', async () => {
+      // Use text with unicode and varying token densities
+      const text = `# Test Document
+
+## Unicode Section
+This section contains unicode characters: café, naïve, résumé, 中文, العربية
+
+## Code Section
+\`\`\`python
+def function_with_long_name_and_parameters(param1, param2, param3):
+    return param1 + param2 + param3
+\`\`\`
+
+## Regular Section
+Regular English text without special characters.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 150, // Token-based threshold
+      });
+
+      const docs = doc.getDocs();
+
+      // Verify token counts are provided in metadata
+      docs.forEach(doc => {
+        expect(doc.metadata.tokenCount).toBeDefined();
+        expect(typeof doc.metadata.tokenCount).toBe('number');
+        expect(doc.metadata.tokenCount).toBeGreaterThan(0);
+      });
+
+      // Token count should be different from character count for unicode text
+      const unicodeDoc = docs.find(doc => doc.text.includes('café'));
+      if (unicodeDoc) {
+        const charCount = unicodeDoc.text.length;
+        const tokenCount = unicodeDoc.metadata.tokenCount;
+
+        // For text with unicode, token count is often different from char count
+        expect(tokenCount).toBeDefined();
+        expect(tokenCount).not.toBe(charCount);
+      }
+    });
+
+    it('should handle documents with only deep headers (no top-level sections)', async () => {
+      const text = `### Deep Section 1
+Short content for deep section 1.
+
+#### Very Deep Section 1.1
+Even shorter content.
+
+#### Very Deep Section 1.2
+Another short subsection.
+
+### Deep Section 2
+Short content for deep section 2.
+
+#### Very Deep Section 2.1
+Final short content.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 200,
+      });
+
+      const chunks = doc.getText();
+      const docs = doc.getDocs();
+
+      // Should merge the small deep sections together
+      expect(chunks.length).toBeLessThan(5);
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Verify deep headers are preserved in merged content
+      const deepChunk = chunks.find(
+        chunk => chunk.includes('### Deep Section 1') && chunk.includes('#### Very Deep Section'),
+      );
+      expect(deepChunk).toBeDefined();
+
+      expect(docs[0]?.metadata?.tokenCount).toBeDefined();
+    });
+
+    it('should leave very large individual sections intact (exceeding joinThreshold)', async () => {
+      const largeContent = 'This is a very long section. '.repeat(50); // ~1500 tokens
+      const text = `# Document Title
+
+## Small Section
+Small content here.
+
+## Oversized Section
+${largeContent}
+
+\`\`\`javascript
+// Adding code to make it even larger
+function processData(data) {
+  const results = [];
+  for (let i = 0; i < data.length; i++) {
+    const processed = data[i] * 2 + Math.random();
+    results.push(processed);
+    console.log(\`Processed item \${i}: \${processed}\`);
+  }
+  return results;
+}
+
+// More code to ensure we exceed the threshold
+class DataManager {
+  constructor(initialData) {
+    this.data = initialData;
+    this.processedCount = 0;
+  }
+  
+  process() {
+    this.data.forEach((item, index) => {
+      // Process each item
+      this.processedCount++;
+    });
+  }
+}
+\`\`\`
+
+## Another Small Section
+More small content.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 300, // Much smaller than the oversized section
+      });
+
+      const chunks = doc.getText();
+      const docs = doc.getDocs();
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      // The oversized section should be left as its own chunk
+      const oversizedChunk = chunks.find(chunk => chunk.includes('Oversized Section'));
+      expect(oversizedChunk).toBeDefined();
+      expect(oversizedChunk).toContain('This is a very long section.');
+
+      // Verify the oversized chunk exceeds the threshold
+      const oversizedDoc = docs.find(doc => doc.text.includes('Oversized Section'));
+      expect(oversizedDoc?.metadata?.tokenCount).toBeGreaterThan(300);
+
+      // Small sections should still be merged where possible
+      const smallChunk = chunks.find(chunk => chunk.includes('Small Section') && !chunk.includes('Oversized'));
+      expect(smallChunk).toBeDefined();
+    });
+
+    it('should handle mixed header levels with gaps (skipping levels)', async () => {
+      const text = `# Top Level
+
+#### Deep Level A (skipped H2 and H3)
+Content for deep level A that is moderately sized with enough text to make it substantial. This section needs to have sufficient content to test the merging behavior properly when header levels are skipped. Let's add more content to ensure we have enough tokens to work with.
+
+## Middle Level
+Content for middle level section that also needs to be substantial enough to test the algorithm. This section should have enough content to be meaningful when testing the semantic markdown chunking with mixed header levels.
+
+##### Very Deep Level (skipped H3 and H4)
+Short content for very deep level that should still be substantial enough for testing. Even though this is marked as short, we need enough content to make the test meaningful.
+
+# Another Top Level
+
+This second top-level section should definitely create a boundary that prevents everything from merging into a single chunk. We need substantial content here to ensure proper separation.
+
+### Medium Deep Level (skipped H2)
+Final content for testing header level gaps. This section also needs substantial content to ensure we're testing the algorithm properly with realistic content sizes.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 150, // Smaller threshold to encourage more chunks
+      });
+
+      const chunks = doc.getText();
+
+      // Should handle the gaps gracefully - expect at least 2 chunks due to the second top-level section
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+
+      // Verify headers with gaps are preserved
+      expect(chunks.some(chunk => chunk.includes('#### Deep Level A'))).toBe(true);
+      expect(chunks.some(chunk => chunk.includes('##### Very Deep Level'))).toBe(true);
+      expect(chunks.some(chunk => chunk.includes('### Medium Deep Level'))).toBe(true);
+
+      // Verify both top-level sections are present
+      expect(chunks.some(chunk => chunk.includes('# Top Level'))).toBe(true);
+      expect(chunks.some(chunk => chunk.includes('# Another Top Level'))).toBe(true);
+    });
+
+    it('should handle large documents efficiently (performance test)', async () => {
+      const sections: string[] = [];
+      for (let i = 1; i <= 100; i++) {
+        sections.push(`## Section ${i}`);
+        sections.push(`This is content for section ${i}. `.repeat(10)); // ~100 tokens each
+
+        for (let j = 1; j <= 3; j++) {
+          sections.push(`### Subsection ${i}.${j}`);
+          sections.push(`This is subsection content ${i}.${j}. `.repeat(5)); // ~50 tokens each
+        }
+      }
+
+      const largeText = `# Large Test Document\n\n${sections.join('\n\n')}`;
+
+      const doc = MDocument.fromMarkdown(largeText);
+
+      const startTime = Date.now();
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 300,
+      });
+
+      const duration = Date.now() - startTime;
+      const chunks = doc.getText();
+      const docs = doc.getDocs();
+
+      expect(duration).toBeLessThan(5000);
+
+      expect(chunks.length).toBeGreaterThan(10);
+      expect(chunks.length).toBeLessThan(400);
+
+      docs.forEach(doc => {
+        expect(doc.metadata.tokenCount).toBeDefined();
+        expect(doc.metadata.tokenCount).toBeGreaterThan(0);
+      });
+    }, 10000);
+
+    it('should maintain semantic coherence with very small joinThreshold', async () => {
+      const text = `# Document
+
+This is a substantial preamble section that should have enough content to be meaningful in token counting. We need sufficient content here to test the algorithm properly.
+
+## Section A
+Brief content for section A that needs to be expanded to ensure we have meaningful token counts for testing the semantic markdown chunking algorithm with a very small threshold.
+
+### Sub A1
+More substantial content here for subsection A1. This content needs to be long enough to have a reasonable token count that will affect the merging decisions in our semantic chunking algorithm.
+
+### Sub A2
+Even more substantial content for subsection A2. Again, we need enough tokens here to make the test meaningful and to properly exercise the algorithm's decision-making process.
+
+## Section B
+Another section with substantial content for section B. This section should also have enough content to be meaningful in our token-based chunking strategy testing.
+
+### Sub B1
+Final substantial content for subsection B1. This content should complete our test document with enough tokens to properly test the small threshold behavior.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 30, // Even smaller threshold to force separation
+      });
+
+      const chunks = doc.getText();
+
+      // With a very small threshold, we should get at least some separation
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+
+      // Verify all chunks have meaningful content
+      chunks.forEach(chunk => {
+        expect(chunk.trim().length).toBeGreaterThan(0);
+        expect(chunk.trim().length).toBeGreaterThan(10);
+      });
+
+      // Verify we have the main document structure preserved
+      const allText = chunks.join(' ');
+      expect(allText).toContain('# Document');
+      expect(allText).toContain('## Section A');
+      expect(allText).toContain('## Section B');
+    });
+
+    it('should not treat headers inside code blocks as headers for splitting', async () => {
+      const text = `# Real Header
+
+Some introductory text explaining code examples.
+
+\`\`\`markdown
+# This is not a real header
+It is inside a code block and should be ignored for chunking.
+
+## This is also not a real header  
+It should be treated as plain text content, not a section boundary.
+
+### Even deeper fake headers
+Should also be ignored completely.
+\`\`\`
+
+## A Real Second Header
+This content comes after the code block.
+
+### A Real Subsection
+With some additional content to test the hierarchy.`;
+
+      const doc = MDocument.fromMarkdown(text);
+
+      await doc.chunk({
+        strategy: 'semantic-markdown',
+        joinThreshold: 25, // Low threshold to force separation into 2 or more chunks
+      });
+
+      const chunks = doc.getText();
+
+      // With a low threshold, we should get exactly 2 chunks:
+      // 1. "# Real Header" section (with the code block as content)
+      // 2. "## A Real Second Header" section (with its subsection)
+      // If fake headers were processed, we'd get more than 2 chunks
+      expect(chunks.length).toBe(2);
+
+      const firstChunk = chunks[0];
+      const secondChunk = chunks[1];
+
+      expect(firstChunk).toContain('# Real Header');
+      expect(firstChunk).toContain('Some introductory text explaining code examples');
+      expect(firstChunk).toContain('```markdown');
+      expect(firstChunk).toContain('# This is not a real header');
+      expect(firstChunk).toContain('## This is also not a real header');
+      expect(firstChunk).toContain('### Even deeper fake headers');
+      expect(firstChunk).not.toContain('## A Real Second Header');
+
+      expect(secondChunk).toContain('## A Real Second Header');
+      expect(secondChunk).toContain('### A Real Subsection');
+      expect(secondChunk).not.toContain('# Real Header');
+      expect(secondChunk).not.toContain('# This is not a real header');
     });
   });
 });

@@ -2,12 +2,14 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { Mastra, MastraMessageV2, Tool } from '../..';
-import { Agent } from '../../agent';
-import type { DynamicArgument, MastraLanguageModel } from '../../agent';
+import { Agent, MessageList } from '../../agent';
+import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { RegisteredLogger } from '../../logger';
 import type { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
+import type { DynamicArgument } from '../../types';
 import type { Workflow } from '../../workflows';
 import { EMITTER_SYMBOL } from '../../workflows/constants';
 import { createWorkflow, createStep } from '../../workflows/workflow';
@@ -67,6 +69,82 @@ export class NewAgentNetwork extends MastraBase {
 
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+  }
+
+  private getLastMessage(messages: MessageListInput) {
+    let message = '';
+    if (typeof messages === 'string') {
+      message = messages;
+    } else {
+      const lastMessage = Array.isArray(messages) ? messages[messages.length - 1] : messages;
+      if (typeof lastMessage === 'string') {
+        message = lastMessage;
+      } else if (lastMessage && `content` in lastMessage && lastMessage?.content) {
+        const lastMessageContent = lastMessage.content;
+        if (typeof lastMessageContent === 'string') {
+          message = lastMessageContent;
+        } else if (Array.isArray(lastMessageContent)) {
+          const lastPart = lastMessageContent[lastMessageContent.length - 1];
+          if (lastPart?.type === 'text') {
+            message = lastPart.text;
+          }
+        }
+      }
+    }
+
+    return message;
+  }
+
+  private async beforeRun({
+    runtimeContext,
+    threadId,
+    resourceId,
+    messages,
+  }: {
+    runtimeContext: RuntimeContext;
+    threadId: string;
+    resourceId: string;
+    messages: MessageListInput;
+  }) {
+    const memory = await this.getMemory({ runtimeContext });
+    let thread = await memory?.getThreadById({ threadId });
+    if (!thread) {
+      thread = await memory?.createThread({
+        threadId,
+        title: '',
+        resourceId,
+      });
+    }
+    if (typeof messages === 'string') {
+      await memory?.saveMessages({
+        messages: [
+          {
+            id: this.#mastra?.generateId() || randomUUID(),
+            type: 'text',
+            role: 'user',
+            content: { parts: [{ type: 'text', text: messages }], format: 2 },
+            createdAt: new Date(),
+            threadId: thread?.id,
+            resourceId: thread?.resourceId,
+          },
+        ] as MastraMessageV2[],
+        format: 'v2',
+      });
+    } else {
+      const messageList = new MessageList({
+        threadId: thread?.id,
+        resourceId: thread?.resourceId,
+      });
+      messageList.add(messages, 'user');
+      const messagesToSave = messageList.get.all.v2();
+
+      await memory?.saveMessages({
+        messages: messagesToSave,
+        format: 'v2',
+      });
+    }
+
+    return thread;
   }
 
   async getAgents({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
@@ -201,17 +279,23 @@ export class NewAgentNetwork extends MastraBase {
       instructions,
       model: this.#model,
       memory: memoryToUse,
+      // @ts-ignore
+      _agentNetworkAppend: true,
     });
   }
 
   async loop(
-    message: string,
+    messages: MessageListInput,
     {
       runtimeContext,
       maxIterations,
+      threadId,
+      resourceId,
     }: {
       runtimeContext?: RuntimeContext;
       maxIterations?: number;
+      threadId?: string;
+      resourceId?: string;
     },
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
@@ -238,11 +322,10 @@ export class NewAgentNetwork extends MastraBase {
         iteration: z.number(),
         task: z.string(),
         resourceType: RESOURCE_TYPES,
+        threadId: z.string().optional(),
+        threadResourceId: z.string().optional(),
       }),
-      outputSchema: z.object({
-        text: z.string(),
-        iteration: z.number(),
-      }),
+      outputSchema: networkWorkflow.outputSchema,
     })
       .dountil(networkWorkflow, async ({ inputData }) => {
         return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);
@@ -252,11 +335,22 @@ export class NewAgentNetwork extends MastraBase {
 
     const run = mainWorkflow.createRun();
 
+    const thread = await this.beforeRun({
+      runtimeContext: runtimeContext || new RuntimeContext(),
+      threadId: threadId || run.runId,
+      resourceId: resourceId || this.name,
+      messages,
+    });
+
+    const message = this.getLastMessage(messages);
+
     const result = await run.start({
       inputData: {
         task: message,
         resourceType: 'none',
         iteration: 0,
+        threadResourceId: thread?.resourceId,
+        threadId: thread?.id,
       },
     });
 
@@ -272,7 +366,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async loopStream(
-    message: string,
+    messages: MessageListInput,
     {
       runtimeContext,
       maxIterations,
@@ -335,21 +429,14 @@ export class NewAgentNetwork extends MastraBase {
 
     const run = mainWorkflow.createRun();
 
-    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: randomUUID() as string,
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: message }], format: 2 },
-          createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
+    const thread = await this.beforeRun({
+      runtimeContext: runtimeContext || new RuntimeContext(),
+      threadId: threadId || run.runId,
+      resourceId: resourceId || this.name,
+      messages,
     });
+
+    const message = this.getLastMessage(messages);
 
     return run.stream({
       inputData: {
@@ -357,8 +444,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadResourceId: resourceId,
-        threadId,
+        threadResourceId: thread?.resourceId,
+        threadId: thread?.id,
         isOneOff: false,
         verboseIntrospection: true,
       },
@@ -366,7 +453,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   createWorkflow({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
-    const runId = randomUUID();
+    const runId = this.#mastra?.generateId() || randomUUID();
 
     const runtimeContextToUse = runtimeContext || new RuntimeContext();
 
@@ -398,6 +485,13 @@ export class NewAgentNetwork extends MastraBase {
 
         const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
+        const model = await routingAgent.getModel();
+
+        const completionSchema = z.object({
+          isComplete: z.boolean(),
+          finalResult: z.string(),
+          completionReason: z.string(),
+        });
         let completionResult;
         if (inputData.resourceType !== 'none' && inputData?.result) {
           // Check if the task is complete
@@ -415,15 +509,21 @@ export class NewAgentNetwork extends MastraBase {
                         }
                     `;
 
-          completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
-            output: z.object({
-              isComplete: z.boolean(),
-              finalResult: z.string(),
-              completionReason: z.string(),
-            }),
-            threadId: initData?.threadId ?? runId,
-            resourceId: initData?.threadResourceId ?? this.name,
-          });
+          if (model.specificationVersion === 'v2') {
+            completionResult = await routingAgent.generateVNext([{ role: 'assistant', content: completionPrompt }], {
+              output: completionSchema,
+              threadId: initData?.threadId ?? runId,
+              resourceId: initData?.threadResourceId ?? this.name,
+              runtimeContext: runtimeContextToUse,
+            });
+          } else {
+            completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
+              output: completionSchema,
+              threadId: initData?.threadId ?? runId,
+              resourceId: initData?.threadResourceId ?? this.name,
+              runtimeContext: runtimeContextToUse,
+            });
+          }
 
           if (completionResult.object.isComplete) {
             return {
@@ -439,42 +539,49 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
-        const result = await routingAgent.generate(
-          [
-            {
-              role: 'assistant',
-              content: `
-                    ${inputData.isOneOff ? 'You are executing just one primitive based on the user task. Make sure to pick the primitive that is the best suited to accomplish the whole task. Primitives that execute only part of the task should be avoided.' : 'You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.'}
-
-                    The user has given you the following task: 
-                    ${inputData.task}
-                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
-
-                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
-                    If you are calling the same agent again, make sure to adjust the prompt to be more specific.
-
-                    {
-                        "resourceId": string,
-                        "resourceType": "agent" | "workflow" | "tool",
-                        "prompt": string,
-                        "selectionReason": string
-                    }
-
-                    The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
-                    `,
-            },
-          ],
+        let result;
+        const prompt: MessageListInput = [
           {
-            output: z.object({
-              resourceId: z.string(),
-              resourceType: RESOURCE_TYPES,
-              prompt: z.string(),
-              selectionReason: z.string(),
-            }),
-            threadId: initData?.threadId ?? runId,
-            resourceId: initData?.threadResourceId ?? this.name,
+            role: 'assistant',
+            content: `
+                  ${inputData.isOneOff ? 'You are executing just one primitive based on the user task. Make sure to pick the primitive that is the best suited to accomplish the whole task. Primitives that execute only part of the task should be avoided.' : 'You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.'}
+
+                  The user has given you the following task: 
+                  ${inputData.task}
+                  ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
+
+                  Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
+                  If you are calling the same agent again, make sure to adjust the prompt to be more specific.
+
+                  {
+                      "resourceId": string,
+                      "resourceType": "agent" | "workflow" | "tool",
+                      "prompt": string,
+                      "selectionReason": string
+                  }
+
+                  The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
+                  `,
           },
-        );
+        ];
+
+        const options = {
+          output: z.object({
+            resourceId: z.string(),
+            resourceType: RESOURCE_TYPES,
+            prompt: z.string(),
+            selectionReason: z.string(),
+          }),
+          threadId: initData?.threadId ?? runId,
+          resourceId: initData?.threadResourceId ?? this.name,
+          runtimeContext: runtimeContextToUse,
+        };
+
+        if (model.specificationVersion === 'v2') {
+          result = await routingAgent.generateVNext(prompt, options);
+        } else {
+          result = await routingAgent.generate(prompt, options);
+        }
 
         return {
           task: inputData.task,
@@ -540,6 +647,7 @@ export class NewAgentNetwork extends MastraBase {
         const { fullStream } = await agent.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
+          runtimeContext: runtimeContextToUse,
           onFinish: result => {
             streamPromise.resolve(result.text);
           },
@@ -578,7 +686,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: randomUUID() as string,
+              id: this.#mastra?.generateId() || randomUUID(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
@@ -687,7 +795,6 @@ export class NewAgentNetwork extends MastraBase {
               break;
 
             case 'start':
-            case 'finish':
             case 'step-start':
             case 'step-finish':
             case 'tool-call':
@@ -721,7 +828,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: randomUUID() as string,
+              id: this.#mastra?.generateId() || randomUUID(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
@@ -798,7 +905,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: randomUUID() as string,
+              id: this.#mastra?.generateId() || randomUUID(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: JSON.stringify(finalResult) }], format: 2 },
@@ -933,7 +1040,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async generate(
-    message: string,
+    messages: MessageListInput,
     {
       runtimeContext,
       threadId,
@@ -943,21 +1050,14 @@ export class NewAgentNetwork extends MastraBase {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
-    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: randomUUID() as string,
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: message }], format: 2 },
-          createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
+    const thread = await this.beforeRun({
+      runtimeContext: runtimeContext || new RuntimeContext(),
+      threadId: threadId || run.runId,
+      resourceId: resourceId || this.name,
+      messages,
     });
+
+    const message = this.getLastMessage(messages);
 
     const result = await run.start({
       inputData: {
@@ -965,8 +1065,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadId,
-        threadResourceId: resourceId,
+        threadId: thread?.id,
+        threadResourceId: thread?.resourceId,
         isOneOff: true,
         verboseIntrospection: true,
       },
@@ -989,7 +1089,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   async stream(
-    message: string,
+    messages: MessageListInput,
     {
       runtimeContext,
       threadId,
@@ -999,21 +1099,14 @@ export class NewAgentNetwork extends MastraBase {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
-    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: randomUUID() as string,
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: message }], format: 2 },
-          createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
+    const thread = await this.beforeRun({
+      runtimeContext: runtimeContext || new RuntimeContext(),
+      threadId: threadId || run.runId,
+      resourceId: resourceId || this.name,
+      messages,
     });
+
+    const message = this.getLastMessage(messages);
 
     return run.stream({
       inputData: {
@@ -1021,8 +1114,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadResourceId: resourceId,
-        threadId,
+        threadResourceId: thread?.resourceId,
+        threadId: thread?.id,
         isOneOff: true,
         verboseIntrospection: true,
       },

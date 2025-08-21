@@ -3,7 +3,8 @@ import { join } from 'path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import virtual from '@rollup/plugin-virtual';
-import { Cloudflare } from 'cloudflare';
+import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
+import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
 interface CFRoute {
   pattern: string;
@@ -24,40 +25,30 @@ interface KVNamespaceBinding {
 }
 
 export class CloudflareDeployer extends Deployer {
-  private cloudflare: Cloudflare | undefined;
   routes?: CFRoute[] = [];
   workerNamespace?: string;
-  scope: string;
   env?: Record<string, any>;
   projectName?: string;
   d1Databases?: D1DatabaseBinding[];
   kvNamespaces?: KVNamespaceBinding[];
 
   constructor({
-    scope,
     env,
     projectName = 'mastra',
     routes,
     workerNamespace,
-    auth,
     d1Databases,
     kvNamespaces,
   }: {
     env?: Record<string, any>;
-    scope: string;
     projectName?: string;
     routes?: CFRoute[];
     workerNamespace?: string;
-    auth: {
-      apiToken: string;
-      apiEmail?: string;
-    };
     d1Databases?: D1DatabaseBinding[];
     kvNamespaces?: KVNamespaceBinding[];
   }) {
     super({ name: 'CLOUDFLARE' });
 
-    this.scope = scope;
     this.projectName = projectName;
     this.routes = routes;
     this.workerNamespace = workerNamespace;
@@ -68,8 +59,6 @@ export class CloudflareDeployer extends Deployer {
 
     if (d1Databases) this.d1Databases = d1Databases;
     if (kvNamespaces) this.kvNamespaces = kvNamespaces;
-
-    this.cloudflare = new Cloudflare(auth);
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
@@ -108,53 +97,56 @@ export class CloudflareDeployer extends Deployer {
     return `
     import '#polyfills';
     import { mastra } from '#mastra';
-    import { createHonoServer } from '#server';
+    import { createHonoServer, getToolExports } from '#server';
+    import { tools } from '#tools';
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
     import { checkEvalStorageFields } from '@mastra/core/utils';
 
-    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
-      evaluate({
-        agentName,
-        input,
-        metric,
-        output,
-        runId,
-        globalRunId: runId,
-        instructions,
-      });
-    });
-
-    registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-      const storage = mastra.getStorage();
-      if (storage) {
-        // Check for required fields
-        const logger = mastra?.getLogger();
-        const areFieldsValid = checkEvalStorageFields(traceObject, logger);
-        if (!areFieldsValid) return;
-
-        await storage.insert({
-          tableName: TABLE_EVALS,
-          record: {
-            input: traceObject.input,
-            output: traceObject.output,
-            result: JSON.stringify(traceObject.result || {}),
-            agent_name: traceObject.agentName,
-            metric_name: traceObject.metricName,
-            instructions: traceObject.instructions,
-            test_info: null,
-            global_run_id: traceObject.globalRunId,
-            run_id: traceObject.runId,
-            created_at: new Date().toISOString(),
-          },
-        });
-      }
-    });
-
     export default {
       fetch: async (request, env, context) => {
-        const app = await createHonoServer(mastra)
+        const _mastra = mastra();
+
+        registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+          evaluate({
+            agentName,
+            input,
+            metric,
+            output,
+            runId,
+            globalRunId: runId,
+            instructions,
+          });
+        });
+
+        registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
+          const storage = _mastra.getStorage();
+          if (storage) {
+            // Check for required fields
+            const logger = _mastra?.getLogger();
+            const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+            if (!areFieldsValid) return;
+
+            await storage.insert({
+              tableName: TABLE_EVALS,
+              record: {
+                input: traceObject.input,
+                output: traceObject.output,
+                result: JSON.stringify(traceObject.result || {}),
+                agent_name: traceObject.agentName,
+                metric_name: traceObject.metricName,
+                instructions: traceObject.instructions,
+                test_info: null,
+                global_run_id: traceObject.globalRunId,
+                run_id: traceObject.runId,
+                created_at: new Date().toISOString(),
+              },
+            });
+          }
+        });
+      
+        const app = await createHonoServer(_mastra, { tools: getToolExports(tools) });
         return app.fetch(request, env, context);
       }
     }
@@ -169,7 +161,7 @@ export class CloudflareDeployer extends Deployer {
     serverFile: string,
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
-    toolsPaths: string[],
+    toolsPaths: (string | string[])[],
   ) {
     const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths);
 
@@ -182,13 +174,15 @@ process.versions.node = '${process.versions.node}';
       `,
         }),
         ...inputOptions.plugins,
+        postgresStoreInstanceChecker(),
+        mastraInstanceWrapper(mastraEntryFile),
       ];
     }
 
     return inputOptions;
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
@@ -196,28 +190,11 @@ process.versions.node = '${process.versions.node}';
     this.logger?.info('Deploying to Cloudflare failed. Please use the Cloudflare dashboard to deploy.');
   }
 
-  async tagWorker({
-    workerName,
-    namespace,
-    tags,
-    scope,
-  }: {
-    scope: string;
-    workerName: string;
-    namespace: string;
-    tags: string[];
-  }): Promise<void> {
-    if (!this.cloudflare) {
-      throw new Error('Cloudflare Deployer not initialized');
-    }
-
-    await this.cloudflare.workersForPlatforms.dispatch.namespaces.scripts.tags.update(namespace, workerName, {
-      account_id: scope,
-      body: tags,
-    });
+  async tagWorker(): Promise<void> {
+    throw new Error('tagWorker method is no longer supported. Use the Cloudflare dashboard or API directly.');
   }
 
-  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
     const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;

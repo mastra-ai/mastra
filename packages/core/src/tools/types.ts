@@ -1,12 +1,16 @@
 import type { ToolExecutionOptions, Tool, Schema } from 'ai';
+import type { ToolCallOptions, Tool as ToolV5 } from 'ai-v5';
 import type { JSONSchema7Type } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
+import type { AITraceContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
+import type { ToolStream } from './stream';
 
 export type VercelTool = Tool;
+export type VercelToolV5 = ToolV5;
 
 // Define CoreTool as a discriminated union to match the AI SDK's Tool type
 export type CoreTool = {
@@ -50,6 +54,8 @@ export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined 
   extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;
   runtimeContext: RuntimeContext;
+  writer?: ToolStream<any>;
+  aiTracingContext?: AITraceContext;
 }
 
 export interface ToolAction<
@@ -63,4 +69,15 @@ export interface ToolAction<
     options?: ToolExecutionOptions,
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   mastra?: Mastra;
+  onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
+  onInputDelta?: (
+    options: {
+      inputTextDelta: string;
+    } & ToolCallOptions,
+  ) => void | PromiseLike<void>;
+  onInputAvailable?: (
+    options: {
+      input: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : unknown;
+    } & ToolCallOptions,
+  ) => void | PromiseLike<void>;
 }

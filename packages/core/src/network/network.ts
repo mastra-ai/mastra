@@ -12,9 +12,11 @@ import type { ZodSchema } from 'zod';
 
 import { Agent } from '../agent';
 import type { AgentGenerateOptions, AgentStreamOptions } from '../agent';
+import type { MessageListInput } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 
+import type { GenerateReturn } from '../llm/model/base.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
@@ -360,25 +362,28 @@ export class AgentNetwork extends MastraBase {
     return this.#agents;
   }
 
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
-
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    args?: AgentGenerateOptions<Z> &
-      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
-  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
-
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    args?: AgentGenerateOptions<Z> &
-      ({ output?: Z; experimental_output?: never } | { experimental_output?: Z; output?: never }),
-  ): Promise<
-    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
-  > {
+  async generate(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateTextResult<any, undefined>>;
+  async generate<OUTPUT extends ZodSchema | JSONSchema7>(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<GenerateObjectResult<OUTPUT>>;
+  async generate<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
+  ): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT>,
+  ): Promise<GenerateReturn<any, OUTPUT, EXPERIMENTAL_OUTPUT>> {
     this.#clearNetworkHistoryBeforeRun();
     this.logger.debug(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
 
@@ -393,36 +398,64 @@ export class AgentNetwork extends MastraBase {
     // Generate a response using the routing agent
     const result = await this.#routingAgent.generate(
       messages,
-      ops as AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
+      ops as AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
     );
 
     // Log completion
     this.logger.debug(`AgentNetwork: Generation complete with ${result.steps?.length || 0} steps`);
 
-    return result;
+    return result as unknown as GenerateReturn<any, OUTPUT, EXPERIMENTAL_OUTPUT>;
   }
 
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    args?: AgentStreamOptions<Z> &
-      ({ output: Z; experimental_output?: never } | { experimental_output: Z; output?: never }),
-  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    args?: AgentStreamOptions<Z> &
-      ({ output?: Z; experimental_output?: never } | { experimental_output?: Z; output?: never }),
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
   ): Promise<
-    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
+    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
+      partialObjectStream: StreamTextResult<
+        any,
+        OUTPUT extends ZodSchema
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
+      >['experimental_partialOutputStream'];
+    }
+  >;
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT>,
+  ): Promise<
+    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
     this.#clearNetworkHistoryBeforeRun();
     this.logger.debug(`AgentNetwork: Starting generation with ${this.#agents.length} available agents`);
 
-    const ops = {
+    const ops: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       maxSteps: this.#agents?.length * 10, // Default to 10 steps per agent
       ...args,
     };
@@ -433,10 +466,12 @@ export class AgentNetwork extends MastraBase {
     // Generate a response using the routing agent
     const result = await this.#routingAgent.stream(
       messages,
-      ops as AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
+      ops as AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
     );
 
-    return result;
+    return result as unknown as
+      | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+      | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
   }
 
   __registerMastra(p: Mastra) {

@@ -134,7 +134,7 @@ export const createMastraProject = async ({
 
     s.start(`Installing ${pm} dependencies`);
     try {
-      await exec(`${pm} ${installCommand} zod`);
+      await exec(`${pm} ${installCommand} zod@^3`);
       await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
       await exec(`echo '{
   "compilerOptions": {

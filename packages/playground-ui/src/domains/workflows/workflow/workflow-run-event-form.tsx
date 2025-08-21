@@ -31,6 +31,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
     setIsLoading(true);
     setError(null);
     try {
+      setError(null);
       data = JSON.parse(eventData);
     } catch (error) {
       setError('Invalid JSON');
@@ -39,6 +40,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
     }
 
     try {
+      setError(null);
       const result = await onSendEvent({ event, data, runId });
       toast.success(result.message);
     } catch (error) {
@@ -52,6 +54,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
   const buttonClass = 'text-icon3 hover:text-icon6';
 
   const formatEventData = async () => {
+    setError(null);
     if (!isValidJson(eventData)) {
       setError('Invalid JSON');
       return;

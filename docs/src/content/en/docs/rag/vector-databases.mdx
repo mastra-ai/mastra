@@ -114,7 +114,15 @@ await store.upsert({
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { ChromaVector } from '@mastra/chroma'
 
-const store = new ChromaVector()
+// Running Chroma locally
+// const store = new ChromaVector()
+
+// Running on Chroma Cloud
+const store = new ChromaVector({
+  apiKey: process.env.CHROMA_API_KEY,
+  tenant: process.env.CHROMA_TENANT,
+  database: process.env.CHROMA_DATABASE
+})
 
 await store.createIndex({
   indexName: "myCollection",

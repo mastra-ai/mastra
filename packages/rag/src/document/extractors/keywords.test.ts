@@ -9,7 +9,7 @@ const openai = createOpenAI({
 
 const model = openai('gpt-4o');
 
-vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
+vi.setConfig({ testTimeout: 50_000, hookTimeout: 50_000 });
 
 describe('KeywordExtractor', () => {
   it('can use a custom model for keywords extraction', async () => {
@@ -46,15 +46,21 @@ describe('KeywordExtractor', () => {
     expect(typeof result.excerptKeywords).toBe('string');
     expect(result.excerptKeywords.length).toBeGreaterThan(0);
   });
-  it('handles very long input', async () => {
-    const extractor = new KeywordExtractor();
-    const longText = 'A'.repeat(1000);
-    const node = new TextNode({ text: longText });
-    const result = await extractor.extractKeywordsFromNodes(node);
-    expect(result).toHaveProperty('excerptKeywords');
-    expect(typeof result.excerptKeywords).toBe('string');
-    expect(result.excerptKeywords.length).toBeGreaterThan(0);
-  });
+  it(
+    'handles very long input',
+    {
+      timeout: 60_000,
+    },
+    async () => {
+      const extractor = new KeywordExtractor();
+      const longText = 'A'.repeat(1000);
+      const node = new TextNode({ text: longText });
+      const result = await extractor.extractKeywordsFromNodes(node);
+      expect(result).toHaveProperty('excerptKeywords');
+      expect(typeof result.excerptKeywords).toBe('string');
+      expect(result.excerptKeywords.length).toBeGreaterThan(0);
+    },
+  );
 
   it('handles whitespace only input', async () => {
     const extractor = new KeywordExtractor();

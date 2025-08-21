@@ -44,13 +44,13 @@ mastra dev [options]
     },
     {
       name: "--env",
-      type: "string", 
+      type: "string",
       description: "Path to custom environment file",
       isOptional: true,
     },
     {
       name: "--inspect",
-      type: "boolean", 
+      type: "boolean",
       description: "Start the dev server in inspect mode for debugging (cannot be used with --inspect-brk)",
       isOptional: true,
     },
@@ -58,6 +58,12 @@ mastra dev [options]
       name: "--inspect-brk",
       type: "boolean",
       description: "Start the dev server in inspect mode and break at the beginning of the script (cannot be used with --inspect)",
+      isOptional: true,
+    },
+    {
+      name: "--custom-args",
+      type: "string",
+      description: "Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types",
       isOptional: true,
     },
     {
@@ -123,6 +129,7 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 - **GET `/api/memory/threads`**: Get all threads.
 - **GET `/api/memory/threads/:threadId`**: Get thread by ID.
 - **GET `/api/memory/threads/:threadId/messages`**: Get messages for a thread.
+- **GET `/api/memory/threads/:threadId/messages/paginated`**: Get paginated messages for a thread.
 - **POST `/api/memory/threads`**: Create a new thread.
 - **PATCH `/api/memory/threads/:threadId`**: Update a thread.
 - **DELETE `/api/memory/threads/:threadId`**: Delete a thread.
@@ -154,7 +161,7 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 
 ## Additional Notes
 
-The port defaults to 4111. Both the port and hostname can be configured via the mastra server config. See [Launch Development Server](/docs/local-dev/mastra-dev#launch-development-server) for configuration details.
+The port defaults to 4111. Both the port and hostname can be configured via the mastra server config. See [Launch Development Server](/docs/server-db/local-dev-playground) for configuration details.
 
 Make sure you have your environment variables set up in your `.env.development` or `.env` file for any providers you use (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.).
 

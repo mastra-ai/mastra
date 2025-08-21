@@ -1,3 +1,4 @@
+import type { MastraVector } from '@mastra/core/vector';
 import type { EmbeddingModel } from 'ai';
 import type { RerankConfig } from '../rerank';
 
@@ -56,7 +57,6 @@ export type VectorQueryToolOptions = {
   id?: string;
   description?: string;
   indexName: string;
-  vectorStoreName: string;
   model: EmbeddingModel<string>;
   enableFilter?: boolean;
   includeVectors?: boolean;
@@ -64,7 +64,15 @@ export type VectorQueryToolOptions = {
   reranker?: RerankConfig;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
-};
+} & (
+  | {
+      vectorStoreName: string;
+    }
+  | {
+      vectorStoreName?: string;
+      vectorStore: MastraVector;
+    }
+);
 
 export type GraphRagToolOptions = {
   id?: string;

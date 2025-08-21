@@ -73,6 +73,15 @@ export function nodeModulesExtensionResolver(): Plugin {
 
         return null;
       } catch (e) {
+        // try to do a node like resolve first
+        const resolved = safeResolve(id, importer);
+        if (resolved) {
+          return {
+            id: resolved,
+            external: true,
+          };
+        }
+
         for (const ext of ['.mjs', '.js', '.cjs']) {
           const resolved = safeResolve(id + ext, importer);
           if (resolved) {

@@ -1,15 +1,19 @@
 import { createHash } from 'crypto';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
+import type { WritableStream } from 'stream/web';
+import type { CoreMessage } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { AnyAISpan } from './ai-tracing';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraMemory } from './memory';
+import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
-import type { CoreTool, ToolAction, VercelTool } from './tools';
+import type { ChunkType } from './stream/types';
+import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
+import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -41,6 +45,28 @@ export function deepMerge<T extends object = object>(target: T, source: Partial<
   });
 
   return output;
+}
+
+export function generateEmptyFromSchema(schema: string) {
+  try {
+    const parsedSchema = JSON.parse(schema);
+    if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
+    const obj: Record<string, any> = {};
+    const TYPE_DEFAULTS = {
+      string: '',
+      array: [],
+      object: {},
+      number: 0,
+      integer: 0,
+      boolean: false,
+    };
+    for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
+      obj[key] = TYPE_DEFAULTS[prop.type as keyof typeof TYPE_DEFAULTS] ?? null;
+    }
+    return obj;
+  } catch {
+    return {};
+  }
 }
 
 export interface TagMaskOptions {
@@ -200,10 +226,10 @@ export interface ToolOptions {
   runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
-  model?: LanguageModelV1;
+  model?: MastraLanguageModel;
+  writableStream?: WritableStream<ChunkType>;
+  agentAISpan?: AnyAISpan;
 }
-
-type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 
 /**
  * Checks if a value is a Zod type
@@ -288,6 +314,14 @@ export function makeCoreTool(
   logType?: 'tool' | 'toolset' | 'client-tool',
 ): CoreTool {
   return new CoreToolBuilder({ originalTool, options, logType }).build();
+}
+
+export function makeCoreToolV5(
+  originalTool: ToolToConvert,
+  options: ToolOptions,
+  logType?: 'tool' | 'toolset' | 'client-tool',
+): VercelToolV5 {
+  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
 }
 
 /**

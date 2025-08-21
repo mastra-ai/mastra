@@ -1,6 +1,9 @@
 name: Website link checker
 on: [deployment_status]
 
+permissions:
+  contents: read
+
 jobs:
   link-checker-docs:
     name: Run link checker
@@ -15,3 +18,27 @@ jobs:
           node-version: '22.x'
       - name: Check links
         run: npx --force --ignore-engine github:wardpeet/broken-link-checker ${{ github.event.deployment_status.target_url }}/docs -roef
+
+  validate-redirects:
+    name: Validate next.config.mjs redirects
+    if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies for docs
+        run: npm ci
+        working-directory: docs
+
+      - name: Set deployment URL as env var
+        run: echo "MASTRA_DEPLOYMENT_URL=${{ github.event.deployment_status.target_url }}" >> $GITHUB_ENV
+
+      - name: Run validate-redirects
+        run: node .github/scripts/validate-redirects.js

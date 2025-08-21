@@ -50,10 +50,10 @@ All commands install the same @mastra/client-js package but use different packag
 
 To get started you'll need to initialize your MastraClient with necessary parameters:
 
-```typescript
+```typescript filename="lib/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
-const client = new MastraClient({
+export const mastraClient = new MastraClient({
   baseUrl: "http://localhost:4111", // Default Mastra development server port
 });
 ```
@@ -62,8 +62,10 @@ const client = new MastraClient({
 
 You can customize the client with various options:
 
-```typescript
-const client = new MastraClient({
+```typescript filename="lib/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
   // Required
   baseUrl: "http://localhost:4111",
 
@@ -82,10 +84,12 @@ const client = new MastraClient({
 
 The Mastra Client SDK supports request cancellation using the standard Web API `AbortSignal`. Pass an `AbortSignal` to the client constructor to enable cancellation for all requests:
 
-```typescript
+```typescript filename="lib/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
 const controller = new AbortController();
 
-const client = new MastraClient({
+export const mastraClient = new MastraClient({
   baseUrl: "http://localhost:4111",
   abortSignal: controller.signal,
 });

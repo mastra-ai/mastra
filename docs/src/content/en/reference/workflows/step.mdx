@@ -1,48 +1,34 @@
 ---
-title: "Reference: Step | Building Workflows | Mastra Docs"
-description: Documentation for the Step class, which defines individual units of work within a workflow.
+title: "Reference: Step Class | Workflows | Mastra Docs"
+description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 ---
 
-# Step
+# Step Class
 
 The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling.
 It can take either a tool or an agent as a parameter to automatically create a step from them.
 
-## Usage
+## Usage example
 
-```typescript
-import { createStep } from "@mastra/core/workflows";
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const processOrder = createStep({
-  id: "processOrder",
+const step1 = createStep({
+  id: "step-1",
+  description: "passes value from input to output",
   inputSchema: z.object({
-    orderId: z.string(),
-    userId: z.string(),
+    value: z.number()
   }),
   outputSchema: z.object({
-    status: z.string(),
-    orderId: z.string(),
+    value: z.number()
   }),
-  resumeSchema: z.object({
-    orderId: z.string(),
-  }),
-  suspendSchema: z.object({}),
-  execute: async ({
-    inputData,
-    mastra,
-    getStepResult,
-    getInitData,
-    suspend,
-    runtimeContext,
-    runCount
-    runId,
-  }) => {
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
     return {
-      status: "processed",
-      orderId: inputData.orderId,
+      value
     };
-  },
+  }
 });
 ```
 
@@ -156,5 +142,3 @@ const processOrder = createStep({
 
 - [Control flow](../../docs/workflows/control-flow.mdx)
 - [Using agents and tools](../../docs/workflows/using-with-agents-and-tools.mdx)
-- [Tool and agent as step example](../../examples/workflows/agent-and-tool-interop.mdx)
-- [Input data mapping](../../docs/workflows/input-data-mapping.mdx)

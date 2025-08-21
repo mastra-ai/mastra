@@ -15,6 +15,7 @@ import { NewAgentNetwork } from './index';
 class MockMemory extends MastraMemory {
   #byResourceId: Map<string, any[]> = new Map();
   #byThreadId: Map<string, any[]> = new Map();
+  #workingMemory: Map<string, string> = new Map();
 
   constructor(config: { name: string }) {
     super({
@@ -26,7 +27,7 @@ class MockMemory extends MastraMemory {
   }
 
   async getWorkingMemory({ threadId }: { threadId: string }) {
-    return this.#byThreadId.get(threadId) || [];
+    return this.#workingMemory.get(threadId) || null;
   }
 
   async getWorkingMemoryTemplate() {
@@ -34,6 +35,10 @@ class MockMemory extends MastraMemory {
       format: 'json' as const,
       content: '{ "test": "test" }',
     };
+  }
+
+  async updateWorkingMemory({ threadId, workingMemory }: { threadId: string; workingMemory: string }) {
+    this.#workingMemory.set(threadId, workingMemory);
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }) {

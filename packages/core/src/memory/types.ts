@@ -1,14 +1,17 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
-import type { MastraLanguageModel, DynamicArgument } from '../agent/types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { MastraStorage } from '../storage';
+import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from 'ai';
-export type { MastraLanguageModel, DynamicArgument };
+export type { MastraLanguageModel };
 
 // Types for the memory system
 export type MastraMessageV1 = {
@@ -53,10 +56,11 @@ type BaseWorkingMemory = {
 type TemplateWorkingMemory = BaseWorkingMemory & {
   template: string;
   schema?: never;
+  version?: 'stable' | 'vnext';
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: ZodObject<any>;
+  schema: ZodObject<any> | JSONSchema7;
   template?: never;
 };
 
@@ -94,7 +98,7 @@ export type SharedMemoryConfig = {
   options?: MemoryConfig;
 
   vector?: MastraVector | false;
-  embedder?: EmbeddingModel<string>;
+  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
 
   processors?: MemoryProcessor[];
 };

@@ -421,6 +421,42 @@ export async function streamWorkflowHandler({
   }
 }
 
+export async function streamVNextWorkflowHandler({
+  mastra,
+  runtimeContext,
+  workflowId,
+  runId,
+  inputData,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  inputData?: unknown;
+  runtimeContext?: RuntimeContext;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to stream workflow' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.createRunAsync({ runId });
+    const result = run.streamVNext({
+      inputData,
+      runtimeContext,
+    });
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error streaming workflow');
+  }
+}
+
 export async function resumeAsyncWorkflowHandler({
   mastra,
   workflowId,

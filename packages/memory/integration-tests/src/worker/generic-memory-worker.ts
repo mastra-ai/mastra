@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'worker_threads';
 import type { MastraMessageV2, SharedMemoryConfig } from '@mastra/core';
-import type { LibSQLConfig } from '@mastra/libsql';
+import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
@@ -19,6 +19,7 @@ enum StorageType {
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
   storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  vectorConfigForWorker?: LibSQLVectorConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
@@ -30,10 +31,11 @@ interface WorkerData {
   messages: MessageToProcess[];
   storageType: WorkerTestConfig['storageTypeForWorker'];
   storageConfig: WorkerTestConfig['storageConfigForWorker'];
+  vectorConfig?: WorkerTestConfig['vectorConfigForWorker'];
   memoryOptions?: WorkerTestConfig['memoryOptionsForWorker'];
 }
 
-const { messages, storageType, storageConfig, memoryOptions } = workerData as WorkerData;
+const { messages, storageType, storageConfig, vectorConfig, memoryOptions } = workerData as WorkerData;
 
 async function initializeAndRun() {
   let store;
@@ -43,7 +45,7 @@ async function initializeAndRun() {
       case 'libsql':
         const { LibSQLStore, LibSQLVector } = await import('@mastra/libsql');
         store = new LibSQLStore(storageConfig as LibSQLConfig);
-        vector = new LibSQLVector({ connectionUrl: (storageConfig as LibSQLConfig).url });
+        vector = new LibSQLVector(vectorConfig as LibSQLVectorConfig);
         break;
       case 'upstash':
         const { UpstashStore } = await import('@mastra/upstash');

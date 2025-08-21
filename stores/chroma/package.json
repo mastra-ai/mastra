@@ -1,6 +1,6 @@
 {
   "name": "@mastra/chroma",
-  "version": "0.11.0",
+  "version": "0.11.4-alpha.0",
   "description": "Chroma vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -12,33 +12,35 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
-    "build:watch": "pnpm build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
   "license": "MIT",
   "dependencies": {
-    "chromadb": "^2.4.6"
+    "chromadb": "^3.0.11"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "eslint": "^9.29.0",
+    "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*",
+    "@internal/storage-test-utils": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.11.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.14.0-0"
   }
 }

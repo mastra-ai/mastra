@@ -25,11 +25,5 @@
     },
     "types": ["node", "vite/client"]
   },
-  "include": [
-    "src/**/*",
-    "tailwind.config.ts",
-    "postcss.config.js",
-    "../../../playground-ui/src/store/playground-store.ts",
-    "../../../playground-ui/src/domains/workflows/utils.ts"
-  ]
+  "include": ["src/**/*", "tailwind.config.ts", "postcss.config.js"]
 }

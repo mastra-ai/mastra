@@ -1,13 +1,14 @@
 const meta = {
-  "system-prompt": "Giving a System Prompt",
-  "workflow-as-tools": "Workflow as Tools",
-  "using-a-tool": "Using a Tool",
-  "hierarchical-multi-agent": "Hierarchical Multi-Agent System",
-  "multi-agent-workflow": "Multi-Agent Workflow",
-  "bird-checker": "Bird Checker",
-  "adding-voice-capabilities": "Give your Agent a voice",
+  "calling-agents": "Calling Agents",
+  "system-prompt": "Changing the System Prompt",
+  "using-a-tool": "Adding a Tool",
+  "using-a-workflow": "Adding a Workflow",
+  "supervisor-agent": "Supervisor Agent",
+  "image-analysis": "Image Analysis",
+  "adding-voice-capabilities": "Using Voice",
+  "dynamic-agents": "Dynamic Context",
   "deploying-mcp-server": "Deploying an MCPServer",
-  "dynamic-agents": "Dynamic Agents",
+  "ai-sdk-v5-integration": "AI SDK v5 Integration",
 };
 
 export default meta;

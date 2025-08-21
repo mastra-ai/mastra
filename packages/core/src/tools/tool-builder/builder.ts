@@ -1,3 +1,4 @@
+import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -15,9 +16,11 @@ import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
-import type { CoreTool, ToolAction, VercelTool } from '../types';
+import { ToolStream } from '../stream';
+import type { CoreTool, ToolAction, VercelTool, VercelToolV5 } from '../types';
+import { validateToolInput } from '../validation';
 
-export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
+export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
 interface LogOptions {
@@ -116,9 +119,9 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
+    const execFunction = async (args: unknown, execOptions: ToolExecutionOptions | ToolCallOptions) => {
       if (isVercelTool(tool)) {
-        return tool?.execute?.(args, execOptions) ?? undefined;
+        return tool?.execute?.(args, execOptions as ToolExecutionOptions) ?? undefined;
       }
 
       return (
@@ -131,17 +134,51 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+            writer: new ToolStream(
+              {
+                prefix: 'tool',
+                callId: execOptions.toolCallId,
+                name: options.name,
+                runId: options.runId!,
+              },
+              options.writableStream || (execOptions as any).writableStream,
+            ),
           },
-          execOptions,
+          execOptions as ToolExecutionOptions & ToolCallOptions,
         ) ?? undefined
       );
     };
 
-    return async (args: any, execOptions?: any) => {
+    return async (args: unknown, execOptions?: ToolExecutionOptions | ToolCallOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, args });
-        return await execFunction(args, execOptions);
+
+        // Validate input parameters if schema exists
+        const parameters = this.getParameters();
+        const { data, error } = validateToolInput(parameters, args, options.name);
+        if (error) {
+          logger.warn(`Tool input validation failed for '${options.name}'`, {
+            toolName: options.name,
+            errors: error.validationErrors,
+            args,
+          });
+          return error;
+        }
+        // Use validated/transformed data
+        args = data;
+
+        // there is a small delay in stream output so we add an immediate to ensure the stream is ready
+        return await new Promise((resolve, reject) => {
+          setImmediate(async () => {
+            try {
+              const result = await execFunction(args, execOptions!);
+              resolve(result);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
       } catch (err) {
         const mastraError = new MastraError(
           {
@@ -149,8 +186,8 @@ export class CoreToolBuilder extends MastraBase {
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
-              error,
-              args,
+              errorMessage: String(error),
+              argsJson: JSON.stringify(args),
               model: rest.model?.modelId ?? '',
             },
           },
@@ -161,6 +198,22 @@ export class CoreToolBuilder extends MastraBase {
         return mastraError;
       }
     };
+  }
+
+  buildV5() {
+    const builtTool = this.build();
+
+    if (!builtTool.parameters) {
+      throw new Error('Tool parameters are required');
+    }
+
+    return {
+      ...builtTool,
+      inputSchema: builtTool.parameters,
+      onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
+      onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
+      onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
+    } as VercelToolV5;
   }
 
   build(): CoreTool {
@@ -188,13 +241,25 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
+      let supportsStructuredOutputs = false;
+      if (model.specificationVersion === 'v2') {
+        supportsStructuredOutputs = true;
+      } else {
+        supportsStructuredOutputs = model.supportsStructuredOutputs ?? false;
+      }
+
+      const modelInfo = {
+        modelId: model.modelId,
+        supportsStructuredOutputs,
+        provider: model.provider,
+      };
       schemaCompatLayers.push(
-        new OpenAIReasoningSchemaCompatLayer(model),
-        new OpenAISchemaCompatLayer(model),
-        new GoogleSchemaCompatLayer(model),
-        new AnthropicSchemaCompatLayer(model),
-        new DeepSeekSchemaCompatLayer(model),
-        new MetaSchemaCompatLayer(model),
+        new OpenAIReasoningSchemaCompatLayer(modelInfo),
+        new OpenAISchemaCompatLayer(modelInfo),
+        new GoogleSchemaCompatLayer(modelInfo),
+        new AnthropicSchemaCompatLayer(modelInfo),
+        new DeepSeekSchemaCompatLayer(modelInfo),
+        new MetaSchemaCompatLayer(modelInfo),
       );
     }
 
@@ -216,6 +281,7 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
+      id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedSchema,
       outputSchema: processedOutputSchema,
     };

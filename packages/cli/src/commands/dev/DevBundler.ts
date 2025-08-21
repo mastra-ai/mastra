@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions, writeTelemetryConfig, getBundlerOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { RollupWatcherEvent } from 'rollup';
@@ -45,18 +45,38 @@ export class DevBundler extends Bundler {
     });
   }
 
-  async watch(entryFile: string, outputDirectory: string, toolsPaths: string[]): ReturnType<typeof createWatcher> {
+  async watch(
+    entryFile: string,
+    outputDirectory: string,
+    toolsPaths: (string | string[])[],
+  ): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
     const envFiles = await this.getEnvFiles();
-    const inputOptions = await getWatcherInputOptions(entryFile, 'node', {
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-    });
+
+    let sourcemapEnabled = false;
+    let transpilePackages: string[] = [];
+    try {
+      const bundlerOptions = await getBundlerOptions(entryFile, outputDirectory);
+      sourcemapEnabled = !!bundlerOptions?.sourcemap;
+      transpilePackages = bundlerOptions?.transpilePackages ?? [];
+    } catch (error) {
+      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+    }
+
+    const inputOptions = await getWatcherInputOptions(
+      entryFile,
+      'node',
+      {
+        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      },
+      { sourcemap: sourcemapEnabled, transpilePackages },
+    );
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
-    await writeTelemetryConfig(entryFile, outputDir);
+    await writeTelemetryConfig(entryFile, outputDir, this.logger);
 
     const mastraFolder = dirname(entryFile);
     const fileService = new FileService();
@@ -136,7 +156,7 @@ export class DevBundler extends Bundler {
       },
       {
         dir: outputDir,
-        sourcemap: true,
+        sourcemap: sourcemapEnabled,
       },
     );
 

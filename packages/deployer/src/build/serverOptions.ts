@@ -1,12 +1,7 @@
-import * as babel from '@babel/core';
-import { rollup } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
-
 import { removeAllOptionsExceptServer } from './babel/remove-all-options-server';
-import commonjs from '@rollup/plugin-commonjs';
-import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
-import type { Config, Mastra } from '@mastra/core';
-import { tsConfigPaths } from './plugins/tsconfig-paths';
+import type { Config } from '@mastra/core/mastra';
+import { extractMastraOption, extractMastraOptionBundler } from './shared/extract-mastra-option';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function getServerOptionsBundler(
   entryFile: string,
@@ -14,99 +9,24 @@ export function getServerOptionsBundler(
     hasCustomConfig: false;
   },
 ) {
-  return rollup({
-    logLevel: 'silent',
-    input: {
-      'server-config': entryFile,
-    },
-    treeshake: 'smallest',
-    plugins: [
-      tsConfigPaths(),
-      // transpile typescript to something we understand
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
-      commonjs({
-        extensions: ['.js', '.ts'],
-        strictRequires: 'strict',
-        transformMixedEsModules: true,
-        ignoreTryCatch: false,
-      }),
-      {
-        name: 'get-server-config',
-        transform(code, id) {
-          if (id !== entryFile) {
-            return;
-          }
-
-          return new Promise((resolve, reject) => {
-            babel.transform(
-              code,
-              {
-                babelrc: false,
-                configFile: false,
-                filename: id,
-                plugins: [removeAllOptionsExceptServer(result)],
-              },
-              (err, result) => {
-                if (err) {
-                  return reject(err);
-                }
-
-                resolve({
-                  code: result!.code!,
-                  map: result!.map!,
-                });
-              },
-            );
-          });
-        },
-      },
-      // let esbuild remove all unused imports
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
-      {
-        name: 'cleanup',
-        transform(code, id) {
-          if (id !== entryFile) {
-            return;
-          }
-
-          return recursiveRemoveNonReferencedNodes(code);
-        },
-      },
-      // let esbuild remove all unused imports
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
-    ],
-  });
+  return extractMastraOptionBundler('server', entryFile, removeAllOptionsExceptServer, result);
 }
 
-export async function getServerOptions(entryFile: string, outputDir: string): Promise<Config['server'] | null> {
-  const result = {
-    hasCustomConfig: false,
-  } as const;
-
-  const bundle = await getServerOptionsBundler(entryFile, result);
-
-  await bundle.write({
-    dir: outputDir,
-    format: 'es',
-    entryFileNames: '[name].mjs',
-    sourcemap: true,
-  });
-
-  if (result.hasCustomConfig) {
-    return (await import(`file:${outputDir}/server-config.mjs`)).server as unknown as Config['server'];
+export async function getServerOptions(
+  entryFile: string,
+  outputDir: string,
+  logger?: IMastraLogger,
+): Promise<Config['server'] | null> {
+  const result = await extractMastraOption<Config['server']>(
+    'server',
+    entryFile,
+    removeAllOptionsExceptServer,
+    outputDir,
+    logger,
+  );
+  if (!result) {
+    return null;
   }
 
-  return null;
+  return result.getConfig();
 }

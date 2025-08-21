@@ -191,6 +191,15 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Creates a new workflow run (alias for createRun)
+   * @param params - Optional object containing the optional runId
+   * @returns Promise containing the runId of the created run
+   */
+  createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
+    return this.createRun(params);
+  }
+
+  /**
    * Starts a workflow run synchronously without waiting for the workflow to complete
    * @param params - Object containing the runId, inputData and runtimeContext
    * @returns Promise containing success message
@@ -289,6 +298,9 @@ export class Workflow extends BaseResource {
       throw new Error('Response body is null');
     }
 
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
     // Create a transform stream that processes the response body
     const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
       start() {},
@@ -303,11 +315,13 @@ export class Workflow extends BaseResource {
           // Process each chunk
           for (const chunk of chunks) {
             if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
               try {
-                const parsedChunk = JSON.parse(chunk);
+                const parsedChunk = JSON.parse(newChunk);
                 controller.enqueue(parsedChunk);
-              } catch {
-                // Silently ignore parsing errors
+                failedChunk = undefined;
+              } catch (error) {
+                failedChunk = newChunk;
               }
             }
           }

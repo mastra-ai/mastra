@@ -52,10 +52,12 @@ Search is implemented with Algolia. To set up search functionality:
 
 1. Create an Algolia account and application
 2. Set up your environment variables in `.env.local`:
-   ```bash
+
+```bash
    NEXT_PUBLIC_ALGOLIA_APP_ID=your_app_id
    NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY=your_search_key
-   ```
+```
+
 3. Index your documentation content in Algolia
 
 For detailed setup instructions, see [ALGOLIA_SETUP.md](./ALGOLIA_SETUP.md).
@@ -93,7 +95,7 @@ export default meta;
 
 Mastra is built on [Nextra](https://nextra.site/docs) and therefore we use custom components that `Nextra` provides which includes `callouts`, `Tabs` e.t.c
 
-You can find the full list [here](https://nextra.site/docs/built-ins)
+You can find the full list [on the nextra site](https://nextra.site/docs/built-ins)
 
 ### Guidelines
 

@@ -153,18 +153,10 @@ export class Deps extends MastraBase {
       root: dir,
     });
 
-    const env: Record<string, string> = {
-      PATH: process.env.PATH!,
-    };
-
-    if (process.env.npm_config_registry) {
-      env.npm_config_registry = process.env.npm_config_registry;
-    }
-
     return cpLogger({
       cmd: runCommand,
       args,
-      env,
+      env: process.env as Record<string, string>,
     });
   }
 

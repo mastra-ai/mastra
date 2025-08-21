@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.32",
+  "version": "0.0.44-alpha.5",
   "main": "dist/index.js",
   "type": "module",
   "files": [
@@ -51,7 +51,7 @@
     "playwright": "^1.51.0",
     "playwright-core": "^1.51.0",
     "sqlite3": "^5.1.7",
-    "typescript": "^5.8.2",
+    "typescript": "^5.8.3",
     "zod": "^3.25.67"
   }
 }

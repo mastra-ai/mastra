@@ -26,7 +26,7 @@ When running a workflow, its `status` can be one of the following:
 
 ## Suspending a workflow with `suspend()`
 
-When the state is `suspended`, you can identify any and all steps that have been suspended by looking at the `suspended` array of the workflow result output.
+To pause execution at a specific step until user input is received, use the `⁠suspend` function to temporarily halt the workflow, allowing it to resume only when the necessary data is provided.
 
 ![Suspending a workflow with suspend()](/image/workflows/workflows-suspend-resume-suspend.jpg)
 
@@ -61,7 +61,7 @@ export const testWorkflow = createWorkflow({})
   .commit();
 ```
 
-> See [Define Suspendable workflow](/examples/workflows/human-in-the-loop#define-suspendable-workflow) for more information.
+> For more details, check out the [Suspend workflow example](/examples/workflows/human-in-the-loop#suspend-workflow).
 
 ### Identifying suspended steps
 
@@ -111,11 +111,11 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
 }
 ```
 
-> See [Run Workflow Results](/workflows/overview#run-workflow-results) for more details.
+> See [Run Workflow Results](/docs/workflows/overview#run-workflow-results) for more details.
 
 ## Resuming a workflow with `resume()`
 
-A workflow can be resumed by calling `resume` and providing the required `resumeData`.
+A workflow can be resumed by calling `resume` and providing the required `resumeData`. You can either explicitly specify which step to resume from, or when exactly one step is suspended, omit the `step` parameter and the workflow will automatically resume that step.
 
 ```typescript {16-18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -140,6 +140,17 @@ if (result.status === "suspended") {
 
   console.log(JSON.stringify(resumedResult, null, 2));
 }
+```
+
+You can also omit the `step` parameter when exactly one step is suspended:
+
+```typescript {5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const resumedResult = await run.resume({
+  resumeData: {
+    city: "Berlin"
+  },
+  // step parameter omitted - automatically resumes the single suspended step
+});
 ```
 
 ### Resuming nested workflows

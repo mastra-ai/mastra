@@ -1,8 +1,6 @@
-import * as babel from '@babel/core';
 import { rollup } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
+import { esbuild } from './plugins/esbuild';
 import commonjs from '@rollup/plugin-commonjs';
-import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
 export function getCustomInstrumentationBundler(
   entryFile: string,
@@ -18,11 +16,7 @@ export function getCustomInstrumentationBundler(
     treeshake: false,
     plugins: [
       // transpile typescript to something we understand
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
+      esbuild(),
       commonjs({
         extensions: ['.js', '.ts'],
         strictRequires: 'strict',
@@ -36,6 +30,9 @@ export function getCustomInstrumentationBundler(
 export async function writeCustomInstrumentation(
   entryFile: string,
   outputDir: string,
+  options: {
+    sourcemap?: boolean;
+  } = {},
 ): Promise<{
   hasCustomConfig: boolean;
   externalDependencies: string[];
@@ -50,6 +47,7 @@ export async function writeCustomInstrumentation(
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    sourcemap: options.sourcemap,
   });
   const externals = output[0].imports.filter(x => !x.startsWith('./'));
 

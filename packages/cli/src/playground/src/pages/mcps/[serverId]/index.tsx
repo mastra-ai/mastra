@@ -1,7 +1,6 @@
 import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMCPServerTools } from '@/hooks/use-mcp-server-tools';
 import { useMCPServers } from '@/hooks/use-mcp-servers';
 import { client } from '@/lib/client';
@@ -25,9 +24,12 @@ import {
   EntityIcon,
   MainContentLayout,
   MainContentContent,
+  PlaygroundTabs,
+  TabList,
+  Tab,
+  TabContent,
 } from '@mastra/playground-ui';
-import clsx from 'clsx';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Link, useParams } from 'react-router';
 
 export const McpServerPage = () => {
@@ -163,24 +165,14 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
 };
 
 const McpSetupTabs = ({ sseUrl, serverName }: { sseUrl: string; serverName: string }) => {
-  const [tab, setTab] = useState('cursor');
-  const tabTriggerClass = 'p-3 text-ui-lg text-icon3 font-medium border-b-2 border-transparent -mb-[0.5px]';
-
   return (
-    <Tabs onValueChange={setTab} value={tab}>
-      <TabsList className="border-b-sm border-border1 w-full">
-        <TabsTrigger value="cursor" className={clsx(tabTriggerClass, tab === 'cursor' && 'text-icon6 border-b-icon6')}>
-          Cursor
-        </TabsTrigger>
-        <TabsTrigger
-          value="windsurf"
-          className={clsx(tabTriggerClass, tab === 'windsurf' && 'text-icon6 border-b-icon6')}
-        >
-          Windsurf
-        </TabsTrigger>
-      </TabsList>
+    <PlaygroundTabs defaultTab="cursor">
+      <TabList>
+        <Tab value="cursor">Cursor</Tab>
+        <Tab value="windsurf">Windsurf</Tab>
+      </TabList>
 
-      <TabsContent value="cursor" className="pt-5">
+      <TabContent value="cursor">
         <Txt className="text-icon3 pb-4">
           Cursor comes with built-in MCP Support.{' '}
           <Link
@@ -204,8 +196,8 @@ const McpSetupTabs = ({ sseUrl, serverName }: { sseUrl: string; serverName: stri
   }
 }`}
         />
-      </TabsContent>
-      <TabsContent value="windsurf" className="pt-5">
+      </TabContent>
+      <TabContent value="windsurf">
         <Txt className="text-icon3 pb-4">
           Windsurf comes with built-in MCP Support.{' '}
           <Link
@@ -230,7 +222,7 @@ const McpSetupTabs = ({ sseUrl, serverName }: { sseUrl: string; serverName: stri
   }
 }`}
         />
-      </TabsContent>
-    </Tabs>
+      </TabContent>
+    </PlaygroundTabs>
   );
 };

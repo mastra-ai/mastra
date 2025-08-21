@@ -11,7 +11,7 @@ export const WorkflowGraphLayout = ({ children }: WorkflowGraphLayoutProps) => {
   const { workflowId } = useParams();
 
   return (
-    <MainContentContent isDivided={true} className="flex">
+    <MainContentContent isDivided={true} className="flex overflow-y-hidden">
       {children}
       <MastraResizablePanel
         defaultWidth={20}

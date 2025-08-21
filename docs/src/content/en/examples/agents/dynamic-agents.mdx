@@ -1,135 +1,94 @@
 ---
-title: Dynamic Agents Example | Agents | Mastra Docs
+title: Dynamic Context Example | Agents | Mastra Docs
 description: Learn how to create and configure dynamic agents using runtime context in Mastra.
 ---
 
-# Dynamic Agents Example
+# Dynamic Context
 
-First, let's define our runtime context type:
+Dynamic agents adapt their behavior and capabilities at runtime based on contextual input. Instead of relying on fixed configurations, they adjust to users, environments, or scenarios, enabling a single agent to serve personalized, context-aware responses.
 
-```typescript
-import { Agent, RuntimeContext } from "@mastra/core";
-import { z } from "zod";
+## Prerequisites
 
-type SupportRuntimeContext = {
-  "user-tier": "free" | "pro" | "enterprise";
-  language: "en" | "es" | "fr";
-  "user-id": string;
-};
+This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
 ```
 
-Next, let's create our dynamic support agent with its configuration:
+## Creating an agent
 
-```typescript
-const supportAgent = new Agent({
-  name: "Dynamic Support Agent",
+Create an agent that returns technical support for mastra cloud using dynamic values provided via `runtimeContext`.
 
+```typescript filename="src/mastra/agents/example-support-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const supportAgent = new Agent({
+  name: "support-agent",
+  description: "Returns technical support for mastra cloud based on runtime context",
   instructions: async ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");
 
-    return `You are a customer support agent for our SaaS platform.
-    The current user is on the ${userTier} tier and prefers ${language} language.
-    
-    For ${userTier} tier users:
-    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
-    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
-    ${userTier === "enterprise" ? "- Provide priority support with custom solutions" : ""}
-    
-    Always respond in ${language} language.`;
+    return `You are a customer support agent for [Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/overview).
+    The current user is on the ${userTier} tier.
+
+    Support guidance:
+    ${userTier === "free" ? "- Give basic help and link to documentation." : ""}
+    ${userTier === "pro" ? "- Offer detailed technical support and best practices." : ""}
+    ${userTier === "enterprise" ? "- Provide priority assistance with tailored solutions." : ""}
+
+    Always respond in ${language}.`;
   },
-
-  model: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier");
-    return userTier === "enterprise"
-      ? openai("gpt-4")
-      : openai("gpt-3.5-turbo");
-  },
-
-  tools: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier");
-    const baseTools = [knowledgeBase, ticketSystem];
-
-    if (userTier === "pro" || userTier === "enterprise") {
-      baseTools.push(advancedAnalytics);
-    }
-
-    if (userTier === "enterprise") {
-      baseTools.push(customIntegration);
-    }
-
-    return baseTools;
-  },
+  model: openai("gpt-4o")
 });
 ```
 
-RuntimeContext can be passed from the client/server directly to your agent generate and stream calls
+> See [Agent](../../reference/agents/agent.mdx) for a full list of configuration options.
 
-```typescript
-async function handleSupportRequest(userId: string, message: string) {
-  const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+## Registering an agent
 
-  runtimeContext.set("user-id", userId);
-  runtimeContext.set("user-tier", await getUserTier(userId));
-  runtimeContext.set("language", await getUserLanguage(userId));
+To use an agent, register it in your main Mastra instance.
 
-  const response = await supportAgent.generate(message, {
-    runtimeContext,
-  });
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
 
-  return response.text;
-}
-```
-
-RuntimeContext can also be set from the server middleware layer
-
-```typescript
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
+import { supportAgent } from "./agents/example-support-agent";
 
 export const mastra = new Mastra({
-  agents: {
-    support: supportAgent,
-  },
-  server: {
-    middleware: [
-      async (c, next) => {
-        const userId = c.req.header("X-User-ID");
-        const runtimeContext = c.get<SupportRuntimeContext>("runtimeContext");
-
-        // Set user tier based on subscription
-        const userTier = await getUserTier(userId);
-        runtimeContext.set("user-tier", userTier);
-
-        // Set language based on user preferences
-        const language = await getUserLanguage(userId);
-        runtimeContext.set("language", language);
-
-        // Set user ID
-        runtimeContext.set("user-id", userId);
-
-        await next();
-      },
-    ],
-    apiRoutes: [
-      registerApiRoute("/support", {
-        method: "POST",
-        handler: async (c) => {
-          const { userId, message } = await c.req.json();
-
-          try {
-            const response = await handleSupportRequest(userId, message);
-            return c.json({ response });
-          } catch (error) {
-            return c.json({ error: "Failed to process support request" }, 500);
-          }
-        },
-      }),
-    ],
-  },
+  // ...
+  agents: { supportAgent }
 });
 ```
 
-## Usage Example
+## Example usage
 
-This example shows how a single agent can handle different types of users and scenarios by leveraging runtime context, making it more flexible and maintainable than creating separate agents for each use case.
+Set `RuntimeContext` using `set()`, then use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt passing in the `runtimeContext`.
+
+```typescript filename="src/test-support-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+type SupportRuntimeContext = {
+  "user-tier": "free" | "pro" | "enterprise";
+  language: "en" | "es" | "ja";
+};
+
+const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+runtimeContext.set("user-tier", "free");
+runtimeContext.set("language", "ja");
+
+const agent = mastra.getAgent("supportAgent");
+
+const response = await agent.generate("Can Mastra Cloud handle long-running requests?", {
+  runtimeContext
+});
+
+console.log(response.text);
+```
+
+## Related
+
+- [Calling Agents](./calling-agents.mdx#from-the-command-line)

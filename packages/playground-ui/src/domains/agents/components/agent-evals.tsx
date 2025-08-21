@@ -8,12 +8,12 @@ import { FormattedDate } from '@/components/ui/formatted-date';
 import { Input } from '@/components/ui/input';
 import { ScoreIndicator } from '@/components/ui/score-indicator';
 import { Table, TableHeader, TableHead, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { cn } from '@/lib/utils';
 
 import { AnimatePresence } from 'motion/react';
 import { Evals, SortConfig, GroupedEvals } from '@/domains/evals/types';
+import { PlaygroundTabs, Tab, TabContent, TabList } from '@/components/ui/playground-tabs';
 
 const scrollableContentClass = cn(
   'relative overflow-y-auto overflow-x-hidden invisible hover:visible focus:visible',
@@ -51,28 +51,19 @@ export function AgentEvals({ liveEvals, ciEvals, onRefetchLiveEvals, onRefetchCi
   }
 
   return (
-    <Tabs
-      value={activeTab}
-      onValueChange={value => setActiveTab(value as 'live' | 'ci')}
-      className="grid grid-rows-[auto_1fr] h-full min-h-0 pb-2"
-    >
-      <div className="border-b border-mastra-border/10">
-        <TabsList className="bg-transparent border-0 h-auto mx-4">
-          <TabsTrigger value="live" className={tabIndicatorClass}>
-            Live
-          </TabsTrigger>
-          <TabsTrigger value="ci" className={tabIndicatorClass}>
-            CI
-          </TabsTrigger>
-        </TabsList>
-      </div>
-      <TabsContent value="live" className={tabContentClass}>
+    <PlaygroundTabs defaultTab="live">
+      <TabList>
+        <Tab value="live">Live</Tab>
+        <Tab value="ci">CI</Tab>
+      </TabList>
+
+      <TabContent value="live">
         <EvalTable evals={liveEvals} isCIMode={false} onRefresh={handleRefresh} />
-      </TabsContent>
-      <TabsContent value="ci" className={tabContentClass}>
+      </TabContent>
+      <TabContent value="ci">
         <EvalTable evals={ciEvals} isCIMode={true} onRefresh={handleRefresh} />
-      </TabsContent>
-    </Tabs>
+      </TabContent>
+    </PlaygroundTabs>
   );
 }
 

@@ -7,20 +7,12 @@ description: Learn how to interact with Mastra AI agents, including generating r
 
 The Agents API provides methods to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools.
 
-## Initialize Mastra Client
-
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
 ## Getting All Agents
 
 Retrieve a list of all available agents:
 
 ```typescript
-const agents = await client.getAgents();
+const agents = await mastraClient.getAgents();
 ```
 
 ## Working with a Specific Agent
@@ -28,7 +20,7 @@ const agents = await client.getAgents();
 Get an instance of a specific agent:
 
 ```typescript
-const agent = client.getAgent("agent-id");
+const agent = mastraClient.getAgent("agent-id");
 ```
 
 ## Agent Methods
@@ -89,7 +81,7 @@ response.processDataStream({
   },
 });
 
-// Process text stream with the processTextStream util 
+// Process text stream with the processTextStream util
 // (used with structured output)
  response.processTextStream({
       onTextPart: text => {

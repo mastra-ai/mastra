@@ -1,0 +1,4 @@
+node_modules/
+.env
+mastra.db
+pnpm-lock.yaml

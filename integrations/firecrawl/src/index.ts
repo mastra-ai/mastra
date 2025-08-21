@@ -34,12 +34,14 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       }),
       outputSchema: z.object({
         success: z.boolean(),
-        crawlData: z.array(z.object({
-          markdown: z.string(),
-          metadata: z.object({
-            sourceURL: z.string(),
+        crawlData: z.array(
+          z.object({
+            markdown: z.string(),
+            metadata: z.object({
+              sourceURL: z.string(),
+            }),
           }),
-        })),
+        ),
         entityType: z.string(),
       }),
     });
@@ -54,15 +56,17 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       }),
       outputSchema: z.object({
         success: z.boolean(),
-        crawlData: z.array(z.object({
-          markdown: z.string(),
-          metadata: z.object({
-            sourceURL: z.string(),
+        crawlData: z.array(
+          z.object({
+            markdown: z.string(),
+            metadata: z.object({
+              sourceURL: z.string(),
+            }),
           }),
-        })),
+        ),
         entityType: z.string(),
       }),
-      execute: async ({ inputData  }) => {
+      execute: async ({ inputData }) => {
         const triggerData = inputData;
         console.log('Starting crawl', triggerData?.url);
 

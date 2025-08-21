@@ -10,6 +10,7 @@ export enum ErrorDomain {
   MASTRA_VECTOR = 'MASTRA_VECTOR',
   LLM = 'LLM',
   EVAL = 'EVAL',
+  SCORER = 'SCORER',
   A2A = 'A2A',
   MASTRA_INSTANCE = 'MASTRA_INSTANCE',
   MASTRA = 'MASTRA',

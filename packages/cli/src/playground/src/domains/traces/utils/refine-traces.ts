@@ -1,6 +1,4 @@
-import { Span } from '@mastra/playground-ui';
-
-import { RefinedTrace } from '@mastra/playground-ui';
+import { Span, RefinedTrace } from '@mastra/playground-ui';
 
 export const refineTraces = (traces: Span[], isWorkflow: boolean = false): RefinedTrace[] => {
   const listOfSpanIds = new Set<string>();
@@ -31,7 +29,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
       parentSpanId: parentSpan?.id === span.id ? null : span?.parentSpanId,
     }));
 
-    const failedStatus = value.find(span => span.status.code !== 0)?.status;
+    const failedStatus = value.find(span => span.status.code === 2)?.status;
 
     const runId = value?.[0]?.attributes?.runId;
 
