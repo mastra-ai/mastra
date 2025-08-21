@@ -98,17 +98,7 @@ export async function spawnSWPM(cwd: string, command: string, packageNames: stri
     // ignore and try fallbacks
   }
 
-  // 2) Fallback to npx -y swpm
-  try {
-    console.log('Running install command with npx -y swpm');
-    await spawn('npx', ['-y', 'swpm', command, ...packageNames], { cwd });
-    return;
-  } catch (e) {
-    console.log('Failed to run install command with npx -y swpm', e);
-    // ignore and try native package manager
-  }
-
-  // 3) Fallback to native package manager based on lock files
+  // 2) Fallback to native package manager based on lock files
   try {
     // Detect package manager from lock files
     let packageManager: string;
