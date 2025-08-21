@@ -5,7 +5,7 @@ description: Documentation for the Tool Call Accuracy Scorer in Mastra, which ev
 
 # Tool Call Accuracy Scorer
 
-The `createToolCallAccuracyScorer()` function evaluates whether an LLM selects the correct tool from a list of available tools for a given task. It provides binary scoring based on tool selection accuracy and supports both strict and lenient evaluation modes.
+The `createToolCallAccuracyScorer()` function evaluates whether an LLM selects the correct tool from a list of available tools for a given task. It provides binary scoring based on tool selection accuracy and supports both strict and lenient evaluation modes, as well as tool calling order validation.
 
 For a usage example, see the [Tool Call Accuracy Examples](/examples/scorers/tool-call-accuracy).
 
@@ -16,15 +16,21 @@ For a usage example, see the [Tool Call Accuracy Examples](/examples/scorers/too
     {
       name: "expectedTool",
       type: "string",
-      description: "The name of the tool that should be called for the given task.",
+      description: "The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.",
       required: true,
     },
     {
       name: "strictMode",
       type: "boolean",
-      description: "When true, only exact single tool calls are accepted. When false (default), the expected tool can be among multiple tools called.",
+      description: "Controls evaluation strictness. For single tool mode: only exact single tool calls accepted. For order checking mode: tools must match exactly with no extra tools allowed.",
       required: false,
       default: "false",
+    },
+    {
+      name: "expectedToolOrder",
+      type: "string[]",
+      description: "Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.",
+      required: false,
     },
   ]}
 />
@@ -43,7 +49,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
     {
       name: "preprocessStepResult",
       type: "object",
-      description: "Object with tool call analysis: { expectedTool: string, actualTools: string[], strictMode: boolean, hasToolCalls: boolean, correctToolCalled: boolean }",
+      description: "Object with tool call analysis: { expectedTool: string, actualTools: string[], strictMode: boolean, expectedToolOrder?: string[], hasToolCalls: boolean, correctToolCalled: boolean, correctOrderCalled: boolean | null, toolCallInfos: ToolCallInfo[] }",
     },
     {
       name: "score",
@@ -55,13 +61,35 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 ## Evaluation Modes
 
-### Standard Mode (strictMode: false)
+The scorer operates in two distinct modes: **Single Tool Mode** and **Order Checking Mode**.
+
+### Single Tool Mode
+
+When `expectedToolOrder` is not provided, the scorer evaluates single tool selection:
+
+#### Standard Mode (strictMode: false)
 
 In standard mode, the scorer returns `1` if the expected tool is called, regardless of whether other tools are also called. This is useful for evaluating tool selection in multi-tool scenarios.
 
-### Strict Mode (strictMode: true)
+#### Strict Mode (strictMode: true)
 
 In strict mode, the scorer returns `1` only if exactly one tool is called and it matches the expected tool. This is useful for evaluating precise tool selection where calling multiple tools would be incorrect.
+
+### Order Checking Mode
+
+When `expectedToolOrder` is provided, the scorer validates tool calling sequence and ignores the `expectedTool` parameter. The `strictMode` parameter controls the order validation behavior:
+
+#### Strict Order Mode (strictMode: true)
+
+- **Pass Condition**: Tools are called in exactly the specified order with no extra tools
+- **Use Case**: Workflows requiring precise sequential execution
+- **Example**: `['search-tool', 'weather-tool']` passes only if exactly these two tools are called in this order
+
+#### Flexible Order Mode (strictMode: false)
+
+- **Pass Condition**: Expected tools appear in the correct relative order (extra tools allowed)
+- **Use Case**: Flexible workflows where additional tools may be called
+- **Example**: `['search-tool', 'weather-tool']` passes for `['search-tool', 'calendar-tool', 'weather-tool']`
 
 ## Tool Call Detection
 
@@ -96,22 +124,79 @@ The scorer provides binary evaluation of tool selection accuracy.
 // Actual: [] → Score: 0
 ```
 
-### Strict Mode Examples
+### Single Tool Mode Examples
 
 ```typescript
+// Standard Mode (strictMode: false)
 // Expected: weather-tool
 // Actual: [weather-tool] → Score: 1
-// Actual: [weather-tool, calendar-tool] → Score: 0
+// Actual: [weather-tool, calendar-tool] → Score: 1 (tool found among others)
+// Actual: [calendar-tool] → Score: 0
+// Actual: [] → Score: 0
+
+// Strict Mode (strictMode: true)  
+// Expected: weather-tool
+// Actual: [weather-tool] → Score: 1
+// Actual: [weather-tool, calendar-tool] → Score: 0 (extra tools not allowed)
 // Actual: [calendar-tool] → Score: 0
 // Actual: [] → Score: 0
 ```
 
+### Order Checking Mode Examples
+
+```typescript
+// Flexible Order (strictMode: false)
+// Expected: ['auth-tool', 'fetch-tool']
+// Actual: ['auth-tool', 'fetch-tool'] → Score: 1
+// Actual: ['auth-tool', 'log-tool', 'fetch-tool'] → Score: 1 (extra tools OK)
+// Actual: ['fetch-tool', 'auth-tool'] → Score: 0 (wrong order)
+// Actual: ['auth-tool'] → Score: 0 (missing fetch-tool)
+
+// Strict Order (strictMode: true)
+// Expected: ['auth-tool', 'fetch-tool'] 
+// Actual: ['auth-tool', 'fetch-tool'] → Score: 1
+// Actual: ['auth-tool', 'log-tool', 'fetch-tool'] → Score: 0 (extra tools not allowed)
+// Actual: ['fetch-tool', 'auth-tool'] → Score: 0 (wrong order)
+// Actual: ['auth-tool'] → Score: 0 (missing fetch-tool)
+```
+
 ## Use Cases
 
+### Single Tool Evaluation
 - **Tool Selection Testing**: Verify agents call the right tools for specific tasks
 - **Multi-Tool Scenarios**: Evaluate tool selection in complex workflows
 - **Tool Training**: Assess model performance on tool selection tasks
 - **Quality Assurance**: Automated testing of tool-calling behavior
+
+### Sequential Tool Evaluation
+- **Workflow Validation**: Ensure tools are called in the correct sequence for multi-step processes
+- **Dependency Management**: Verify tools with dependencies are called in proper order
+- **Process Compliance**: Test that agents follow specified operational procedures
+- **Chain-of-Thought Evaluation**: Validate reasoning sequences that require specific tool ordering
+
+### Example Scenarios
+
+```typescript
+// Single tool validation (flexible)
+createToolCallAccuracyScorer({ expectedTool: 'weather-tool' })
+
+// Strict single tool (no other tools allowed)
+createToolCallAccuracyScorer({ expectedTool: 'calculator-tool', strictMode: true })
+
+// Flexible sequence validation (allows extra tools)
+createToolCallAccuracyScorer({ 
+  expectedTool: 'search-tool', // ignored when order is specified
+  expectedToolOrder: ['search-tool', 'weather-tool'],
+  strictMode: false // default - extra tools allowed
+})
+
+// Strict sequence validation (no extra tools)
+createToolCallAccuracyScorer({ 
+  expectedTool: 'search-tool', // ignored when order is specified
+  expectedToolOrder: ['authenticate-tool', 'fetch-data-tool', 'process-tool'],
+  strictMode: true // exact match required
+})
+```
 
 ## Related
 

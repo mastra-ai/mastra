@@ -330,6 +330,169 @@ The output receives a zero score because no tools were called when the weather t
 }
 ```
 
+## Tool order checking examples
+
+The scorer can validate that tools are called in a specific order, which is useful for workflows that require sequential execution.
+
+### Strict order validation
+
+```typescript filename="src/example-strict-order.ts" showLineNumbers copy
+import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+
+const scorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'auth-tool', // This will be ignored when expectedToolOrder is provided
+  expectedToolOrder: ['auth-tool', 'fetch-tool', 'process-tool'],
+  strictMode: true // Exact match - no extra tools allowed
+});
+
+// Test correct order
+const inputMessages = [createUIMessage({ 
+  content: 'Authenticate, fetch data, then process it', 
+  role: 'user', 
+  id: 'input-1' 
+})];
+
+const correctOrderOutput = [createUIMessage({
+  content: 'I will authenticate, fetch data, and process it.',
+  role: 'assistant',
+  id: 'output-1',
+  toolInvocations: [
+    createToolInvocation({
+      toolCallId: 'call-1',
+      toolName: 'auth-tool',
+      args: { token: 'abc123' },
+      result: { authenticated: true },
+      state: 'result'
+    }),
+    createToolInvocation({
+      toolCallId: 'call-2', 
+      toolName: 'fetch-tool',
+      args: { endpoint: '/data' },
+      result: { data: ['item1', 'item2'] },
+      state: 'result'
+    }),
+    createToolInvocation({
+      toolCallId: 'call-3',
+      toolName: 'process-tool',
+      args: { data: ['item1', 'item2'] },
+      result: { processed: true },
+      state: 'result'
+    })
+  ]
+})];
+
+const run = createAgentTestRun({ inputMessages, output: correctOrderOutput });
+const result = await scorer.run(run);
+
+console.log(result.score); // 1 - correct strict order
+console.log(result.preprocessStepResult?.correctOrderCalled); // true
+```
+
+### Flexible order validation
+
+```typescript filename="src/example-flexible-order.ts" showLineNumbers copy
+import { createToolCallAccuracyScorer } from "@mastra/evals/scorers";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+
+const scorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'auth-tool', // Ignored when expectedToolOrder is provided
+  expectedToolOrder: ['auth-tool', 'fetch-tool'],
+  strictMode: false // Flexible mode - allows extra tools as long as expected ones are in order
+});
+
+// Test with extra tools that don't break the expected order
+const inputMessages = [createUIMessage({ 
+  content: 'Do a comprehensive data operation', 
+  role: 'user', 
+  id: 'input-1' 
+})];
+
+const flexibleOrderOutput = [createUIMessage({
+  content: 'I will perform a comprehensive operation.',
+  role: 'assistant',
+  id: 'output-1',
+  toolInvocations: [
+    createToolInvocation({
+      toolCallId: 'call-1',
+      toolName: 'auth-tool',
+      args: { token: 'abc123' },
+      result: { authenticated: true },
+      state: 'result'
+    }),
+    createToolInvocation({
+      toolCallId: 'call-2',
+      toolName: 'log-tool', // Extra tool - this is OK in contains mode
+      args: { message: 'Starting fetch' },
+      result: { logged: true },
+      state: 'result'
+    }),
+    createToolInvocation({
+      toolCallId: 'call-3',
+      toolName: 'fetch-tool',
+      args: { endpoint: '/data' },
+      result: { data: ['item1'] },
+      state: 'result'
+    }),
+    createToolInvocation({
+      toolCallId: 'call-4',
+      toolName: 'cleanup-tool', // Extra tool at end - also OK
+      args: {},
+      result: { cleaned: true },
+      state: 'result'
+    })
+  ]
+})];
+
+const run = createAgentTestRun({ inputMessages, output: flexibleOrderOutput });
+const result = await scorer.run(run);
+
+console.log(result.score); // 1 - auth-tool comes before fetch-tool
+console.log(result.preprocessStepResult?.actualTools); 
+// ['auth-tool', 'log-tool', 'fetch-tool', 'cleanup-tool']
+```
+
+### Wrong order example
+
+```typescript filename="src/example-wrong-order.ts" showLineNumbers copy
+const wrongOrderScorer = createToolCallAccuracyScorer({ 
+  expectedTool: 'auth-tool',
+  expectedToolOrder: ['auth-tool', 'fetch-tool'],
+  strictMode: false // Even in flexible mode, order must be correct
+});
+
+const wrongOrderOutput = [createUIMessage({
+  content: 'Let me fetch first then authenticate.',
+  role: 'assistant',
+  id: 'output-1',
+  toolInvocations: [
+    createToolInvocation({
+      toolCallId: 'call-1',
+      toolName: 'fetch-tool', // Called before auth-tool (wrong order)
+      args: { endpoint: '/data' },
+      result: { error: 'unauthorized' },
+      state: 'result'
+    }),
+    createToolInvocation({
+      toolCallId: 'call-2',
+      toolName: 'auth-tool', // Should have been called first
+      args: { token: 'abc123' },
+      result: { authenticated: true },
+      state: 'result'
+    })
+  ]
+})];
+
+const wrongRun = createAgentTestRun({ 
+  inputMessages: [createUIMessage({ content: 'Authenticate then fetch', role: 'user', id: 'input-1' })], 
+  output: wrongOrderOutput 
+});
+const wrongResult = await wrongOrderScorer.run(wrongRun);
+
+console.log(wrongResult.score); // 0 - wrong order
+console.log(wrongResult.preprocessStepResult?.correctOrderCalled); // false
+```
+
 ## Scorer configuration
 
 You can configure the `ToolCallAccuracyScorer` behavior using the available options:
@@ -346,6 +509,20 @@ const strictScorer = createToolCallAccuracyScorer({
   expectedTool: 'search-tool',
   strictMode: true
 });
+
+// Strict order checking - tools must match exactly
+const strictOrderScorer = createToolCallAccuracyScorer({
+  expectedTool: 'step1-tool', // ignored when order is specified
+  expectedToolOrder: ['step1-tool', 'step2-tool', 'step3-tool'],
+  strictMode: true // no extra tools allowed
+});
+
+// Flexible order checking - allows extra tools
+const flexibleOrderScorer = createToolCallAccuracyScorer({
+  expectedTool: 'step1-tool', // ignored when order is specified
+  expectedToolOrder: ['auth-tool', 'process-tool'],
+  strictMode: false // extra tools allowed (default)
+});
 ```
 
 > See [ToolCallAccuracyScorer](/reference/scorers/tool-call-accuracy) for a full list of configuration options.
@@ -361,8 +538,11 @@ const strictScorer = createToolCallAccuracyScorer({
     expectedTool: string,
     actualTools: string[],
     strictMode: boolean,
+    expectedToolOrder?: string[],
     hasToolCalls: boolean,
-    correctToolCalled: boolean
+    correctToolCalled: boolean,
+    correctOrderCalled: boolean | null,
+    toolCallInfos: ToolCallInfo[]
   },
   score: number
 }
@@ -372,19 +552,22 @@ const strictScorer = createToolCallAccuracyScorer({
 
 A binary accuracy score:
 
-- **1**: Correct tool selection according to the specified mode
-- **0**: Incorrect tool selection or no tools called
+- **1**: Correct tool selection or order according to the specified mode
+- **0**: Incorrect tool selection/order or no tools called
 
 ### runId
 The unique identifier for this scorer run.
 
 ### preprocessStepResult
 Object with tool call analysis details:
-- **expectedTool**: The tool that was expected to be called
-- **actualTools**: Array of tools that were actually called
-- **strictMode**: Whether strict mode evaluation was used
+- **expectedTool**: The tool that was expected to be called (ignored when order checking)
+- **actualTools**: Array of tools that were actually called in order
+- **strictMode**: Whether strict mode evaluation was used (applies to both single tool and order checking modes)
+- **expectedToolOrder**: Array of tools in expected order (when order checking is enabled)
 - **hasToolCalls**: Whether any tools were called at all
-- **correctToolCalled**: Whether the expected tool was among those called
+- **correctToolCalled**: Whether the expected tool was among those called (single tool mode)
+- **correctOrderCalled**: Whether tools were called in correct order (null when order checking disabled)
+- **toolCallInfos**: Detailed information about each tool call including call IDs and positions
 
 <GithubLink
   marginTop='mt-16'
