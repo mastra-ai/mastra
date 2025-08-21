@@ -1044,7 +1044,7 @@ do:
     await this.#pubsub.unsubscribe(topic, listener);
   }
 
-  public async startEventListeners() {
+  public async startEventEngine() {
     for (const topic in this.#events) {
       if (!this.#events[topic]) {
         continue;
@@ -1057,7 +1057,7 @@ do:
     }
   }
 
-  public async stopEventListeners() {
+  public async stopEventEngine() {
     for (const topic in this.#events) {
       if (!this.#events[topic]) {
         continue;

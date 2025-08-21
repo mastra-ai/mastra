@@ -58,7 +58,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const runId = `test-run-id-${testRunIdCounter++}`;
         let watchData: StreamEvent[] = [];
@@ -163,7 +163,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       // TODO: fix this test
@@ -246,7 +246,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await promptEvalWorkflow.createRunAsync();
 
@@ -314,7 +314,7 @@ describe.sequential(
             endedAt: expect.any(Number),
           },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to use an agent as a step', async () => {
@@ -392,7 +392,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const agentStep1 = createStep(agent);
         const agentStep2 = createStep(agent2);
@@ -619,7 +619,7 @@ describe.sequential(
             type: 'finish',
           },
         ]);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle sleep waiting flow', async () => {
@@ -654,7 +654,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         const runId = `test-run-id-${testRunIdCounter++}`;
@@ -796,7 +796,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle waitForEvent waiting flow', async () => {
@@ -831,7 +831,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const runId = `test-run-id-${testRunIdCounter++}`;
         let watchData: StreamEvent[] = [];
@@ -946,7 +946,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -991,7 +991,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { value: 'bail' } });
@@ -1024,7 +1024,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should throw error when execution flow not defined', () => {
@@ -1102,7 +1102,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1115,7 +1115,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should have access to typed workflow results', async () => {
@@ -1147,7 +1147,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1160,7 +1160,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should execute multiple steps in parallel', async () => {
@@ -1200,7 +1200,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1226,7 +1226,7 @@ describe.sequential(
             endedAt: expect.any(Number),
           },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should have runId in the step execute function - bug #4260', async () => {
@@ -1257,7 +1257,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -1273,7 +1273,7 @@ describe.sequential(
             endedAt: expect.any(Number),
           },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       describe.sequential('Variable Resolution', () => {
@@ -1308,7 +1308,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { inputData: 'test-input' } });
@@ -1331,7 +1331,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should provide access to step results and trigger data via getStepResult helper', async () => {
@@ -1387,7 +1387,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { inputValue: 'test-input' } });
@@ -1417,7 +1417,7 @@ describe.sequential(
               endedAt: expect.any(Number),
             },
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve trigger data from context', async () => {
@@ -1448,7 +1448,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           await run.start({ inputData: { inputData: 'test-input' } });
@@ -1458,7 +1458,7 @@ describe.sequential(
               inputData: { inputData: 'test-input' },
             }),
           );
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve trigger data from getInitData', async () => {
@@ -1500,7 +1500,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1521,7 +1521,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve trigger data from getInitData with workflow schema', async () => {
@@ -1562,7 +1562,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1581,7 +1581,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve trigger data and DI runtimeContext values via .map()', async () => {
@@ -1634,7 +1634,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const runtimeContext = new RuntimeContext<{ life: number }>();
           runtimeContext.set('life', 42);
@@ -1656,7 +1656,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve dynamic mappings via .map()', async () => {
@@ -1723,7 +1723,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1750,7 +1750,7 @@ describe.sequential(
             result: 'test-input',
             second: 'success',
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve variables from previous steps', async () => {
@@ -1796,7 +1796,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           await run.start({ inputData: {} });
@@ -1808,7 +1808,7 @@ describe.sequential(
               },
             }),
           );
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve inputs from previous steps that are not objects', async () => {
@@ -1844,7 +1844,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: {} });
@@ -1868,7 +1868,7 @@ describe.sequential(
               endedAt: expect.any(Number),
             },
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve inputs from previous steps that are arrays', async () => {
@@ -1904,7 +1904,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: {} });
@@ -1928,7 +1928,7 @@ describe.sequential(
               endedAt: expect.any(Number),
             },
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve inputs from previous steps that are arrays via .map()', async () => {
@@ -1973,7 +1973,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: {} });
@@ -1997,7 +1997,7 @@ describe.sequential(
               endedAt: expect.any(Number),
             },
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve constant values via .map()', async () => {
@@ -2050,7 +2050,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -2069,7 +2069,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should resolve fully dynamic input via .map()', async () => {
@@ -2121,7 +2121,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -2140,7 +2140,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
       });
 
@@ -2222,7 +2222,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { status: 'success' } });
@@ -2237,7 +2237,7 @@ describe.sequential(
             step2: { status: 'success', output: { result: 'step2' } },
             step4: { status: 'success', output: { result: 'step2' } },
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should handle failing dependencies', async () => {
@@ -2277,7 +2277,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
@@ -2300,7 +2300,7 @@ describe.sequential(
             endedAt: expect.any(Number),
           });
           expect((step1Result as any)?.error).toMatch(/^Error: Failed/);
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should support simple string conditions', async () => {
@@ -2365,7 +2365,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { status: 'success' } });
@@ -2392,7 +2392,7 @@ describe.sequential(
               endedAt: expect.any(Number),
             },
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should support custom condition functions', async () => {
@@ -2439,7 +2439,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { count: 5 } });
@@ -2461,7 +2461,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
       });
 
@@ -2500,7 +2500,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const startTime = Date.now();
@@ -2525,7 +2525,7 @@ describe.sequential(
         });
 
         expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should execute a a sleep until step', async () => {
@@ -2567,7 +2567,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const startTime = Date.now();
@@ -2592,7 +2592,7 @@ describe.sequential(
         });
 
         expect(endTime - startTime).toBeGreaterThan(900);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should execute a waitForEvent step', async () => {
@@ -2632,7 +2632,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const startTime = Date.now();
@@ -2663,7 +2663,7 @@ describe.sequential(
         });
 
         expect(endTime - startTime).toBeGreaterThan(1000);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       // timeouts not supported for now
@@ -2704,7 +2704,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const startTime = Date.now();
@@ -2729,7 +2729,7 @@ describe.sequential(
         });
 
         expect(endTime - startTime).toBeGreaterThan(900);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -2770,7 +2770,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const p = run.start({ inputData: { value: 'test' } });
@@ -2791,7 +2791,7 @@ describe.sequential(
         });
 
         expect(result.steps['step2']).toBeUndefined();
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to abort workflow execution immediately', async () => {
@@ -2831,7 +2831,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const p = run.start({ inputData: { value: 'test' } });
@@ -2851,7 +2851,7 @@ describe.sequential(
         });
 
         expect(result.steps['step2']).toBeUndefined();
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to abort workflow execution during a step', async () => {
@@ -2905,7 +2905,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const p = run.start({ inputData: { value: 'test' } });
@@ -2932,7 +2932,7 @@ describe.sequential(
         //   startedAt: expect.any(Number),
         //   endedAt: expect.any(Number),
         // });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -2965,7 +2965,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
 
@@ -2993,7 +2993,7 @@ describe.sequential(
           endedAt: expect.any(Number),
         });
         expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle variable resolution errors', async () => {
@@ -3031,7 +3031,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         await expect(run.start({ inputData: {} })).resolves.toMatchObject({
@@ -3055,7 +3055,7 @@ describe.sequential(
             },
           },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle step execution errors within branches', async () => {
@@ -3106,7 +3106,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -3128,7 +3128,7 @@ describe.sequential(
           },
         });
         expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle step execution errors within nested workflows', async () => {
@@ -3186,7 +3186,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await mainWorkflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -3202,7 +3202,7 @@ describe.sequential(
         });
 
         expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Step execution failed/);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -3294,7 +3294,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -3313,7 +3313,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -3382,7 +3382,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { target: 10, value: 0 } });
@@ -3393,7 +3393,7 @@ describe.sequential(
         expect(result.result).toEqual({ finalValue: 12 });
         // @ts-ignore
         expect(result.steps.increment.output).toEqual({ value: 12 });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should run a while loop', async () => {
@@ -3460,7 +3460,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { target: 10, value: 0 } });
@@ -3471,7 +3471,7 @@ describe.sequential(
         expect(result.result).toEqual({ finalValue: 12 });
         // @ts-ignore
         expect(result.steps.increment.output).toEqual({ value: 12 });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -3524,7 +3524,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
@@ -3551,7 +3551,7 @@ describe.sequential(
             endedAt: expect.any(Number),
           },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -3664,7 +3664,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 1 } });
@@ -3676,7 +3676,7 @@ describe.sequential(
         expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
         // @ts-ignore
         expect(result.steps.start.output).toEqual({ newValue: 2 });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should run the else branch', async () => {
@@ -3788,7 +3788,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 6 } });
@@ -3800,7 +3800,7 @@ describe.sequential(
         expect(result.steps['else-branch'].output).toEqual({ finalValue: 26 + 6 + 1 });
         // @ts-ignore
         expect(result.steps.start.output).toEqual({ newValue: 7 });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -3876,7 +3876,7 @@ describe.sequential(
           },
           storage: testStorage,
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -3895,7 +3895,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -3934,7 +3934,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         workflow.then(step1).then(step2).commit();
 
@@ -3960,7 +3960,7 @@ describe.sequential(
         expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
         expect(step1.execute).toHaveBeenCalledTimes(1);
         expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should retry a step with a custom retry config', async () => {
@@ -3998,7 +3998,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         workflow.then(step1).then(step2).commit();
 
@@ -4024,7 +4024,7 @@ describe.sequential(
         expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
         expect(step1.execute).toHaveBeenCalledTimes(1);
         expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -4067,7 +4067,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -4090,7 +4090,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -4127,7 +4127,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         let watchData: WatchEvent[] = [];
         const onTransition = data => {
@@ -4218,7 +4218,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should watch workflow state changes and call onTransition when attaching from separate run', async () => {
@@ -4253,7 +4253,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         let watchData: WatchEvent[] = [];
         const onTransition = data => {
@@ -4344,7 +4344,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       // TODO: fix this test, second watcher doesn't get events
@@ -4380,7 +4380,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const onTransition = vi.fn();
         const onTransition2 = vi.fn();
@@ -4415,7 +4415,7 @@ describe.sequential(
 
         expect(onTransition).toHaveBeenCalledTimes(10);
         expect(onTransition2).toHaveBeenCalledTimes(10);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to use all action types in a workflow', async () => {
@@ -4457,7 +4457,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
 
@@ -4553,7 +4553,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -4672,7 +4672,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await promptEvalWorkflow.createRunAsync();
 
@@ -4744,7 +4744,7 @@ describe.sequential(
             endedAt: expect.any(Number),
           },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle parallel steps with conditional suspend', async () => {
@@ -4825,7 +4825,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
 
@@ -4900,7 +4900,7 @@ describe.sequential(
             suspendedAt: expect.any(Number),
           },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       // TODO: fix this test, timing issue?
@@ -5025,7 +5025,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const started = run.start({ inputData: { input: 'test' } });
@@ -5107,7 +5107,7 @@ describe.sequential(
           },
           humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle basic suspend and resume flow with async await syntax', async () => {
@@ -5199,7 +5199,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5365,7 +5365,7 @@ describe.sequential(
         });
 
         expect(promptAgentAction).toHaveBeenCalledTimes(2);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should work with runtimeContext - bug #4442', async () => {
@@ -5421,7 +5421,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5438,7 +5438,7 @@ describe.sequential(
         expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
         // @ts-ignore
         expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should work with custom runtimeContext - bug #4442', async () => {
@@ -5494,7 +5494,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await promptEvalWorkflow.createRunAsync();
 
@@ -5514,7 +5514,7 @@ describe.sequential(
         expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
         // @ts-ignore
         expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should handle basic suspend and resume in a dountil workflow', async () => {
@@ -5590,7 +5590,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await dowhileWorkflow.createRunAsync();
         const result = await run.start({ inputData: { value: 0 } });
@@ -5617,7 +5617,7 @@ describe.sequential(
         expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
           status: 'success',
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -5664,7 +5664,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         // Create a few runs
         const run1 = await workflow.createRunAsync();
@@ -5680,7 +5680,7 @@ describe.sequential(
         expect(runs[0]?.workflowName).toBe('test-workflow');
         expect(runs[0]?.snapshot).toBeDefined();
         expect(runs[1]?.snapshot).toBeDefined();
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should get workflow run by id from storage', async () => {
@@ -5713,7 +5713,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         // Create a few runs
         const run1 = await workflow.createRunAsync();
@@ -5732,7 +5732,7 @@ describe.sequential(
         expect(run3?.runId).toBe(run1.runId);
         expect(run3?.workflowName).toBe('test-workflow');
         expect(run3?.snapshot).toEqual(runs[0].snapshot);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -5760,7 +5760,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         // Access new instance properties directly - should work without warning
         const run = await workflow.createRunAsync();
@@ -5768,7 +5768,7 @@ describe.sequential(
 
         expect(telemetry).toBeDefined();
         expect(telemetry).toBeInstanceOf(Telemetry);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -5849,7 +5849,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
         const agentStep1 = createStep(agent);
         const agentStep2 = createStep(agent2);
 
@@ -5895,7 +5895,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to use an agent in parallel', async () => {
@@ -5990,7 +5990,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const nestedWorkflow1 = createWorkflow({
           id: 'nested-workflow',
@@ -6066,7 +6066,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to use an agent as a step via mastra instance', async () => {
@@ -6129,7 +6129,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         workflow
           .then(startStep)
@@ -6196,7 +6196,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
@@ -6242,7 +6242,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const agentStep = createStep({
           id: 'agent-step',
@@ -6315,7 +6315,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -6413,7 +6413,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -6446,7 +6446,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to nest workflows sequentially', async () => {
@@ -6523,7 +6523,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -6540,7 +6540,7 @@ describe.sequential(
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 28,
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able clone workflows as steps', async () => {
@@ -6640,7 +6640,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -6673,7 +6673,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should be able to nest workflows with conditions', async () => {
@@ -6777,7 +6777,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -6810,7 +6810,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       describe.sequential('new if else branching syntax with nested workflows', () => {
@@ -6919,7 +6919,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = counterWorkflow.createRun();
           const result = await run.start({ inputData: { startValue: 0 } });
@@ -6956,7 +6956,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should execute else-branch', async () => {
@@ -7064,7 +7064,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = counterWorkflow.createRun();
           const result = await run.start({ inputData: { startValue: 0 } });
@@ -7102,7 +7102,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
 
         it('should execute nested else and if-branch', async () => {
@@ -7247,7 +7247,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = counterWorkflow.createRun();
           const result = await run.start({ inputData: { startValue: 1 } });
@@ -7285,7 +7285,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
       });
 
@@ -7390,7 +7390,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = counterWorkflow.createRun();
           const result = await run.start({ inputData: { startValue: 0 } });
@@ -7417,7 +7417,7 @@ describe.sequential(
           expect(other).toHaveBeenCalledTimes(2);
           expect(final).toHaveBeenCalledTimes(1);
           expect(last).toHaveBeenCalledTimes(1);
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
       });
 
@@ -7514,7 +7514,7 @@ describe.sequential(
               projectId: 'pubsub-test',
             }),
           });
-          await mastra.startEventListeners();
+          await mastra.startEventEngine();
 
           const run = counterWorkflow.createRun();
           const result = await run.start({ inputData: { startValue: 0 } });
@@ -7542,7 +7542,7 @@ describe.sequential(
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          await mastra.stopEventListeners();
+          await mastra.stopEventEngine();
         });
       });
 
@@ -7677,7 +7677,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -7712,7 +7712,7 @@ describe.sequential(
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
         expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -7741,14 +7741,14 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = workflow.createRun();
         const result = await run.start({ runtimeContext });
 
         // @ts-ignore
         expect(result.steps.step1.output.injectedValue).toBe(testValue);
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('should inject runtimeContext dependencies into steps during resume', async () => {
@@ -7788,7 +7788,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = workflow.createRun();
         await run.start({ runtimeContext });
@@ -7806,7 +7806,7 @@ describe.sequential(
 
         // @ts-ignore
         expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -7899,7 +7899,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { input: 'test-data' } });
@@ -7940,7 +7940,7 @@ describe.sequential(
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
 
@@ -7972,13 +7972,13 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const result = await workflow.createRun().start({ inputData: {} });
 
         expect(result.status).toBe('success');
         expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('multiple steps should have different run counts', async () => {
@@ -8022,7 +8022,7 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
@@ -8030,7 +8030,7 @@ describe.sequential(
         expect(result.status).toBe('success');
         expect(result.steps.step1).toHaveProperty('output', { count: 3 });
         expect(result.steps.step2).toHaveProperty('output', { count: 10 });
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
 
       it('runCount should exist and equal zero for the first run', async () => {
@@ -8061,14 +8061,14 @@ describe.sequential(
             projectId: 'pubsub-test',
           }),
         });
-        await mastra.startEventListeners();
+        await mastra.startEventEngine();
 
-        const run = workflow.createRun();
+        const run = await workflow.createRunAsync();
         await run.start({ inputData: {} });
 
         expect(mockExec).toHaveBeenCalledTimes(1);
         expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
-        await mastra.stopEventListeners();
+        await mastra.stopEventEngine();
       });
     });
   },
