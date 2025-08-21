@@ -1,5 +1,11 @@
 # mastra
 
+## 0.10.22-alpha.4
+
+### Patch Changes
+
+- dd702eb: Fix default in playground
+
 ## 0.10.22-alpha.3
 
 ### Patch Changes

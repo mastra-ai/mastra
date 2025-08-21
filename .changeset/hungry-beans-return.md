@@ -2,4 +2,4 @@
 "@mastra/deployer": patch
 ---
 
-Deployer handlers
+Add handlers for VNext
