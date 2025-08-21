@@ -1,6 +1,7 @@
 import { ReadableStream, TransformStream } from 'stream/web';
 import { convertFullStreamChunkToMastra } from './aisdk/v4/transform';
 import type { ChunkType } from './types';
+import { ChunkFrom } from './types';
 
 export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
   #usageCount = {
@@ -71,7 +72,7 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
         controller.enqueue({
           type: 'start',
           runId,
-          from: 'AGENT',
+          from: ChunkFrom.AGENT,
           payload: {},
         });
 

@@ -18,6 +18,7 @@ import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { delay } from '../utils';
@@ -262,26 +263,32 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
 
-        let stream = await electionAgent.streamVNext('Call the election-tool and tell me what it says.');
+        const mastraStream = await electionAgent.streamVNext('Call the election-tool and tell me what it says.');
 
-        let chunks: ChunkType[] = [];
-        for await (const chunk of stream.fullStream) {
+        const chunks: ChunkType[] = [];
+        for await (const chunk of mastraStream.fullStream) {
           chunks.push(chunk);
         }
 
-        expect(chunks.find(chunk => chunk.type === 'tool-output')).toBeDefined();
+        // our types are broken, we do output these tool-output types when a tool writes
+        // but adding this to the ai sdk output stream part types breaks 100 other types
+        // so cast as any
+        expect(chunks.find((chunk: any) => chunk.type === 'tool-output')).toBeDefined();
 
-        chunks = [];
+        const aiSdkParts: AIV5FullStreamPart[] = [];
 
-        stream = await electionAgent.streamVNext('Call the election-tool and tell me what it says.', {
+        const aiSdkStream = await electionAgent.streamVNext('Call the election-tool and tell me what it says.', {
           format: 'aisdk',
         });
 
-        for await (const chunk of stream.fullStream) {
-          chunks.push(chunk);
+        for await (const chunk of aiSdkStream.fullStream) {
+          aiSdkParts.push(chunk);
         }
 
-        const toolOutputChunk = chunks.find(chunk => chunk.type === 'tool-output');
+        // our types are broken, we do output these tool-output types when a tool writes
+        // but adding this to the ai sdk output stream part types breaks 100 other types
+        // so cast as any
+        const toolOutputChunk = aiSdkParts.find((chunk: any) => chunk.type === 'tool-output');
 
         expect(toolOutputChunk).toBeDefined();
       });

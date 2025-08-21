@@ -1,5 +1,4 @@
 import type { CoreMessage } from 'ai';
-import pMap from 'p-map';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../agent';
 import { MastraError } from '../error';
 import type { RuntimeContext } from '../runtime-context';
@@ -79,6 +78,8 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
       text: 'Failed to run experiment: No target provided',
     });
   }
+
+  const pMap = (await import('p-map')).default;
 
   await pMap(
     data,

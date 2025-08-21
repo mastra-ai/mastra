@@ -1,8 +1,13 @@
 import { anthropic } from '@ai-sdk/anthropic';
+import { anthropic as anthropicV5 } from '@ai-sdk/anthropic-v5';
 import { google } from '@ai-sdk/google';
+import { google as googleV5 } from '@ai-sdk/google-v5';
 import { groq } from '@ai-sdk/groq';
+import { groq as groqV5 } from '@ai-sdk/groq-v5';
 import { openai } from '@ai-sdk/openai';
+import { openai as openaiV5 } from '@ai-sdk/openai-v5';
 import { xai } from '@ai-sdk/xai';
+import { xai as xaiV5 } from '@ai-sdk/xai-v5';
 import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
@@ -495,7 +500,7 @@ export async function streamVNextUIMessageHandler({
   }
 }
 
-export function updateAgentModelHandler({
+export async function updateAgentModelHandler({
   mastra,
   agentId,
   body,
@@ -505,7 +510,7 @@ export function updateAgentModelHandler({
     modelId: string;
     provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
   };
-}): { message: string } {
+}): Promise<{ message: string }> {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -513,17 +518,31 @@ export function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
+    const agentModel = await agent.getModel();
+    const modelVersion = agentModel.specificationVersion;
+
     const { modelId, provider } = body;
 
     const providerMap = {
-      openai: openai(modelId),
-      anthropic: anthropic(modelId),
-      groq: groq(modelId),
-      xai: xai(modelId),
-      google: google(modelId),
+      v1: {
+        openai: openai(modelId),
+        anthropic: anthropic(modelId),
+        groq: groq(modelId),
+        xai: xai(modelId),
+        google: google(modelId),
+      },
+      v2: {
+        openai: openaiV5(modelId),
+        anthropic: anthropicV5(modelId),
+        groq: groqV5(modelId),
+        xai: xaiV5(modelId),
+        google: googleV5(modelId),
+      },
     };
 
-    let model = providerMap[provider];
+    const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
+
+    let model = providerMap[modelVersionKey][provider];
 
     agent.__updateModel({ model });
 

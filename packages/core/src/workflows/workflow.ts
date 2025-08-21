@@ -14,6 +14,7 @@ import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 import type { ChunkType } from '../stream/types';
+import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -1591,7 +1592,7 @@ export class Run<
           buffer.push({
             type,
             runId: this.runId,
-            from: 'WORKFLOW',
+            from: ChunkFrom.WORKFLOW,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
               ...newPayload,

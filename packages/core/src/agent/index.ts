@@ -55,7 +55,7 @@ import { DefaultVoice } from '../voice';
 import { createStep, createWorkflow } from '../workflows';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
-import type { AgentExecutionOptions, AgentVNextStreamOptions, InnerAgentExecutionOptions } from './agent.types';
+import type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -76,6 +76,7 @@ export { convertMessages } from './message-list';
 export type { OutputFormat } from './message-list';
 export * from './types';
 
+export type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 export type { MastraLanguageModel } from '../llm/model/shared.types';
 
@@ -110,6 +111,7 @@ function resolveThreadIdFromArgs(args: {
     '__registerPrimitives',
     '__runInputProcessors',
     '__runOutputProcessors',
+    '_wrapToolsWithAITracing',
     'getProcessorRunner',
     '__setTools',
     '__setLogger',
@@ -142,7 +144,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #defaultVNextStreamOptions: DynamicArgument<AgentVNextStreamOptions<any, any>>;
+  #defaultVNextStreamOptions: DynamicArgument<AgentExecutionOptions<any, any>>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -508,15 +510,16 @@ export class Agent<
     Output extends ZodSchema | undefined,
     StructuredOutput extends ZodSchema | undefined,
   >({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | AgentVNextStreamOptions<Output, StructuredOutput>
-    | Promise<AgentVNextStreamOptions<Output, StructuredOutput>> {
+    | AgentExecutionOptions<Output, StructuredOutput>
+    | Promise<AgentExecutionOptions<Output, StructuredOutput>> {
     if (typeof this.#defaultVNextStreamOptions !== 'function') {
-      return this.#defaultVNextStreamOptions as AgentVNextStreamOptions<Output, StructuredOutput>;
+      return this.#defaultVNextStreamOptions as AgentExecutionOptions<Output, StructuredOutput>;
     }
 
     const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
-      | AgentVNextStreamOptions<Output, StructuredOutput>
-      | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>;
+      | AgentExecutionOptions<Output, StructuredOutput>
+      | Promise<AgentExecutionOptions<Output, StructuredOutput>>;
+
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -2868,7 +2871,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const executionWorkflow = createWorkflow({
       id: 'execution-workflow',
       inputSchema: z.any(),
-      outputSchema: z.record(z.string(), z.any()),
+      outputSchema: z.any(),
       steps: [prepareToolsStep, prepareMemory],
     })
       .parallel([prepareToolsStep, prepareMemory])
@@ -3249,14 +3252,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
   ): Promise<
-    ReturnType<FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']>
+    FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     const result = await this.streamVNext(messages, options);
 
     if (result.tripwire) {
-      return result as ReturnType<
-        FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']
-      >;
+      return result as unknown as FORMAT extends 'aisdk'
+        ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
     let fullOutput = await result.getFullOutput();
@@ -3267,19 +3272,19 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       throw error;
     }
 
-    return fullOutput as ReturnType<
-      FORMAT extends 'mastra' ? MastraModelOutput['getFullOutput'] : AISDKV5OutputStream['getFullOutput']
-    >;
+    return fullOutput as unknown as FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
   async streamVNext<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' = 'mastra' | 'aisdk',
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'mastra' ? MastraModelOutput : AISDKV5OutputStream> {
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
@@ -3325,7 +3330,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       });
     }
 
-    return result.result as FORMAT extends 'mastra' ? MastraModelOutput : AISDKV5OutputStream;
+    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
   async generate(
