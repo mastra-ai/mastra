@@ -18,8 +18,7 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
-import { getPackageName } from './utils';
-import { getPackageInfo } from 'local-pkg';
+import { getPackageName, getPackageRootPath } from './utils';
 
 interface DependencyMetadata {
   exports: string[];
@@ -83,7 +82,7 @@ function isRelativePath(id: string): boolean {
  * @param isVirtualFile - Whether the entry is a virtual file (content string) or a file path
  * @param platform - Target platform (node or browser)
  * @param logger - Logger instance for debugging
- * @returns Map of dependencies to optimize with their metadata (exported bindings)
+ * @returns Map of dependencies to optimize with their metadata (exported bindings, rootPath)
  */
 async function analyze(
   entry: string,
@@ -162,13 +161,10 @@ async function analyze(
     }
 
     const pkgName = getPackageName(dep);
-    let rootPath: string | null;
+    let rootPath: string | null = null;
 
-    try {
-      const info = await getPackageInfo(pkgName!);
-      rootPath = info?.rootPath ?? null;
-    } catch (e) {
-      rootPath = null;
+    if (pkgName && pkgName !== '#tools') {
+      rootPath = await getPackageRootPath(pkgName);
     }
 
     depsToOptimize.set(dep, { exports: bindings, rootPath });
@@ -201,7 +197,7 @@ async function analyze(
  * Bundles vendor dependencies identified in the analysis step.
  * Creates virtual modules for each dependency and bundles them using rollup.
  *
- * @param depsToOptimize - Map of dependencies with their exports from analyze step
+ * @param depsToOptimize - Map of dependencies to optimize with their metadata (exported bindings, rootPath)
  * @param outputDir - Directory where bundled files will be written
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
@@ -255,14 +251,7 @@ export async function bundleExternals(
 
   const transpilePackagesMap = new Map<string, string>();
   for (const pkg of transpilePackages) {
-    let dir: string | null;
-
-    try {
-      const info = await getPackageInfo(pkg);
-      dir = info?.rootPath ?? null;
-    } catch (e) {
-      dir = null;
-    }
+    const dir = await getPackageRootPath(pkg);
 
     if (dir) {
       transpilePackagesMap.set(pkg, dir);
@@ -498,10 +487,10 @@ If you think your configuration is valid, please open an issue.`);
     for (const [dep, { exports }] of analyzeResult.entries()) {
       if (depsToOptimize.has(dep)) {
         // Merge with existing exports if dependency already exists
-        const existingExports = depsToOptimize.get(dep)!;
+        const existingEntry = depsToOptimize.get(dep)!;
         depsToOptimize.set(dep, {
-          exports: [...new Set([...existingExports.exports, ...exports])],
-          rootPath: existingExports.rootPath,
+          exports: [...new Set([...existingEntry.exports, ...exports])],
+          rootPath: existingEntry.rootPath,
         });
       } else {
         depsToOptimize.set(dep, { exports, rootPath: null });
