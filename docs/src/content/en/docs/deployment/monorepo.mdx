@@ -7,7 +7,7 @@ import { FileTree } from "nextra/components";
 
 # Monorepo Deployment
 
-Deploying Mastra within a monorepo follows the same general approach as deploying it as a standalone application. While some [Cloud](/docs/deployment/cloud-providers) or [Serverless](/docs/deployment/serverless-platforms) providers may introduce additional requirements, the core configuration remains the same.
+Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/index.mdx) or [Serverless](./serverless-platforms/index.mdx) providers may introduce extra requirements, the core setup is the same.
 
 ## Example pnpm monorepo
 
@@ -17,9 +17,9 @@ In this example, the Mastra application is located at `apps/api`, which serves a
   <FileTree.Folder name="apps" defaultOpen>
     <FileTree.Folder name="api" defaultOpen>
       <FileTree.Folder name=".mastra" defaultOpen>
+        <FileTree.Folder name=".build" />
         <FileTree.Folder name="output" />
       </FileTree.Folder>
-      <FileTree.Folder name="node_modules" />
       <FileTree.Folder name="src" defaultOpen>
         <FileTree.Folder name="mastra" defaultOpen>
           <FileTree.Folder name="agents" />
@@ -28,42 +28,55 @@ In this example, the Mastra application is located at `apps/api`, which serves a
           <FileTree.File name="index.ts" />
         </FileTree.Folder>
       </FileTree.Folder>
+      <FileTree.File name="package.json" />
+      <FileTree.File name="tsconfig.json" />
     </FileTree.Folder>
     <FileTree.Folder name="web" />
   </FileTree.Folder>
-
-  <FileTree.Folder name="node_modules" />
-
   <FileTree.Folder name="packages" defaultOpen>
     <FileTree.Folder name="ui" />
     <FileTree.Folder name="utils" />
   </FileTree.Folder>
-
   <FileTree.File name="package.json" />
   <FileTree.File name="pnpm-workspace.yaml" />
 </FileTree>
 
+## Environment variables
 
-## Deployment configuration
+Environment variables like `OPENAI_API_KEY` should be stored in an `.env` file at the package root of the Mastra application `(apps/api)`, for example:
 
-The example below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](/docs/mastra-cloud/overview). While the interface may differ across cloud providers, the configuration remains the same.
+<FileTree>
+  <FileTree.Folder name="api" defaultOpen>
+    <FileTree.Folder name="src" defaultOpen>
+      <FileTree.Folder name="mastra" />
+    </FileTree.Folder>
+    <FileTree.File name=".env" />
+    <FileTree.File name="package.json" />
+    <FileTree.File name="tsconfig.json" />
+  </FileTree.Folder>
+</FileTree>
 
-![Deployment configuration](/image/monorepo/monorepo-mastra-cloud.jpg)
+## Build and dev configuration
 
-## Build configuration
-
-In a monorepo setup, all dependency packages used by Mastra must be built when the application is deployed. In the example below, the `build` script in the project root runs build commands for each workspace in the monorepo.
+In a monorepo setup, all dependency packages used by Mastra must be built when the application is deployed. The root-level `build` script runs build commands for each workspace in the monorepo.
 
 ```json filename="package.json"
 {
   // ...
   "scripts": {
-    "dev": "pnpm --filter web dev && pnpm --filter api dev",
+    "dev": "pnpm -r --parallel --filter api --filter web dev",
     "build": "pnpm --filter ui build && pnpm --filter utils build && pnpm --filter web build && pnpm --filter api build"
   }
 }
 ```
-## Compiler Configuration
+
+In a monorepo with both a Mastra application and a frontend, it's useful to define a root-level `dev` script that runs both services together. To run only the Mastra application, use a filtered command:
+
+```bash copy
+pnpm --filter api dev
+```
+
+## Compiler configuration (optional / advanced)
 
 Mastra supports both **CommonJS (CJS)** and **ECMAScript Modules (ESM)**, making it compatible with a variety of JavaScript environments. In a monorepo setup, you can choose the module system that best fits your project.
 
@@ -78,12 +91,12 @@ This ensures Mastra can integrate into projects using either module format.
 
 ### Build Output
 
-When building Mastra within a monorepo, your build system (such as `tsc`, `esbuild`, or Rollup) should emit output compatible with your chosen module format. This generates optimized output for both ESM and CJS, ensuring compatibility across modern and legacy environments:
+When building Mastra in a monorepo, the build system (such as `tsc`, `esbuild`, or `Rollup`) should produce output that matches the selected module format. This ensures optimized builds for both ESM and CJS, maintaining compatibility with modern and legacy environments.
 
 - **ESM** for projects using `import`/`export` syntax
 - **CJS** for environments that use `require`/`module.exports`
 
-### Configuration Example
+### Advanced configuration
 
 In your build pipeline, configure TypeScript to emit the correct module format. Here's an example `tsconfig.json` for ESM output in a monorepo setup:
 
@@ -103,7 +116,40 @@ In your build pipeline, configure TypeScript to emit the correct module format. 
   "include": ["src/**/*"]
 }
 ```
-
 > To target CommonJS, change to: `module: "CommonJS"`.
+
+## Deployment configuration
+
+The example below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](../mastra-cloud/overview.mdx). While the interface may differ between providers, the configuration remains the same.
+
+![Deployment configuration](/image/monorepo/monorepo-mastra-cloud.jpg)
+
+## Dependency management
+
+In a monorepo, keep dependencies consistent to avoid version conflicts and build errors.
+
+- Use a **single lockfile** at the project root so all packages resolve the same versions.
+- Reference internal packages with the **workspace protocol (`workspace:*`)** instead of version numbers.
+- Put **runtime code in `dependencies`** and keep tooling in `devDependencies`.
+- Align versions of shared libraries (like Mastra or frameworks) to prevent duplicates.
+
+This ensures clean installs, reproducible builds, and avoids subtle dependency issues across workspaces.
+
+## Deployment pitfalls
+
+Common issues to watch for when deploying Mastra in a monorepo:
+
+- **Wrong project root**: make sure the correct package (e.g. `apps/api`) is selected as the deploy target.
+- **Output misconfiguration**: verify each package writes compiled files to the expected `dist` or `.build/output` directory.
+
+## Example workflow
+
+A typical deployment process for a Mastra application in a monorepo might look like this:
+
+- **Build all workspaces**: run the root `build` script to compile every package.
+- **Select the project root**: choose `apps/api` (or the relevant package) as the deployment target.
+- **Configure environment variables**: add required values such as `OPENAI_API_KEY` to the environment.
+- **Deploy**: push the built application to Mastra Cloud or another supported platform.
+
 
 
