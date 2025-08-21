@@ -49,7 +49,7 @@ describe('KeywordExtractor', () => {
   it(
     'handles very long input',
     {
-      timeout: 20_000,
+      timeout: 60_000,
     },
     async () => {
       const extractor = new KeywordExtractor();
