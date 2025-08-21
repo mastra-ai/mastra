@@ -21,18 +21,18 @@ type AISDKV5OutputStreamOptions = {
   objectOptions?: ObjectOptions;
 };
 
-type FullStreamType<T> = T extends undefined
-  ? ReadableStream<TextStreamPart<ToolSet>>
-  : ReadableStream<
+export type AIV5FullStreamPart<T = undefined> = T extends undefined
+  ? TextStreamPart<ToolSet>
+  :
       | TextStreamPart<ToolSet>
       | {
           type: 'object';
           object: T extends z.ZodSchema ? Partial<z.infer<T>> : unknown;
-        }
-    >;
+        };
+export type AIV5FullStreamType<T> = ReadableStream<AIV5FullStreamPart<T>>;
 
 export class AISDKV5OutputStream<TObjectSchema = undefined> {
-  #modelOutput: MastraModelOutput;
+  #modelOutput: MastraModelOutput<TObjectSchema>;
   #options: AISDKV5OutputStreamOptions;
   #messageList: MessageList;
   constructor({
@@ -40,7 +40,7 @@ export class AISDKV5OutputStream<TObjectSchema = undefined> {
     options,
     messageList,
   }: {
-    modelOutput: MastraModelOutput;
+    modelOutput: MastraModelOutput<TObjectSchema>;
     options: AISDKV5OutputStreamOptions;
     messageList: MessageList;
   }) {
@@ -269,7 +269,7 @@ export class AISDKV5OutputStream<TObjectSchema = undefined> {
     return this.#modelOutput.elementStream;
   }
 
-  get fullStream(): FullStreamType<TObjectSchema> {
+  get fullStream(): AIV5FullStreamType<TObjectSchema> {
     let startEvent: OutputChunkType;
     let hasStarted: boolean = false;
 
@@ -325,7 +325,7 @@ export class AISDKV5OutputStream<TObjectSchema = undefined> {
       }),
     );
 
-    return transformedStream as any as FullStreamType<TObjectSchema>;
+    return transformedStream as any as AIV5FullStreamType<TObjectSchema>;
   }
 
   async getFullOutput() {

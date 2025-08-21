@@ -2866,7 +2866,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const executionWorkflow = createWorkflow({
       id: 'execution-workflow',
       inputSchema: z.any(),
-      outputSchema: z.union([z.instanceof(MastraModelOutput), z.instanceof(AISDKV5OutputStream)]),
+      outputSchema: z.any(),
       steps: [prepareToolsStep, prepareMemory],
     })
       .parallel([prepareToolsStep, prepareMemory])
@@ -3249,14 +3249,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   ): Promise<
     FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
   > {
     const result = await this.streamVNext(messages, options);
 
     if (result.tripwire) {
       return result as unknown as FORMAT extends 'aisdk'
         ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-        : Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
+        : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
     let fullOutput = await result.getFullOutput();
@@ -3269,7 +3269,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     return fullOutput as unknown as FORMAT extends 'aisdk'
       ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   }
 
   async streamVNext<
@@ -3279,7 +3279,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput> {
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
     const defaultStreamOptions = await this.getDefaultVNextStreamOptions({
       runtimeContext: streamOptions?.runtimeContext,
     });
@@ -3325,7 +3325,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       });
     }
 
-    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput;
+    return result.result as unknown as FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>;
   }
 
   async generate(

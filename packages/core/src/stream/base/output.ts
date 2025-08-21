@@ -43,10 +43,10 @@ type MastraModelOutputOptions = {
   objectOptions?: ObjectOptions;
   outputProcessors?: OutputProcessor[];
 };
-export class MastraModelOutput extends MastraBase {
-  #aisdkv5: AISDKV5OutputStream;
+export class MastraModelOutput<TObjectSchema = unknown> extends MastraBase {
+  #aisdkv5: AISDKV5OutputStream<TObjectSchema>;
   #error: Error | string | { message: string; stack: string } | undefined;
-  #baseStream: ReadableStream<ChunkType>;
+  #baseStream: ReadableStream<ChunkType<TObjectSchema>>;
   #bufferedSteps: StepBufferItem[] = [];
   #bufferedReasoningDetails: Record<
     string,
@@ -120,7 +120,7 @@ export class MastraModelOutput extends MastraBase {
       provider: string;
       version: 'v1' | 'v2';
     };
-    stream: ReadableStream<ChunkType>;
+    stream: ReadableStream<ChunkType<TObjectSchema>>;
     messageList: MessageList;
     options: MastraModelOutputOptions;
   }) {
@@ -144,7 +144,7 @@ export class MastraModelOutput extends MastraBase {
     const self = this;
 
     this.#baseStream = stream.pipeThrough(
-      new TransformStream<ChunkType, ChunkType>({
+      new TransformStream<ChunkType<TObjectSchema>, ChunkType<TObjectSchema>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
             case 'source':
@@ -565,7 +565,7 @@ export class MastraModelOutput extends MastraBase {
         }),
       )
       .pipeThrough(
-        new TransformStream<ChunkType, ChunkType>({
+        new TransformStream<ChunkType<TObjectSchema>, ChunkType<TObjectSchema>>({
           transform(chunk, controller) {
             if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
               return;
@@ -742,7 +742,7 @@ export class MastraModelOutput extends MastraBase {
     }
 
     return this.fullStream.pipeThrough(
-      new TransformStream<ChunkType | any, ChunkType>({
+      new TransformStream<ChunkType<TObjectSchema> | any, ChunkType<TObjectSchema>>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
             controller.enqueue(chunk.object);
@@ -788,7 +788,7 @@ export class MastraModelOutput extends MastraBase {
     }
 
     return this.teeStream().pipeThrough(
-      new TransformStream<ChunkType, string>({
+      new TransformStream<ChunkType<TObjectSchema>, string>({
         transform(chunk, controller) {
           if (chunk.type === 'text-delta') {
             controller.enqueue(chunk.payload.text);

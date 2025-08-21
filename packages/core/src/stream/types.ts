@@ -8,6 +8,7 @@ import type {
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
 import type { CoreMessage, StepResult } from 'ai-v5';
+import type z from 'zod';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -200,10 +201,6 @@ interface AbortPayload {
   [key: string]: any;
 }
 
-interface ObjectPayload {
-  [key: string]: any;
-}
-
 interface ReasoningSignaturePayload {
   id: string;
   signature: string;
@@ -234,7 +231,7 @@ interface TripwirePayload {
   tripwireReason: string;
 }
 
-export type ChunkType =
+export type ChunkType<TObjectSchema = unknown> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
   | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
@@ -259,7 +256,10 @@ export type ChunkType =
   | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload })
   | (BaseChunkType & { type: 'tool-error'; payload: ToolErrorPayload })
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
-  | (BaseChunkType & { type: 'object'; payload: ObjectPayload })
+  | (BaseChunkType & {
+      type: 'object';
+      object: TObjectSchema extends z.ZodSchema ? Partial<z.infer<TObjectSchema>> : unknown;
+    })
   | (BaseChunkType & { type: 'tool-output'; payload: ToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
