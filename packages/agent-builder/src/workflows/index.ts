@@ -108,13 +108,21 @@ const cloneTemplateStep = createStep({
         templateDir: tempDir,
         commitSha: commitSha.trim(),
         slug: inferredSlug,
+        success: true,
       };
     } catch (error) {
       // Cleanup on error
       try {
         await rm(tempDir, { recursive: true, force: true });
       } catch {}
-      throw new Error(`Failed to clone template: ${error instanceof Error ? error.message : String(error)}`);
+
+      return {
+        templateDir: '',
+        commitSha: '',
+        slug: slug || 'unknown',
+        success: false,
+        error: `Failed to clone template: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   },
 });
@@ -144,6 +152,7 @@ const analyzePackageStep = createStep({
         name: packageJson.name || '',
         version: packageJson.version || '',
         description: packageJson.description || '',
+        success: true,
       };
     } catch (error) {
       console.warn(`Failed to read template package.json: ${error instanceof Error ? error.message : String(error)}`);
@@ -155,6 +164,7 @@ const analyzePackageStep = createStep({
         name: '',
         version: '',
         description: '',
+        success: true, // This is a graceful fallback, not a failure
       };
     }
   },
@@ -271,7 +281,10 @@ Return the actual exported names of the units, as well as the file names.`,
 
     console.log('Discovered units:', JSON.stringify(units, null, 2));
 
-    return { units };
+    return {
+      units,
+      success: true,
+    };
   },
 });
 
@@ -291,7 +304,10 @@ const orderUnitsStep = createStep({
       return aWeight - bWeight;
     });
 
-    return { orderedUnits };
+    return {
+      orderedUnits,
+      success: true,
+    };
   },
 });
 
@@ -304,10 +320,22 @@ const prepareBranchStep = createStep({
   execute: async ({ inputData, runtimeContext }) => {
     const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
 
-    const branchName = `feat/install-template-${inputData.slug}`;
-    await gitCheckoutBranch(branchName, targetPath);
+    try {
+      const branchName = `feat/install-template-${inputData.slug}`;
+      await gitCheckoutBranch(branchName, targetPath);
 
-    return { branchName };
+      return {
+        branchName,
+        success: true,
+      };
+    } catch (error) {
+      console.error('Failed to prepare branch:', error);
+      return {
+        branchName: `feat/install-template-${inputData.slug}`, // Return the intended name anyway
+        success: false,
+        error: `Failed to prepare branch: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
   },
 });
 
@@ -441,6 +469,7 @@ const flatInstallStep = createStep({
       return {
         success: false,
         message: `Flat install failed: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   },
@@ -787,7 +816,14 @@ const programmaticFileCopyStep = createStep({
       };
     } catch (error) {
       console.error('Programmatic file copy failed:', error);
-      throw new Error(`Programmatic file copy failed: ${error instanceof Error ? error.message : String(error)}`);
+
+      return {
+        success: false,
+        copiedFiles: [],
+        conflicts: [],
+        message: `Programmatic file copy failed: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   },
 });
@@ -1348,9 +1384,30 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   ],
 })
   .then(cloneTemplateStep)
+  .map(async ({ getStepResult }) => {
+    const cloneResult = getStepResult(cloneTemplateStep);
+
+    // Check for critical failure in clone step
+    if (isCriticalFailure(cloneResult, 'clone-template')) {
+      throw new Error(`Critical failure in clone step: ${cloneResult.error}`);
+    }
+
+    return cloneResult;
+  })
   .parallel([analyzePackageStep, discoverUnitsStep])
   .map(async ({ getStepResult }) => {
+    const analyzeResult = getStepResult(analyzePackageStep);
     const discoverResult = getStepResult(discoverUnitsStep);
+
+    // Check for critical failures in parallel steps
+    if (isCriticalFailure(analyzeResult, 'analyze-package')) {
+      throw new Error(`Critical failure in analyze package step: ${analyzeResult.error || 'Package analysis failed'}`);
+    }
+
+    if (isCriticalFailure(discoverResult, 'discover-units')) {
+      throw new Error(`Critical failure in discover units step: ${discoverResult.error || 'Unit discovery failed'}`);
+    }
+
     return discoverResult;
   })
   .then(orderUnitsStep)
@@ -1431,19 +1488,45 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   })
   .then(validationAndFixStep)
   .map(async ({ getStepResult }) => {
-    const validationResult = getStepResult(validationAndFixStep);
+    const cloneResult = getStepResult(cloneTemplateStep);
+    const analyzeResult = getStepResult(analyzePackageStep);
+    const discoverResult = getStepResult(discoverUnitsStep);
+    const orderResult = getStepResult(orderUnitsStep);
     const prepareBranchResult = getStepResult(prepareBranchStep);
-    const intelligentMergeResult = getStepResult(intelligentMergeStep);
+    const packageMergeResult = getStepResult(packageMergeStep);
+    const flatInstallResult = getStepResult(flatInstallStep);
     const copyResult = getStepResult(programmaticFileCopyStep);
+    const intelligentMergeResult = getStepResult(intelligentMergeStep);
+    const validationResult = getStepResult(validationAndFixStep);
 
     const branchName = prepareBranchResult.branchName;
 
     // Aggregate errors from all steps
-    const allErrors = [copyResult.error, intelligentMergeResult.error, validationResult.error].filter(Boolean);
+    const allErrors = [
+      cloneResult.error,
+      analyzeResult.error,
+      discoverResult.error,
+      orderResult.error,
+      prepareBranchResult.error,
+      packageMergeResult.error,
+      flatInstallResult.error,
+      copyResult.error,
+      intelligentMergeResult.error,
+      validationResult.error,
+    ].filter(Boolean);
 
     // Determine overall success based on all step results
     const overallSuccess =
-      copyResult.success !== false && intelligentMergeResult.success !== false && validationResult.success;
+      cloneResult.success !== false &&
+      analyzeResult.success !== false &&
+      discoverResult.success !== false &&
+      orderResult.success !== false &&
+      prepareBranchResult.success !== false &&
+      packageMergeResult.success !== false &&
+      flatInstallResult.success !== false &&
+      copyResult.success !== false &&
+      intelligentMergeResult.success !== false &&
+      validationResult.success !== false;
 
     // Create comprehensive message
     const messages = [];
@@ -1475,6 +1558,13 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
       branchName,
       // Additional debugging info
       stepResults: {
+        cloneSuccess: cloneResult.success,
+        analyzeSuccess: analyzeResult.success,
+        discoverSuccess: discoverResult.success,
+        orderSuccess: orderResult.success,
+        prepareBranchSuccess: prepareBranchResult.success,
+        packageMergeSuccess: packageMergeResult.success,
+        flatInstallSuccess: flatInstallResult.success,
         copySuccess: copyResult.success,
         mergeSuccess: intelligentMergeResult.success,
         validationSuccess: validationResult.success,
@@ -1516,4 +1606,20 @@ const determineConflictStrategy = (
   //   return 'rename';
   // }
   // return 'backup-and-replace';
+};
+
+// Helper function to check if a step result indicates a critical failure
+const isCriticalFailure = (stepResult: any, stepName: string): boolean => {
+  // Critical steps that should stop the workflow if they fail
+  const criticalSteps = [
+    'clone-template', // Can't proceed without template
+    'analyze-package', // Can't merge dependencies without package info
+    'discover-units', // Can't copy files without knowing what units exist
+  ];
+
+  if (!criticalSteps.includes(stepName)) {
+    return false;
+  }
+
+  return stepResult?.success === false || stepResult?.error;
 };

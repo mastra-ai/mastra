@@ -213,9 +213,16 @@ export const ApplyResultSchema = z.object({
   errors: z.array(z.string()).optional(),
   stepResults: z
     .object({
-      copySuccess: z.boolean(),
-      mergeSuccess: z.boolean(),
-      validationSuccess: z.boolean(),
+      cloneSuccess: z.boolean().optional(),
+      analyzeSuccess: z.boolean().optional(),
+      discoverSuccess: z.boolean().optional(),
+      orderSuccess: z.boolean().optional(),
+      prepareBranchSuccess: z.boolean().optional(),
+      packageMergeSuccess: z.boolean().optional(),
+      flatInstallSuccess: z.boolean().optional(),
+      copySuccess: z.boolean().optional(),
+      mergeSuccess: z.boolean().optional(),
+      validationSuccess: z.boolean().optional(),
       filesCopied: z.number(),
       conflictsSkipped: z.number(),
       conflictsResolved: z.number(),
@@ -227,6 +234,8 @@ export const CloneTemplateResultSchema = z.object({
   templateDir: z.string(),
   commitSha: z.string(),
   slug: z.string(),
+  success: z.boolean().optional(),
+  error: z.string().optional(),
 });
 
 // Package analysis schemas and types
@@ -238,16 +247,22 @@ export const PackageAnalysisSchema = z.object({
   devDependencies: z.record(z.string()).optional(),
   peerDependencies: z.record(z.string()).optional(),
   scripts: z.record(z.string()).optional(),
+  success: z.boolean().optional(),
+  error: z.string().optional(),
 });
 
 // Discovery step schemas and types
 export const DiscoveryResultSchema = z.object({
   units: z.array(TemplateUnitSchema),
+  success: z.boolean().optional(),
+  error: z.string().optional(),
 });
 
 // Unit ordering schemas and types
 export const OrderedUnitsSchema = z.object({
   orderedUnits: z.array(TemplateUnitSchema),
+  success: z.boolean().optional(),
+  error: z.string().optional(),
 });
 
 // Package merge schemas and types
@@ -274,6 +289,7 @@ export const FlatInstallResultSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   details: z.string().optional(),
+  error: z.string().optional(),
 });
 
 export const PrepareBranchInputSchema = z.object({
@@ -284,4 +300,6 @@ export const PrepareBranchInputSchema = z.object({
 
 export const PrepareBranchResultSchema = z.object({
   branchName: z.string(),
+  success: z.boolean().optional(),
+  error: z.string().optional(),
 });
