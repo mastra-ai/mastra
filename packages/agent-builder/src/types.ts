@@ -231,15 +231,13 @@ export const CloneTemplateResultSchema = z.object({
 
 // Package analysis schemas and types
 export const PackageAnalysisSchema = z.object({
+  name: z.string().optional(),
+  version: z.string().optional(),
+  description: z.string().optional(),
   dependencies: z.record(z.string()).optional(),
   devDependencies: z.record(z.string()).optional(),
   peerDependencies: z.record(z.string()).optional(),
   scripts: z.record(z.string()).optional(),
-  packageInfo: z.object({
-    name: z.string().optional(),
-    version: z.string().optional(),
-    description: z.string().optional(),
-  }),
 });
 
 // Discovery step schemas and types

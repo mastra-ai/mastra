@@ -141,11 +141,9 @@ const analyzePackageStep = createStep({
         devDependencies: packageJson.devDependencies || {},
         peerDependencies: packageJson.peerDependencies || {},
         scripts: packageJson.scripts || {},
-        packageInfo: {
-          name: packageJson.name,
-          version: packageJson.version,
-          description: packageJson.description,
-        },
+        name: packageJson.name || '',
+        version: packageJson.version || '',
+        description: packageJson.description || '',
       };
     } catch (error) {
       console.warn(`Failed to read template package.json: ${error instanceof Error ? error.message : String(error)}`);
@@ -154,7 +152,9 @@ const analyzePackageStep = createStep({
         devDependencies: {},
         peerDependencies: {},
         scripts: {},
-        packageInfo: {},
+        name: '',
+        version: '',
+        description: '',
       };
     }
   },
@@ -1356,24 +1356,23 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .then(orderUnitsStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
-    const packageResult = getStepResult(analyzePackageStep);
     const initData = getInitData();
-
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
       targetPath: initData.targetPath,
-      packageInfo: packageResult,
     };
   })
   .then(prepareBranchStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
+    const packageResult = getStepResult(analyzePackageStep);
     const initData = getInitData();
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
       targetPath: initData.targetPath,
+      packageInfo: packageResult,
     };
   })
   .then(packageMergeStep)
