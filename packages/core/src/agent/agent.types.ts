@@ -117,7 +117,7 @@ export type AgentExecutionOptions<
   runtimeContext?: RuntimeContext;
   format?: FORMAT;
   output?: OUTPUT;
-  experimental_output?: STRUCTURED_OUTPUT;
+
   resourceId?: string;
   threadId?: string;
 
