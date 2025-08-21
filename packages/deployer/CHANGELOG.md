@@ -1,5 +1,36 @@
 # @mastra/deployer
 
+## 0.14.0-alpha.4
+
+### Patch Changes
+
+- 96518cc: Bundling cleanup code improvements
+- c712849: Deployer handlers
+- 2454423: generateVNext and streamVNext
+- 95e1330: Move to default rollup resolve from resolveFrom pkg
+- 33eb340: Optimize workspace dependency detection in bundler
+  - Check workspace map directly before resolving package.json path
+
+- Updated dependencies [0a7f675]
+- Updated dependencies [12cae67]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [1a80071]
+- Updated dependencies [36a3be8]
+- Updated dependencies [361757b]
+- Updated dependencies [bc1684a]
+- Updated dependencies [2bb9955]
+- Updated dependencies [2454423]
+- Updated dependencies [a44d91e]
+- Updated dependencies [dfb91e9]
+- Updated dependencies [a741dde]
+- Updated dependencies [7cb3fc0]
+- Updated dependencies [195eabb]
+- Updated dependencies [b78b95b]
+- Updated dependencies [57f7019]
+  - @mastra/core@0.14.0-alpha.4
+  - @mastra/server@0.14.0-alpha.4
+
 ## 0.14.0-alpha.3
 
 ### Patch Changes

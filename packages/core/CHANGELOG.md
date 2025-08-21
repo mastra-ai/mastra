@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 0.14.0-alpha.4
+
+### Patch Changes
+
+- 0a7f675: Client JS vnext methods
+- 12cae67: fix: add threadId and resourceId to scorers
+- 5a37d0c: Fix dev server bug related to p-map imports
+- 4bde0cb: Allow renaming .map functions in workflows
+- 1a80071: loop code and tests
+- 36a3be8: Agent processors tests
+- 361757b: Execute method
+- 2bb9955: Model loop changes
+- 2454423: generateVNext and streamVNext
+- a44d91e: Message list changes
+- dfb91e9: Server handlers
+- a741dde: generateVNext plumbing
+- 7cb3fc0: Fix loop test
+- 195eabb: Process Mastra Stream
+- b78b95b: Support generateVNext in playground
+
 ## 0.14.0-alpha.3
 
 ### Patch Changes
