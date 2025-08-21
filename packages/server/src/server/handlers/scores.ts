@@ -15,7 +15,7 @@ async function getScorersFromSystem({
 
   const scorersMap = new Map<string, MastraScorerEntry & { agentIds: string[]; workflowIds: string[] }>();
 
-  for (const [agentId, agent] of Object.entries(agents)) {
+  for (const [_agentId, agent] of Object.entries(agents)) {
     const scorers =
       (await agent.getScorers({
         runtimeContext,
