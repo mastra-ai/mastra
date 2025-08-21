@@ -10,3 +10,16 @@ export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
     execSync(`echo ".mastra" >> .gitignore`);
   }
 }
+
+/**
+ * Get the package name from a module ID
+ */
+export function getPackageName(id: string) {
+  const parts = id.split('/');
+
+  if (id.startsWith('@')) {
+    return parts.slice(0, 2).join('/');
+  }
+
+  return parts[0];
+}
