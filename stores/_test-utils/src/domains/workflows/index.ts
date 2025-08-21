@@ -475,7 +475,6 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
           test: 'test',
         },
       });
-      console.log('updatedSnapshot', updatedSnapshot);
 
       expect(updatedSnapshot).toEqual({
         'step-1': {
