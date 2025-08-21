@@ -19,10 +19,12 @@ import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
 import { getPackageName, getPackageRootPath } from './utils';
+import { createWorkspacePackageMap, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 
 interface DependencyMetadata {
   exports: string[];
   rootPath: string | null;
+  isWorkspace: boolean;
 }
 
 // TODO: Make this extendable or find a rollup plugin that can do this
@@ -91,6 +93,7 @@ async function analyze(
   platform: 'node' | 'browser',
   logger: IMastraLogger,
   sourcemapEnabled: boolean = false,
+  workspaceMap: Map<string, WorkspacePackageInfo>,
 ) {
   logger.info('Analyzing dependencies...');
   let virtualPlugin = null;
@@ -160,6 +163,8 @@ async function analyze(
       continue;
     }
 
+    const isWorkspace = workspaceMap.has(dep);
+
     const pkgName = getPackageName(dep);
     let rootPath: string | null = null;
 
@@ -167,7 +172,7 @@ async function analyze(
       rootPath = await getPackageRootPath(pkgName);
     }
 
-    depsToOptimize.set(dep, { exports: bindings, rootPath });
+    depsToOptimize.set(dep, { exports: bindings, rootPath, isWorkspace });
   }
 
   for (const o of output) {
@@ -183,7 +188,7 @@ async function analyze(
 
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
-        depsToOptimize.set(dynamicImport, { exports: ['*'], rootPath: null });
+        depsToOptimize.set(dynamicImport, { exports: ['*'], rootPath: null, isWorkspace: false });
       }
     }
   }
@@ -378,11 +383,13 @@ async function validateOutput(
     reverseVirtualReferenceMap,
     usedExternals,
     outputDir,
+    workspaceMap,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
     usedExternals: Record<string, Record<string, string>>;
     outputDir: string;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
   },
   logger: IMastraLogger,
 ) {
@@ -390,6 +397,7 @@ async function validateOutput(
     invalidChunks: new Set<string>(),
     dependencies: new Map<string, string>(),
     externalDependencies: new Set<string>(),
+    workspaceMap,
   };
 
   // we should resolve the version of the deps
@@ -477,10 +485,20 @@ export const mastra = new Mastra({
 If you think your configuration is valid, please open an issue.`);
   }
 
+  const workspaceMap = await createWorkspacePackageMap();
+
   const depsToOptimize = new Map<string, DependencyMetadata>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
-    const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger, sourcemapEnabled);
+    const analyzeResult = await analyze(
+      entry,
+      mastraEntry,
+      isVirtualFile,
+      platform,
+      logger,
+      sourcemapEnabled,
+      workspaceMap,
+    );
 
     for (const [dep, { exports }] of analyzeResult.entries()) {
       if (depsToOptimize.has(dep)) {
@@ -489,8 +507,11 @@ If you think your configuration is valid, please open an issue.`);
         depsToOptimize.set(dep, {
           exports: [...new Set([...existingEntry.exports, ...exports])],
           rootPath: existingEntry.rootPath,
+          isWorkspace: existingEntry.isWorkspace,
         });
       } else {
+        const isWorkspace = workspaceMap.has(dep);
+
         const pkgName = getPackageName(dep);
         let rootPath: string | null = null;
 
@@ -498,7 +519,7 @@ If you think your configuration is valid, please open an issue.`);
           rootPath = await getPackageRootPath(pkgName);
         }
 
-        depsToOptimize.set(dep, { exports, rootPath });
+        depsToOptimize.set(dep, { exports, rootPath, isWorkspace });
       }
     }
   }
@@ -510,7 +531,10 @@ If you think your configuration is valid, please open an issue.`);
     logger,
     bundlerOptions ?? undefined,
   );
-  const result = await validateOutput({ output, reverseVirtualReferenceMap, usedExternals, outputDir }, logger);
+  const result = await validateOutput(
+    { output, reverseVirtualReferenceMap, usedExternals, outputDir, workspaceMap },
+    logger,
+  );
 
   return result;
 }
