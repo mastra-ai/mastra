@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { createToolCallAccuracyScorerLLM } from './index';
 
 describe('createToolCallAccuracyScorerLLM', () => {
