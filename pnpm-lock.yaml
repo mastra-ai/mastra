@@ -2190,6 +2190,9 @@ importers:
       framer-motion:
         specifier: ^11.18.2
         version: 11.18.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      json-schema-to-zod:
+        specifier: ^2.6.1
+        version: 2.6.1
       lucide-react:
         specifier: ^0.522.0
         version: 0.522.0(react@19.1.1)
