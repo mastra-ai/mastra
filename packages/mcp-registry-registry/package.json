@@ -52,6 +52,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.0-0 <0.14.0-0"
+    "@mastra/core": ">=0.10.0-0 <0.15.0-0"
   }
 }
