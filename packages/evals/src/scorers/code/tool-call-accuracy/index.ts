@@ -94,13 +94,19 @@ export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOption
 
       const { tools: actualTools, toolCallInfos } = extractToolCalls(run.output);
 
+      const correctToolCalled = expectedTool ? 
+        (strictMode ? 
+          (actualTools.length === 1 && actualTools[0] === expectedTool) : 
+          actualTools.includes(expectedTool)) : 
+        false;
+
       return {
         expectedTool,
         actualTools,
         strictMode,
         expectedToolOrder,
         hasToolCalls: actualTools.length > 0,
-        correctToolCalled: expectedTool ? actualTools.includes(expectedTool) : false,
+        correctToolCalled,
         toolCallInfos,
         correctOrderCalled: expectedToolOrder ? checkToolOrder(actualTools, expectedToolOrder, strictMode) : null,
       };

@@ -163,7 +163,7 @@ describe('createToolCallAccuracyScorerCode', () => {
     const result = await scorer.run(run);
 
     expect(result.score).toBe(0);
-    expect(result.preprocessStepResult?.correctToolCalled).toBe(true);
+    expect(result.preprocessStepResult?.correctToolCalled).toBe(false);
   });
 
   test('should return 1 when only the expected tool is called (strict mode)', async () => {
