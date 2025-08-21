@@ -1,4 +1,4 @@
-import { PubSub as PubSubClient } from '@google-cloud/pubsub';
+import { PubSub as PubSubClient, Subscription } from '@google-cloud/pubsub';
 import type { ClientConfig } from '@google-cloud/pubsub';
 import { PubSub } from '@mastra/core/events';
 import type { Event } from '@mastra/core/events';
@@ -6,6 +6,7 @@ import type { Event } from '@mastra/core/events';
 export class GoogleCloudPubSub extends PubSub {
   private pubsub: PubSubClient;
   private ackBuffer: Record<string, Promise<any>> = {};
+  private activeSubscriptions: Record<string, Subscription> = {};
 
   constructor(config: ClientConfig) {
     super();
@@ -29,6 +30,7 @@ export class GoogleCloudPubSub extends PubSub {
   }
 
   async destroy(topicName: string) {
+    delete this.activeSubscriptions[topicName];
     this.pubsub.subscription(topicName).removeAllListeners();
     await this.pubsub.subscription(topicName).delete();
     await this.pubsub.topic(topicName).delete();
@@ -74,7 +76,10 @@ export class GoogleCloudPubSub extends PubSub {
       runId = parts[parts.length - 1];
     }
 
-    let subscription = this.pubsub.subscription(topic);
+    // Update tracked callbacks
+    const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(topic);
+    this.activeSubscriptions[topic] = subscription;
+
     subscription.on('message', message => {
       const event = JSON.parse(message.data.toString()) as Event;
       try {
@@ -118,7 +123,7 @@ export class GoogleCloudPubSub extends PubSub {
   }
 
   async unsubscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
-    const subscription = this.pubsub.subscription(topic);
+    const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(topic);
     subscription.removeListener('message', cb);
     await subscription.close();
   }
