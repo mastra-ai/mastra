@@ -125,7 +125,6 @@ export class StepExecutor extends MastraBase {
       return finalResult;
     } catch (error: any) {
       const endedAt = Date.now();
-      console.log('exec_error', error);
 
       return {
         ...stepInfo,

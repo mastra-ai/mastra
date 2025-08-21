@@ -172,7 +172,6 @@ describe.sequential(
         const promptAgentAction = vi
           .fn()
           .mockImplementationOnce(async ({ suspend }) => {
-            console.log('suspend');
             await suspend();
             return undefined;
           })
@@ -253,7 +252,6 @@ describe.sequential(
         const { stream, getWorkflowState } = await run.streamAsync({ inputData: { input: 'test' } });
 
         for await (const data of stream) {
-          console.log('chunk', data);
           if (data.type === 'step-suspended') {
             expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
@@ -268,9 +266,7 @@ describe.sequential(
 
         expect(evaluateToneAction).toHaveBeenCalledTimes(1);
 
-        console.log('getWorkflowState');
         const resumeResult = await getWorkflowState();
-        console.log('resumeResult', resumeResult);
 
         expect(resumeResult.steps).toEqual({
           input: { input: 'test' },
@@ -427,7 +423,6 @@ describe.sequential(
         });
 
         const values: StreamEvent[] = [];
-        console.log('wf_stream');
         for await (const value of stream.values()) {
           values.push(value);
         }
@@ -663,20 +658,16 @@ describe.sequential(
           runId,
         });
 
-        console.log('wf_stream');
         const { stream, getWorkflowState } = await run.streamAsync({ inputData: {} });
 
         // Start watching the workflow
         const collectedStreamData: StreamEvent[] = [];
         for await (const data of stream) {
-          console.log('wf_chunk', data);
           collectedStreamData.push(JSON.parse(JSON.stringify(data)));
         }
         watchData = collectedStreamData;
 
-        console.log('wf_wait');
         const executionResult = await getWorkflowState();
-        console.log('wf_done', executionResult);
 
         expect(watchData.length).toBe(11);
         expect(watchData).toMatchObject([
@@ -3110,7 +3101,6 @@ describe.sequential(
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: {} });
-        console.log('rezzie', result);
 
         expect(result.steps).toMatchObject({
           step1: {
@@ -4430,7 +4420,6 @@ describe.sequential(
 
         // @ts-ignore
         const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-          console.log('tool call context', context);
           return { name: context.name };
         });
 
@@ -4928,7 +4917,6 @@ describe.sequential(
             await suspend();
           })
           .mockImplementationOnce(({ resumeData }) => {
-            console.log('resumeData', resumeData);
             return { improvedOutput: 'human intervention output' };
           });
         const explainResponseAction = vi.fn().mockResolvedValue({
@@ -5611,8 +5599,6 @@ describe.sequential(
           resumeData: { value: 21 },
           step: ['simple-resume-workflow', 'resume'],
         });
-
-        console.log('lastResumeResult', lastResumeResult);
 
         expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
           status: 'success',
@@ -6578,7 +6564,6 @@ describe.sequential(
           return { finalValue: startVal + otherVal };
         });
         const last = vi.fn().mockImplementation(async ({ inputData }) => {
-          console.log('inputData', inputData);
           return { success: true };
         });
         const finalStep = createStep({
@@ -7854,7 +7839,6 @@ describe.sequential(
             result3: z.string(),
           }),
           execute: vi.fn<any>().mockImplementation(async ({ inputData }) => {
-            console.log('!!inputData', inputData);
             return { result3: `combined-${inputData.step1.result1}-${inputData.step2.result2}` };
           }),
         });

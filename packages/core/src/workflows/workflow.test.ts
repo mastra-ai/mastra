@@ -166,7 +166,6 @@ describe('Workflow', () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          console.log('suspend');
           await suspend();
           return undefined;
         })
@@ -4612,7 +4611,6 @@ describe('Workflow', () => {
 
       // @ts-ignore
       const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        console.log('tool call context', context);
         return { name: context.name };
       });
 
@@ -5090,7 +5088,6 @@ describe('Workflow', () => {
           await suspend();
         })
         .mockImplementationOnce(({ resumeData }) => {
-          console.log('resumeData', resumeData);
           return { improvedOutput: 'human intervention output' };
         });
       const explainResponseAction = vi.fn().mockResolvedValue({
@@ -6071,8 +6068,6 @@ describe('Workflow', () => {
 
           value = value + 1;
           condition = value >= 10;
-
-          console.log(value);
 
           return {
             value,
@@ -7117,7 +7112,6 @@ describe('Workflow', () => {
         return { finalValue: startVal + otherVal };
       });
       const last = vi.fn().mockImplementation(async ({ inputData }) => {
-        console.log('inputData', inputData);
         return { success: true };
       });
       const finalStep = createStep({
