@@ -118,18 +118,24 @@ export class Deps extends MastraBase {
     return args;
   }
 
-  private getPackageManagerInstallCommand(pm: PackageManager): string {
+  /**
+   * Depending on whether we want to install or add a package, this function returns the appropriate commands.
+   * All package managers support both commands (e.g. npm install has an alias on "add")
+   */
+  private getPackageManagerCommand(pm: PackageManager, type: 'install' | 'add'): string {
+    const cmd = type === 'install' ? 'install' : 'add';
+
     switch (pm) {
       case 'npm':
-        return 'install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false';
+        return `${cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
-        return 'install';
+        return `${cmd}`;
       case 'pnpm':
-        return 'install --ignore-workspace install --loglevel=error';
+        return `${cmd} --ignore-workspace install --loglevel=error`;
       case 'bun':
-        return 'install';
+        return cmd;
       default:
-        return 'install';
+        return cmd;
     }
   }
 
@@ -138,7 +144,7 @@ export class Deps extends MastraBase {
     architecture,
   }: { dir?: string; architecture?: ArchitectureOptions } = {}) {
     const pm = this.packageManager;
-    const installCommand = this.getPackageManagerInstallCommand(pm);
+    const installCommand = this.getPackageManagerCommand(pm, 'install');
     let args: string[] = [];
 
     switch (pm) {
@@ -177,7 +183,7 @@ export class Deps extends MastraBase {
 
   public async installPackages(packages: string[]) {
     const pm = this.packageManager;
-    const installCommand = this.getPackageManagerInstallCommand(pm);
+    const installCommand = this.getPackageManagerCommand(pm, 'add');
 
     const env: Record<string, string> = {
       PATH: process.env.PATH!,
