@@ -1,8 +1,8 @@
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 export const summarizer = new Agent({
-  name: 'Summarizer',
+  name: "Summarizer",
   instructions: `
       You are an assistant that given a long feedback, you are able to generate a succint title.
 
@@ -12,5 +12,5 @@ export const summarizer = new Agent({
 
       The title should be also make sense. Also please remove the quotes, no double quotes at the start and end of words.
 `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
