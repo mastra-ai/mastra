@@ -166,7 +166,6 @@ export default function Template() {
   // Watch for installation completion
   useEffect(() => {
     if (installationResult) {
-      console.log('installationResult', installationResult);
       if (installationResult.success) {
         setSuccess(true);
       } else {
@@ -191,6 +190,7 @@ export default function Template() {
   };
 
   console.log('streamResult', streamResult);
+  console.log('installationResult', installationResult);
 
   return (
     <MainContentLayout>

@@ -602,6 +602,29 @@ export const mastra = new Mastra({
         },
       }),
 
+      replaceLines: createTool({
+        id: 'replace-lines',
+        description:
+          'Replace specific line ranges in files with new content. Perfect for fixing multiline imports, function signatures, or other structured code.',
+        inputSchema: z.object({
+          filePath: z.string().describe('Path to the file to edit'),
+          startLine: z.number().describe('Starting line number to replace (1-indexed)'),
+          endLine: z.number().describe('Ending line number to replace (1-indexed, inclusive)'),
+          newContent: z.string().describe('New content to replace the lines with'),
+          createBackup: z.boolean().default(false).describe('Create backup file before editing'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          message: z.string(),
+          linesReplaced: z.number().optional(),
+          backup: z.string().optional(),
+          error: z.string().optional(),
+        }),
+        execute: async ({ context }) => {
+          return await AgentBuilderDefaults.replaceLines({ ...context, projectPath });
+        },
+      }),
+
       // Interactive Communication
       askClarification: createTool({
         id: 'ask-clarification',
@@ -2040,6 +2063,7 @@ export const mastra = new Mastra({
     createBackup?: boolean;
     projectPath?: string;
   }) {
+    const { operations, createBackup = false, projectPath = process.cwd() } = context;
     const results: Array<{
       filePath: string;
       editsApplied: number;
@@ -2048,62 +2072,57 @@ export const mastra = new Mastra({
     }> = [];
 
     try {
-      const { projectPath } = context;
-
-      for (const operation of context.operations) {
-        // Resolve path relative to project directory if it's not absolute
-        const resolvedPath = isAbsolute(operation.filePath)
-          ? operation.filePath
-          : resolve(projectPath || process.cwd(), operation.filePath);
-
-        const result = {
-          filePath: resolvedPath,
-          editsApplied: 0,
-          errors: [] as string[],
-          backup: undefined as string | undefined,
-        };
+      for (const operation of operations) {
+        const filePath = isAbsolute(operation.filePath) ? operation.filePath : join(projectPath, operation.filePath);
+        let editsApplied = 0;
+        const errors: string[] = [];
+        let backup: string | undefined;
 
         try {
-          // Read file content
-          const originalContent = await readFile(resolvedPath, 'utf-8');
-
           // Create backup if requested
-          if (context.createBackup) {
-            const backupPath = `${resolvedPath}.backup.${Date.now()}`;
-            await writeFile(backupPath, originalContent);
-            result.backup = backupPath;
+          if (createBackup) {
+            const backupPath = `${filePath}.backup.${Date.now()}`;
+            const originalContent = await readFile(filePath, 'utf-8');
+            await writeFile(backupPath, originalContent, 'utf-8');
+            backup = backupPath;
           }
 
-          let modifiedContent = originalContent;
+          // Read current file content
+          let content = await readFile(filePath, 'utf-8');
 
-          // Apply edits sequentially
+          // Apply each edit
           for (const edit of operation.edits) {
-            if (edit.replaceAll) {
-              const regex = new RegExp(edit.oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-              const matches = modifiedContent.match(regex);
+            const { oldString, newString, replaceAll = false } = edit;
+
+            if (replaceAll) {
+              const regex = new RegExp(oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+              const matches = content.match(regex);
               if (matches) {
-                modifiedContent = modifiedContent.replace(regex, edit.newString);
-                result.editsApplied += matches.length;
+                content = content.replace(regex, newString);
+                editsApplied += matches.length;
               }
             } else {
-              if (modifiedContent.includes(edit.oldString)) {
-                modifiedContent = modifiedContent.replace(edit.oldString, edit.newString);
-                result.editsApplied++;
+              if (content.includes(oldString)) {
+                content = content.replace(oldString, newString);
+                editsApplied++;
               } else {
-                result.errors.push(`String not found: "${edit.oldString.substring(0, 50)}..."`);
+                errors.push(`String not found: "${oldString.substring(0, 50)}${oldString.length > 50 ? '...' : ''}"`);
               }
             }
           }
 
-          // Write modified content
-          if (result.editsApplied > 0) {
-            await writeFile(resolvedPath, modifiedContent);
-          }
+          // Write updated content back
+          await writeFile(filePath, content, 'utf-8');
         } catch (error) {
-          result.errors.push(error instanceof Error ? error.message : String(error));
+          errors.push(`File operation error: ${error instanceof Error ? error.message : String(error)}`);
         }
 
-        results.push(result);
+        results.push({
+          filePath: operation.filePath,
+          editsApplied,
+          errors,
+          backup,
+        });
       }
 
       const totalEdits = results.reduce((sum, r) => sum + r.editsApplied, 0);
@@ -2112,13 +2131,86 @@ export const mastra = new Mastra({
       return {
         success: totalErrors === 0,
         results,
-        message: `Applied ${totalEdits} edits across ${results.length} files${totalErrors > 0 ? ` with ${totalErrors} errors` : ''}`,
+        message: `Applied ${totalEdits} edits across ${operations.length} files${totalErrors > 0 ? ` with ${totalErrors} errors` : ''}`,
       };
     } catch (error) {
       return {
         success: false,
         results,
         message: `Multi-edit operation failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  /**
+   * Replace specific line ranges in a file with new content
+   */
+  static async replaceLines(context: {
+    filePath: string;
+    startLine: number;
+    endLine: number;
+    newContent: string;
+    createBackup?: boolean;
+    projectPath?: string;
+  }) {
+    const { filePath, startLine, endLine, newContent, createBackup = false, projectPath = process.cwd() } = context;
+
+    try {
+      const fullPath = isAbsolute(filePath) ? filePath : join(projectPath, filePath);
+
+      // Read current file content
+      const content = await readFile(fullPath, 'utf-8');
+      const lines = content.split('\n');
+
+      // Validate line numbers
+      if (startLine < 1 || endLine < 1 || startLine > lines.length || endLine > lines.length) {
+        return {
+          success: false,
+          message: `Invalid line range: ${startLine}-${endLine}. File has ${lines.length} lines.`,
+          error: 'Invalid line range',
+        };
+      }
+
+      if (startLine > endLine) {
+        return {
+          success: false,
+          message: `Start line (${startLine}) cannot be greater than end line (${endLine}).`,
+          error: 'Invalid line range',
+        };
+      }
+
+      // Create backup if requested
+      let backup: string | undefined;
+      if (createBackup) {
+        const backupPath = `${fullPath}.backup.${Date.now()}`;
+        await writeFile(backupPath, content, 'utf-8');
+        backup = backupPath;
+      }
+
+      // Replace the specified line range
+      const beforeLines = lines.slice(0, startLine - 1);
+      const afterLines = lines.slice(endLine);
+      const newLines = newContent ? newContent.split('\n') : [];
+
+      const updatedLines = [...beforeLines, ...newLines, ...afterLines];
+      const updatedContent = updatedLines.join('\n');
+
+      // Write updated content back
+      await writeFile(fullPath, updatedContent, 'utf-8');
+
+      const linesReplaced = endLine - startLine + 1;
+
+      return {
+        success: true,
+        message: `Successfully replaced ${linesReplaced} lines (${startLine}-${endLine}) in ${filePath}`,
+        linesReplaced,
+        backup,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to replace lines: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }

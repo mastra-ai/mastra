@@ -1135,7 +1135,7 @@ Start by listing your tasks and work through them systematically!
 // Step 10: Validation and Fix Step - validates merged code and fixes any issues
 const validationAndFixStep = createStep({
   id: 'validation-and-fix',
-  description: 'Validate the merged template code and fix any validation errors using a specialized agent',
+  description: 'Validate the merged template code and fix any issues using a specialized agent',
   inputSchema: ValidationFixInputSchema,
   outputSchema: ValidationFixResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
@@ -1184,11 +1184,23 @@ const validationAndFixStep = createStep({
 
 2. **Fix validation errors systematically**:
    - Use readFile to examine files with errors
-   - Use multiEdit to fix issues like missing imports, incorrect paths, syntax errors
+   - Use multiEdit for simple search-replace fixes (single line changes)
+   - Use replaceLines for complex multiline fixes (imports, function signatures, etc.)
    - Use listDirectory to understand project structure when fixing import paths
    - Update file contents to resolve TypeScript and linting issues
 
-3. **Fix ALL template integration issues**:
+3. **Choose the right tool for the job**:
+   - multiEdit: Simple replacements, single line changes, small fixes
+   - replaceLines: Multiline imports, function signatures, complex code blocks
+   - writeFile: ONLY for creating new files (never overwrite existing)
+
+4. **Create missing files ONLY when necessary**:
+   - Use writeFile ONLY for creating NEW files that don't exist
+   - NEVER overwrite existing files - use multiEdit or replaceLines instead
+   - Common cases: missing barrel files (index.ts), missing config files, missing type definitions
+   - Always check with readFile first to ensure file doesn't exist
+
+5. **Fix ALL template integration issues**:
    - Fix import path issues in copied files
    - Ensure TypeScript imports and exports are correct
    - Validate integration works properly
@@ -1201,14 +1213,14 @@ const validationAndFixStep = createStep({
    - Use the COPIED FILES mapping below to fix import paths
    - Fix any missing dependencies or module resolution issues
 
-4. **Validate index file structure**:
+6. **Validate index file structure**:
    - Correct imports for all components
    - Proper anchor structure (agents: {}, etc.)
    - No duplicate registrations
    - Correct export names and paths
    - Proper formatting and organization
 
-5. **Follow naming conventions**:
+7. **Follow naming conventions**:
    Import paths:
    - camelCase: import { myAgent } from './myAgent'
    - snake_case: import { myAgent } from './my_agent'
@@ -1223,9 +1235,26 @@ const validationAndFixStep = createStep({
 
    Key Rule: Keep variable/export names unchanged, only adapt file names and import paths
 
-6. **Re-validate after fixes** to ensure all issues are resolved
+8. **Re-validate after fixes** to ensure all issues are resolved
 
 CRITICAL: Always validate the entire project first to get a complete picture of issues, then fix them systematically, and re-validate to confirm fixes worked.
+
+CRITICAL TOOL SELECTION GUIDE:
+- **multiEdit**: Use for simple string replacements, single-line changes
+  Example: changing './oldPath' to './newPath'
+  
+- **replaceLines**: Use for multiline fixes, complex code structures
+  Example: fixing multiline imports, function signatures, or code blocks
+  Usage: replaceLines({ filePath: 'file.ts', startLine: 5, endLine: 8, newContent: 'new multiline content' })
+  
+- **writeFile**: ONLY for creating new files that don't exist
+  Example: creating missing index.ts barrel files
+
+CRITICAL WRITEFILЕ SAFETY RULES:
+- ONLY use writeFile for creating NEW files that don't exist
+- ALWAYS check with readFile first to verify file doesn't exist
+- NEVER use writeFile to overwrite existing files - use multiEdit or replaceLines instead
+- Common valid uses: missing index.ts barrel files, missing type definitions, missing config files
 
 CRITICAL IMPORT PATH RESOLUTION:
 The following files were copied from template with new names:
@@ -1249,7 +1278,9 @@ Be thorough and methodical. Always use listDirectory to verify actual file exist
         tools: {
           validateCode: allTools.validateCode,
           readFile: allTools.readFile,
+          writeFile: allTools.writeFile,
           multiEdit: allTools.multiEdit,
+          replaceLines: allTools.replaceLines,
           listDirectory: allTools.listDirectory,
           executeCommand: allTools.executeCommand,
         },
