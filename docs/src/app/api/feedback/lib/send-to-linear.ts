@@ -1,4 +1,5 @@
 import { FeedbackData } from "./types";
+import { mastra } from "@/mastra";
 
 export async function sendToLinear(feedback: FeedbackData) {
   const LINEAR_API_KEY = process.env.LINEAR_API_KEY;
@@ -52,11 +53,17 @@ export async function sendToLinear(feedback: FeedbackData) {
     }
   `;
 
+  const res = await mastra.getAgent('summarizer').generate(`Give me a succint title from ${feedback.feedback}`)
+ 
+
   const variables = {
     input: {
       teamId: LINEAR_TEAM_ID,
-      title: `Docs Feedback: ${feedback.id}`,
-      description: `${feedback.feedback},\n Affected Page: ${page}`,
+      title: `MDF: ${res.text}`,
+      description: `
+${feedback.feedback},
+Affected Page: ${page}
+`,
       priority: priority,
       assigneeId: "3237bea7-049c-48f5-bb95-57e00e5f31c4",
     },
