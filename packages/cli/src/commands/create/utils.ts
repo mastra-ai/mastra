@@ -5,7 +5,7 @@ import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps.js';
-import { getPackageManagerInstallCommand } from '../../utils/package-manager.js';
+import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
 import type { PackageManager } from '../../utils/package-manager.js';
 import { getPackageManager } from '../utils.js';
 
@@ -47,7 +47,7 @@ async function installMastraDependency(
   isDev: boolean,
   timeout?: number,
 ) {
-  let installCommand = getPackageManagerInstallCommand(pm);
+  let installCommand = getPackageManagerAddCommand(pm);
 
   if (isDev) {
     installCommand = `${installCommand} --save-dev`;
@@ -113,7 +113,7 @@ export const createMastraProject = async ({
 
     process.chdir(projectName);
     const pm = getPackageManager();
-    const installCommand = getPackageManagerInstallCommand(pm);
+    const installCommand = getPackageManagerAddCommand(pm);
 
     s.message('Initializing project structure');
     try {

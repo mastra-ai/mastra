@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { execa } from 'execa';
 import fsExtra from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
-import { getPackageManagerInstallCommand } from '../utils/package-manager';
+import { getPackageManagerAddCommand } from '../utils/package-manager';
 import type { PackageManager } from '../utils/package-manager';
 
 export class DepsService {
@@ -47,7 +47,7 @@ export class DepsService {
 
   public async installPackages(packages: string[]) {
     const pm = this.packageManager;
-    const installCommand = getPackageManagerInstallCommand(pm);
+    const installCommand = getPackageManagerAddCommand(pm);
 
     const packageList = packages.join(' ');
     return execa(`${pm} ${installCommand} ${packageList}`, {

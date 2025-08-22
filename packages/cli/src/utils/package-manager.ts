@@ -1,6 +1,6 @@
 export type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
-export function getPackageManagerInstallCommand(pm: PackageManager): string {
+export function getPackageManagerAddCommand(pm: PackageManager): string {
   switch (pm) {
     case 'npm':
       return 'install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false';
