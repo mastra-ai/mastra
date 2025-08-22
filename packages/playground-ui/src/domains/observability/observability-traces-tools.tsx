@@ -1,9 +1,7 @@
 import { DatePicker } from '@/components/ui/date-picker';
 import { SelectField } from '@/components/ui/elements';
 import { Button } from '@/components/ui/elements/buttons';
-import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
-import { useState } from 'react';
 
 type ObservabilityTracesToolsProps = {
   onEntityChange: (val: string) => void;
@@ -44,16 +42,6 @@ export function ObservabilityTracesTools({
             placeholder="From"
             value={selectedDateFrom}
             setValue={date => onDateChange?.(date, 'from')}
-            // value={value}
-            // setValue={date => {
-            //   const newDate = date ? new Date(date).toISOString() : date;
-            //   if (newDate) {
-            //     props.onChange({
-            //       target: { value: newDate?.toString(), name: inputProps.name },
-            //     });
-            //     setValue(new Date(newDate));
-            //   }
-            // }}
             clearable={true}
             className="w-[9rem]"
           />
@@ -61,16 +49,6 @@ export function ObservabilityTracesTools({
             placeholder="To"
             value={selectedDateTo}
             setValue={date => onDateChange?.(date, 'to')}
-            // value={value}
-            // setValue={date => {
-            //   const newDate = date ? new Date(date).toISOString() : date;
-            //   if (newDate) {
-            //     props.onChange({
-            //       target: { value: newDate?.toString(), name: inputProps.name },
-            //     });
-            //     setValue(new Date(newDate));
-            //   }
-            // }}
             clearable={true}
             className="w-[9rem]"
           />
