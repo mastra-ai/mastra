@@ -1,9 +1,10 @@
 
 export interface FeedbackData {
+  id: string;
   feedback: string;
-  rating?: number;
+  rating: number;
   page: string;
-  userAgent?: string;
+  userAgent: string;
   timestamp: string;
 }
 

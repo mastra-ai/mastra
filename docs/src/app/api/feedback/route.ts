@@ -49,12 +49,9 @@ export async function POST(request: NextRequest) {
 
     if (linearResult.status === 'fulfilled' && linearResult.value?.url) {
       linearTicketUrl = linearResult.value.url;
-      try {
-        await sendToSlack(feedbackEntry, linearTicketUrl);
-      } catch (error) {
-        console.error('Failed to send updated Slack notification with Linear link:', error);
-      }
     }
+
+    await sendToSlack(feedbackEntry, linearTicketUrl);
 
     if (notionResult.status === 'rejected') {
       console.error('Failed to send to Notion:', notionResult.reason);
