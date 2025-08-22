@@ -18,7 +18,6 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
 
   return (
     <DatePicker
-      id={id}
       className={error ? 'border-destructive' : ''}
       value={value}
       setValue={date => {
