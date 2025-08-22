@@ -67,7 +67,7 @@ export async function sendToSlack(feedback: FeedbackData, linearTicketUrl: strin
         elements: [
           {
             type: "mrkdwn",
-            text: `🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent.split(" ")[0] ?? "Unknown"}`,
+            text: `🕐 ${new Date(feedback.timestamp).toLocaleString()} | 🌐 ${feedback.userAgent?.split(" ")[0] ?? "Unknown"}`,
           },
         ],
       },
