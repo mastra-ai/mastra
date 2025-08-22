@@ -1,0 +1,4 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "files": ["runtime-context-extend.test-d.ts"]
+}
