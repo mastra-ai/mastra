@@ -3,9 +3,11 @@ import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent, InputProcessor } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import { InputProcessor } from '@mastra/core/agent/input-processor';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { AgentBuilder } from '@mastra/agent-builder';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
@@ -224,4 +226,10 @@ export const evalAgent = new Agent({
       scorer: answerRelevance,
     },
   },
+});
+
+export const agentBuilder = new AgentBuilder({
+  model: openai('gpt-4.1'),
+  projectPath: '/Users/daniellew/Documents/Mastra/mastra-agent-builder-test4',
+  summaryModel: google('gemini-2.0-flash-001'),
 });

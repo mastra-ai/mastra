@@ -12,6 +12,7 @@ overrides:
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
   '@mastra/libsql': link:../../stores/libsql
+  '@mastra/agent-builder': link:../../packages/agent-builder
   '@mastra/evals': link:../../packages/evals
   mastra: link:../../packages/cli
 
@@ -28,6 +29,9 @@ importers:
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.15
         version: '@ai-sdk/openai@2.0.15(zod@3.25.76)'
+      '@mastra/agent-builder':
+        specifier: link:../../packages/agent-builder
+        version: link:../../packages/agent-builder
       '@mastra/client-js':
         specifier: link:../../client-sdks/client-js
         version: link:../../client-sdks/client-js
