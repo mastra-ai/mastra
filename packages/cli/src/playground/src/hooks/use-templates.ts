@@ -213,10 +213,65 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
       // Get a reader from the ReadableStream
       const reader = stream.getReader();
 
+      // Local accumulator to track stream data (since state updates are async)
+      let localStreamData: any = {
+        runId,
+        eventTimestamp: new Date().toISOString(),
+        phase: 'running',
+        payload: {
+          workflowState: {
+            steps: workflowInfo?.allSteps
+              ? Object.keys(workflowInfo.allSteps).reduce((acc, stepId) => {
+                  acc[stepId] = {
+                    id: stepId,
+                    description: workflowInfo.allSteps[stepId].description,
+                    status: 'pending',
+                  };
+                  return acc;
+                }, {} as any)
+              : {},
+          },
+          currentStep: null,
+        },
+      };
+      let localInstallationResult: TemplateInstallationResult | null = null;
+
+      // Helper function to update both local accumulator and React state
+      const updateStreamData = (updater: (prev: any) => any) => {
+        const newData = updater(localStreamData);
+        localStreamData = newData;
+        setStreamResult(updater);
+      };
+
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            // If we don't have an installationResult yet, extract it from the final workflow state
+            if (!localInstallationResult) {
+              const currentSteps = localStreamData?.payload?.workflowState?.steps || {};
+              const finalStep = Object.values(currentSteps)
+                .filter((step: any) => step.status === 'success' && step.output)
+                .pop() as any;
+
+              if (finalStep?.output) {
+                const templateResult: TemplateInstallationResult = {
+                  success: finalStep.output.success || false,
+                  applied: finalStep.output.applied || false,
+                  branchName: finalStep.output.branchName,
+                  message: finalStep.output.message || 'Template installation completed',
+                  validationResults: finalStep.output.validationResults,
+                  stepResults: finalStep.output.stepResults,
+                };
+                localInstallationResult = templateResult;
+                setInstallationResult(templateResult);
+              }
+            } else {
+              // We already have the result, just set it in state
+              setInstallationResult(localInstallationResult);
+            }
+            break;
+          }
 
           // Handle different event types from the template installation workflow
           if (value.type === 'start') {
@@ -232,7 +287,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
               });
             }
 
-            setStreamResult((prev: any) => ({
+            updateStreamData((prev: any) => ({
               ...prev,
               runId: value.payload.runId,
               eventTimestamp: new Date(),
@@ -252,7 +307,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
           if (value.type === 'step-start') {
             const stepId = value.payload.id;
 
-            setStreamResult((prev: any) => ({
+            updateStreamData((prev: any) => ({
               ...prev,
               phase: 'processing',
               payload: {
@@ -280,8 +335,9 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
           }
 
           if (value.type === 'step-result') {
-            const stepId = value.payload.id || streamResult.payload?.currentStep?.id;
-            setStreamResult((prev: any) => ({
+            const stepId = value.payload.id || localStreamData.payload?.currentStep?.id;
+
+            updateStreamData((prev: any) => ({
               ...prev,
               payload: {
                 ...prev.payload,
@@ -310,7 +366,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
           }
 
           if (value.type === 'step-finish') {
-            setStreamResult((prev: any) => ({
+            updateStreamData((prev: any) => ({
               ...prev,
               payload: {
                 ...prev.payload,
@@ -321,7 +377,8 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
 
           if (value.type === 'finish') {
             const finalResult = value.payload.result;
-            setStreamResult((prev: any) => ({
+
+            updateStreamData((prev: any) => ({
               ...prev,
               status: value.payload.status,
               phase: 'completed',
@@ -352,12 +409,13 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
                 errors: finalResult.errors,
                 stepResults: finalResult.stepResults,
               };
+              localInstallationResult = templateResult;
               setInstallationResult(templateResult);
             }
           }
 
           if (value.type === 'error') {
-            setStreamResult((prev: any) => ({
+            updateStreamData((prev: any) => ({
               ...prev,
               status: 'failed',
               error: value.payload.error,
@@ -375,7 +433,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
         }
       } catch (error) {
         console.error('Error streaming template installation:', error);
-        setStreamResult((prev: any) => ({
+        updateStreamData((prev: any) => ({
           ...prev,
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown error',

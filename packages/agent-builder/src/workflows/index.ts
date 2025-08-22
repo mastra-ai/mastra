@@ -57,7 +57,7 @@ const resolveModel = (runtimeContext: any): MastraLanguageModel => {
       'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
     );
   }
-  return openai('gpt-4o-mini'); // Default model
+  return openai('gpt-4.1'); // Default model
 };
 
 // Type guard to check if object is a valid MastraLanguageModel
