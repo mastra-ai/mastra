@@ -2913,6 +2913,7 @@ describe('Workflow', () => {
           setTimeout(async () => {
             const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
             expect(currentExecResult?.status).toBe('running');
+            expect(currentExecResult?.steps['final']?.status).toBe('running');
           }, 500);
         }
       }

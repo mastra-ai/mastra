@@ -973,6 +973,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    serializedStepGraph,
   }: {
     workflowId: string;
     runId: string;
@@ -988,6 +989,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
     return super.executeStep({
       workflowId,
@@ -1001,6 +1003,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       abortController,
       runtimeContext,
       writableStream,
+      serializedStepGraph,
     });
   }
 
@@ -1741,10 +1744,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           workflowId,
           runId,
           entry: step,
+          serializedStepGraph,
           prevStep,
           stepResults,
           resume,
-          serializedStepGraph,
           executionContext: {
             workflowId,
             runId,
