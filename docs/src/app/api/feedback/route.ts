@@ -2,8 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendToNotion } from "./lib/send-to-notion";
 import { sendToLinear } from "./lib/send-to-linear";
 import { sendToSlack } from "./lib/send-to-slack";
-import { getErrorMessage } from "./lib/error";
-import { FeedbackData } from "./lib/types";
+import { FeedbackData, ErrorWithMessage } from "./lib/types";
+
+
+
+function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as Record<string, unknown>).message === "string"
+  );
+}
+
+function toErrorWithMessage(maybeError: unknown): ErrorWithMessage {
+  if (isErrorWithMessage(maybeError)) return maybeError;
+
+  try {
+    return new Error(JSON.stringify(maybeError));
+  } catch {
+    return new Error(String(maybeError));
+  }
+}
+
+export function getErrorMessage(error: unknown) {
+  return toErrorWithMessage(error).message;
+}
+
 
 export async function POST(request: NextRequest) {
   try {
