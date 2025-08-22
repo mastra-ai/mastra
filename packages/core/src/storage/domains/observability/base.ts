@@ -95,7 +95,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Deletes multiple AI traces and all their associated spans in a single batch operation.
    */
-  batchDeleteAITraces(_args: { traceIds: string }[]): Promise<void> {
+  batchDeleteAITraces(_args: { traceIds: string[] }): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_DELETE_AI_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

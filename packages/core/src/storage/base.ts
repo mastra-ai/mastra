@@ -604,7 +604,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Deletes multiple AI traces and all their associated spans in a single batch operation.
    */
-  async batchDeleteAITraces(args: { traceIds: string }[]): Promise<void> {
+  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.batchDeleteAITraces(args);
     }
