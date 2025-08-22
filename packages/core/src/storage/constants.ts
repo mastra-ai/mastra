@@ -154,7 +154,7 @@ export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
   output: { type: 'jsonb', nullable: true },
   error: { type: 'jsonb', nullable: true },
   startAt: { type: 'timestamp', nullable: false }, // When the span started
-  endAt: { type: 'timestamp', nullable: false }, // When the span ended
+  endAt: { type: 'timestamp', nullable: true }, // When the span ended
   createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
   updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
 };

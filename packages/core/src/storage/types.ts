@@ -174,7 +174,7 @@ export interface AISpanRecord {
   links: Record<string, any> | null;
   other: string | null;
   startAt: Date;
-  endAt: Date;
+  endAt: Date | null;
   createdAt: Date;
   updatedAt: Date | null;
   input: Record<string, any> | null;
