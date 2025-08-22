@@ -79,11 +79,11 @@ export async function sendToSlack(
         fields: [
           {
             type: "mrkdwn",
-            text: `<https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>`,
+            text: `💡<https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>`,
           },
           {
             type: "mrkdwn",
-            text: `${linearTicketUrl ? `<${linearTicketUrl}|View Linear ticket>` : ""}`,
+            text: `🔗${linearTicketUrl ? `<${linearTicketUrl}|View Linear ticket>` : ""}`,
           },
         ],
       },
