@@ -12,6 +12,7 @@ export function SideDialog({
   children,
   variant = 'default',
   hasCloseButton = true,
+  className,
 }: {
   variant?: 'default' | 'confirmation';
   dialogTitle: string;
@@ -21,6 +22,7 @@ export function SideDialog({
   onPrevious?: (() => void) | null;
   children?: React.ReactNode;
   hasCloseButton?: boolean;
+  className?: string;
 }) {
   const isConfirmation = variant === 'confirmation';
 
@@ -32,7 +34,8 @@ export function SideDialog({
         )}
         <Dialog.Content
           className={cn(
-            'fixed top-0 bottom-0 right-0 border-l border-border1 w-[calc(100vw-20rem)] max-w-[50rem] z-50 bg-surface4',
+            'fixed top-0 bottom-0 right-0 border-l border-border1 z-50 bg-surface4',
+            'w-[calc(100vw-20rem)] max-w-[50rem]',
             '3xl:max-w-[60rem]',
             '4xl:max-w-[50%]',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
@@ -41,6 +44,7 @@ export function SideDialog({
                 !isConfirmation,
               'bg-surface2/70': isConfirmation,
             },
+            className,
           )}
         >
           <VisuallyHidden.Root>
