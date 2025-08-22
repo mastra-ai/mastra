@@ -1,8 +1,12 @@
 import { MockLanguageModelV1 } from 'ai/test';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { SchemaCompatLayer } from './schema-compatibility';
 import type { ModelInformation } from './types';
+
+vi.mock('zod', () => ({
+  z,
+}));
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: ModelInformation) {

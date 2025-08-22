@@ -2632,8 +2632,11 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
       zod-from-json-schema:
-        specifier: ^0.0.5
-        version: 0.0.5
+        specifier: ^0.5.0
+        version: 0.5.0
+      zod-from-json-schema-v3:
+        specifier: npm:zod-from-json-schema@^0.0.5
+        version: zod-from-json-schema@0.0.5
       zod-to-json-schema:
         specifier: ^3.24.5
         version: 3.24.6(zod@3.25.76)
@@ -16914,6 +16917,9 @@ packages:
 
   zod-from-json-schema@0.0.5:
     resolution: {integrity: sha512-zYEoo86M1qpA1Pq6329oSyHLS785z/mTwfr9V1Xf/ZLhuuBGaMlDGu/pDVGVUe4H4oa1EFgWZT53DP0U3oT9CQ==}
+
+  zod-from-json-schema@0.5.0:
+    resolution: {integrity: sha512-W1v1YIoimOJfvuorGGp1QroizLL3jEGELJtgrHiVg/ytxVZdh/BTTVyPypGB7YK30LHrCkkebbjuyHIjBGCEzw==}
 
   zod-to-json-schema@3.24.6:
     resolution: {integrity: sha512-h/z3PKvcTcTetyjl1fkj79MHNEjm+HpD6NXheWjzOekY7kV+lwDYnHw+ivHkijnCSMz1yJaWBD9vu/Fcmk+vEg==}
@@ -32627,6 +32633,10 @@ snapshots:
   zod-from-json-schema@0.0.5:
     dependencies:
       zod: 3.25.76
+
+  zod-from-json-schema@0.5.0:
+    dependencies:
+      zod: 4.0.17
 
   zod-to-json-schema@3.24.6(zod@3.25.76):
     dependencies:
