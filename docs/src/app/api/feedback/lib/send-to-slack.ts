@@ -76,7 +76,7 @@ export async function sendToSlack(feedback: FeedbackData, linearTicketUrl: strin
         fields: [
           {
             type: "mrkdwn",
-            text: `<https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>${linearTicketUrl ? ` | 🎫 <${linearTicketUrl}|View Linear ticket>` : ""}`,
+            text: `<https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>`,
           },
           {
             type: "mrkdwn",
