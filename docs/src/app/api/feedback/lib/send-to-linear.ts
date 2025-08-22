@@ -4,6 +4,7 @@ import { mastra } from "@/mastra";
 export async function sendToLinear(feedback: FeedbackData) {
   const LINEAR_API_KEY = process.env.LINEAR_API_KEY;
   const LINEAR_TEAM_ID = process.env.LINEAR_TEAM_ID;
+  const LINEAR_PROJECT_ID = process.env.LINEAR_PROJECT_ID;
 
   if (!LINEAR_API_KEY) {
     console.warn(
@@ -15,6 +16,13 @@ export async function sendToLinear(feedback: FeedbackData) {
   if (!LINEAR_TEAM_ID) {
     console.warn(
       "LINEAR_TEAM_ID not configured, skipping Linear ticket creation",
+    );
+    return null;
+  }
+
+  if (!LINEAR_PROJECT_ID) {
+    console.warn(
+      "LINEAR_PROJECT_ID not configured, skipping Linear ticket creation",
     );
     return null;
   }
@@ -53,9 +61,63 @@ export async function sendToLinear(feedback: FeedbackData) {
     }
   `;
 
+  const getCycleQuery = `
+    query getCurrentCycle {
+      teams {
+        nodes {
+          activeCycle {
+            id
+          }
+        }
+      }
+    }
+  `;
+
+  // Fetch current cycle
+  const getCurrentCycle = async () => {
+    try {
+      const cycleResponse = await fetch(linearUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `${LINEAR_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: getCycleQuery,
+        }),
+      });
+
+      if (!cycleResponse.ok) {
+        console.warn(
+          "Failed to fetch current cycle, proceeding without cycle assignment",
+        );
+        return null;
+      }
+
+      const cycleResult = await cycleResponse.json();
+
+      if (cycleResult.errors) {
+        console.warn("GraphQL errors when fetching cycle:", cycleResult.errors);
+        return null;
+      }
+
+      // Find the first team with an active cycle
+      const teams = cycleResult.data?.teams?.nodes || [];
+      const teamWithCycle = teams.find((team: any) => team.activeCycle);
+
+      return teamWithCycle?.activeCycle?.id || null;
+    } catch (error) {
+      console.warn("Error fetching current cycle:", error);
+      return null;
+    }
+  };
+
   const res = await mastra
     .getAgent("summarizer")
     .generate(`Give me a succint title from ${feedback.feedback}`);
+
+  // Get the current cycle ID
+  const cycleId = await getCurrentCycle();
 
   const variables = {
     input: {
@@ -67,6 +129,8 @@ Affected Page: ${page}
 `,
       priority: priority,
       assigneeId: "3237bea7-049c-48f5-bb95-57e00e5f31c4",
+      ...(cycleId && { cycleId }), // Only add cycleId if it exists
+      projectId: LINEAR_PROJECT_ID,
     },
   };
 
