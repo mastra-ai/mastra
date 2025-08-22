@@ -166,7 +166,6 @@ describe.sequential(
         await mastra.stopEventEngine();
       });
 
-      // TODO: fix this test
       it('should handle basic suspend and resume flow', async () => {
         const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
         const promptAgentAction = vi
