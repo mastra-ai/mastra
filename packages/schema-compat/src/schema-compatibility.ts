@@ -12,6 +12,7 @@ import {
   SUPPORTED_ZOD_TYPES as SUPPORTED_ZOD_TYPES_V3,
 } from './schema-compatibility-v3';
 import type {
+  UnsupportedZodType as UnsupportedZodTypeV3,
   ShapeValue as ShapeValueV3,
   StringCheckType,
   NumberCheckType,
@@ -23,8 +24,11 @@ import {
   UNSUPPORTED_ZOD_TYPES as UNSUPPORTED_ZOD_TYPES_V4,
   SUPPORTED_ZOD_TYPES as SUPPORTED_ZOD_TYPES_V4,
 } from './schema-compatibility-v4';
-
-import type { ShapeValue as ShapeValueV4, AllZodType as AllZodTypeV4 } from './schema-compatibility-v4';
+import type {
+  UnsupportedZodType as UnsupportedZodTypeV4,
+  ShapeValue as ShapeValueV4,
+  AllZodType as AllZodTypeV4,
+} from './schema-compatibility-v4';
 
 // Define constraint types locally since they're not exported from v3/v4 files
 type StringConstraints = {
@@ -302,18 +306,13 @@ export abstract class SchemaCompatLayer {
    * @returns The original value if not in the throw list
    * @throws Error if the type is in the unsupported list
    */
-  public defaultUnsupportedZodTypeHandler<T extends zV4.ZodObject>(
-    value: zV4.ZodTypeAny,
-    throwOnTypes?: readonly (typeof UNSUPPORTED_ZOD_TYPES_V4)[],
-  ): ShapeValueV4<T>;
-  public defaultUnsupportedZodTypeHandler<T extends zV3.AnyZodObject>(
-    value: zV3.ZodTypeAny,
-    throwOnTypes?: readonly (typeof UNSUPPORTED_ZOD_TYPES_V3)[],
-  ): ShapeValueV3<T>;
-
   public defaultUnsupportedZodTypeHandler<T extends zV4.ZodObject | zV3.AnyZodObject>(
-    value: zV4.ZodTypeAny | zV3.ZodTypeAny,
-    throwOnTypes?: readonly (typeof UNSUPPORTED_ZOD_TYPES_V3)[] | readonly (typeof UNSUPPORTED_ZOD_TYPES_V4)[],
+    value: T,
+    throwOnTypes?: T extends zV4.ZodObject
+      ? UnsupportedZodTypeV4[]
+      : T extends zV3.AnyZodObject
+        ? UnsupportedZodTypeV3[]
+        : never,
   ): T extends zV4.ZodObject ? ShapeValueV4<T> : T extends zV3.AnyZodObject ? ShapeValueV3<T> : never {
     if ('_zod' in value) {
       return this.v4Layer.defaultUnsupportedZodTypeHandler(
@@ -454,9 +453,7 @@ export abstract class SchemaCompatLayer {
    * @param zodSchema - The Zod object schema to process
    * @returns An AI SDK Schema with provider-specific compatibility applied
    */
-  public processToAISDKSchema(zodSchema: zV4.ZodAny): Schema;
-  public processToAISDKSchema(zodSchema: zV3.ZodSchema): Schema;
-  public processToAISDKSchema(zodSchema: zV3.ZodSchema | zV4.ZodAny): Schema {
+  public processToAISDKSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): Schema {
     const processedSchema = this.processZodType(zodSchema);
 
     return convertZodSchemaToAISDKSchema(processedSchema, this.getSchemaTarget());
@@ -468,10 +465,7 @@ export abstract class SchemaCompatLayer {
    * @param zodSchema - The Zod object schema to process
    * @returns A JSONSchema7 object with provider-specific compatibility applied
    */
-  public processToJSONSchema(zodSchema: zV4.ZodAny): JSONSchema7;
-  public processToJSONSchema(zodSchema: zV3.ZodSchema): JSONSchema7;
-  public processToJSONSchema(zodSchema: zV3.ZodSchema | zV4.ZodAny): JSONSchema7 {
-    // @ts-expect-error - fix later
+  public processToJSONSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): JSONSchema7 {
     return this.processToAISDKSchema(zodSchema).jsonSchema;
   }
 }

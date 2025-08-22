@@ -45,7 +45,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "json-schema": "^0.4.0",
-    "zod-from-json-schema": "^0.0.5",
+    "zod-from-json-schema": "^0.5.0",
+    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
