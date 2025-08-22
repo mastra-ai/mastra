@@ -81,7 +81,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     }
 
     const resultData: any = await new Promise(resolve => {
-      const finishCb = async (event: Event, ack: () => Promise<void>) => {
+      const finishCb = async (event: Event, ack?: () => Promise<void>) => {
         if (event.runId !== params.runId) {
           await ack?.();
           return;

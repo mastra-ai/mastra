@@ -89,7 +89,7 @@ export class GoogleCloudPubSub extends PubSub {
     }
   }
 
-  async subscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
+  async subscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
     let runId: string | undefined = undefined;
     if (topic.startsWith('workflow.events.')) {
       const parts = topic.split('.');
@@ -120,6 +120,9 @@ export class GoogleCloudPubSub extends PubSub {
 
     subscription.on('message', async message => {
       const event = JSON.parse(message.data.toString()) as Event;
+      event.id = message.id;
+      event.createdAt = message.publishTime;
+
       try {
         if (runId) {
           if (runId !== event.runId) {
@@ -157,7 +160,7 @@ export class GoogleCloudPubSub extends PubSub {
     });
   }
 
-  async unsubscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
+  async unsubscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
     const subscription = this.activeSubscriptions[topic] ?? this.pubsub.subscription(this.getSubscriptionName(topic));
     const activeCbs = this.activeCbs[topic] ?? new Set();
     activeCbs.delete(cb);
