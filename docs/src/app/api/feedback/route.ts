@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { sendToNotion } from "./lib/send-to-notion";
 import { sendToLinear } from "./lib/send-to-linear";
@@ -33,7 +32,7 @@ export async function POST(request: NextRequest) {
     const feedbackEntry = {
       id: `FEEDBACK-${dateStr}-${timeStr}-${randomId}`,
       feedback: body.feedback.trim(),
-      rating: body.rating || null,
+      rating: body.rating || 3,
       page: body.page,
       userAgent:
         body.userAgent || request.headers.get("user-agent") || "unknown",

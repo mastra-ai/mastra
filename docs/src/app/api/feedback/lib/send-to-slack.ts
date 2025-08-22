@@ -1,4 +1,6 @@
-export async function sendToSlack(feedback: any, linearTicketUrl: string | null = null) {
+import { FeedbackData } from "./types";
+
+export async function sendToSlack(feedback: FeedbackData, linearTicketUrl: string | null = null) {
   const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 
   if (!SLACK_WEBHOOK_URL) {
@@ -50,10 +52,6 @@ export async function sendToSlack(feedback: any, linearTicketUrl: string | null 
           {
             type: "mrkdwn",
             text: `*Page:*\n<${page}|View Docs Page>`,
-          },
-          {
-            type: "mrkdwn",
-            text: `*Source:*\n${feedback.source}`,
           },
         ],
       },

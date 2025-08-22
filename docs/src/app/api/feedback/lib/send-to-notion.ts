@@ -1,4 +1,6 @@
-export async function sendToNotion(feedback: any) {
+import { FeedbackData } from "./types";
+
+export async function sendToNotion(feedback: FeedbackData) {
   const NOTION_API_KEY = process.env.NOTION_API_KEY;
   const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
 

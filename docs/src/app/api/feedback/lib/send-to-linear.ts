@@ -1,4 +1,6 @@
-export async function sendToLinear(feedback: any) {
+import { FeedbackData } from "./types";
+
+export async function sendToLinear(feedback: FeedbackData) {
   const LINEAR_API_KEY = process.env.LINEAR_API_KEY;
   const LINEAR_TEAM_ID = process.env.LINEAR_TEAM_ID;
 
