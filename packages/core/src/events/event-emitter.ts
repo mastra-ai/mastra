@@ -11,7 +11,13 @@ export class EventEmitterPubSub extends PubSub {
   }
 
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
-    this.emitter.emit(topic, JSON.parse(JSON.stringify(event)));
+    const id = crypto.randomUUID();
+    const createdAt = new Date();
+    this.emitter.emit(topic, {
+      ...event,
+      id,
+      createdAt,
+    });
   }
 
   async subscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
