@@ -11,6 +11,6 @@ export function getPackageManagerAddCommand(pm: PackageManager): string {
     case 'bun':
       return 'add';
     default:
-      return 'install';
+      return 'add';
   }
 }
