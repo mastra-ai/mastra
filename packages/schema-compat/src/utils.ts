@@ -1,13 +1,14 @@
 import { jsonSchema } from 'ai';
 import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import type { z } from 'zod';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { SchemaCompatLayer } from './schema-compatibility';
+import type { SchemaCompatLayer } from './schema-compatibility-v3';
+import { zodToJsonSchema } from './zod-to-json';
 
 /**
  * Converts a Zod schema to an AI SDK Schema with validation support.
@@ -33,17 +34,8 @@ import type { SchemaCompatLayer } from './schema-compatibility';
  * ```
  */
 // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
-export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
-  let jsonSchemaToUse: JSONSchema7;
-  if ('toJSONSchema' in z) {
-    // @ts-ignore
-    jsonSchemaToUse = z.toJSONSchema(zodSchema) as JSONSchema7;
-  } else {
-    jsonSchemaToUse = zodToJsonSchema(zodSchema, {
-      $refStrategy: 'none',
-      target,
-    }) as JSONSchema7;
-  }
+export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7') {
+  const jsonSchemaToUse = zodToJsonSchema(zodSchema, target) as JSONSchema7;
 
   return jsonSchema(jsonSchemaToUse, {
     validate: value => {
@@ -201,10 +193,9 @@ export function applyCompatLayer({
       return mode === 'jsonSchema' ? compat.processToJSONSchema(zodSchema) : compat.processToAISDKSchema(zodSchema);
     }
   }
-  debugger;
   // If no compatibility applied, convert back to appropriate format
   if (mode === 'jsonSchema') {
-    return zodToJsonSchema(zodSchema, { $refStrategy: 'none', target: 'jsonSchema7' }) as JSONSchema7;
+    return zodToJsonSchema(zodSchema, 'jsonSchema7') as JSONSchema7;
   } else {
     return convertZodSchemaToAISDKSchema(zodSchema);
   }

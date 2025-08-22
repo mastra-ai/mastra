@@ -1,7 +1,8 @@
-import type { ZodTypeAny } from 'zod';
+import type { ZodType as ZodTypeV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatLayer, isArr, isObj, isOptional, isString, isUnion } from '../schema-compatibility';
-import type { ModelInformation } from '../schema-compatibility';
+import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ModelInformation } from '../types';
 
 export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -17,16 +18,23 @@ export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
     return this.getModel().modelId.includes('deepseek') && !this.getModel().modelId.includes('r1');
   }
 
-  processZodType(value: ZodTypeAny): ZodTypeAny {
-    if (isOptional(value)) {
+  processZodType(value: ZodTypeV3): ZodTypeV3;
+  processZodType(value: ZodTypeV4): ZodTypeV4;
+  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+    if (this.isOptional(value as ZodTypeV4)) {
+      // @ts-expect-error - fix later
       return this.defaultZodOptionalHandler(value, ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodString', 'ZodNumber']);
-    } else if (isObj(value)) {
+    } else if (this.isObj(value as ZodTypeV4)) {
+      // @ts-expect-error - fix later
       return this.defaultZodObjectHandler(value);
-    } else if (isArr(value)) {
+    } else if (this.isArr(value as ZodTypeV4)) {
+      // @ts-expect-error - fix later
       return this.defaultZodArrayHandler(value, ['min', 'max']);
-    } else if (isUnion(value)) {
+    } else if (this.isUnion(value as ZodTypeV4)) {
+      // @ts-expect-error - fix later
       return this.defaultZodUnionHandler(value);
-    } else if (isString(value)) {
+    } else if (this.isString(value as ZodTypeV4)) {
+      // @ts-expect-error - fix later
       return this.defaultZodStringHandler(value);
     }
 

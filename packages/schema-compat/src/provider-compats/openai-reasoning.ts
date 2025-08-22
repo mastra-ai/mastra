@@ -1,18 +1,8 @@
 import { z } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import type { ModelInformation } from '../schema-compatibility';
-import {
-  SchemaCompatLayer,
-  isArr,
-  isDate,
-  isDefault,
-  isNumber,
-  isObj,
-  isOptional,
-  isString,
-  isUnion,
-} from '../schema-compatibility';
+import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ModelInformation } from '../types';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -44,17 +34,19 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     return false;
   }
 
-  processZodType(value: ZodTypeAny): ZodTypeAny {
-    if (isOptional(value)) {
+  processZodType(value: ZodTypeV3): ZodTypeV3;
+  processZodType(value: ZodTypeV4): ZodTypeV4;
+  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+    if (this.isOptional(value)) {
       const innerZodType = this.processZodType(value._def.innerType);
       return innerZodType.nullable();
-    } else if (isObj(value)) {
+    } else if (this.isObj(value)) {
       return this.defaultZodObjectHandler(value, { passthrough: false });
-    } else if (isArr(value)) {
+    } else if (this.isArr(value)) {
       return this.defaultZodArrayHandler(value);
-    } else if (isUnion(value)) {
+    } else if (this.isUnion(value)) {
       return this.defaultZodUnionHandler(value);
-    } else if (isDefault(value)) {
+    } else if (this.isDefault(value)) {
       const defaultDef = value._def;
       const innerType = defaultDef.innerType;
       const defaultValue = defaultDef.defaultValue();
@@ -69,11 +61,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
         result = result.describe(description);
       }
       return result;
-    } else if (isNumber(value)) {
+    } else if (this.isNumber(value)) {
       return this.defaultZodNumberHandler(value);
-    } else if (isString(value)) {
+    } else if (this.isString(value)) {
       return this.defaultZodStringHandler(value);
-    } else if (isDate(value)) {
+    } else if (this.isDate(value)) {
       return this.defaultZodDateHandler(value);
     } else if (value._def.typeName === 'ZodAny') {
       // It's bad practice in the tool to use any, it's not reasonable for models that don't support that OOTB, to cast every single possible type
