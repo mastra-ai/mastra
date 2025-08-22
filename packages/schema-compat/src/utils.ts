@@ -7,7 +7,7 @@ import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
-import type { SchemaCompatLayer } from './schema-compatibility-v3';
+import type { SchemaCompatLayer } from './schema-compatibility';
 import { zodToJsonSchema } from './zod-to-json';
 
 /**
