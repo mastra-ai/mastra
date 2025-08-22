@@ -1,5 +1,27 @@
 # @mastra/clickhouse
 
+## 0.13.2
+
+### Patch Changes
+
+- [#6928](https://github.com/mastra-ai/mastra/pull/6928) [`0228905`](https://github.com/mastra-ai/mastra/commit/0228905518545146bf2f253c6774f454a7379582) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - export clickhouse utils
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- [#6928](https://github.com/mastra-ai/mastra/pull/6928) [`0228905`](https://github.com/mastra-ai/mastra/commit/0228905518545146bf2f253c6774f454a7379582) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - export clickhouse utils
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+
 ## 0.13.1
 
 ### Patch Changes

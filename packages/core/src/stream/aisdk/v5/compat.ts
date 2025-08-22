@@ -356,7 +356,8 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           if ('inputSchema' in tool) {
             inputSchema = tool.inputSchema;
           } else if ('parameters' in tool) {
-            inputSchema = (tool as any).parameters;
+            // @ts-ignore tool is not part
+            inputSchema = tool.parameters;
           }
 
           const sdkTool = toolFn({
