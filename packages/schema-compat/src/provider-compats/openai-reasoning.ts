@@ -1,10 +1,12 @@
 import { z } from 'zod';
-import type { ZodTypeAny } from 'zod';
+import type { ZodType as ZodTypeV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
+  
   constructor(model: ModelInformation) {
     super(model);
   }

@@ -12,7 +12,7 @@ import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, 
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-import { json, z } from 'zod';
+import { z } from 'zod';
 
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
