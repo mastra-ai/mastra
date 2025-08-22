@@ -67,11 +67,32 @@ export async function POST(request: NextRequest) {
       userAgent:
         body.userAgent || request.headers.get("user-agent") || "unknown",
       timestamp: body.timestamp || new Date().toISOString(),
-      source: "docs",
+      source: body.pageTitle,
     };
 
-    await sendToNotion(feedbackEntry);
-    await sendToSlack(feedbackEntry);
+    const [notionResult, linearResult] = await Promise.allSettled([
+      sendToNotion(feedbackEntry),
+      sendToLinear(feedbackEntry),
+    ]);
+
+    let linearTicketUrl = null;
+    if (linearResult.status === 'fulfilled' && linearResult.value?.url) {
+      linearTicketUrl = linearResult.value.url;
+      
+      try {
+        await sendToSlack(feedbackEntry, linearTicketUrl);
+      } catch (error) {
+        console.error('Failed to send updated Slack notification with Linear link:', error);
+      }
+    }
+
+    if (notionResult.status === 'rejected') {
+      console.error('Failed to send to Notion:', notionResult.reason);
+    }
+ 
+    if (linearResult.status === 'rejected') {
+      console.error('Failed to send to Linear:', linearResult.reason);
+    }
 
     return NextResponse.json(
       {
@@ -180,7 +201,114 @@ async function sendToNotion(feedback: any) {
   return result;
 }
 
-async function sendToSlack(feedback: any) {
+async function sendToLinear(feedback: any) {
+  const LINEAR_API_KEY = process.env.LINEAR_API_KEY;
+  const LINEAR_TEAM_ID = process.env.LINEAR_TEAM_ID;
+
+  if (!LINEAR_API_KEY) {
+    console.warn(
+      "LINEAR_API_KEY not configured, skipping Linear ticket creation",
+    );
+    return null;
+  }
+
+  if (!LINEAR_TEAM_ID) {
+    console.warn(
+      "LINEAR_TEAM_ID not configured, skipping Linear ticket creation",
+    );
+    return null;
+  }
+
+  const linearUrl = "https://api.linear.app/graphql";
+
+  // Get priority based on rating
+  const getPriority = (rating: number | null) => {
+    if (!rating) return 2; // Medium priority
+    switch (rating) {
+      case 1:
+        return 1; // High priority (not helpful feedback)
+      case 2:
+        return 2; // Medium priority
+      case 3:
+        return 3; // Low priority (helpful feedback)
+      default:
+        return 2; // Medium priority
+    }
+  };
+
+  const priority = getPriority(feedback.rating);
+  const page = `${process.env.NEXT_PUBLIC_APP_URL}${feedback.page}`;
+
+  const mutation = `
+    mutation IssueCreate($input: IssueCreateInput!) {
+      issueCreate(input: $input) {
+        success
+        issue {
+          id
+          identifier
+          title
+          url
+        }
+      }
+    }
+  `;
+
+  const variables = {
+    input: {
+      teamId: LINEAR_TEAM_ID,
+      title: `Docs Feedback: ${feedback.id}`,
+      description: `${feedback.feedback}, Affected Page: ${page}`,
+      priority: priority,
+      assigneeId: "3237bea7-049c-48f5-bb95-57e00e5f31c4"
+    },
+  };
+
+  try {
+    const response = await fetch(linearUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LINEAR_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: variables,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Linear API error: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const result = await response.json();
+
+    if (result.errors) {
+      throw new Error(`Linear GraphQL errors: ${JSON.stringify(result.errors)}`);
+    }
+
+    if (!result.data?.issueCreate?.success) {
+      throw new Error("Failed to create Linear issue");
+    }
+
+    //might want to parse this
+    const issue = result.data.issueCreate.issue;
+
+    return {
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      url: issue.url,
+    };
+  } catch (error) {
+    console.error("Failed to create Linear ticket:", error);
+    throw error;
+  }
+}
+
+async function sendToSlack(feedback: any, linearTicketUrl: string | null = null) {
   const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 
   if (!SLACK_WEBHOOK_URL) {
@@ -256,12 +384,16 @@ async function sendToSlack(feedback: any) {
         ],
       },
       {
-        type: "context",
-        elements: [
+        type: "section",
+        fields: [
           {
             type: "mrkdwn",
-            text: `💡 <https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>`,
+            text: `<https://www.notion.so/${process.env.NOTION_DATABASE_ID}|View feedback database in Notion>${linearTicketUrl ? ` | 🎫 <${linearTicketUrl}|View Linear ticket>` : ""}`,
           },
+          {
+            type: "mrkdwn",
+            text: `${linearTicketUrl ? `<${linearTicketUrl}|View Linear ticket>` : ""}`
+          }
         ],
       },
     ],
