@@ -1,9 +1,10 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import type { asSchema, CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
 import type { OutputProcessor } from '../processors';
+import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
@@ -23,7 +24,7 @@ export type LoopConfig = {
   abortSignal?: AbortSignal;
 };
 
-export type LoopOptions<Tools extends ToolSet = ToolSet> = {
+export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   model: LanguageModelV2;
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
@@ -43,24 +44,21 @@ export type LoopOptions<Tools extends ToolSet = ToolSet> = {
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
   _internal?: StreamInternal;
-  objectOptions?: ObjectOptions;
+  output?: OUTPUT;
 };
 
-export type ObjectOptions =
-  | {
-      schema?: Parameters<typeof asSchema>[0];
-    }
-  | undefined;
-
-export type LoopRun<Tools extends ToolSet = ToolSet> = LoopOptions<Tools> & {
+export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = LoopOptions<
+  Tools,
+  OUTPUT
+> & {
   runId: string;
   startTimestamp: number;
   modelStreamSpan: Span;
   _internal: StreamInternal;
 };
 
-export type OuterLLMRun<Tools extends ToolSet = ToolSet> = {
+export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;
-} & LoopRun<Tools>;
+} & LoopRun<Tools, OUTPUT>;
