@@ -1,10 +1,10 @@
 import * as crypto from 'crypto';
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 /**
@@ -524,11 +524,11 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
    * Process streaming output chunks for PII detection and redaction
    */
   async processOutputStream(args: {
-    part: TextStreamPart<any> | ObjectStreamPart<any>;
-    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: ChunkType;
+    streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+  }): Promise<ChunkType | null> {
     const { part, abort } = args;
     try {
       // Only process text-delta chunks
@@ -536,7 +536,7 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
         return part;
       }
 
-      const textContent = part.textDelta;
+      const textContent = part.payload.text;
       if (!textContent.trim()) {
         return part;
       }
@@ -567,7 +567,10 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
               );
               return {
                 ...part,
-                textDelta: detectionResult.redacted_content,
+                payload: {
+                  ...part.payload,
+                  text: detectionResult.redacted_content,
+                },
               };
             } else {
               console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
