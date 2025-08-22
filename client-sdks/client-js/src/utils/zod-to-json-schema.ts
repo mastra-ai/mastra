@@ -20,6 +20,7 @@ export function zodToJsonSchema<T extends ZodType | any>(zodSchema: T) {
   }
 
   if ('toJSONSchema' in z) {
+    // @ts-expect-error - zod v4 type
     return z.toJSONSchema(zodSchema);
   }
 

@@ -277,8 +277,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<OUTPUT extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async generateVNext<T extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<T>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     const processedParams = {
       ...params,
@@ -1188,8 +1188,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async streamVNext<OUTPUT extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async streamVNext<T extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<T>,
   ): Promise<
     Response & {
       processDataStream: ({

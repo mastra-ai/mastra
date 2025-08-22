@@ -52,9 +52,6 @@ export class CoreToolBuilder extends MastraBase {
       return this.originalTool.parameters ?? z.object({});
     }
 
-    console.log('wtf dudee');
-    console.log(this.originalTool.inputSchema);
-
     return this.originalTool.inputSchema ?? z.object({});
   };
 
