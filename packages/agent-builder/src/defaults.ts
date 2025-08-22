@@ -4,7 +4,7 @@ import { join, dirname, relative, isAbsolute, resolve } from 'path';
 import { createTool } from '@mastra/core/tools';
 import ignore from 'ignore';
 import { z } from 'zod';
-import { exec, spawnSWPM } from './utils';
+import { exec, spawnSWPM, spawnWithOutput } from './utils';
 
 export class AgentBuilderDefaults {
   static DEFAULT_INSTRUCTIONS = (
@@ -1121,7 +1121,7 @@ export const mastra = new Mastra({
       }
       args.push('--example');
 
-      const { stdout, stderr } = await exec(args.join(' '));
+      const { stdout, stderr } = await spawnWithOutput(args[0]!, args.slice(1), {});
 
       return {
         success: true,
@@ -1131,6 +1131,7 @@ export const mastra = new Mastra({
         error: stderr,
       };
     } catch (error) {
+      console.log(error);
       return {
         success: false,
         message: `Failed to create project: ${error instanceof Error ? error.message : String(error)}`,
