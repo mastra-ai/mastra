@@ -2,6 +2,7 @@ import { spawn as nodeSpawn } from 'child_process';
 import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
 import { join, dirname, relative, isAbsolute, resolve } from 'path';
 import { createTool } from '@mastra/core/tools';
+import ignore from 'ignore';
 import { z } from 'zod';
 import { exec, spawnSWPM } from './utils';
 
@@ -2537,6 +2538,19 @@ export const mastra = new Mastra({
         projectPath,
       } = context;
 
+      const gitignorePath = join(projectPath || process.cwd(), '.gitignore');
+      let gitignoreFilter: ignore.Ignore | undefined;
+
+      try {
+        const gitignoreContent = await readFile(gitignorePath, 'utf-8');
+        gitignoreFilter = ignore().add(gitignoreContent);
+      } catch (err: any) {
+        if (err.code !== 'ENOENT') {
+          console.error(`Error reading .gitignore file:`, err);
+        }
+        // If .gitignore doesn't exist, gitignoreFilter remains undefined, meaning no files are ignored by gitignore.
+      }
+
       // Resolve path relative to project directory if it's not absolute
       const resolvedPath = isAbsolute(path) ? path : resolve(projectPath || process.cwd(), path);
 
@@ -2550,11 +2564,13 @@ export const mastra = new Mastra({
       }> = [];
 
       async function processDirectory(dirPath: string, currentDepth: number = 0) {
+        if (gitignoreFilter?.ignores(dirPath)) return;
         if (currentDepth > maxDepth) return;
 
         const entries = await readdir(dirPath);
 
         for (const entry of entries) {
+          if (gitignoreFilter?.ignores(entry)) continue;
           if (!includeHidden && entry.startsWith('.')) continue;
 
           const fullPath = join(dirPath, entry);
