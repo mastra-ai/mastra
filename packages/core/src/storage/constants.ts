@@ -7,15 +7,23 @@ export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
+export const TABLE_AI_SPANS = 'mastra_ai_spans';
 
-export type TABLE_NAMES =
+export type TABLE_NAMES<IncludeAiSpans extends boolean = false> =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_EVALS
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
-  | typeof TABLE_SCORERS;
+  | typeof TABLE_SCORERS
+  /**
+   * TODO: Remove this once we settle on the AI Span storage schema/apis
+   * Table names with optional new tables for gradual migration.
+   * Use `TABLE_NAMES<true>` to include newer tables like AI_SPANS.
+   * Defaults to original tables only for backward compatibility.
+   */
+  | (IncludeAiSpans extends true ? typeof TABLE_AI_SPANS : never);
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -129,7 +137,29 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   },
 };
 
-export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
+export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
+  // Composite primary key of traceId and spanId
+  traceId: { type: 'text', nullable: false },
+  spanId: { type: 'text', nullable: false },
+  parentSpanId: { type: 'text', nullable: true },
+  name: { type: 'text', nullable: false },
+  scope: { type: 'jsonb', nullable: true }, // Mastra package info {"core-version": "0.1.0"}
+  spanType: { type: 'integer', nullable: false }, // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
+  attributes: { type: 'jsonb', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  events: { type: 'jsonb', nullable: true },
+  links: { type: 'jsonb', nullable: true },
+  other: { type: 'text', nullable: true },
+  input: { type: 'jsonb', nullable: true },
+  output: { type: 'jsonb', nullable: true },
+  error: { type: 'jsonb', nullable: true },
+  startAt: { type: 'timestamp', nullable: false }, // When the span started
+  endAt: { type: 'timestamp', nullable: false }, // When the span ended
+  createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
+  updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
+};
+
+export const TABLE_SCHEMAS: Record<TABLE_NAMES<true>, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
       type: 'text',
@@ -203,6 +233,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     resourceId: { type: 'text', nullable: true },
   },
+  [TABLE_AI_SPANS]: AI_SPAN_SCHEMA,
   [TABLE_TRACES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     parentSpanId: { type: 'text', nullable: true },
