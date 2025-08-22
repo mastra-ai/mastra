@@ -28,7 +28,6 @@ export async function processWorkflowWaitForEvent(
     status: 'success',
     output: currentState?.context[currentStep?.id ?? 'input']?.payload,
   };
-  console.dir({ currentStep, currentState }, { depth: null });
 
   await pubsub.publish('workflows', {
     type: 'workflow.step.run',

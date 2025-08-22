@@ -153,8 +153,6 @@ export async function processWorkflowForEach(
   const idx = currentResult?.output?.length ?? 0;
   const targetLen = (prevResult as any)?.output?.length ?? 0;
 
-  console.dir({ foreach: { idx, targetLen, executionPath, prevResult, currentResult } }, { depth: null });
-
   if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
