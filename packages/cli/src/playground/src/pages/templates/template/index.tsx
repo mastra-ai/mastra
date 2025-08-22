@@ -189,9 +189,6 @@ export default function Template() {
     }));
   };
 
-  console.log('streamResult', streamResult);
-  console.log('installationResult', installationResult);
-
   return (
     <MainContentLayout>
       <Header>
