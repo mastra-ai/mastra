@@ -4,8 +4,6 @@ import { sendToLinear } from "./lib/send-to-linear";
 import { sendToSlack } from "./lib/send-to-slack";
 import { FeedbackData, ErrorWithMessage } from "./lib/types";
 
-
-
 function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
   return (
     typeof error === "object" &&
@@ -28,7 +26,6 @@ function toErrorWithMessage(maybeError: unknown): ErrorWithMessage {
 export function getErrorMessage(error: unknown) {
   return toErrorWithMessage(error).message;
 }
-
 
 export async function POST(request: NextRequest) {
   try {

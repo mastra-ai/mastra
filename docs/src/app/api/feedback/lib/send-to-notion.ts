@@ -56,11 +56,10 @@ export async function sendToNotion(feedback: FeedbackData) {
         select: { name: "New" },
       },
       Rating: {
-        number: feedback.rating
-      }
+        number: feedback.rating,
+      },
     },
   };
-
 
   const response = await fetch(notionUrl, {
     method: "POST",
