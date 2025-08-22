@@ -16,7 +16,7 @@ export async function sendToNotion(feedback: FeedbackData) {
 
   const notionUrl = `https://api.notion.com/v1/pages`;
 
-  const payload: any = {
+  const payload = {
     parent: {
       type: "database_id",
       database_id: NOTION_DATABASE_ID,
@@ -49,22 +49,18 @@ export async function sendToNotion(feedback: FeedbackData) {
           },
         ],
       },
-
       Timestamp: {
         date: { start: feedback.timestamp },
       },
       Status: {
         select: { name: "New" },
       },
+      Rating: {
+        number: feedback.rating
+      }
     },
   };
 
-  // Add optional properties if they exist
-  if (feedback.rating) {
-    payload.properties["Rating"] = {
-      number: feedback.rating,
-    };
-  }
 
   const response = await fetch(notionUrl, {
     method: "POST",
