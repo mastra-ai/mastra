@@ -352,10 +352,8 @@ export class MastraLLMV1 extends MastraBase {
           })
         : undefined,
     };
-    debugger;
 
     try {
-      console.log(argsForExecute);
       const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
 
       if (schema && result.finishReason === 'stop') {

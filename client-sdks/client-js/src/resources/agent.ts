@@ -277,7 +277,7 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async generateVNext<T extends JSONSchema7 | ZodType | undefined = undefined>(
     params: StreamVNextParams<T>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     const processedParams = {
@@ -1188,7 +1188,7 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async streamVNext<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async streamVNext<T extends JSONSchema7 | ZodType | undefined = undefined>(
     params: StreamVNextParams<T>,
   ): Promise<
     Response & {
