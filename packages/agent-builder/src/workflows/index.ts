@@ -342,7 +342,7 @@ const prepareBranchStep = createStep({
 // Step 6: Package merge
 const packageMergeStep = createStep({
   id: 'package-merge',
-  description: 'Merge template package.json dependencies into target project and install',
+  description: 'Merge template package.json dependencies into target project',
   inputSchema: PackageMergeInputSchema,
   outputSchema: PackageMergeResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
@@ -440,7 +440,7 @@ const packageMergeStep = createStep({
 // Step 7: Install
 const installStep = createStep({
   id: 'install',
-  description: 'Run a install command without specifying packages',
+  description: 'Install packages based on merged package.json',
   inputSchema: InstallInputSchema,
   outputSchema: InstallResultSchema,
   execute: async ({ inputData, runtimeContext }) => {

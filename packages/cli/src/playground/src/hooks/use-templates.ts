@@ -268,6 +268,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
                   steps: {
                     ...prev.payload.workflowState.steps,
                     [stepId]: {
+                      ...prev.payload.workflowState.steps[stepId],
                       status: 'running',
                       startTime: new Date(),
                       ...value.payload, // Include any additional data from the stream

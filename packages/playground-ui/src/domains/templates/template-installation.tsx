@@ -50,11 +50,8 @@ function TemplateStepStatus({
     }
   };
 
-  // Format step title - use description from workflow if available, otherwise format stepId
-  const formatStepTitle = (stepId: string, stepData: any) => {
-    if (stepData.description) {
-      return stepData.description;
-    }
+  // Always format the step ID as the title
+  const formatStepTitle = (stepId: string) => {
     return stepId.charAt(0).toUpperCase() + stepId.slice(1).replace(/-/g, ' ');
   };
 
@@ -62,7 +59,9 @@ function TemplateStepStatus({
     <div ref={stepRef} className={`rounded-lg p-4 transition-all duration-200 ${getStatusColor(stepData.status)}`}>
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-icon6 text-base">{formatStepTitle(stepId, stepData)}</div>
+          {/* Always show formatted step name as title */}
+          <div className="font-medium text-icon6 text-base">{formatStepTitle(stepId)}</div>
+          {/* Show description separately if available */}
           {stepData.description && <div className="text-icon3 text-sm mt-1">{stepData.description}</div>}
         </div>
         <div className="flex-shrink-0 ml-4">{getStatusIcon(stepData.status)}</div>
@@ -216,7 +215,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {hasSteps && (
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-icon4">Installation Progress</h4>
-          <div ref={scrollContainerRef} className="space-y-3 max-h-80 overflow-y-auto">
+          <div ref={scrollContainerRef} className="space-y-4 max-h-80 overflow-y-auto p-1">
             {visibleSteps.map(([stepId, stepData]: [string, any]) => (
               <TemplateStepStatus
                 key={stepId}
