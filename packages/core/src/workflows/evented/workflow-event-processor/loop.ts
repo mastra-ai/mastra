@@ -145,7 +145,6 @@ export async function processWorkflowForEach(
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
-  // TODO: concurrency
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
     step.step.id
   ] as any;
