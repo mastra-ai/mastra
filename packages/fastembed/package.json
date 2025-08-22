@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "fastembed": "^1.14.4"
   },
   "devDependencies": {
