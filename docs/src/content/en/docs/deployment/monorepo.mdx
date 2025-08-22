@@ -11,7 +11,7 @@ Deploying Mastra in a monorepo follows the same approach as deploying a standalo
 
 ## Example pnpm monorepo
 
-In this example, the Mastra application is located at `apps/api`, which serves as the project root.
+In this example, the Mastra application is located at `apps/api`.
 
 <FileTree>
   <FileTree.Folder name="apps" defaultOpen>
@@ -43,7 +43,7 @@ In this example, the Mastra application is located at `apps/api`, which serves a
 
 ## Environment variables
 
-Environment variables like `OPENAI_API_KEY` should be stored in an `.env` file at the package root of the Mastra application `(apps/api)`, for example:
+Environment variables like `OPENAI_API_KEY` should be stored in an `.env` file at the root of the Mastra application `(apps/api)`, for example:
 
 <FileTree>
   <FileTree.Folder name="api" defaultOpen>
@@ -70,7 +70,7 @@ In a monorepo setup, all dependency packages used by Mastra must be built when t
 }
 ```
 
-In a monorepo with both a Mastra application and a frontend, it's useful to define a root-level `dev` script that runs both services together. To run only the Mastra application, use a filtered command:
+In a monorepo with both a Mastra application and a frontend, it's useful to define a root-level `dev` script that runs both services together. To run only the Mastra application, use a `pnpm` filtered command:
 
 ```bash copy
 pnpm --filter api dev
