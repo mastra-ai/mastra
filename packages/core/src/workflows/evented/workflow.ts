@@ -601,6 +601,10 @@ export class EventedRun<
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const watchCb = async (event: any, ack?: () => Promise<void>) => {
+      if (event.runId !== this.runId) {
+        return;
+      }
+
       cb(event.data);
       await ack?.();
     };
@@ -625,6 +629,10 @@ export class EventedRun<
     type: 'watch' | 'watch-v2' = 'watch',
   ): Promise<() => Promise<void>> {
     const watchCb = async (event: any, ack?: () => Promise<void>) => {
+      if (event.runId !== this.runId) {
+        return;
+      }
+
       cb(event.data);
       await ack?.();
     };

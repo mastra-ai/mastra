@@ -4337,8 +4337,7 @@ describe.sequential(
         await mastra.stopEventEngine();
       });
 
-      // TODO: fix this test, second watcher doesn't get events
-      it.skip('should unsubscribe from transitions when unwatch is called', async () => {
+      it('should unsubscribe from transitions when unwatch is called', async () => {
         const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
         const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 
@@ -4377,8 +4376,8 @@ describe.sequential(
 
         const run = await workflow.createRunAsync();
 
-        run.watch(onTransition);
-        run.watch(onTransition2);
+        await run.watchAsync(onTransition);
+        await run.watchAsync(onTransition2);
 
         await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -4390,7 +4389,7 @@ describe.sequential(
 
         const run2 = await workflow.createRunAsync();
 
-        run2.watch(onTransition2);
+        await run2.watchAsync(onTransition2);
 
         await run2.start({ inputData: {} });
 

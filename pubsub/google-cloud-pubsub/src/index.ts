@@ -90,7 +90,6 @@ export class GoogleCloudPubSub extends PubSub {
   }
 
   async subscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
-    let runId: string | undefined = undefined;
     if (topic.startsWith('workflow.events.')) {
       const parts = topic.split('.');
       if (parts[parts.length - 2] === 'v2') {
@@ -98,8 +97,6 @@ export class GoogleCloudPubSub extends PubSub {
       } else {
         topic = 'workflow.events.v1';
       }
-
-      runId = parts[parts.length - 1];
     }
 
     // Update tracked callbacks
@@ -124,13 +121,6 @@ export class GoogleCloudPubSub extends PubSub {
       event.createdAt = message.publishTime;
 
       try {
-        if (runId) {
-          if (runId !== event.runId) {
-            await this.ackMessage(topic, message);
-            return;
-          }
-        }
-
         const activeCbs = this.activeCbs[topic] ?? [];
         for (const cb of activeCbs) {
           cb(event, async () => {
