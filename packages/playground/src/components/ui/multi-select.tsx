@@ -292,7 +292,7 @@ function SelectBody<T extends MultiSelectShape>({
                   </p>
                   <CommandGroup>
                     {groupedData[key].map((item: T, idx: number) => {
-                      const isSelected = !!selectedValues.length
+                      const isSelected = selectedValues.length
                         ? isSingleSelect
                           ? selectedValues[0][idKey] === item[idKey]
                           : !!selectedValues.find(value => value[idKey] === item[idKey])
@@ -330,7 +330,7 @@ function SelectBody<T extends MultiSelectShape>({
           ) : (
             <CommandGroup>
               {options.map((item, idx) => {
-                const isSelected = !!selectedValues.length
+                const isSelected = selectedValues.length
                   ? isSingleSelect
                     ? selectedValues[0][idKey] === item[idKey]
                     : !!selectedValues.find(value => value[idKey] === item[idKey])
