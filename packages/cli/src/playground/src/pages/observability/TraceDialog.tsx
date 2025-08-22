@@ -12,7 +12,8 @@ import { CalendarIcon, ClockIcon, PanelLeftIcon, PanelTopIcon, SquareSplitVertic
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
-import { TraceSpanTree } from './trace-span-tree';
+// import { TraceSpanTree } from './trace-tree-span';
+import { TraceTree } from './trace-tree';
 
 type TraceDialogProps = {
   trace?: any;
@@ -185,18 +186,13 @@ export function TraceDialog({
             <h2>Trace</h2>
           </SideDialogHeader>
 
-          <div className="space-y-[1.5rem] overflow-y-auto pr-[1.5rem]">
-            {nestedSpans?.map((span: any) => (
-              <TraceSpanTree
-                key={span.id}
-                span={span}
-                onSpanClick={handleSpanClick}
-                selectedSpanId={selectedSpanId}
-                overallLatency={nestedSpans?.[0].latency}
-                overallStartTime={nestedSpans?.[0].startTime}
-              />
-            ))}
-          </div>
+          <TraceTree
+            spans={nestedSpans}
+            onSpanClick={handleSpanClick}
+            selectedSpanId={selectedSpanId}
+            overallLatency={nestedSpans?.[0].latency}
+            overallStartTime={nestedSpans?.[0].startTime}
+          />
 
           {combinedView && (
             <div className="overflow-y-auto border-t-2 border-gray-500 grid grid-rows-[auto_1fr]">

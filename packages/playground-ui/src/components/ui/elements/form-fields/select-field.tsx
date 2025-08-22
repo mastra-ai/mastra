@@ -28,6 +28,8 @@ export function SelectField({
   onValueChange,
   placeholder = 'Select an option',
 }: SelectFieldProps) {
+  console.log('--->>>', value);
+
   return (
     <div
       className={cn(
