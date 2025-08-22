@@ -7767,7 +7767,7 @@ describe('Workflow', () => {
         status: 'suspended',
         suspendPayload: {
           __workflow_meta: {
-            path: ['nested-workflow-b', 'nested-workflow-a', 'other'],
+            path: ['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other'],
           },
         },
       });

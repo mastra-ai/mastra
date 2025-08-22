@@ -846,8 +846,6 @@ describe.sequential(
 
         const executionResult = await getWorkflowState();
 
-        console.dir({ watchData }, { depth: null });
-
         expect(watchData.length).toBe(9);
         expect(watchData).toMatchObject([
           {
@@ -2216,7 +2214,6 @@ describe.sequential(
 
           const run = await workflow.createRunAsync();
           const result = await run.start({ inputData: { status: 'success' } });
-          console.dir({ result }, { depth: null });
 
           expect(step1Action).toHaveBeenCalled();
           expect(step2Action).toHaveBeenCalled();
@@ -2630,7 +2627,6 @@ describe.sequential(
           run.sendEvent('hello-event', { data: 'hello' });
         }, 3e3);
         const result = await run.start({ inputData: {} });
-        console.dir({ testResult: result }, { depth: null });
         const endTime = Date.now();
 
         expect(execute).toHaveBeenCalled();
@@ -4130,7 +4126,6 @@ describe.sequential(
 
         const executionResult = await run.start({ inputData: {} });
 
-        console.dir({ watchData }, { depth: null });
         expect(watchData.length).toBe(5);
         expect(watchData[1]).toEqual({
           type: 'watch',
@@ -4256,7 +4251,6 @@ describe.sequential(
         run2.watch(onTransition);
 
         const executionResult = await run.start({ inputData: {} });
-        console.dir({ watchData }, { depth: null });
 
         expect(watchData.length).toBe(5);
         expect(watchData[1]).toEqual({
@@ -4890,8 +4884,7 @@ describe.sequential(
         await mastra.stopEventEngine();
       });
 
-      // TODO: fix this test, timing issue?
-      it.skip('should handle complex workflow with multiple suspends', async () => {
+      it('should handle complex workflow with multiple suspends', async () => {
         const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
         const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
 
@@ -5034,28 +5027,34 @@ describe.sequential(
               if (!hasResumed) {
                 hasResumed = true;
 
-                try {
-                  const resumed = await run.resume({
-                    step: humanIntervention,
-                    resumeData: {
-                      humanPrompt: 'What improvements would you suggest?',
-                    },
-                  });
-                  resolve(resumed as any);
-                } catch (error) {
-                  reject(error);
-                }
+                // TODO: timing issue? if resuming immediately, the workflow.suspend event is not processed yet because the suspend event for a step is received before it
+                setTimeout(async () => {
+                  try {
+                    const resumed = await run.resume({
+                      step: humanIntervention,
+                      resumeData: {
+                        humanPrompt: 'What improvements would you suggest?',
+                      },
+                    });
+                    resolve(resumed as any);
+                  } catch (error) {
+                    reject(error);
+                  }
+                }, 200);
               }
             } else if (isImproveResponseSuspended) {
               if (!hasResumedImproveResponse) {
                 hasResumedImproveResponse = true;
-                const resumed = run.resume({
-                  step: improveResponse,
-                  resumeData: {
-                    ...data.payload.workflowState.steps,
-                  },
-                });
-                improvedResponseResultPromise = resumed;
+                // TODO: timing issue? if resuming immediately, the workflow.suspend event is not processed yet because the suspend event for a step is received before it
+                setTimeout(() => {
+                  const resumed = run.resume({
+                    step: improveResponse,
+                    resumeData: {
+                      ...data.payload.workflowState.steps,
+                    },
+                  });
+                  improvedResponseResultPromise = resumed;
+                }, 200);
               }
             }
           });
@@ -5075,6 +5074,11 @@ describe.sequential(
           throw new Error('Resume failed to return a result');
         }
 
+        expect(getUserInputAction).toHaveBeenCalledTimes(1);
+        expect(promptAgentAction).toHaveBeenCalledTimes(1);
+        expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+        expect(improveResponseAction).toHaveBeenCalledTimes(2);
+        expect(evaluateImprovedAction).toHaveBeenCalledTimes(1);
         expect(humanInterventionAction).toHaveBeenCalledTimes(2);
         expect(explainResponseAction).toHaveBeenCalledTimes(1);
 
@@ -5190,7 +5194,6 @@ describe.sequential(
         const run = await promptEvalWorkflow.createRunAsync();
 
         const initialResult = await run.start({ inputData: { input: 'test' } });
-        console.dir({ initialResult }, { depth: null });
         expect(initialResult.steps.promptAgent.status).toBe('suspended');
         expect(promptAgentAction).toHaveBeenCalledTimes(1);
         // expect(initialResult.activePaths.size).toBe(1);
@@ -5231,8 +5234,6 @@ describe.sequential(
         if (!firstResumeResult) {
           throw new Error('Resume failed to return a result');
         }
-
-        console.dir({ firstResumeResult }, { depth: null });
 
         // expect(firstResumeResult.activePaths.size).toBe(1);
         // expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
@@ -5293,7 +5294,6 @@ describe.sequential(
         if (!secondResumeResult) {
           throw new Error('Resume failed to return a result');
         }
-        console.dir({ secondResumeResult }, { depth: null });
 
         expect(promptAgentAction).toHaveBeenCalledTimes(2);
 
@@ -5704,7 +5704,6 @@ describe.sequential(
         await run1.start({ inputData: {} });
 
         const { runs, total } = await workflow.getWorkflowRuns();
-        console.dir({ runs }, { depth: null });
         expect(total).toBe(1);
         expect(runs).toHaveLength(1);
         expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
@@ -5712,7 +5711,6 @@ describe.sequential(
         expect(runs[0]?.snapshot).toBeDefined();
 
         const run3 = await workflow.getWorkflowRunById(run1.runId);
-        console.dir({ run3 }, { depth: null });
         expect(run3?.runId).toBe(run1.runId);
         expect(run3?.workflowName).toBe('test-workflow');
         expect(run3?.snapshot).toEqual(runs[0].snapshot);
@@ -7664,14 +7662,13 @@ describe.sequential(
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
-        console.dir(result, { depth: null });
 
         expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
         expect(result.steps['nested-workflow-c']).toMatchObject({
           status: 'suspended',
           suspendPayload: {
             __workflow_meta: {
-              path: ['nested-workflow-b', 'nested-workflow-a', 'other'],
+              path: ['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other'],
             },
           },
         });

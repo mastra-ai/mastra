@@ -110,7 +110,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       const suspendedSteps = Object.entries(resultData.stepResults)
         .map(([stepId, stepResult]: [string, any]) => {
           if (stepResult.status === 'suspended') {
-            return [stepId].concat(stepResult.suspendPayload?.__workflow_meta?.path ?? []);
+            return stepResult.suspendPayload?.__workflow_meta?.path ?? [];
           }
 
           return null;

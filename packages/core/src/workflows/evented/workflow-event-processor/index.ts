@@ -257,7 +257,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               ...prevResult.suspendPayload,
               __workflow_meta: {
                 runId: runId,
-                path: parentWorkflow?.parentWorkflow
+                path: parentWorkflow?.stepId
                   ? [parentWorkflow.stepId].concat(prevResult.suspendPayload?.__workflow_meta?.path ?? [])
                   : (prevResult.suspendPayload?.__workflow_meta?.path ?? []),
               },
