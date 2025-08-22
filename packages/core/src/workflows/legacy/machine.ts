@@ -50,7 +50,7 @@ export class Machine<
   logger: IMastraLogger;
   #mastra?: Mastra;
   #runtimeContext: RuntimeContext;
-  #workflowInstance: WorkflowInstance;
+  #workflowInstance: WorkflowInstance<TSteps, TTriggerSchema, TResultSchema>;
   #executionSpan?: Span | undefined;
 
   #stepGraph: StepGraph;
@@ -79,7 +79,7 @@ export class Machine<
     logger: IMastraLogger;
     mastra?: Mastra;
     runtimeContext: RuntimeContext;
-    workflowInstance: WorkflowInstance;
+    workflowInstance: WorkflowInstance<TSteps, TTriggerSchema, TResultSchema>;
     executionSpan?: Span;
     name: string;
     runId: string;

@@ -25,7 +25,7 @@ const CHARS_PER_TOKEN = 4;
 const DEFAULT_MESSAGE_RANGE = { before: 2, after: 2 } as const;
 const DEFAULT_TOP_K = 2;
 
-const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
+const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any> => v instanceof ZodObject;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration

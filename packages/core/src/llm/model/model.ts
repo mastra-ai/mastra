@@ -11,7 +11,7 @@ import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, 
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-import { json, z } from 'zod';
+import { z } from 'zod';
 
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
@@ -141,7 +141,7 @@ export class MastraLLM extends MastraLLMBase {
       if (isZodType(experimental_output)) {
         schema = experimental_output as z.ZodType<inferOutput<Z>>;
         if (schema instanceof z.ZodArray) {
-          schema = schema._def.type as z.ZodType<inferOutput<Z>>;
+          schema = schema._zod.def.element as z.ZodType<inferOutput<Z>>;
         }
 
         let jsonSchemaToUse;
@@ -273,7 +273,7 @@ export class MastraLLM extends MastraLLMBase {
       let output: 'object' | 'array' = 'object';
       if (structuredOutput instanceof z.ZodArray) {
         output = 'array';
-        structuredOutput = structuredOutput._def.type;
+        structuredOutput = structuredOutput._zod.def.type as unknown as Z;
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);
@@ -371,7 +371,7 @@ export class MastraLLM extends MastraLLMBase {
       if (typeof (experimental_output as any).parse === 'function') {
         schema = experimental_output as z.ZodType<Z>;
         if (schema instanceof z.ZodArray) {
-          schema = schema._def.type as z.ZodType<Z>;
+          schema = schema._zod.def.type as unknown as z.ZodType<Z>;
         }
       } else {
         schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
@@ -524,7 +524,7 @@ export class MastraLLM extends MastraLLMBase {
       let output: 'object' | 'array' = 'object';
       if (structuredOutput instanceof z.ZodArray) {
         output = 'array';
-        structuredOutput = structuredOutput._def.type;
+        structuredOutput = structuredOutput._zod.def.type as unknown as T;
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);

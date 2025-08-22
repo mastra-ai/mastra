@@ -207,7 +207,7 @@ export class LegacyWorkflow<
         loopType: config?.['#internal']?.loopType,
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
-      },
+      } as StepDef<any, any, any, any>[any],
       get id() {
         return that.#makeStepKey(this.step, this.config);
       },
@@ -333,7 +333,7 @@ export class LegacyWorkflow<
         loopType: config?.['#internal']?.loopType,
         serializedWhen: typeof when === 'function' ? when.toString() : when,
         data: requiredData,
-      },
+      } as StepDef<any, any, any, any>[any],
       get id() {
         return that.#makeStepKey(this.step, this.config);
       },

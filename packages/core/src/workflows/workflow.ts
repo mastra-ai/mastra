@@ -383,7 +383,7 @@ export function createStep<
           context: inputData,
           mastra,
           runtimeContext,
-        });
+        }) as Promise<z.infer<TStepOutput>>;
       }),
     };
   }
@@ -875,8 +875,7 @@ export class Workflow<
         {
           [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]['outputSchema'];
         },
-        any,
-        z.ZodTypeAny
+        any
       >
     >;
   }
@@ -931,8 +930,7 @@ export class Workflow<
         {
           [K in keyof StepsRecord<ExtractedSteps[]>]: StepsRecord<ExtractedSteps[]>[K]['outputSchema'];
         },
-        any,
-        z.ZodTypeAny
+        any
       >
     >;
   }
@@ -993,7 +991,7 @@ export class Workflow<
 
   foreach<
     TPrevIsArray extends TPrevSchema extends z.ZodArray<any> ? true : false,
-    TStepInputSchema extends TPrevSchema extends z.ZodArray<infer TElement> ? TElement : never,
+    TStepInputSchema extends TPrevSchema extends z.ZodArray<infer TElement> ? TElement : any,
     TStepId extends string,
     TSchemaOut extends z.ZodType<any>,
   >(
@@ -1257,7 +1255,7 @@ export class Workflow<
       throw res.error;
     }
 
-    return res.status === 'success' ? res.result : undefined;
+    return res.status === 'success' ? res.result : (undefined as any);
   }
 
   async getWorkflowRuns(args?: {
@@ -1788,7 +1786,7 @@ export class Run<
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: snapshot?.context?.input,
+        input: snapshot?.context?.input as any,
         resume: {
           steps,
           stepResults,

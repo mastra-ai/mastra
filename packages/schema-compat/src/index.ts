@@ -25,7 +25,7 @@ export {
   isUnion,
   isString,
   isNumber,
-} from './schema-compatibility';
+} from './schema-compatibility-v3';
 
 // Utility functions
 export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod } from './utils';

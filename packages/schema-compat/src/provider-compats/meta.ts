@@ -1,7 +1,7 @@
 import type { LanguageModelV1 } from 'ai';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatLayer, isArr, isNumber, isObj, isOptional, isString, isUnion } from '../schema-compatibility';
+import { SchemaCompatLayer, isArr, isNumber, isObj, isOptional, isString, isUnion } from '../schema-compatibility-v3';
 
 export class MetaSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {

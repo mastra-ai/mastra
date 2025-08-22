@@ -30,10 +30,10 @@ export interface WorkflowOptions<
 }
 
 export interface StepExecutionContext<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaIn extends z.ZodType | undefined = undefined,
   TContext extends WorkflowContext = WorkflowContext,
-> extends IExecutionContext<TSchemaIn> {
-  context: TSchemaIn extends z.ZodSchema ? { inputData: z.infer<TSchemaIn> } & TContext : TContext;
+> extends Omit<IExecutionContext<TSchemaIn>, 'context'> {
+  context: TSchemaIn extends z.ZodType ? { inputData: z.infer<TSchemaIn> } & TContext : TContext;
   suspend: (payload?: unknown, softSuspend?: any) => Promise<void>;
   runId: string;
   emit: (event: string, data: any) => void;
@@ -43,13 +43,13 @@ export interface StepExecutionContext<
 
 export interface StepAction<
   TId extends string,
-  TSchemaIn extends z.ZodSchema | undefined,
-  TSchemaOut extends z.ZodSchema | undefined,
+  TSchemaIn extends z.ZodType | undefined,
+  TSchemaOut extends z.ZodType | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
-> extends IAction<TId, TSchemaIn, TSchemaOut, TContext> {
+> extends IAction<TId, TSchemaIn, TSchemaOut, TContext & IExecutionContext<TSchemaIn>> {
   mastra?: Mastra;
-  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
-  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  payload?: TSchemaIn extends z.ZodType ? Partial<z.infer<TSchemaIn>> : unknown;
+  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodType ? z.infer<TSchemaOut> : unknown>;
   retryConfig?: RetryConfig;
   workflow?: LegacyWorkflow;
   workflowId?: string;
@@ -62,8 +62,8 @@ interface SimpleConditionalType {
 
 export type StepVariableType<
   TId extends string,
-  TSchemaIn extends z.ZodSchema | undefined,
-  TSchemaOut extends z.ZodSchema | undefined,
+  TSchemaIn extends z.ZodType | undefined,
+  TSchemaOut extends z.ZodType | undefined,
   TContext extends StepExecutionContext<TSchemaIn>,
 > = StepAction<TId, TSchemaIn, TSchemaOut, TContext> | 'trigger' | { id: string };
 

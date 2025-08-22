@@ -45,10 +45,10 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
 // Define a Step interface
 export interface Step<
   TStepId extends string = string,
-  TSchemaIn extends z.ZodType<any> = z.ZodType<any>,
-  TSchemaOut extends z.ZodType<any> = z.ZodType<any>,
-  TResumeSchema extends z.ZodType<any> = z.ZodType<any>,
-  TSuspendSchema extends z.ZodType<any> = z.ZodType<any>,
+  TSchemaIn extends z.ZodType<any, any> = z.ZodType<any, any>,
+  TSchemaOut extends z.ZodType<any, any> = z.ZodType<any, any>,
+  TResumeSchema extends z.ZodType<any, any> = z.ZodType<any, any>,
+  TSuspendSchema extends z.ZodType<any, any> = z.ZodType<any, any>,
   TEngineType = any,
 > {
   id: TStepId;

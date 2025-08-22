@@ -320,7 +320,7 @@ export class WorkflowInstance<
           // @ts-ignore
           getStepResult: (stepId: string) => results[stepId],
         },
-      });
+      }) as z.infer<TResult>;
     }
 
     return result;

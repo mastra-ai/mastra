@@ -1,8 +1,8 @@
 import type { LanguageModelV1 } from 'ai';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatLayer, isArr, isObj, isOptional, isString, isUnion } from '../schema-compatibility';
-import type { AllZodType } from '../schema-compatibility';
+import { SchemaCompatLayer, isArr, isObj, isOptional, isString, isUnion } from '../schema-compatibility-v3';
+import type { AllZodType } from '../schema-compatibility-v3';
 
 export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {

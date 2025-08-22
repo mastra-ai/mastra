@@ -12,7 +12,7 @@ import {
   isOptional,
   isString,
   isUnion,
-} from '../schema-compatibility';
+} from '../schema-compatibility-v3';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {

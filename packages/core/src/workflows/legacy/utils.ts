@@ -304,7 +304,7 @@ export function workflowToStep<
 
   return {
     id: workflow.name,
-    workflow,
+    workflow: workflow as LegacyWorkflow,
     workflowId: toCamelCaseWithRandomSuffix(workflow.name),
     execute: async ({ context, suspend, emit, mastra: mastraFromExecute, runtimeContext }) => {
       const realMastra = mastraFromExecute ?? mastra;

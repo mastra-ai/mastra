@@ -19,13 +19,13 @@ import type {
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z } from 'zod';
+import type { ZodType, z } from 'zod';
 import type { RuntimeContext } from '../../runtime-context';
 
-export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
+export type inferOutput<Output extends ZodType | JSONSchema7 | undefined = undefined> = Output extends ZodType
   ? z.infer<Output>
   : Output extends JSONSchema7
-    ? unknown
+    ? string
     : undefined;
 
 export type { ToolSet } from 'ai';
@@ -69,20 +69,20 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 // #region generateText
 export type OriginalGenerateTextOptions<
   TOOLS extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
 > = Parameters<typeof generateText<TOOLS, inferOutput<Output>, DeepPartial<inferOutput<Output>>>>[0];
-type GenerateTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
+type GenerateTextOptions<Tools extends ToolSet, Output extends ZodType | JSONSchema7 | undefined = undefined> = Omit<
   OriginalGenerateTextOptions<Tools, Output>,
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: GenerateTextOnStepFinishCallback<inferOutput<Output>>;
+    onStepFinish?: GenerateTextOnStepFinishCallback<Tools>;
     experimental_output?: Output;
   };
 
 export type GenerateTextWithMessagesArgs<
   Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
 > = {
   messages: UIMessage[] | CoreMessage[];
   output?: never;
@@ -90,59 +90,61 @@ export type GenerateTextWithMessagesArgs<
 
 export type GenerateTextResult<
   Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
 > = Omit<OriginalGenerateTextResult<Tools, inferOutput<Output>>, 'experimental_output'> & {
   object?: Output extends undefined ? never : inferOutput<Output>;
 } & TripwireProperties;
 
-export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
-  | Parameters<typeof generateObject<inferOutput<Output>>>[0]
-  | (Parameters<typeof generateObject<inferOutput<Output>>>[0] & { output: 'array' })
+export type OriginalGenerateObjectOptions<Output extends ZodType | JSONSchema7 | undefined = undefined> =
+  | Parameters<typeof generateObject<inferOutput<Output> extends string ? inferOutput<Output> : any>>[0]
+  | (Parameters<typeof generateObject<inferOutput<Output> extends string ? inferOutput<Output> : any>>[0] & {
+      output: 'array';
+    })
   | (Parameters<typeof generateObject<string>>[0] & { output: 'enum' })
   | (Parameters<typeof generateObject>[0] & { output: 'no-schema' });
 
-type GenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
+type GenerateObjectOptions<Output extends ZodType | JSONSchema7 | undefined = undefined> = Omit<
   OriginalGenerateObjectOptions<Output>,
   MastraCustomLLMOptionsKeys | 'model' | 'output'
 > &
   MastraCustomLLMOptions;
 
-export type GenerateObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema7> = {
+export type GenerateObjectWithMessagesArgs<Output extends ZodType | JSONSchema7> = {
   messages: UIMessage[] | CoreMessage[];
   structuredOutput: Output;
   output?: never;
 } & GenerateObjectOptions<Output>;
 
-export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
+export type GenerateObjectResult<Output extends ZodType | JSONSchema7 | undefined = undefined> =
   OriginalGenerateObjectResult<inferOutput<Output>> & {
     readonly reasoning?: never;
   } & TripwireProperties;
 
 export type GenerateReturn<
   Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-  StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
+  StructuredOutput extends ZodType | JSONSchema7 | undefined = undefined,
 > = Output extends undefined ? GenerateTextResult<Tools, StructuredOutput> : GenerateObjectResult<Output>;
 // #endregion
 
 // #region streamText
 export type OriginalStreamTextOptions<
   TOOLS extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
 > = Parameters<typeof streamText<TOOLS, inferOutput<Output>, DeepPartial<inferOutput<Output>>>>[0];
-type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
+type StreamTextOptions<Tools extends ToolSet, Output extends ZodType | JSONSchema7 | undefined = undefined> = Omit<
   OriginalStreamTextOptions<Tools, Output>,
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish' | 'onFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: StreamTextOnStepFinishCallback<inferOutput<Output>>;
-    onFinish?: StreamTextOnFinishCallback<inferOutput<Output>>;
+    onStepFinish?: StreamTextOnStepFinishCallback<Tools>;
+    onFinish?: StreamTextOnFinishCallback<Tools>;
     experimental_output?: Output;
   };
 
 export type StreamTextWithMessagesArgs<
   Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
 > = {
   messages: UIMessage[] | CoreMessage[];
   output?: never;
@@ -150,18 +152,18 @@ export type StreamTextWithMessagesArgs<
 
 export type StreamTextResult<
   Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
 > = Omit<OriginalStreamTextResult<Tools, DeepPartial<inferOutput<Output>>>, 'experimental_output'> & {
   object?: inferOutput<Output>;
 } & TripwireProperties;
 
-export type OriginalStreamObjectOptions<Output extends ZodSchema | JSONSchema7> =
+export type OriginalStreamObjectOptions<Output extends ZodType | JSONSchema7> =
   | Parameters<typeof streamObject<inferOutput<Output>>>[0]
   | (Parameters<typeof streamObject<inferOutput<Output>>>[0] & { output: 'array' })
   | (Parameters<typeof streamObject<string>>[0] & { output: 'enum' })
   | (Parameters<typeof streamObject>[0] & { output: 'no-schema' });
 
-type StreamObjectOptions<Output extends ZodSchema | JSONSchema7> = Omit<
+type StreamObjectOptions<Output extends ZodType | JSONSchema7> = Omit<
   OriginalStreamObjectOptions<Output>,
   MastraCustomLLMOptionsKeys | 'model' | 'output' | 'onFinish'
 > &
@@ -169,13 +171,13 @@ type StreamObjectOptions<Output extends ZodSchema | JSONSchema7> = Omit<
     onFinish?: StreamObjectOnFinishCallback<inferOutput<Output>>;
   };
 
-export type StreamObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema7> = {
+export type StreamObjectWithMessagesArgs<Output extends ZodType | JSONSchema7> = {
   messages: UIMessage[] | CoreMessage[];
   structuredOutput: Output;
   output?: never;
 } & StreamObjectOptions<Output>;
 
-export type StreamObjectResult<Output extends ZodSchema | JSONSchema7> = OriginalStreamObjectResult<
+export type StreamObjectResult<Output extends ZodType | JSONSchema7> = OriginalStreamObjectResult<
   DeepPartial<inferOutput<Output>>,
   inferOutput<Output>,
   any
@@ -184,7 +186,7 @@ export type StreamObjectResult<Output extends ZodSchema | JSONSchema7> = Origina
 
 export type StreamReturn<
   Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-  StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
+  Output extends ZodType | JSONSchema7 | undefined = undefined,
+  StructuredOutput extends ZodType | JSONSchema7 | undefined = undefined,
 > = StreamTextResult<Tools, StructuredOutput> | StreamObjectResult<NonNullable<Output>>;
 // #endregion
