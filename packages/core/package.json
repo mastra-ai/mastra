@@ -76,7 +76,7 @@
         "default": "./dist/workflows/evented/index.js"
       },
       "require": {
-        "types": "./dist/workflows/evented/index.d.cts",
+        "types": "./dist/workflows/evented/index.d.ts",
         "default": "./dist/workflows/evented/index.cjs"
       }
     },
