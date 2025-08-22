@@ -53,8 +53,9 @@ export async function sendToLinear(feedback: FeedbackData) {
     }
   `;
 
-  const res = await mastra.getAgent('summarizer').generate(`Give me a succint title from ${feedback.feedback}`)
- 
+  const res = await mastra
+    .getAgent("summarizer")
+    .generate(`Give me a succint title from ${feedback.feedback}`);
 
   const variables = {
     input: {
