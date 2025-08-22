@@ -5,9 +5,11 @@ import { fileURLToPath } from 'url';
 import { execa } from 'execa';
 import fsExtra from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
+import { getPackageManagerInstallCommand } from '../utils/package-manager';
+import type { PackageManager } from '../utils/package-manager';
 
 export class DepsService {
-  readonly packageManager: string;
+  readonly packageManager: PackageManager;
 
   constructor() {
     this.packageManager = this.getPackageManager();
@@ -27,7 +29,7 @@ export class DepsService {
     return null;
   }
 
-  private getPackageManager(): string {
+  private getPackageManager(): PackageManager {
     const lockFile = this.findLockFile(process.cwd());
     switch (lockFile) {
       case 'pnpm-lock.yaml':
@@ -44,15 +46,11 @@ export class DepsService {
   }
 
   public async installPackages(packages: string[]) {
-    let runCommand = this.packageManager;
-    if (this.packageManager === 'npm') {
-      runCommand = `${this.packageManager} install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
-    } else {
-      runCommand = `${this.packageManager} add`;
-    }
+    const pm = this.packageManager;
+    const installCommand = getPackageManagerInstallCommand(pm);
 
     const packageList = packages.join(' ');
-    return execa(`${runCommand} ${packageList}`, {
+    return execa(`${pm} ${installCommand} ${packageList}`, {
       all: true,
       shell: true,
       stdio: 'inherit',

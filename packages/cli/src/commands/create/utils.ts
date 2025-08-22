@@ -5,7 +5,9 @@ import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps.js';
-import { getPackageManager, getPackageManagerInstallCommand } from '../utils.js';
+import { getPackageManagerInstallCommand } from '../../utils/package-manager.js';
+import type { PackageManager } from '../../utils/package-manager.js';
+import { getPackageManager } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
@@ -39,7 +41,7 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
 };
 
 async function installMastraDependency(
-  pm: string,
+  pm: PackageManager,
   dependency: string,
   versionTag: string,
   isDev: boolean,

@@ -4,7 +4,7 @@ import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps';
-import { getPackageManagerInstallCommand } from '../utils';
+import { getPackageManagerInstallCommand } from '../../utils/package-manager';
 
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';

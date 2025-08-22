@@ -8,6 +8,8 @@ import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
+type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
+
 interface ArchitectureOptions {
   os?: string[];
   cpu?: string[];
@@ -15,7 +17,7 @@ interface ArchitectureOptions {
 }
 
 export class Deps extends MastraBase {
-  private packageManager: string;
+  private packageManager: PackageManager;
   private rootDir: string;
 
   constructor(rootDir = process.cwd()) {
@@ -39,7 +41,7 @@ export class Deps extends MastraBase {
     return null;
   }
 
-  private getPackageManager(): string {
+  private getPackageManager(): PackageManager {
     const lockFile = this.findLockFile(this.rootDir);
     switch (lockFile) {
       case 'pnpm-lock.yaml':
@@ -116,16 +118,31 @@ export class Deps extends MastraBase {
     return args;
   }
 
+  private getPackageManagerInstallCommand(pm: PackageManager): string {
+    switch (pm) {
+      case 'npm':
+        return 'install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false';
+      case 'yarn':
+        return 'install';
+      case 'pnpm':
+        return 'install --ignore-workspace install --loglevel=error';
+      case 'bun':
+        return 'install';
+      default:
+        return 'install';
+    }
+  }
+
   public async install({
     dir = this.rootDir,
     architecture,
   }: { dir?: string; architecture?: ArchitectureOptions } = {}) {
-    let runCommand = this.packageManager;
+    const pm = this.packageManager;
+    const installCommand = this.getPackageManagerInstallCommand(pm);
     let args: string[] = [];
 
-    switch (this.packageManager) {
+    switch (pm) {
       case 'pnpm':
-        runCommand = `${this.packageManager} --ignore-workspace install`;
         if (architecture) {
           await this.writePnpmConfig(dir, architecture);
         }
@@ -136,16 +153,14 @@ export class Deps extends MastraBase {
         if (architecture) {
           await this.writeYarnConfig(dir, architecture);
         }
-        runCommand = `${this.packageManager} install`;
         break;
       case 'npm':
-        runCommand = `${this.packageManager} install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
         if (architecture) {
           args = this.getNpmArgs(architecture);
         }
         break;
       default:
-        runCommand = `${this.packageManager} install`;
+      // Do nothing
     }
 
     const cpLogger = createChildProcessLogger({
@@ -154,19 +169,15 @@ export class Deps extends MastraBase {
     });
 
     return cpLogger({
-      cmd: runCommand,
+      cmd: `${pm} ${installCommand}`,
       args,
       env: process.env as Record<string, string>,
     });
   }
 
   public async installPackages(packages: string[]) {
-    let runCommand = this.packageManager;
-    if (this.packageManager === 'npm') {
-      runCommand = `${this.packageManager} install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
-    } else {
-      runCommand = `${this.packageManager} add`;
-    }
+    const pm = this.packageManager;
+    const installCommand = this.getPackageManagerInstallCommand(pm);
 
     const env: Record<string, string> = {
       PATH: process.env.PATH!,
@@ -182,7 +193,7 @@ export class Deps extends MastraBase {
     });
 
     return cpLogger({
-      cmd: `${runCommand}`,
+      cmd: `${pm} ${installCommand}`,
       args: packages,
       env,
     });
