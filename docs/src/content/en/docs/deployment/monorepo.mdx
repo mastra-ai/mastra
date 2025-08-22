@@ -80,7 +80,7 @@ pnpm --filter api dev
 
 Mastra supports both **CommonJS (CJS)** and **ECMAScript Modules (ESM)**, making it compatible with a variety of JavaScript environments. In a monorepo setup, you can choose the module system that best fits your project.
 
-### Module Support
+### Module support
 
 Mastra provides dual builds for each module type:
 
@@ -89,7 +89,7 @@ Mastra provides dual builds for each module type:
 
 This ensures Mastra can integrate into projects using either module format.
 
-### Build Output
+### Build output
 
 When building Mastra in a monorepo, the build system (such as `tsc`, `esbuild`, or `Rollup`) should produce output that matches the selected module format. This ensures optimized builds for both ESM and CJS, maintaining compatibility with modern and legacy environments.
 
