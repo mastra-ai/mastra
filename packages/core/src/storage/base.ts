@@ -103,7 +103,7 @@ export abstract class MastraStorage extends MastraBase {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
-    observability?: boolean;
+    aiTracing?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -111,7 +111,7 @@ export abstract class MastraStorage extends MastraBase {
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
-      observability: false,
+      aiTracing: false,
     };
   }
 
@@ -355,7 +355,7 @@ export abstract class MastraStorage extends MastraBase {
       );
     }
 
-    if (this.supports.observability) {
+    if (this.supports.aiTracing) {
       tableCreationTasks.push(
         this.createTable({
           tableName: TABLE_AI_SPANS,
