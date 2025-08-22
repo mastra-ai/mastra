@@ -1,3 +1,4 @@
+import type { AISpanType } from '../ai-tracing';
 import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
@@ -159,3 +160,37 @@ export interface ThreadSortOptions {
 export type ThreadOrderBy = 'createdAt' | 'updatedAt';
 
 export type ThreadSortDirection = 'ASC' | 'DESC';
+
+export interface AISpanRecord {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  scope: Record<string, any> | null;
+  spanType: AISpanType;
+  attributes: Record<string, any> | null;
+  metadata: Record<string, any> | null;
+  events: Record<string, any> | null;
+  links: Record<string, any> | null;
+  other: string | null;
+  startAt: Date;
+  endAt: Date;
+  createdAt: Date;
+  updatedAt: Date | null;
+  input: Record<string, any> | null;
+  output: Record<string, any> | null;
+  error: Record<string, any> | null;
+}
+
+export interface AITraceRecord {
+  traceId: string;
+  spans: AISpanRecord[];
+}
+
+export interface AITracesPaginatedArg {
+  filter: {
+    name?: string;
+    spanType?: AISpanType;
+  };
+  pagination: PaginationArgs;
+}
