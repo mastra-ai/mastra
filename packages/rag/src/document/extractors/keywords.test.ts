@@ -9,7 +9,7 @@ const openai = createOpenAI({
 
 const model = openai('gpt-4o');
 
-vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
+vi.setConfig({ testTimeout: 50_000, hookTimeout: 50_000 });
 
 describe('KeywordExtractor', () => {
   it('can use a custom model for keywords extraction', async () => {
@@ -49,7 +49,7 @@ describe('KeywordExtractor', () => {
   it(
     'handles very long input',
     {
-      timeout: 20_000,
+      timeout: 60_000,
     },
     async () => {
       const extractor = new KeywordExtractor();

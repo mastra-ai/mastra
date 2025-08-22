@@ -1,6 +1,7 @@
-import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
+import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -15,6 +16,7 @@ import type {
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -25,16 +27,18 @@ import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
-import type { AgentVNextStreamOptions } from './agent.types';
+import type { AgentExecutionOptions } from './agent.types';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
 
-export type ToolsetsInput = Record<string, ToolsInput>;
+export type AgentAISpanProperties = {
+  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+};
 
-export type MastraLanguageModel = LanguageModelV1;
+export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<S extends ZodTypeAny> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
@@ -68,7 +72,7 @@ export interface AgentConfig<
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
-  defaultVNextStreamOptions?: DynamicArgument<AgentVNextStreamOptions>;
+  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
   mastra?: Mastra;
   scorers?: DynamicArgument<MastraScorers>;
   evals?: TMetrics;
@@ -127,6 +131,10 @@ export type AgentGenerateOptions<
   telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
+  /** Scorers to use for this generation */
+  scorers?: MastraScorers;
+  /** Whether to return the input required to run scorers for agents, defaults to false */
+  returnScorerData?: boolean;
   /**
    * Whether to save messages incrementally on step finish
    * @default false
@@ -136,6 +144,8 @@ export type AgentGenerateOptions<
   inputProcessors?: InputProcessor[];
   /** Output processors to use for this generation call (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
+  /** AI tracing context for span hierarchy and metadata */
+  aiTracingContext?: AITracingContext;
 } & (
   | {
       /**
@@ -209,6 +219,8 @@ export type AgentStreamOptions<
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessor[];
+  /** AI tracing context for span hierarchy and metadata */
+  aiTracingContext?: AITracingContext;
 } & (
   | {
       /**

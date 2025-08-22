@@ -20,7 +20,7 @@ const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
+vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
 
 describe('MDocument', () => {
   describe('basics', () => {

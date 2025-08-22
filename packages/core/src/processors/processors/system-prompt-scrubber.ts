@@ -1,8 +1,8 @@
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
-import type { MastraLanguageModel } from '../../agent/types';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 export interface SystemPromptScrubberOptions {
@@ -86,11 +86,11 @@ export class SystemPromptScrubber implements Processor {
    * Process streaming chunks to detect and handle system prompts
    */
   async processOutputStream(args: {
-    part: TextStreamPart<any> | ObjectStreamPart<any>;
-    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: ChunkType;
+    streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+  }): Promise<ChunkType | null> {
     const { part, abort } = args;
 
     // Only process text-delta chunks
@@ -98,7 +98,7 @@ export class SystemPromptScrubber implements Processor {
       return part;
     }
 
-    const text = part.textDelta;
+    const text = part.payload.text;
     if (!text || text.trim() === '') {
       return part;
     }
@@ -132,7 +132,10 @@ export class SystemPromptScrubber implements Processor {
               detectionResult.redacted_content || this.redactText(text, detectionResult.detections || []);
             return {
               ...part,
-              textDelta: redactedText,
+              payload: {
+                ...part.payload,
+                text: redactedText,
+              },
             };
         }
       }
@@ -223,23 +226,33 @@ export class SystemPromptScrubber implements Processor {
    */
   private async detectSystemPrompts(text: string): Promise<SystemPromptDetectionResult> {
     try {
-      const result = await this.detectionAgent.generate(text, {
-        output: z.object({
-          detections: z
-            .array(
-              z.object({
-                type: z.string(),
-                value: z.string(),
-                confidence: z.number().min(0).max(1),
-                start: z.number(),
-                end: z.number(),
-                redacted_value: z.string().optional(),
-              }),
-            )
-            .optional(),
-          redacted_content: z.string().optional(),
-        }),
+      const model = await this.detectionAgent.getModel();
+      let result: any;
+      const schema = z.object({
+        detections: z
+          .array(
+            z.object({
+              type: z.string(),
+              value: z.string(),
+              confidence: z.number().min(0).max(1),
+              start: z.number(),
+              end: z.number(),
+              redacted_value: z.string().optional(),
+            }),
+          )
+          .optional(),
+        redacted_content: z.string().optional(),
       });
+
+      if (model.specificationVersion === 'v2') {
+        result = await this.detectionAgent.generateVNext(text, {
+          output: schema,
+        });
+      } else {
+        result = await this.detectionAgent.generate(text, {
+          output: schema,
+        });
+      }
 
       return result.object as SystemPromptDetectionResult;
     } catch (error) {

@@ -17,6 +17,8 @@ export function loop<Tools extends ToolSet = ToolSet>({
   modelSettings,
   tools,
   _internal,
+  mode = 'stream',
+  outputProcessors,
   ...rest
 }: LoopOptions<Tools>) {
   let loggerToUse =
@@ -40,7 +42,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
   let startTimestamp = internalToUse.now?.();
 
   const { rootSpan } = getRootSpan({
-    operationId: `mastra.stream`,
+    operationId: mode === 'stream' ? `mastra.stream` : `mastra.generate`,
     model: {
       modelId: model.modelId,
       provider: model.provider,
@@ -59,7 +61,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
   });
 
   const { rootSpan: modelStreamSpan } = getRootSpan({
-    operationId: `mastra.stream.aisdk.doStream`,
+    operationId: `mastra.${mode}.aisdk.doStream`,
     model: {
       modelId: model.modelId,
       provider: model.provider,
@@ -80,6 +82,8 @@ export function loop<Tools extends ToolSet = ToolSet>({
     tools,
     modelStreamSpan,
     telemetry_settings,
+    modelSettings,
+    outputProcessors,
     ...rest,
   };
 
@@ -102,6 +106,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
       objectOptions: rest.objectOptions,
+      outputProcessors,
     },
   });
 }

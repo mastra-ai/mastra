@@ -1,6 +1,8 @@
-import type { TextStreamPart, ObjectStreamPart, TextPart } from 'ai';
+import type { TextPart } from 'ai';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../agent/message-list';
+import type { ChunkType } from '../../stream';
+import { ChunkFrom } from '../../stream/types';
 import { TokenLimiterProcessor } from './token-limiter';
 
 function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant', id = 'test-id'): MastraMessageV2 {
@@ -27,8 +29,13 @@ describe('TokenLimiterProcessor', () => {
     it('should allow chunks within token limit', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      const result = await processor.processOutputStream({ part, streamParts: [part], state: {}, abort: mockAbort });
 
       expect(result).toEqual(part);
       expect(processor.getCurrentTokens()).toBeGreaterThan(0);
@@ -39,7 +46,12 @@ describe('TokenLimiterProcessor', () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
       // First part should be allowed
-      const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const chunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result1 = await processor.processOutputStream({
         part: chunk1,
         streamParts: [],
@@ -49,9 +61,11 @@ describe('TokenLimiterProcessor', () => {
       expect(result1).toEqual(chunk1);
 
       // Second part should be truncated
-      const chunk2: TextStreamPart<any> = {
+      const chunk2: ChunkType = {
         type: 'text-delta',
-        textDelta: ' world this is a very long message that will exceed the token limit',
+        payload: { text: ' world this is a very long message that will exceed the token limit', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
       const result2 = await processor.processOutputStream({
         part: chunk2,
@@ -65,7 +79,12 @@ describe('TokenLimiterProcessor', () => {
     it('should accept simple number constructor', async () => {
       processor = new TokenLimiterProcessor(10);
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toEqual(part);
@@ -81,7 +100,12 @@ describe('TokenLimiterProcessor', () => {
       });
 
       // First part should be allowed
-      const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const chunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result1 = await processor.processOutputStream({
         part: chunk1,
         streamParts: [],
@@ -91,7 +115,12 @@ describe('TokenLimiterProcessor', () => {
       expect(result1).toEqual(chunk1);
 
       // Second part should trigger abort
-      const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world this is a very long message' };
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world this is a very long message', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
 
       // The abort function should be called
       await processor.processOutputStream({ part: chunk2, streamParts: [], state: {}, abort: mockAbort });
@@ -103,11 +132,23 @@ describe('TokenLimiterProcessor', () => {
     it('should use cumulative counting by default', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world' };
-      const chunk3: TextStreamPart<any> = {
+      const chunk1: ChunkType = {
         type: 'text-delta',
-        textDelta: ' this is a very long message that will definitely exceed the token limit',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      const chunk3: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' this is a very long message that will definitely exceed the token limit', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       await processor.processOutputStream({ part: chunk1, streamParts: [], state: {}, abort: mockAbort });
@@ -134,8 +175,18 @@ describe('TokenLimiterProcessor', () => {
         countMode: 'part',
       });
 
-      const chunk1: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
-      const chunk2: TextStreamPart<any> = { type: 'text-delta', textDelta: ' world this is a very long message' };
+      const chunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      const chunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world this is a very long message', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
 
       // First part should be allowed (within limit)
       const result1 = await processor.processOutputStream({
@@ -164,7 +215,12 @@ describe('TokenLimiterProcessor', () => {
     it('should handle text-delta chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello world' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello world', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toEqual(part);
@@ -173,9 +229,11 @@ describe('TokenLimiterProcessor', () => {
     it('should handle object chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 50 });
 
-      const part: ObjectStreamPart<any> = {
+      const part: ChunkType = {
         type: 'object',
         object: { message: 'Hello world', count: 42 },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
@@ -185,9 +243,11 @@ describe('TokenLimiterProcessor', () => {
     it('should count tokens in object chunks correctly', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
-      const part: ObjectStreamPart<any> = {
+      const part: ChunkType = {
         type: 'object',
         object: { message: 'This is a very long message that will exceed the token limit' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
@@ -199,7 +259,12 @@ describe('TokenLimiterProcessor', () => {
     it('should reset token counter', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(processor.getCurrentTokens()).toBeGreaterThan(0);
@@ -218,7 +283,12 @@ describe('TokenLimiterProcessor', () => {
 
       expect(processor.getCurrentTokens()).toBe(0);
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(processor.getCurrentTokens()).toBeGreaterThan(0);
@@ -229,7 +299,12 @@ describe('TokenLimiterProcessor', () => {
     it('should handle empty text chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: '' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: '', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toEqual(part);
@@ -239,7 +314,12 @@ describe('TokenLimiterProcessor', () => {
     it('should handle single character chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 1 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'a' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'a', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toEqual(part);
@@ -248,7 +328,12 @@ describe('TokenLimiterProcessor', () => {
     it('should handle very large limits', async () => {
       processor = new TokenLimiterProcessor({ limit: 1000000 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello world' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello world', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toEqual(part);
@@ -257,7 +342,12 @@ describe('TokenLimiterProcessor', () => {
     it('should handle zero limit', async () => {
       processor = new TokenLimiterProcessor({ limit: 0 });
 
-      const part: TextStreamPart<any> = { type: 'text-delta', textDelta: 'Hello' };
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toBeNull();
@@ -269,11 +359,11 @@ describe('TokenLimiterProcessor', () => {
       processor = new TokenLimiterProcessor({ limit: 20 });
 
       const chunks = [
-        { type: 'text-delta', textDelta: 'Hello' },
-        { type: 'text-delta', textDelta: ' ' },
-        { type: 'text-delta', textDelta: 'world' },
-        { type: 'text-delta', textDelta: '!' },
-      ] as TextStreamPart<any>[];
+        { type: 'text-delta', payload: { text: 'Hello', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' ', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: 'world', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: '!', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
+      ] as ChunkType[];
 
       for (let i = 0; i < chunks.length; i++) {
         const result = await processor.processOutputStream({
@@ -294,10 +384,10 @@ describe('TokenLimiterProcessor', () => {
     it('should work with mixed part types', async () => {
       processor = new TokenLimiterProcessor({ limit: 30 });
 
-      const chunks: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [
-        { type: 'text-delta', textDelta: 'Hello' },
-        { type: 'object', object: { status: 'ok' } },
-        { type: 'text-delta', textDelta: ' world' },
+      const chunks: ChunkType[] = [
+        { type: 'text-delta', payload: { text: 'Hello', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        { type: 'object', object: { status: 'ok' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
       ];
 
       for (let i = 0; i < chunks.length; i++) {
