@@ -16,8 +16,10 @@ import { TraceDialog } from './TraceDialog';
 
 export default function observability() {
   const { trace, nestedSpans, spans, spanIds } = useTrace();
-  const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const [selectedEntity, setSelectedEntity] = useState<number | undefined>(undefined);
+  const [selectedTrace, setSelectedTrace] = useState<any>(null);
+  const [selectedEntity, setSelectedEntity] = useState<string | undefined>(undefined);
+  const [selectedDateFrom, setSelectedDateFrom] = useState<Date | null | undefined>(undefined);
+  const [selectedDateTo, setSelectedDateTo] = useState<Date | null | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents, isLoading: agentsLoading } = useAgents();
   // const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
@@ -26,16 +28,28 @@ export default function observability() {
     ...(Object.entries(agents) || []).map(([key, value]) => ({ id: key, name: value.name, type: 'agent' })),
     // ...(workflows || []).map(workflow => ({ id: workflow.id, name: workflow.name, type: 'workflow' })),
   ];
-  const entityOptions = entities.map(entity => entity.name);
+  const entityOptions = entities.map(entity => ({ value: entity.id, label: entity.name }));
 
   const handleReset = () => {
-    setSelectedEvent(null);
-    setSelectedEntity(undefined);
+    setSelectedTrace(null);
+    setSelectedEntity('');
     setDialogIsOpen(false);
+    setSelectedDateFrom(undefined);
+    setSelectedDateTo(undefined);
   };
 
   const handleEntityChange = (value: string) => {
-    setSelectedEntity(value ? parseInt(value, 10) : undefined);
+    setSelectedEntity(value || '');
+  };
+
+  const handleDataChange = (value: Date | null | undefined, type: 'from' | 'to') => {
+    console.log({ value, type });
+
+    if (type === 'from') {
+      setSelectedDateFrom(value);
+    } else {
+      setSelectedDateTo(value);
+    }
   };
 
   const events = [
@@ -75,8 +89,8 @@ export default function observability() {
   ];
 
   const filteredEvents = events.filter(event => {
-    if (typeof selectedEntity === 'number' && selectedEntity >= 0) {
-      const entity = entities?.[selectedEntity];
+    if (selectedEntity) {
+      const entity = entities.find(entity => entity.id === selectedEntity);
 
       if (entity && event.entityId !== entity.id) {
         return false;
@@ -94,10 +108,10 @@ export default function observability() {
   ];
 
   const handleOnListItem = (id: string) => {
-    console.log('handleOnListItem', id, selectedEvent?.id);
+    console.log('handleOnListItem', id, selectedTrace?.id);
 
-    if (id === selectedEvent?.id) {
-      setSelectedEvent(null);
+    if (id === selectedTrace?.id) {
+      setSelectedTrace(null);
     } else {
       const item = events.find(item => item.id === id);
 
@@ -106,7 +120,7 @@ export default function observability() {
         return;
       }
 
-      setSelectedEvent(item);
+      setSelectedTrace(item);
       setDialogIsOpen(true);
     }
   };
@@ -116,7 +130,7 @@ export default function observability() {
     if (currentIndex === -1 || currentIndex === (events?.length || 0) - 1) {
       return null; // No next event
     }
-    return () => setSelectedEvent(events[(currentIndex || 0) + 1]);
+    return () => setSelectedTrace(events[(currentIndex || 0) + 1]);
   };
 
   const toNextItem = (currentEvent: any) => {
@@ -124,7 +138,7 @@ export default function observability() {
     if ((currentIndex || 0) <= 0) {
       return null; // No previous event
     }
-    return () => setSelectedEvent(events[(currentIndex || 0) - 1]);
+    return () => setSelectedTrace(events[(currentIndex || 0) - 1]);
   };
 
   return (
@@ -140,12 +154,15 @@ export default function observability() {
             <ObservabilityTracesTools
               onEntityChange={handleEntityChange}
               onReset={handleReset}
-              selectedEntity={selectedEntity?.toString() || ''}
+              selectedEntity={selectedEntity}
               entityOptions={entityOptions}
+              onDateChange={handleDataChange}
+              selectedDateFrom={selectedDateFrom}
+              selectedDateTo={selectedDateTo}
             />
             <EntryList
               items={filteredEvents}
-              selectedItem={selectedEvent}
+              selectedItem={selectedTrace}
               onItemClick={handleOnListItem}
               columns={listColumns}
               isLoading={false}
@@ -156,8 +173,8 @@ export default function observability() {
       <TraceDialog
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={toNextItem(selectedEvent)}
-        onPrevious={toPreviousItem(selectedEvent)}
+        onNext={toNextItem(selectedTrace)}
+        onPrevious={toPreviousItem(selectedTrace)}
         trace={trace}
         spans={spans || []}
         nestedSpans={nestedSpans}

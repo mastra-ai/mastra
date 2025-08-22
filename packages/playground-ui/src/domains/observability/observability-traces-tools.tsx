@@ -1,12 +1,16 @@
+import { DatePicker } from '@/components/ui/date-picker';
+import { SelectField } from '@/components/ui/elements';
 import { Button } from '@/components/ui/elements/buttons';
-import { Select } from '@/components/ui/elements/select';
 import { XIcon } from 'lucide-react';
 
 type ObservabilityTracesToolsProps = {
   onEntityChange: (val: string) => void;
   selectedEntity?: string;
-  entityOptions?: string[];
+  entityOptions?: { value: string; label: string }[];
   onReset?: () => void;
+  onDateChange?: (value: Date | null | undefined, type: 'from' | 'to') => void;
+  selectedDateFrom?: Date | null | undefined;
+  selectedDateTo?: Date | null | undefined;
 };
 
 export function ObservabilityTracesTools({
@@ -14,21 +18,45 @@ export function ObservabilityTracesTools({
   onReset,
   selectedEntity,
   entityOptions,
+  onDateChange,
+  selectedDateFrom,
+  selectedDateTo,
 }: ObservabilityTracesToolsProps) {
+  console.log({ selectedEntity });
+
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-[3rem] items-center">
-      <div className="items-center gap-4 max-w-[40rem] flex">
-        <Select
-          name={'select-entity'}
-          onChange={onEntityChange}
-          value={selectedEntity}
-          options={entityOptions || []}
-          placeholder="Select Entity"
-        />
-        <Button variant="primary" onClick={onReset}>
-          Reset <XIcon />
-        </Button>
+    <div className="flex gap-[1rem] items-center">
+      <SelectField
+        label="Filter by Entity"
+        name={'select-entity'}
+        placeholder="Select..."
+        options={entityOptions || []}
+        onValueChange={onEntityChange}
+        value={selectedEntity}
+      />
+
+      <div className="flex gap-[.5rem] items-center">
+        <label className="shrink-0 text-[0.875rem] text-icon3">Filter by Date range</label>
+        <div className="flex gap-[1rem] w-[19rem]">
+          <DatePicker
+            placeholder="From"
+            value={selectedDateFrom}
+            setValue={date => onDateChange?.(date, 'from')}
+            clearable={true}
+            className="w-[9rem]"
+          />
+          <DatePicker
+            placeholder="To"
+            value={selectedDateTo}
+            setValue={date => onDateChange?.(date, 'to')}
+            clearable={true}
+            className="w-[9rem]"
+          />
+        </div>
       </div>
+      <Button variant="primary" onClick={onReset}>
+        Reset <XIcon />
+      </Button>
     </div>
   );
 }
