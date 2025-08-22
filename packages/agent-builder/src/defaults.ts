@@ -1114,7 +1114,7 @@ export const mastra = new Mastra({
    */
   static async createMastraProject({ features, projectName }: { features?: string[]; projectName?: string }) {
     try {
-      const args = ['pnpx', 'create', 'mastra@latest', projectName ?? '', '-l', 'openai', '-k', 'skip'];
+      const args = ['pnpx', 'create-mastra@latest', projectName ?? '', '-l', 'openai', '-k', 'skip'];
 
       if (features && features.length > 0) {
         args.push('--components', features.join(','));
