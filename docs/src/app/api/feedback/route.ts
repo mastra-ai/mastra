@@ -5,7 +5,6 @@ import { sendToSlack } from "./lib/send-to-slack";
 import { getErrorMessage } from "./lib/error";
 import { FeedbackData } from "./lib/types";
 
-
 export async function POST(request: NextRequest) {
   try {
     const body: FeedbackData = await request.json();
@@ -44,21 +43,20 @@ export async function POST(request: NextRequest) {
       sendToLinear(feedbackEntry),
     ]);
 
-
     let linearTicketUrl = null;
 
-    if (linearResult.status === 'fulfilled' && linearResult.value?.url) {
+    if (linearResult.status === "fulfilled" && linearResult.value?.url) {
       linearTicketUrl = linearResult.value.url;
     }
 
     await sendToSlack(feedbackEntry, linearTicketUrl);
 
-    if (notionResult.status === 'rejected') {
-      console.error('Failed to send to Notion:', notionResult.reason);
+    if (notionResult.status === "rejected") {
+      console.error("Failed to send to Notion:", notionResult.reason);
     }
- 
-    if (linearResult.status === 'rejected') {
-      console.error('Failed to send to Linear:', linearResult.reason);
+
+    if (linearResult.status === "rejected") {
+      console.error("Failed to send to Linear:", linearResult.reason);
     }
 
     return NextResponse.json(
@@ -76,4 +74,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

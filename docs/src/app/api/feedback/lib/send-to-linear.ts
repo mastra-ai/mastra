@@ -22,14 +22,14 @@ export async function sendToLinear(feedback: FeedbackData) {
 
   // Get priority based on rating
   const getPriority = (rating: number | null) => {
-    if (!rating) return 3; 
+    if (!rating) return 3;
     switch (rating) {
       case 3:
-        return 3; // Normal 
+        return 3; // Normal
       case 2:
-        return 2; // High 
+        return 2; // High
       case 1:
-        return 1; // Urgent 
+        return 1; // Urgent
       default:
         return 3; // Normal
     }
@@ -58,7 +58,7 @@ export async function sendToLinear(feedback: FeedbackData) {
       title: `Docs Feedback: ${feedback.id}`,
       description: `${feedback.feedback},\n Affected Page: ${page}`,
       priority: priority,
-      assigneeId: "3237bea7-049c-48f5-bb95-57e00e5f31c4"
+      assigneeId: "3237bea7-049c-48f5-bb95-57e00e5f31c4",
     },
   };
 
@@ -85,7 +85,9 @@ export async function sendToLinear(feedback: FeedbackData) {
     const result = await response.json();
 
     if (result.errors) {
-      throw new Error(`Linear GraphQL errors: ${JSON.stringify(result.errors)}`);
+      throw new Error(
+        `Linear GraphQL errors: ${JSON.stringify(result.errors)}`,
+      );
     }
 
     if (!result.data?.issueCreate?.success) {

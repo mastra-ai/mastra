@@ -1,4 +1,3 @@
-
 export interface FeedbackData {
   id: string;
   feedback: string;
@@ -7,7 +6,6 @@ export interface FeedbackData {
   userAgent: string;
   timestamp: string;
 }
-
 
 export type ErrorWithMessage = {
   message: string;

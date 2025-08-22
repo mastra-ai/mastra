@@ -1,6 +1,9 @@
 import { FeedbackData } from "./types";
 
-export async function sendToSlack(feedback: FeedbackData, linearTicketUrl: string | null = null) {
+export async function sendToSlack(
+  feedback: FeedbackData,
+  linearTicketUrl: string | null = null,
+) {
   const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 
   if (!SLACK_WEBHOOK_URL) {
@@ -80,8 +83,8 @@ export async function sendToSlack(feedback: FeedbackData, linearTicketUrl: strin
           },
           {
             type: "mrkdwn",
-            text: `${linearTicketUrl ? `<${linearTicketUrl}|View Linear ticket>` : ""}`
-          }
+            text: `${linearTicketUrl ? `<${linearTicketUrl}|View Linear ticket>` : ""}`,
+          },
         ],
       },
     ],
