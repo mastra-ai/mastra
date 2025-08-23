@@ -21,12 +21,11 @@ program
     });
 
     try {
-      // Validate gh CLI is installed
       spinner.start('Checking gh CLI installation...');
       const { execSync } = await import('child_process');
       try {
         execSync('gh --version', { stdio: 'pipe' });
-        spinner.succeed('GitHub CLI (gh) is installed');
+        spinner.succeed('initialized');
       } catch {
         spinner.fail('GitHub CLI (gh) is not installed');
         console.log(chalk.yellow('\nPlease install the GitHub CLI:'));
@@ -35,15 +34,8 @@ program
         process.exit(1);
       }
 
-      // Check if interactive mode is requested
       spinner.stop();
       await runGitHubIssueReproWorkflow({ issueUrl: issue });
-      // const { startInteractiveChat } = await import('./chat.js');
-      // await startInteractiveChat({
-      //   model: options.model,
-      //   projectPath: options.projectPath,
-      //   initialIssue: issue,
-      // });
     } catch (error) {
       spinner.fail('Failed to reproduce issue');
       console.error(chalk.red('\n❌ Error:'), error);
