@@ -1614,7 +1614,7 @@ importers:
         specifier: ^14.1.1
         version: 14.1.1
       '@modelcontextprotocol/sdk':
-        specifier: ^1.17.0
+        specifier: ^1.17.3
         version: 1.17.3
       date-fns:
         specifier: ^4.1.0
@@ -1699,7 +1699,7 @@ importers:
         specifier: workspace:^
         version: link:../mcp
       '@modelcontextprotocol/sdk':
-        specifier: ^1.13.0
+        specifier: ^1.17.3
         version: 1.17.3
       date-fns:
         specifier: ^4.1.0
@@ -1766,7 +1766,7 @@ importers:
   packages/mcp-registry-registry:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.13.0
+        specifier: ^1.17.3
         version: 1.17.3
       uuid:
         specifier: ^11.1.0
