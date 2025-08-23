@@ -1,9 +1,14 @@
-import type { Client } from '@libsql/client';
+import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import { createExecuteWriteOperationWithRetry, prepareStatement } from '../utils';
+import {
+  createExecuteWriteOperationWithRetry,
+  prepareDeleteStatement,
+  prepareStatement,
+  prepareUpdateStatement,
+} from '../utils';
 
 export class StoreOperationsLibSQL extends StoreOperations {
   private client: Client;
@@ -42,7 +47,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     return (await result.rows)?.some((row: any) => row.name === column);
   }
 
-  private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
+  private getCreateTableSQL(tableName: TABLE_NAMES<true>, schema: Record<string, StorageColumn>): string {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
       const parsedColumnName = parseSqlIdentifier(name, 'column name');
@@ -66,6 +71,14 @@ export class StoreOperationsLibSQL extends StoreOperations {
       return stmnt;
     }
 
+    if (tableName === TABLE_AI_SPANS) {
+      const stmnt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (
+                    ${columns.join(',\n')},
+                    PRIMARY KEY (traceId, spanId)
+                )`;
+      return stmnt;
+    }
+
     return `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns.join(', ')})`;
   }
 
@@ -73,7 +86,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     schema,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES<true>;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
@@ -110,7 +123,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     record,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES<true>;
     record: Record<string, any>;
   }): Promise<void> {
     await this.client.execute(
@@ -121,7 +134,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     );
   }
 
-  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  public insert(args: { tableName: TABLE_NAMES<true>; record: Record<string, any> }): Promise<void> {
     const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
       logger: this.logger,
       maxRetries: this.maxRetries,
@@ -130,7 +143,13 @@ export class StoreOperationsLibSQL extends StoreOperations {
     return executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
   }
 
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+  async load<R>({
+    tableName,
+    keys,
+  }: {
+    tableName: TABLE_NAMES<true>;
+    keys: Record<string, string>;
+  }): Promise<R | null> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
     const parsedKeys = Object.keys(keys).map(key => parseSqlIdentifier(key, 'column name'));
@@ -164,11 +183,106 @@ export class StoreOperationsLibSQL extends StoreOperations {
     return parsed as R;
   }
 
+  async loadMany<R>({
+    tableName,
+    whereClause,
+    orderBy,
+    offset,
+    limit,
+    args,
+  }: {
+    tableName: TABLE_NAMES<true>;
+    whereClause?: { sql: string; args: InValue[] };
+    orderBy?: string;
+    offset?: number;
+    limit?: number;
+    args?: any[];
+  }): Promise<R[]> {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+    let statement = `SELECT * FROM ${parsedTableName}`;
+
+    if (whereClause?.sql) {
+      statement += `${whereClause.sql}`;
+    }
+
+    if (orderBy) {
+      statement += ` ORDER BY ${orderBy}`;
+    }
+
+    if (limit) {
+      statement += ` LIMIT ${limit}`;
+    }
+
+    if (offset) {
+      statement += ` OFFSET ${offset}`;
+    }
+
+    console.log(JSON.stringify({ statement, args: whereClause?.args ?? args }, null, 2));
+
+    const result = await this.client.execute({
+      sql: statement,
+      args: whereClause?.args ?? args,
+    });
+
+    return result.rows as R[];
+  }
+
+  async loadTotalCount({
+    tableName,
+    whereClause,
+  }: {
+    tableName: TABLE_NAMES<true>;
+    whereClause?: { sql: string; args: InValue[] };
+  }): Promise<number> {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? `${whereClause.sql}` : ''}`;
+    const args = whereClause?.args ?? [];
+    console.log(JSON.stringify({ statement, args }, null, 2));
+
+    const result = await this.client.execute({
+      sql: statement,
+      args: whereClause?.args ?? [],
+    });
+
+    if (!result.rows || result.rows.length === 0) {
+      return 0;
+    }
+
+    return (result.rows[0]?.count as number) ?? 0;
+  }
+
+  public update(args: {
+    tableName: TABLE_NAMES<true>;
+    keys: Record<string, any>;
+    data: Record<string, any>;
+  }): Promise<void> {
+    const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
+      logger: this.logger,
+      maxRetries: this.maxRetries,
+      initialBackoffMs: this.initialBackoffMs,
+    });
+    return executeWriteOperationWithRetry(() => this.doUpdate(args), `update table ${args.tableName}`);
+  }
+
+  private async doUpdate({
+    tableName,
+    keys,
+    data,
+  }: {
+    tableName: TABLE_NAMES<true>;
+    keys: Record<string, any>;
+    data: Record<string, any>;
+  }): Promise<void> {
+    await this.client.execute(prepareUpdateStatement({ tableName, updates: data, keys }));
+  }
+
   private async doBatchInsert({
     tableName,
     records,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES<true>;
     records: Record<string, any>[];
   }): Promise<void> {
     if (records.length === 0) return;
@@ -176,7 +290,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     await this.client.batch(batchStatements, 'write');
   }
 
-  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+  public batchInsert(args: { tableName: TABLE_NAMES<true>; records: Record<string, any>[] }): Promise<void> {
     const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
       logger: this.logger,
       maxRetries: this.maxRetries,
@@ -199,6 +313,127 @@ export class StoreOperationsLibSQL extends StoreOperations {
         error,
       );
     });
+  }
+
+  /**
+   * Updates multiple records in batch. Each record can be updated based on single or composite keys.
+   * @param args - Batch update arguments
+   * @param args.tableName - Name of the table to update
+   * @param args.updates - Array of update operations
+   * @param args.updates[].keys - Key-value pairs to identify the record to update
+   * @param args.updates[].data - Data to update in the record
+   * @returns Promise that resolves when all updates are complete
+   */
+  private async doBatchUpdate({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES<true>;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<void> {
+    if (updates.length === 0) return;
+
+    const batchStatements = updates.map(({ keys, data }) =>
+      prepareUpdateStatement({
+        tableName,
+        updates: data,
+        keys,
+      }),
+    );
+
+    await this.client.batch(batchStatements, 'write');
+  }
+
+  /**
+   * Public batch update method with retry logic
+   */
+  public batchUpdate(args: {
+    tableName: TABLE_NAMES<true>;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<void> {
+    const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
+      logger: this.logger,
+      maxRetries: this.maxRetries,
+      initialBackoffMs: this.initialBackoffMs,
+    });
+
+    return executeWriteOperationWithRetry(
+      () => this.doBatchUpdate(args),
+      `batch update in table ${args.tableName}`,
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: args.tableName,
+          },
+        },
+        error,
+      );
+    });
+  }
+
+  /**
+   * Public batch delete method with retry logic
+   */
+  public batchDelete(args: { tableName: TABLE_NAMES<true>; keys: Array<Record<string, any>> }): Promise<void> {
+    const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
+      logger: this.logger,
+      maxRetries: this.maxRetries,
+      initialBackoffMs: this.initialBackoffMs,
+    });
+
+    return executeWriteOperationWithRetry(
+      () => this.doBatchDelete(args),
+      `batch delete from table ${args.tableName}`,
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_DELETE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: args.tableName,
+          },
+        },
+        error,
+      );
+    });
+  }
+
+  /**
+   * Deletes multiple records in batch. Each record can be deleted based on single or composite keys.
+   * @param args - Batch delete arguments
+   * @param args.tableName - Name of the table to delete from
+   * @param args.keys - Array of key objects to identify records to delete
+   * @returns Promise that resolves when all deletes are complete
+   */
+
+  private async doBatchDelete({
+    tableName,
+    keys,
+  }: {
+    tableName: TABLE_NAMES<true>;
+    keys: Array<Record<string, any>>;
+  }): Promise<void> {
+    if (keys.length === 0) return;
+
+    const batchStatements = keys.map(keyObj =>
+      prepareDeleteStatement({
+        tableName,
+        keys: keyObj,
+      }),
+    );
+
+    await this.client.batch(batchStatements, 'write');
   }
 
   /**

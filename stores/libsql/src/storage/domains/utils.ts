@@ -42,7 +42,13 @@ export function createExecuteWriteOperationWithRetry({
   };
 }
 
-export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): {
+export function prepareStatement({
+  tableName,
+  record,
+}: {
+  tableName: TABLE_NAMES<true>;
+  record: Record<string, any>;
+}): {
   sql: string;
   args: InValue[];
 } {
@@ -63,5 +69,93 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
   return {
     sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
     args: values,
+  };
+}
+
+export function prepareUpdateStatement({
+  tableName,
+  updates,
+  keys,
+}: {
+  tableName: TABLE_NAMES<true>;
+  updates: Record<string, any>;
+  keys: Record<string, any>;
+}): {
+  sql: string;
+  args: InValue[];
+} {
+  const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+  // Prepare SET clause
+  const updateColumns = Object.keys(updates).map(col => parseSqlIdentifier(col, 'column name'));
+  const updateValues = Object.values(updates).map(transformToSqlValue);
+  const setClause = updateColumns.map(col => `${col} = ?`).join(', ');
+
+  // Prepare WHERE clause
+  const keyColumns = Object.keys(keys).map(col => parseSqlIdentifier(col, 'column name'));
+  const keyValues = Object.values(keys).map(transformToSqlValue);
+  const whereClause = keyColumns.map(col => `${col} = ?`).join(' AND ');
+
+  return {
+    sql: `UPDATE ${parsedTableName} SET ${setClause} WHERE ${whereClause}`,
+    args: [...updateValues, ...keyValues],
+  };
+}
+
+export function transformToSqlValue(value: any): InValue {
+  if (typeof value === 'undefined' || value === null) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return typeof value === 'object' ? JSON.stringify(value) : value;
+}
+
+export function prepareDeleteStatement({
+  tableName,
+  keys,
+}: {
+  tableName: TABLE_NAMES<true>;
+  keys: Record<string, any>;
+}): {
+  sql: string;
+  args: InValue[];
+} {
+  const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+  // Prepare WHERE clause
+  const keyColumns = Object.keys(keys).map(col => parseSqlIdentifier(col, 'column name'));
+  const keyValues = Object.values(keys).map(transformToSqlValue);
+  const whereClause = keyColumns.map(col => `${col} = ?`).join(' AND ');
+
+  return {
+    sql: `DELETE FROM ${parsedTableName} WHERE ${whereClause}`,
+    args: keyValues,
+  };
+}
+
+export function prepareWhereClause(keys: Record<string, any>): {
+  sql: string;
+  args: InValue[];
+} {
+  const keyColumns = Object.keys(keys).map(col => parseSqlIdentifier(col, 'column name'));
+  const keyValues = Object.values(keys).map(transformToSqlValue);
+  const whereClause = keyColumns
+    .map(col => {
+      if (col === 'startAt') {
+        return `${col} >= ?`;
+      }
+
+      if (col === 'endAt') {
+        return `${col} <= ?`;
+      }
+
+      return `${col} = ?`;
+    })
+    .join(' AND ');
+  return {
+    sql: whereClause.length > 0 ? ` WHERE ${whereClause}` : '',
+    args: keyValues,
   };
 }
