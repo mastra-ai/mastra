@@ -2890,7 +2890,7 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250813.1
+        specifier: ^4.20250816.0
         version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
@@ -2936,7 +2936,7 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250813.1
+        specifier: ^4.20250816.0
         version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
