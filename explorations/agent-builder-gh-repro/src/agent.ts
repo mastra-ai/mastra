@@ -53,6 +53,7 @@ export function createGitHubIssueReproAgent(options?: {
     agents: {
       agent,
     },
+    telemetry: { enabled: false },
     storage: new LibSQLStore({
       url: 'file:./repro-agent.db',
     }),
