@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import path from 'path';
 import os from 'os';
 import { Agent } from '@mastra/core';
-import { AgentBuilderDefaults, validationAndFixStep } from '@mastra/agent-builder';
+import { AgentBuilderDefaults } from '@mastra/agent-builder';
 
 // Helper function to create issue slug
 function createIssueSlug(issueUrlOrNumber: string): string {
@@ -201,6 +201,7 @@ export const initialDiscoveryStep = createStep({
         5. Write an ISSUE_SUMMARY.md file to the repro root explaining what you've discovered, which issue this is for, how to run the repo, and any other important relevant info. Keep it direct and to the point without any overly verbose language.
         6. If you add a runnable .ts file that should be run outside of "mastra dev", add an npm script like "repro": "tsx ./src/repro.ts" that can be run immediately by the user when they're running the reproduction.
         7. If you're reproducing a problem that uses a storage/vector adapter that can run in docker, please add a docker-compose.yml file that can be run and connected to. First check docker for any running containers that it might conflict with.
+        8. If you add a repro script and/or a docker compose file, make sure you run the docker file and the npm script to ensure it's reproing as you expect it to. Don't just try "docker-compose" also try "docker compose" since some systems only have the latter.
         Note that a very basic project has already been scaffolded in cwd (${projectPath}). Feel free to explore the files on disk that exist`,
         {
           threadId: getMemoryConfig(issueUrl).thread,
@@ -303,7 +304,7 @@ export const chatLoopStep = createStep({
     }
 
     // Generate response
-    const spinner = ora('Thinking...').start();
+    const spinner = ora('responding...').start();
     let streamStarted = false;
 
     try {
@@ -325,6 +326,7 @@ export const chatLoopStep = createStep({
           console.log(part.type);
           if (part.type === `tool-call` || part.type === `tool-result`) console.log(part.toolName, part.toolCallId);
           if (part.type === `tool-call`) console.log(part.args);
+          if (part.type === `tool-result`) console.log(part.result);
         }
       }
 
