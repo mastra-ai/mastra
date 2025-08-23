@@ -188,9 +188,9 @@ export interface AITraceRecord {
 }
 
 export interface AITracesPaginatedArg {
-  filter: {
+  filter?: {
     name?: string;
     spanType?: AISpanType;
   };
-  pagination: PaginationArgs;
+  pagination?: PaginationArgs;
 }
