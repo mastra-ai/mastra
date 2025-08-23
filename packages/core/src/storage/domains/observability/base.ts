@@ -53,7 +53,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Retrieves a paginated list of AI traces with optional filtering.
    */
-  getAITracesPaginated(_args: AITracesPaginatedArg): Promise<PaginationInfo & { traces: AITraceRecord[] }> {
+  getAITracesPaginated(_args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_GET_AI_TRACES_PAGINATED_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

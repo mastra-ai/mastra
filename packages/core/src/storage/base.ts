@@ -553,7 +553,9 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Retrieves a paginated list of AI traces with optional filtering.
    */
-  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<PaginationInfo & { traces: AITraceRecord[] }> {
+  async getAITracesPaginated(
+    args: AITracesPaginatedArg,
+  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     if (this.stores?.observability) {
       return this.stores.observability.getAITracesPaginated(args);
     }
