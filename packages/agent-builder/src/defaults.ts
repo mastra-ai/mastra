@@ -408,7 +408,7 @@ export const mastra = new Mastra({
     network: 'src/mastra/networks',
   };
 
-  static DEFAULT_TOOLS = async (projectPath?: string, mode: 'template' | 'code-editor' = 'code-editor') => {
+  static DEFAULT_TOOLS = async (projectPath: string, mode: 'template' | 'code-editor' = 'code-editor') => {
     const agentBuilderTools = {
       readFile: createTool({
         id: 'read-file',
@@ -708,7 +708,7 @@ export const mastra = new Mastra({
           }),
         }),
         execute: async ({ context }) => {
-          return await AgentBuilderDefaults.performSmartSearch(context);
+          return await AgentBuilderDefaults.performSmartSearch(context, projectPath);
         },
       }),
 
@@ -2292,21 +2292,24 @@ export const mastra = new Mastra({
   /**
    * Perform intelligent search with context
    */
-  static async performSmartSearch(context: {
-    query: string;
-    type?: 'text' | 'regex' | 'fuzzy' | 'semantic';
-    scope?: {
-      paths?: string[];
-      fileTypes?: string[];
-      excludePaths?: string[];
-      maxResults?: number;
-    };
-    context?: {
-      beforeLines?: number;
-      afterLines?: number;
-      includeDefinitions?: boolean;
-    };
-  }) {
+  static async performSmartSearch(
+    context: {
+      query: string;
+      type?: 'text' | 'regex' | 'fuzzy' | 'semantic';
+      scope?: {
+        paths?: string[];
+        fileTypes?: string[];
+        excludePaths?: string[];
+        maxResults?: number;
+      };
+      context?: {
+        beforeLines?: number;
+        afterLines?: number;
+        includeDefinitions?: boolean;
+      };
+    },
+    projectPath: string,
+  ) {
     try {
       const { query, type = 'text', scope = {}, context: searchContext = {} } = context;
 
@@ -2349,7 +2352,9 @@ export const mastra = new Mastra({
       // Add search paths
       rgCommand += ` "${query}" ${paths.join(' ')}`;
 
-      const { stdout } = await exec(rgCommand);
+      const { stdout } = await exec(rgCommand, {
+        cwd: projectPath,
+      });
       const lines = stdout.split('\n').filter(line => line.trim());
 
       const matches: Array<{
