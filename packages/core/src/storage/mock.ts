@@ -10,7 +10,8 @@ import { InMemoryLegacyEvals } from './domains/legacy-evals/inmemory';
 import type { InMemoryEvals } from './domains/legacy-evals/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
-import { ObservabilityInMemory, type InMemoryObservability } from './domains/observability/inmemory';
+import { ObservabilityInMemory } from './domains/observability/inmemory';
+import type { InMemoryObservability } from './domains/observability/inmemory';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import type { InMemoryScores } from './domains/scores/inmemory';
@@ -392,7 +393,7 @@ export class InMemoryStore extends MastraStorage {
   }
 
   async createAISpan(span: AISpanRecord): Promise<void> {
-    return this.stores.observability?.createAISpan(span);
+    return this.stores.observability!.createAISpan(span);
   }
 
   async updateAISpan(params: {
@@ -400,29 +401,25 @@ export class InMemoryStore extends MastraStorage {
     traceId: string;
     updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
   }): Promise<void> {
-    return this.stores.observability?.updateAISpan(params);
+    return this.stores.observability!.updateAISpan(params);
   }
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    if (!this.stores.observability) {
-      return null;
-    }
-
-    return this.stores.observability.getAITrace(traceId);
+    return this.stores.observability!.getAITrace(traceId);
   }
 
   async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    return this.stores.observability?.batchCreateAISpans(args);
+    return this.stores.observability!.batchCreateAISpans(args);
   }
 
   async batchUpdateAISpans(args: {
     records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
   }): Promise<void> {
-    return this.stores.observability?.batchUpdateAISpans(args);
+    return this.stores.observability!.batchUpdateAISpans(args);
   }
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
-    return this.stores.observability?.batchDeleteAITraces(args);
+    return this.stores.observability!.batchDeleteAITraces(args);
   }
 }
 

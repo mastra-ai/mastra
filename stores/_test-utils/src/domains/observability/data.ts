@@ -27,7 +27,7 @@ export function createSampleAISpanForDB({
   return {
     traceId: generatedTraceId,
     spanId,
-    parentSpanId: parentSpanId || null, // null for root spans, spanId for child spans
+    parentSpanId: parentSpanId || null, // null for root spans, parentSpanId for child spans
     name,
     scope: {
       version: '1.0.0',

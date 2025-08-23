@@ -374,7 +374,6 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
             pagination: { page: 0, perPage: 10 },
           });
 
-          expect(result.spans.length).toBe(0);
           expect(result.spans).toHaveLength(0);
           expect(result.pagination.total).toBe(0);
         });

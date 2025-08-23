@@ -142,7 +142,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     for (const record of args.records) {
       this.validateCreateAISpan(record);
       const id = this.generateId({ traceId: record.traceId, spanId: record.spanId });
-      this.operations.batchInsert;
       this.collection.set(id, record);
     }
   }
