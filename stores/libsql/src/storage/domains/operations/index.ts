@@ -218,8 +218,6 @@ export class StoreOperationsLibSQL extends StoreOperations {
       statement += ` OFFSET ${offset}`;
     }
 
-    console.log(JSON.stringify({ statement, args: whereClause?.args ?? args }, null, 2));
-
     const result = await this.client.execute({
       sql: statement,
       args: whereClause?.args ?? args,
@@ -239,7 +237,6 @@ export class StoreOperationsLibSQL extends StoreOperations {
 
     const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? `${whereClause.sql}` : ''}`;
     const args = whereClause?.args ?? [];
-    console.log(JSON.stringify({ statement, args }, null, 2));
 
     const result = await this.client.execute({
       sql: statement,
