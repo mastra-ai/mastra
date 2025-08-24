@@ -72,19 +72,6 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     traceId: string;
     updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
   }): Promise<void> {
-    const span = await this.operations.load({ tableName: TABLE_AI_SPANS, keys: { spanId, traceId } });
-
-    if (!span) {
-      throw new MastraError(
-        {
-          id: 'LIBSQL_STORE_UPDATE_AI_SPAN_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        new Error(`Span with id ${spanId} and traceId ${traceId} not found`),
-      );
-    }
-
     try {
       await this.operations.update({
         tableName: TABLE_AI_SPANS,
