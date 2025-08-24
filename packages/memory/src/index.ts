@@ -989,7 +989,6 @@ ${
     try {
       let embeddingTextsAndVectorIds: ReturnType<typeof this.getEmbeddingTextAndVectorIds> = [];
 
-      let storedMessages: MastraMessageV2[] = [];
       let storedMessagesById: Record<string, DeepPartial<MastraMessageV2>> = {};
 
       if (config.semanticRecall) {
@@ -997,18 +996,10 @@ ${
           throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
         }
         // fetch all passed messages to get stored vector chunk count
-        storedMessages = (
-          await this.storage.getMessages({
+        const storedMessages = (
+          await this.storage.getMessagesById({
+            messageIds: messages.map(msg => msg.id),
             format: 'v2',
-            threadId: '',
-            selectBy: {
-              include: [
-                ...messages.map(msg => ({
-                  id: msg.id,
-                  threadId: msg.threadId,
-                })),
-              ],
-            },
           })
         ).flat(1);
 
