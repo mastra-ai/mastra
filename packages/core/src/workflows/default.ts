@@ -48,6 +48,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ? e
         : new MastraError(errorDefinition, e);
 
+    // Preserve original stack trace
+    if (!(e instanceof MastraError) && e instanceof Error && e.stack) {
+      error.stack = e.stack;
+    }
+
     this.logger?.trackException(error);
     this.logger?.error(logPrefix + error?.stack);
     return error;
