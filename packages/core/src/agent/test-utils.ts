@@ -3,6 +3,8 @@ import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
 import type { StorageGetMessagesArg } from '../storage';
 import { MessageList } from './message-list';
+import type { Resolve, RequireOnly } from '../types';
+import { deepMerge } from '../utils';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
@@ -112,6 +114,25 @@ export class MockMemory extends MastraMemory {
   }
   async deleteThread(threadId: string) {
     delete this.threads[threadId];
+  }
+
+  async updateMessages({
+    messages,
+  }: {
+    messages: Resolve<RequireOnly<MastraMessageV2, 'id'>>[];
+  }): Promise<MastraMessageV2[]> {
+    const updatedMessages = [];
+    for (const message of messages) {
+      const storedMessage = this.messages.get(message.id);
+      if (!storedMessage) continue;
+
+      const storedMessageV2 = new MessageList().add(storedMessage, 'memory').get.all.v2()[0]!;
+      const updated = deepMerge(storedMessageV2, message as Partial<MastraMessageV2>);
+      this.messages.set(message.id, updated);
+      updatedMessages.push(updated);
+    }
+
+    return updatedMessages;
   }
 
   async deleteMessages(messageIds: string[]): Promise<void> {
