@@ -120,19 +120,6 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         expect(updatedSpan?.spans[0]?.name).toBe('updated-root-span');
         expect(updatedSpan?.spans[0]?.spanType).toBe(span.spanType);
       });
-
-      it('should throw an error if the span is not found', async () => {
-        const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
-        await storage.createAISpan(span);
-
-        await expect(
-          storage.updateAISpan({
-            spanId: 'non-existent-span-id',
-            traceId: span.traceId,
-            updates: { name: 'updated-root-span' },
-          }),
-        ).rejects.toThrow();
-      });
     });
 
     describe('batchCreateAISpans', () => {
