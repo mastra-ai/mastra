@@ -37,20 +37,20 @@ export function ObservabilityTracesTools({
 
       <div className="flex gap-[.5rem] items-center">
         <label className="shrink-0 text-[0.875rem] text-icon3">Filter by Date range</label>
-        <div className="flex gap-[1rem] w-[19rem]">
+        <div className="flex gap-[1rem]">
           <DatePicker
             placeholder="From"
             value={selectedDateFrom}
             setValue={date => onDateChange?.(date, 'from')}
             clearable={true}
-            className="w-[9rem]"
+            className="min-w-[10rem]"
           />
           <DatePicker
             placeholder="To"
             value={selectedDateTo}
             setValue={date => onDateChange?.(date, 'to')}
             clearable={true}
-            className="w-[9rem]"
+            className="min-w-[10rem]"
           />
         </div>
       </div>
