@@ -1,24 +1,33 @@
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as babel from '@babel/core';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { rollup, type OutputAsset, type OutputChunk, type Plugin } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
+import { esbuild } from './plugins/esbuild';
 import { isNodeBuiltin } from './isNodeBuiltin';
 import { aliasHono } from './plugins/hono-alias';
 import { removeDeployer } from './plugins/remove-deployer';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { validate } from '../validator/validate';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
-import resolveFrom from 'resolve-from';
-import { packageDirectory } from 'package-directory';
+import { checkConfigExport } from './babel/check-config-export';
+import { getPackageName, getPackageRootPath } from './utils';
+import { createWorkspacePackageMap, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 
-// TODO: Make thie extendable or find a rollup plugin that can do this
+interface DependencyMetadata {
+  exports: string[];
+  rootPath: string | null;
+  isWorkspace: boolean;
+}
+
+// TODO: Make this extendable or find a rollup plugin that can do this
 const globalExternals = [
   'pino',
   'pino-pretty',
@@ -60,6 +69,13 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
 }
 
 /**
+ * Check if a path is relative without relying on `isAbsolute()` as we want to allow package names (e.g. `@pkg/name`)
+ */
+function isRelativePath(id: string): boolean {
+  return id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../');
+}
+
+/**
  * Analyzes the entry file to identify dependencies that need optimization.
  * This is the first step of the bundle analysis process.
  *
@@ -68,7 +84,7 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
  * @param isVirtualFile - Whether the entry is a virtual file (content string) or a file path
  * @param platform - Target platform (node or browser)
  * @param logger - Logger instance for debugging
- * @returns Map of dependencies to optimize with their exported bindings
+ * @returns Map of dependencies to optimize with their metadata (exported bindings, rootPath, isWorkspace)
  */
 async function analyze(
   entry: string,
@@ -77,6 +93,7 @@ async function analyze(
   platform: 'node' | 'browser',
   logger: IMastraLogger,
   sourcemapEnabled: boolean = false,
+  workspaceMap: Map<string, WorkspacePackageInfo>,
 ) {
   logger.info('Analyzing dependencies...');
   let virtualPlugin = null;
@@ -119,11 +136,7 @@ async function analyze(
         },
       } satisfies Plugin,
       json(),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
+      esbuild(),
       commonjs({
         strictRequires: 'debug',
         ignoreTryCatch: false,
@@ -131,11 +144,7 @@ async function analyze(
         extensions: ['.js', '.ts'],
       }),
       removeDeployer(normalizedMastraEntry, { sourcemap: sourcemapEnabled }),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
+      esbuild(),
     ].filter(Boolean),
   });
 
@@ -146,11 +155,24 @@ async function analyze(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = new Map(Object.entries(output[0].importedBindings));
-  for (const dep of depsToOptimize.keys()) {
+  const depsToOptimize = new Map<string, DependencyMetadata>();
+
+  for (const [dep, bindings] of Object.entries(output[0].importedBindings)) {
+    // Skip node built-in
     if (isNodeBuiltin(dep)) {
-      depsToOptimize.delete(dep);
+      continue;
     }
+
+    const isWorkspace = workspaceMap.has(dep);
+
+    const pkgName = getPackageName(dep);
+    let rootPath: string | null = null;
+
+    if (pkgName && pkgName !== '#tools') {
+      rootPath = await getPackageRootPath(pkgName);
+    }
+
+    depsToOptimize.set(dep, { exports: bindings, rootPath, isWorkspace });
   }
 
   for (const o of output) {
@@ -166,7 +188,7 @@ async function analyze(
 
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
-        depsToOptimize.set(dynamicImport, ['*']);
+        depsToOptimize.set(dynamicImport, { exports: ['*'], rootPath: null, isWorkspace: false });
       }
     }
   }
@@ -178,13 +200,13 @@ async function analyze(
  * Bundles vendor dependencies identified in the analysis step.
  * Creates virtual modules for each dependency and bundles them using rollup.
  *
- * @param depsToOptimize - Map of dependencies with their exports from analyze step
+ * @param depsToOptimize - Map of dependencies to optimize with their metadata (exported bindings, rootPath, isWorkspace)
  * @param outputDir - Directory where bundled files will be written
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
  */
 export async function bundleExternals(
-  depsToOptimize: Map<string, string[]>,
+  depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   logger: IMastraLogger,
   options?: {
@@ -204,7 +226,7 @@ export async function bundleExternals(
   const allExternals = [...globalExternals, ...customExternals];
   const reverseVirtualReferenceMap = new Map<string, string>();
   const virtualDependencies = new Map();
-  for (const [dep, exports] of depsToOptimize.entries()) {
+  for (const [dep, { exports }] of depsToOptimize.entries()) {
     const name = dep.replaceAll('/', '-');
     reverseVirtualReferenceMap.set(name, dep);
 
@@ -232,10 +254,8 @@ export async function bundleExternals(
 
   const transpilePackagesMap = new Map<string, string>();
   for (const pkg of transpilePackages) {
-    const entryPoint = dirname(resolveFrom(outputDir, pkg));
-    const dir = await packageDirectory({
-      cwd: entryPoint,
-    });
+    const dir = await getPackageRootPath(pkg);
+
     if (dir) {
       transpilePackagesMap.set(pkg, dir);
     }
@@ -265,27 +285,26 @@ export async function bundleExternals(
         ),
       ),
       options?.isDev
-        ? {
+        ? ({
             name: 'external-resolver',
-            resolveId(id: string, importer: string | undefined) {
+            async resolveId(id, importer, options) {
               const pathsToTranspile = [...transpilePackagesMap.values()];
-              if (importer && pathsToTranspile.some(p => importer?.startsWith(p))) {
+              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && !isRelativePath(id)) {
+                const resolved = await this.resolve(id, importer, { skipSelf: true, ...options });
+
                 return {
-                  id: resolveFrom(importer, id),
+                  ...resolved,
                   external: true,
                 };
               }
 
               return null;
             },
-          }
+          } as Plugin)
         : null,
       transpilePackagesMap.size
         ? esbuild({
-            target: 'node20',
-            platform: 'node',
             format: 'esm',
-            minify: false,
             include: [...transpilePackagesMap.values()].map(p => {
               // Match files from transpilePackages but exclude any nested node_modules
               // Escapes regex special characters in the path and uses negative lookahead to avoid node_modules
@@ -356,6 +375,7 @@ export async function bundleExternals(
  * @param reverseVirtualReferenceMap - Map to resolve virtual module names back to original deps
  * @param outputDir - Directory containing the bundled files
  * @param logger - Logger instance for debugging
+ * @param workspaceMap - Map of workspace packages that gets directly passed through for later consumption
  * @returns Analysis result containing invalid chunks and dependency mappings
  */
 async function validateOutput(
@@ -364,11 +384,13 @@ async function validateOutput(
     reverseVirtualReferenceMap,
     usedExternals,
     outputDir,
+    workspaceMap,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
     usedExternals: Record<string, Record<string, string>>;
     outputDir: string;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
   },
   logger: IMastraLogger,
 ) {
@@ -376,6 +398,7 @@ async function validateOutput(
     invalidChunks: new Set<string>(),
     dependencies: new Map<string, string>(),
     externalDependencies: new Set<string>(),
+    workspaceMap,
   };
 
   // we should resolve the version of the deps
@@ -443,18 +466,60 @@ export async function analyzeBundle(
   logger: IMastraLogger,
   sourcemapEnabled: boolean = false,
 ) {
-  const depsToOptimize = new Map<string, string[]>();
+  const mastraConfig = await readFile(mastraEntry, 'utf-8');
+  const mastraConfigResult = {
+    hasValidConfig: false,
+  } as const;
+
+  await babel.transformAsync(mastraConfig, {
+    filename: mastraEntry,
+    presets: [import.meta.resolve('@babel/preset-typescript')],
+    plugins: [checkConfigExport(mastraConfigResult)],
+  });
+
+  if (!mastraConfigResult.hasValidConfig) {
+    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
+export const mastra = new Mastra({
+  // your options
+})
+  
+If you think your configuration is valid, please open an issue.`);
+  }
+
+  const workspaceMap = await createWorkspacePackageMap();
+
+  const depsToOptimize = new Map<string, DependencyMetadata>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
-    const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger, sourcemapEnabled);
+    const analyzeResult = await analyze(
+      entry,
+      mastraEntry,
+      isVirtualFile,
+      platform,
+      logger,
+      sourcemapEnabled,
+      workspaceMap,
+    );
 
-    for (const [dep, exports] of analyzeResult.entries()) {
+    for (const [dep, { exports }] of analyzeResult.entries()) {
       if (depsToOptimize.has(dep)) {
         // Merge with existing exports if dependency already exists
-        const existingExports = depsToOptimize.get(dep)!;
-        depsToOptimize.set(dep, [...new Set([...existingExports, ...exports])]);
+        const existingEntry = depsToOptimize.get(dep)!;
+        depsToOptimize.set(dep, {
+          ...existingEntry,
+          exports: [...new Set([...existingEntry.exports, ...exports])],
+        });
       } else {
-        depsToOptimize.set(dep, exports);
+        const isWorkspace = workspaceMap.has(dep);
+
+        const pkgName = getPackageName(dep);
+        let rootPath: string | null = null;
+
+        if (pkgName && pkgName !== '#tools') {
+          rootPath = await getPackageRootPath(pkgName);
+        }
+
+        depsToOptimize.set(dep, { exports, rootPath, isWorkspace });
       }
     }
   }
@@ -466,7 +531,10 @@ export async function analyzeBundle(
     logger,
     bundlerOptions ?? undefined,
   );
-  const result = await validateOutput({ output, reverseVirtualReferenceMap, usedExternals, outputDir }, logger);
+  const result = await validateOutput(
+    { output, reverseVirtualReferenceMap, usedExternals, outputDir, workspaceMap },
+    logger,
+  );
 
   return result;
 }

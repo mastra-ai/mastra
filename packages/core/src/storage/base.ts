@@ -1,7 +1,7 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
-import type { ScoreRowData } from '../scores';
+import type { ScoreRowData, ScoringSource } from '../scores';
 import type { Trace } from '../telemetry';
 
 import type { WorkflowRunState } from '../workflows';
@@ -265,6 +265,14 @@ export abstract class MastraStorage extends MastraBase {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+  abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  abstract getMessagesById({
+    messageIds,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
 
   abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
@@ -407,11 +415,13 @@ export abstract class MastraStorage extends MastraBase {
     pagination,
     entityId,
     entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
   abstract getScoresByRunId({

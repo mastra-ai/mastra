@@ -10,6 +10,8 @@ packages:
   - "examples/dane"
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
+  - "packages/*/integration-tests-v5"
   - "packages/cloud"
   - "auth/*"
+  - "observability/*"
   - "explorations/longmemeval"

@@ -1,16 +1,16 @@
 ---
-title: "Reference: stream() | Agents | Mastra Docs"
-description: "Documentation for the `.stream()` method in Mastra agents, which enables real-time streaming of responses."
+title: "Reference: Agent.stream() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses."
 ---
 
-# stream()
+# Agent.stream()
 
 The `.stream()` method enables real-time streaming of responses from an agent. This method accepts messages and optional streaming options.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const response = await agent.stream("message for agent");
+```typescript copy
+await agent.stream("message for agent");
 ```
 
 ## Parameters
@@ -30,20 +30,6 @@ const response = await agent.stream("message for agent");
     },
   ]}
 />
-
-## Extended usage example
-
-```typescript showLineNumbers copy
-const response = await agent.stream("message for agent", {
-  temperature: 0.7,
-  maxSteps: 3,
-  memory: {
-    thread: "user-123",
-    resource: "test-app"
-  },
-  toolChoice: "auto"
-});
-```
 
 ### Options parameters
 
@@ -472,3 +458,22 @@ const response = await agent.stream("message for agent", {
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript showLineNumbers copy
+await agent.stream("message for agent", {
+  temperature: 0.7,
+  maxSteps: 3,
+  memory: {
+    thread: "user-123",
+    resource: "test-app"
+  },
+  toolChoice: "auto"
+});
+```
+
+## Related
+
+- [Agent streaming](../../docs/agents/streaming.mdx)
+- [Agent generation](../../docs/agents/overview.mdx#generate)

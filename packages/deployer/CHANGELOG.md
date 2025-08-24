@@ -1,5 +1,240 @@
 # @mastra/deployer
 
+## 0.14.1
+
+### Patch Changes
+
+- [#6914](https://github.com/mastra-ai/mastra/pull/6914) [`4c8956f`](https://github.com/mastra-ai/mastra/commit/4c8956f3110ccf39595e022f127a44a0a5c09c86) Thanks [@LekoArts](https://github.com/LekoArts)! - Add the `@rollup/plugin-esm-shim` plugin to the bundler. If your code (or dependencies) uses things like `__dirname` you might see an error during `mastra dev` which is fixed now.
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1
+  - @mastra/server@0.14.1
+
+## 0.14.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236)]:
+  - @mastra/core@0.14.1-alpha.1
+  - @mastra/server@0.14.1-alpha.1
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- [#6914](https://github.com/mastra-ai/mastra/pull/6914) [`4c8956f`](https://github.com/mastra-ai/mastra/commit/4c8956f3110ccf39595e022f127a44a0a5c09c86) Thanks [@LekoArts](https://github.com/LekoArts)! - Add the `@rollup/plugin-esm-shim` plugin to the bundler. If your code (or dependencies) uses things like `__dirname` you might see an error during `mastra dev` which is fixed now.
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+  - @mastra/server@0.14.1-alpha.0
+
+## 0.14.0
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- bca2ba3: Fix issue where `.json` files couldn't be imported and used with deployers
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+- 6313063: Implement model switcher in playground
+- 96518cc: Bundling cleanup code improvements
+- c712849: Add handlers for VNext
+- 04dcd66: Fix babel-preset-typescript import
+- 2454423: Agentic loop and streaming workflow: generateVNext and streamVNext
+- a9916bd: Model switcher v5 support
+- 95e1330: Move to default rollup resolve from resolveFrom pkg
+- 33eb340: Optimize workspace dependency detection in bundler. Check workspace map directly before resolving package.json path
+- 6dfc4a6: In a previous release analysis of the Mastra configuration was added. A bug was fixed to properly support TypeScript.
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [03997ae]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [57f7019]
+- Updated dependencies [a8f129d]
+- Updated dependencies [4908422]
+  - @mastra/core@0.14.0
+  - @mastra/server@0.14.0
+
+## 0.14.0-alpha.7
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- Updated dependencies [03997ae]
+  - @mastra/server@0.14.0-alpha.7
+  - @mastra/core@0.14.0-alpha.7
+
+## 0.14.0-alpha.6
+
+### Patch Changes
+
+- a9916bd: Model switcher v5 support
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+  - @mastra/core@0.14.0-alpha.6
+  - @mastra/server@0.14.0-alpha.6
+
+## 0.14.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [4908422]
+  - @mastra/server@0.14.0-alpha.5
+  - @mastra/core@0.14.0-alpha.5
+
+## 0.14.0-alpha.4
+
+### Patch Changes
+
+- 96518cc: Bundling cleanup code improvements
+- c712849: Deployer handlers
+- 2454423: generateVNext and streamVNext
+- 95e1330: Move to default rollup resolve from resolveFrom pkg
+- 33eb340: Optimize workspace dependency detection in bundler
+  - Check workspace map directly before resolving package.json path
+
+- Updated dependencies [0a7f675]
+- Updated dependencies [12cae67]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [1a80071]
+- Updated dependencies [36a3be8]
+- Updated dependencies [361757b]
+- Updated dependencies [bc1684a]
+- Updated dependencies [2bb9955]
+- Updated dependencies [2454423]
+- Updated dependencies [a44d91e]
+- Updated dependencies [dfb91e9]
+- Updated dependencies [a741dde]
+- Updated dependencies [7cb3fc0]
+- Updated dependencies [195eabb]
+- Updated dependencies [b78b95b]
+- Updated dependencies [57f7019]
+  - @mastra/core@0.14.0-alpha.4
+  - @mastra/server@0.14.0-alpha.4
+
+## 0.14.0-alpha.3
+
+### Patch Changes
+
+- 04dcd66: Fix babel-preset-typescript import
+- Updated dependencies [227c7e6]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0-alpha.3
+  - @mastra/server@0.14.0-alpha.3
+
+## 0.14.0-alpha.2
+
+### Patch Changes
+
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+  - @mastra/core@0.14.0-alpha.2
+  - @mastra/server@0.14.0-alpha.2
+
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- bca2ba3: Fix issue where `.json` files couldn't be imported and used with deployers
+- 6313063: Implement model switcher in playground
+- 6dfc4a6: In a previous release analysis of the Mastra configuration was added. A bug was fixed to properly support TypeScript.
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+  - @mastra/server@0.14.0-alpha.1
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [c30bca8]
+  - @mastra/core@0.13.3-alpha.0
+  - @mastra/server@0.13.3-alpha.0
+
+## 0.13.2
+
+### Patch Changes
+
+- aaf0224: improve dev playground request detection
+- 42cb4e9: Add warning message when an invalid `src/mastra/index.ts` configuration file is found
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- 63449d0: Change the function signatures of `bundle`, `lint`, and internally `getToolsInputOptions` to expand the `toolsPaths` TypeScript type from `string[]` to `(string | string[])[]`.
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [f6a1ae7]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+  - @mastra/server@0.13.2
+
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+  - @mastra/server@0.13.2-alpha.3
+
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- aaf0224: improve dev playground request detection
+- 42cb4e9: Add warning message when an invalid `src/mastra/index.ts` configuration file is found
+- a239d41: Updated A2A syntax to v0.3.0
+- 96169cc: Create handler that returns providers user has keys for in their env
+- c6d2603: Properly set baseUrl in playground when user sets the host or port in Mastra instance.
+- ce04175: Add update agent model handler
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [f6a1ae7]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ce04175]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+  - @mastra/server@0.13.2-alpha.2
+
 ## 0.13.2-alpha.1
 
 ### Patch Changes

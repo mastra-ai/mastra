@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.13.2-alpha.1",
+  "version": "0.14.1",
   "description": "",
   "type": "module",
   "files": [
@@ -94,11 +94,13 @@
   "dependencies": {
     "@babel/core": "^7.28.0",
     "@babel/helper-module-imports": "^7.27.1",
+    "@babel/preset-typescript": "^7.27.1",
     "@mastra/server": "workspace:^",
     "@neon-rs/load": "^0.1.82",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "^5.1.1",
     "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-esm-shim": "^0.1.8",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-virtual": "^3.0.2",
@@ -111,9 +113,9 @@
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "hono": "^4.8.12",
-    "package-directory": "^8.1.0",
+    "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
-    "rollup": "~4.46.2",
+    "rollup": "~4.46.4",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript-paths": "^1.5.1",
@@ -123,6 +125,7 @@
     "@hono/node-server": "^1.17.1",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@microsoft/api-extractor": "^7.52.8",
@@ -138,10 +141,9 @@
     "tsup": "^8.5.0",
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
+    "@mastra/core": ">=0.14.0-0 <0.15.0-0"
   }
 }

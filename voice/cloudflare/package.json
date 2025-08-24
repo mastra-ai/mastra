@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.10.7",
+  "version": "0.10.8",
   "description": "Mastra Sarvam AI voice integration",
   "type": "module",
   "files": [
@@ -34,7 +34,7 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250803.0",
+    "@cloudflare/workers-types": "^4.20250823.0",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -56,6 +56,6 @@
     "speech-recognition"
   ],
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.14.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
   }
 }

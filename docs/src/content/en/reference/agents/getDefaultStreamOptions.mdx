@@ -1,16 +1,16 @@
 ---
-title: "Reference: getDefaultStreamOptions() | Agents | Mastra Docs"
-description: "Documentation for the `.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls."
+title: "Reference: Agent.getDefaultStreamOptions() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls."
 ---
 
-# getDefaultStreamOptions()
+# Agent.getDefaultStreamOptions()
 
-The `.getDefaultStreamOptions()` method retrieves the default streaming options configured for an agent, resolving them if they're a function. These options are used as the base configuration for all `stream()` calls unless overridden.
+Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
-```typescript showLineNumbers copy
-const defaultOptions = await agent.getDefaultStreamOptions();
+```typescript copy
+await agent.getDefaultStreamOptions();
 ```
 
 ## Parameters
@@ -27,10 +27,22 @@ const defaultOptions = await agent.getDefaultStreamOptions();
   ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
+      description: "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>
+
 ## Extended usage example
 
-```typescript showLineNumbers copy
-const defaultOptions = await agent.getDefaultStreamOptions({
+```typescript copy
+await agent.getDefaultStreamOptions({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -49,14 +61,7 @@ const defaultOptions = await agent.getDefaultStreamOptions({
   ]}
 />
 
-## Returns
+## Related
 
-<PropertiesTable
-  content={[
-    {
-      name: "defaultOptions",
-      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
-      description: "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
-    },
-  ]}
-/>
+- [Agent streaming](../../docs/agents/streaming.mdx)
+- [Runtime variables](../../docs/agents/runtime-variables.mdx)

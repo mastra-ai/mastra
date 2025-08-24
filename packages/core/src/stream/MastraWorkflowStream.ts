@@ -1,6 +1,7 @@
 import { ReadableStream } from 'stream/web';
 import type { Run } from '../workflows';
 import type { ChunkType } from './types';
+import { ChunkFrom } from './types';
 
 export class MastraWorkflowStream extends ReadableStream<ChunkType> {
   #usageCount = {
@@ -69,7 +70,7 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
         controller.enqueue({
           type: 'start',
           runId: run.runId,
-          from: 'WORKFLOW',
+          from: ChunkFrom.WORKFLOW,
           payload: {},
         });
 
@@ -95,9 +96,20 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
         controller.enqueue({
           type: 'finish',
           runId: run.runId,
-          from: 'WORKFLOW',
+          from: ChunkFrom.WORKFLOW,
           payload: {
-            totalUsage: this.#usageCount,
+            stepResult: {
+              reason: 'stop',
+            },
+            output: {
+              usage: this.#usageCount as any,
+            },
+            metadata: {},
+            messages: {
+              all: [],
+              user: [],
+              nonUser: [],
+            },
           },
         });
 

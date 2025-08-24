@@ -7,7 +7,7 @@ const meta = {
   "streaming-working-memory-advanced": "Streaming Working Memory (Advanced)",
   "streaming-working-memory-structured": "Streaming Structured Working Memory",
   "memory-processors": "Memory Processors",
-  "use-chat": "AI SDK useChat Hook", // Added entry
+  "use-chat": "AI SDK useChat Hook",
 };
 
 export default meta;

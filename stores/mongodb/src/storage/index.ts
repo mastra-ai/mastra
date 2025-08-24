@@ -1,7 +1,7 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import type {
   EvalRow,
   PaginationArgs,
@@ -205,6 +205,18 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, selectBy, format });
   }
 
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessagesById({ messageIds, format });
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -354,13 +366,15 @@ export class MongoDBStore extends MastraStorage {
     pagination,
     entityId,
     entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
+    source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType });
+    return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
   /**

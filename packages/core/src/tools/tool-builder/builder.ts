@@ -1,3 +1,4 @@
+import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -16,10 +17,10 @@ import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, VercelTool } from '../types';
+import type { CoreTool, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput } from '../validation';
 
-export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
+export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
 interface LogOptions {
@@ -118,9 +119,9 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: ToolExecutionOptions) => {
+    const execFunction = async (args: unknown, execOptions: ToolExecutionOptions | ToolCallOptions) => {
       if (isVercelTool(tool)) {
-        return tool?.execute?.(args, execOptions) ?? undefined;
+        return tool?.execute?.(args, execOptions as ToolExecutionOptions) ?? undefined;
       }
 
       return (
@@ -140,15 +141,15 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.writableStream,
+              options.writableStream || (execOptions as any).writableStream,
             ),
           },
-          execOptions,
+          execOptions as ToolExecutionOptions & ToolCallOptions,
         ) ?? undefined
       );
     };
 
-    return async (args: unknown, execOptions?: ToolExecutionOptions) => {
+    return async (args: unknown, execOptions?: ToolExecutionOptions | ToolCallOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, args });
@@ -199,6 +200,22 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
+  buildV5() {
+    const builtTool = this.build();
+
+    if (!builtTool.parameters) {
+      throw new Error('Tool parameters are required');
+    }
+
+    return {
+      ...builtTool,
+      inputSchema: builtTool.parameters,
+      onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
+      onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
+      onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
+    } as VercelToolV5;
+  }
+
   build(): CoreTool {
     const providerTool = this.buildProviderTool(this.originalTool);
     if (providerTool) {
@@ -224,9 +241,16 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
+      let supportsStructuredOutputs = false;
+      if (model.specificationVersion === 'v2') {
+        supportsStructuredOutputs = true;
+      } else {
+        supportsStructuredOutputs = model.supportsStructuredOutputs ?? false;
+      }
+
       const modelInfo = {
         modelId: model.modelId,
-        supportsStructuredOutputs: model.supportsStructuredOutputs ?? false,
+        supportsStructuredOutputs,
         provider: model.provider,
       };
       schemaCompatLayers.push(
@@ -257,6 +281,7 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
+      id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedSchema,
       outputSchema: processedOutputSchema,
     };

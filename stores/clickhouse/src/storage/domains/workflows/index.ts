@@ -260,6 +260,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
                 resourceId
               FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
               ${whereClause}
+              ORDER BY createdAt DESC LIMIT 1
             `,
         query_params: values,
         format: 'JSONEachRow',

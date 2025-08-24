@@ -1,5 +1,114 @@
 # @mastra/libsql
 
+## 0.13.4
+
+### Patch Changes
+
+- [#6920](https://github.com/mastra-ai/mastra/pull/6920) [`64ad21f`](https://github.com/mastra-ai/mastra/commit/64ad21ff4f58ce8b344d163d800d9e4f84d82f6f) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.12` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.12) (from `^0.15.10`, in `dependencies`)
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1
+
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- [#6920](https://github.com/mastra-ai/mastra/pull/6920) [`64ad21f`](https://github.com/mastra-ai/mastra/commit/64ad21ff4f58ce8b344d163d800d9e4f84d82f6f) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.12` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.12) (from `^0.15.10`, in `dependencies`)
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+
+## 0.13.3
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+- d6e39da: Load most recent snapshot from storage
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0
+
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- 03997ae: Update peerdeps
+  - @mastra/core@0.14.0-alpha.7
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- d6e39da: Load most recent snapshot from storage
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+
+## 0.13.2
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [2e74797]
+- Updated dependencies [8388649]
+- Updated dependencies [a239d41]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [b5cf2a3]
+- Updated dependencies [2fff911]
+- Updated dependencies [b32c50d]
+- Updated dependencies [63449d0]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2
+
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- b5cf2a3: make system message always available during agent calls
+- Updated dependencies [b5cf2a3]
+  - @mastra/core@0.13.2-alpha.3
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- b32c50d: Filter scores by source
+- Updated dependencies [d5330bf]
+- Updated dependencies [a239d41]
+- Updated dependencies [b32c50d]
+- Updated dependencies [121a3f8]
+- Updated dependencies [ec510e7]
+  - @mastra/core@0.13.2-alpha.2
+
 ## 0.13.1
 
 ### Patch Changes

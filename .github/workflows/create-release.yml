@@ -93,6 +93,8 @@ jobs:
           git push
           echo "executed=true" >> "$GITHUB_OUTPUT"
           pnpm install
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Push version changes
         if: ${{ !inputs.dry_run }}

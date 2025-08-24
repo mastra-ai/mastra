@@ -3,7 +3,7 @@ import type { Connection, ConnectionOptions } from '@lancedb/lancedb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
@@ -291,6 +291,18 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format, threadConfig });
   }
 
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessagesById({ messageIds, format });
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -406,12 +418,18 @@ export class LanceStorage extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
+    source,
+    entityId,
+    entityType,
     pagination,
   }: {
     scorerId: string;
     pagination: StoragePagination;
+    source?: ScoringSource;
+    entityId?: string;
+    entityType?: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, pagination });
+    return this.stores.scores.getScoresByScorerId({ scorerId, source, pagination, entityId, entityType });
   }
 
   async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.10.21-alpha.1",
+  "version": "0.10.23",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -47,7 +47,7 @@
     "zod": "^3.0.0"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.28.0",
+    "@babel/preset-env": "^7.28.3",
     "@babel/preset-typescript": "^7.27.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

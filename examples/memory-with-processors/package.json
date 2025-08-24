@@ -12,7 +12,7 @@
     "@ai-sdk/openai": "latest",
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "chalk": "^5.4.1",
     "dotenv": "^16.3.1",
     "js-tiktoken": "^1.0.13",
