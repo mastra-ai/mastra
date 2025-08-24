@@ -12,24 +12,55 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   }
 
   async createAISpan(span: AISpanRecord): Promise<void> {
-    return this.operations.insert({ tableName: TABLE_AI_SPANS, record: span });
+    try {
+      return this.operations.insert({ tableName: TABLE_AI_SPANS, record: span });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_CREATE_AI_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            spanId: span.spanId,
+            traceId: span.traceId,
+            spanType: span.spanType,
+            spanName: span.name,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    const spans = await this.operations.loadMany<AISpanRecord>({
-      tableName: TABLE_AI_SPANS,
-      whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
-      orderBy: 'startAt DESC',
-    });
+    try {
+      const spans = await this.operations.loadMany<AISpanRecord>({
+        tableName: TABLE_AI_SPANS,
+        whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
+        orderBy: 'startAt DESC',
+      });
 
-    if (!spans || spans.length === 0) {
-      return null;
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map(span => this.transformFromSqlRow<AISpanRecord>(span)),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_AI_TRACE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
     }
-
-    return {
-      traceId,
-      spans: this.transformRowsFromSql(spans),
-    };
   }
 
   async updateAISpan({
@@ -54,29 +85,39 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       );
     }
 
-    await this.operations.update({
-      tableName: TABLE_AI_SPANS,
-      keys: { spanId, traceId },
-      data: { ...updates, updatedAt: new Date().toISOString() },
-    });
+    try {
+      await this.operations.update({
+        tableName: TABLE_AI_SPANS,
+        keys: { spanId, traceId },
+        data: { ...updates, updatedAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_UPDATE_AI_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            spanId,
+            traceId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   /**
    * Transforms SQL row data back to AISpanRecord format
    * Reverses the transformations done in prepareStatement
    */
-  private transformFromSql<T = AISpanRecord>(sqlRow: Record<string, any>): T {
+  private transformFromSqlRow<T = AISpanRecord>(sqlRow: Record<string, any>): T {
     const result: Record<string, any> = {};
 
     const jsonColumns = new Set(['scope', 'attributes', 'metadata', 'events', 'links', 'input', 'output', 'error']);
     const dateColumns = new Set(['startAt', 'endAt', 'createdAt', 'updatedAt']);
 
     for (const [key, value] of Object.entries(sqlRow)) {
-      if (value === 'null') {
-        result[key] = null;
-        continue;
-      }
-
       if (value === null || value === undefined) {
         result[key] = value;
         continue;
@@ -96,10 +137,6 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
 
     return result as T;
-  }
-
-  private transformRowsFromSql<T = AISpanRecord>(rows: Record<string, any>[]): T[] {
-    return rows.map(row => this.transformFromSql<T>(row));
   }
 
   async getAITracesPaginated(
@@ -124,10 +161,22 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     });
     const orderBy = 'startAt DESC';
 
-    const count = await this.operations.loadTotalCount({
-      tableName: TABLE_AI_SPANS,
-      whereClause: { sql: whereClause.sql, args: whereClause.args },
-    });
+    let count = 0;
+    try {
+      count = await this.operations.loadTotalCount({
+        tableName: TABLE_AI_SPANS,
+        whereClause: { sql: whereClause.sql, args: whereClause.args },
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_AI_TRACES_PAGINATED_COUNT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
 
     if (count === 0) {
       return {
@@ -141,34 +190,56 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       };
     }
 
-    const spans = await this.operations.loadMany<AISpanRecord>({
-      tableName: TABLE_AI_SPANS,
-      whereClause,
-      orderBy,
-      offset: page * perPage,
-      limit: perPage,
-    });
+    try {
+      const spans = await this.operations.loadMany<AISpanRecord>({
+        tableName: TABLE_AI_SPANS,
+        whereClause,
+        orderBy,
+        offset: page * perPage,
+        limit: perPage,
+      });
 
-    return {
-      pagination: {
-        total: spans.length,
-        page,
-        perPage,
-        hasMore: spans.length === perPage,
-      },
-      spans: this.transformRowsFromSql(spans),
-    };
+      return {
+        pagination: {
+          total: count,
+          page,
+          perPage,
+          hasMore: spans.length === perPage,
+        },
+        spans: spans.map(span => this.transformFromSqlRow<AISpanRecord>(span)),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_AI_TRACES_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
   }
 
   async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    return this.operations.batchInsert({
-      tableName: TABLE_AI_SPANS,
-      records: args.records.map(record => ({
-        ...record,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })),
-    });
+    try {
+      return this.operations.batchInsert({
+        tableName: TABLE_AI_SPANS,
+        records: args.records.map(record => ({
+          ...record,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })),
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_CREATE_AI_SPANS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
   }
 
   async batchUpdateAISpans(args: {
@@ -178,20 +249,42 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
     }[];
   }): Promise<void> {
-    return this.operations.batchUpdate({
-      tableName: TABLE_AI_SPANS,
-      updates: args.records.map(record => ({
-        keys: { spanId: record.spanId, traceId: record.traceId },
-        data: { ...record.updates, updatedAt: new Date().toISOString() },
-      })),
-    });
+    try {
+      return this.operations.batchUpdate({
+        tableName: TABLE_AI_SPANS,
+        updates: args.records.map(record => ({
+          keys: { spanId: record.spanId, traceId: record.traceId },
+          data: { ...record.updates, updatedAt: new Date().toISOString() },
+        })),
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_UPDATE_AI_SPANS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
   }
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
-    const keys = args.traceIds.map(traceId => ({ traceId }));
-    return this.operations.batchDelete({
-      tableName: TABLE_AI_SPANS,
-      keys,
-    });
+    try {
+      const keys = args.traceIds.map(traceId => ({ traceId }));
+      return this.operations.batchDelete({
+        tableName: TABLE_AI_SPANS,
+        keys,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_DELETE_AI_TRACES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
   }
 }
