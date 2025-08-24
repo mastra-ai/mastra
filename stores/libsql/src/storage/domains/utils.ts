@@ -55,7 +55,7 @@ export function prepareStatement({
   const parsedTableName = parseSqlIdentifier(tableName, 'table name');
   const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
   const values = Object.values(record).map(v => {
-    if (typeof v === `undefined`) {
+    if (typeof v === `undefined` || v === null) {
       // returning an undefined value will cause libsql to throw
       return null;
     }
@@ -139,21 +139,24 @@ export function prepareWhereClause(keys: Record<string, any>): {
   sql: string;
   args: InValue[];
 } {
-  const keyColumns = Object.keys(keys).map(col => parseSqlIdentifier(col, 'column name'));
   const keyValues = Object.values(keys).map(transformToSqlValue);
-  const whereClause = keyColumns
-    .map(col => {
-      if (col === 'startAt') {
-        return `${col} >= ?`;
+
+  const whereClause = Object.keys(keys)
+    .map(originalKey => {
+      const parsedColumn = parseSqlIdentifier(originalKey, 'column name');
+
+      if (originalKey === 'startAt') {
+        return `${parsedColumn} >= ?`;
       }
 
-      if (col === 'endAt') {
-        return `${col} <= ?`;
+      if (originalKey === 'endAt') {
+        return `${parsedColumn} <= ?`;
       }
 
-      return `${col} = ?`;
+      return `${parsedColumn} = ?`;
     })
     .join(' AND ');
+
   return {
     sql: whereClause.length > 0 ? ` WHERE ${whereClause}` : '',
     args: keyValues,
