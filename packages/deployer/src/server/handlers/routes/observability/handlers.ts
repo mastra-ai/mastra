@@ -47,15 +47,26 @@ export async function getAITracesPaginatedHandler(c: Context) {
         return c.json({ error: 'Invalid spanType' }, 400);
       }
     }
-    if (start && end) {
+
+    const dateRange: { start?: Date; end?: Date } = {};
+    if (start) {
       try {
-        pagination.dateRange = {
-          start: new Date(start),
-          end: new Date(end),
-        };
+        dateRange.start = new Date(start);
       } catch {
-        return c.json({ error: 'Invalid dateRange JSON' }, 400);
+        return c.json({ error: 'Invalid start date' }, 400);
       }
+    }
+
+    if (end) {
+      try {
+        dateRange.end = new Date(end);
+      } catch {
+        return c.json({ error: 'Invalid end date' }, 400);
+      }
+    }
+
+    if (Object.keys(dateRange).length > 0) {
+      pagination.dateRange = dateRange;
     }
 
     const result = await getOriginalAITracesPaginatedHandler({
