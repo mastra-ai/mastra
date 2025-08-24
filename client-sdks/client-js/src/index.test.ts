@@ -869,11 +869,19 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
         backoffMs: 100,
         maxBackoffMs: 1000,
         headers: { 'Custom-Header': 'value' },
+        credentials: 'same-origin',
       });
 
       (global.fetch as any)
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: {
+            get: () => 'application/json',
+          },
+          json: async () => ({ success: true }),
+        })
         .mockResolvedValueOnce({
           ok: true,
           headers: {
@@ -891,6 +899,24 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
           headers: expect.objectContaining({
             'Custom-Header': 'value',
           }),
+          credentials: 'same-origin',
+        }),
+      );
+
+      // ensure custom headers and credentials are overridable per request
+      const result2 = await customClient.request('/test', {
+        headers: { 'Custom-Header': 'new-value' },
+        credentials: 'include',
+      });
+      expect(result2).toEqual({ success: true });
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/test',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Custom-Header': 'new-value',
+          }),
+          credentials: 'include',
         }),
       );
     });
