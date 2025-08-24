@@ -504,6 +504,66 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
+    const orderByStatement = `ORDER BY [seq_id] DESC`;
+    try {
+      let rows: any[] = [];
+      let query = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE [id] IN (${messageIds.map((_, i) => `@id${i}`).join(', ')})`;
+      const request = this.pool.request();
+      messageIds.forEach((id, i) => request.input(`id${i}`, id));
+
+      query += ` ${orderByStatement}`;
+      const result = await request.query(query);
+      const remainingRows = result.recordset || [];
+      rows.push(...remainingRows);
+      rows.sort((a, b) => {
+        const timeDiff = a.seq_id - b.seq_id;
+        return timeDiff;
+      });
+      rows = rows.map(({ seq_id, ...rest }) => rest);
+      if (format === `v1`) return this._parseAndFormatMessages(rows, format);
+      return this._parseAndFormatMessages(rows, `v2`);
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageIds: JSON.stringify(messageIds),
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return [];
+    }
+  }
+
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';

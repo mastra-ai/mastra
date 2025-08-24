@@ -21,6 +21,7 @@ export function pgTests() {
   describe('PG specific tests', () => {
     beforeAll(async () => {
       store = new PostgresStore(TEST_CONFIG);
+      await store.init();
     });
     afterAll(async () => {
       try {
@@ -79,6 +80,8 @@ export function pgTests() {
       const BASE_SCHEMA = {
         id: { type: 'integer', primaryKey: true, nullable: false },
         name: { type: 'text', nullable: true },
+        createdAt: { type: 'timestamp', nullable: false },
+        updatedAt: { type: 'timestamp', nullable: false },
       } as Record<string, StorageColumn>;
 
       beforeEach(async () => {
@@ -115,7 +118,7 @@ export function pgTests() {
 
         await store.insert({
           tableName: camelCaseTable as TABLE_NAMES,
-          record: { id: '1', name: 'Alice' },
+          record: { id: '1', name: 'Alice', createdAt: new Date(), updatedAt: new Date() },
         });
 
         const row: any = await store.load({
@@ -135,7 +138,7 @@ export function pgTests() {
 
         await store.insert({
           tableName: snakeCaseTable as TABLE_NAMES,
-          record: { id: '2', name: 'Bob' },
+          record: { id: '2', name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
         });
 
         const row: any = await store.load({
@@ -362,6 +365,12 @@ export function pgTests() {
       });
       it('does not throw on non-empty connection string', () => {
         expect(() => new PostgresStore({ connectionString })).not.toThrow();
+      });
+      it('throws if store is not initialized', () => {
+        expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
+          /PostgresStore: Store is not initialized/,
+        );
+        expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
       });
     });
   });

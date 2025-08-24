@@ -1,3 +1,13 @@
+import { anthropic } from '@ai-sdk/anthropic';
+import { anthropic as anthropicV5 } from '@ai-sdk/anthropic-v5';
+import { google } from '@ai-sdk/google';
+import { google as googleV5 } from '@ai-sdk/google-v5';
+import { groq } from '@ai-sdk/groq';
+import { groq as groqV5 } from '@ai-sdk/groq-v5';
+import { openai } from '@ai-sdk/openai';
+import { openai as openaiV5 } from '@ai-sdk/openai-v5';
+import { xai } from '@ai-sdk/xai';
+import { xai as xaiV5 } from '@ai-sdk/xai-v5';
 import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { stringify } from 'superjson';
@@ -14,6 +24,42 @@ type GetBody<
   messages: Parameters<Agent[T]>[0];
 } & Parameters<Agent[T]>[1];
 
+export async function getSerializedAgentTools(tools: Record<string, any>) {
+  return Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
+    const _tool = tool as any;
+
+    const toolId = _tool.id ?? `tool-${key}`;
+
+    let inputSchemaForReturn = undefined;
+
+    if (_tool.inputSchema) {
+      if (_tool.inputSchema?.jsonSchema) {
+        inputSchemaForReturn = stringify(_tool.inputSchema.jsonSchema);
+      } else {
+        inputSchemaForReturn = stringify(zodToJsonSchema(_tool.inputSchema));
+      }
+    }
+
+    let outputSchemaForReturn = undefined;
+
+    if (_tool.outputSchema) {
+      if (_tool.outputSchema?.jsonSchema) {
+        outputSchemaForReturn = stringify(_tool.outputSchema.jsonSchema);
+      } else {
+        outputSchemaForReturn = stringify(zodToJsonSchema(_tool.outputSchema));
+      }
+    }
+
+    acc[key] = {
+      ..._tool,
+      id: toolId,
+      inputSchema: inputSchemaForReturn,
+      outputSchema: outputSchemaForReturn,
+    };
+    return acc;
+  }, {});
+}
+
 // Agent handlers
 export async function getAgentsHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
   try {
@@ -27,15 +73,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
         const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
 
-        const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-          const _tool = tool as any;
-          acc[key] = {
-            ..._tool,
-            inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-            outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
-          };
-          return acc;
-        }, {});
+        const serializedAgentTools = await getSerializedAgentTools(tools);
 
         let serializedAgentWorkflows = {};
 
@@ -56,6 +94,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           }
         }
 
+        const model = llm?.getModel();
+
         return {
           id,
           name: agent.name,
@@ -64,6 +104,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
           modelId: llm?.getModelId(),
+          modelVersion: model?.specificationVersion,
           defaultGenerateOptions: defaultGenerateOptions as any,
           defaultStreamOptions: defaultStreamOptions as any,
         };
@@ -98,15 +139,7 @@ export async function getAgentByIdHandler({
 
     const tools = await agent.getTools({ runtimeContext });
 
-    const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
-      const _tool = tool as any;
-      acc[key] = {
-        ..._tool,
-        inputSchema: _tool.inputSchema ? stringify(zodToJsonSchema(_tool.inputSchema)) : undefined,
-        outputSchema: _tool.outputSchema ? stringify(zodToJsonSchema(_tool.outputSchema)) : undefined,
-      };
-      return acc;
-    }, {});
+    const serializedAgentTools = await getSerializedAgentTools(tools);
 
     let serializedAgentWorkflows = {};
 
@@ -157,6 +190,8 @@ export async function getAgentByIdHandler({
     const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
     const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
+    const model = llm?.getModel();
+
     return {
       name: agent.name,
       instructions,
@@ -164,6 +199,7 @@ export async function getAgentByIdHandler({
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
+      modelVersion: model?.specificationVersion,
       defaultGenerateOptions: defaultGenerateOptions as any,
       defaultStreamOptions: defaultStreamOptions as any,
     };
@@ -261,6 +297,53 @@ export async function generateHandler({
   }
 }
 
+export async function generateVNextHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'generateVNext'> & {
+    runtimeContext?: Record<string, unknown>;
+    format?: 'mastra' | 'aisdk';
+  };
+  abortSignal?: AbortSignal;
+}): Promise<ReturnType<Agent['generateVNext']>> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const result = await agent.generateVNext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      format: rest.format || 'mastra',
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error generating from agent');
+  }
+}
+
 export async function streamGenerateHandler({
   mastra,
   runtimeContext,
@@ -337,6 +420,7 @@ export function streamVNextGenerateHandler({
   agentId: string;
   body: GetBody<'streamVNext'> & {
     runtimeContext?: string;
+    format?: 'aisdk' | 'mastra';
   };
   abortSignal?: AbortSignal;
 }): ReturnType<Agent['streamVNext']> {
@@ -358,11 +442,112 @@ export function streamVNextGenerateHandler({
     const streamResult = agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      abortSignal,
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
+      format: body.format ?? 'mastra',
     });
 
     return streamResult;
   } catch (error) {
     return handleError(error, 'error streaming agent response');
+  }
+}
+
+export async function streamVNextUIMessageHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'streamVNext'> & {
+    runtimeContext?: string;
+  };
+  abortSignal?: AbortSignal;
+}): Promise<Response | undefined> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const streamResult = await agent.streamVNext(messages, {
+      ...rest,
+      runtimeContext: finalRuntimeContext,
+      options: {
+        ...(rest?.options ?? {}),
+        abortSignal,
+      },
+      format: 'aisdk',
+    });
+
+    return streamResult.toUIMessageStreamResponse();
+  } catch (error) {
+    return handleError(error, 'error streaming agent response');
+  }
+}
+
+export async function updateAgentModelHandler({
+  mastra,
+  agentId,
+  body,
+}: Context & {
+  agentId: string;
+  body: {
+    modelId: string;
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  };
+}): Promise<{ message: string }> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const agentModel = await agent.getModel();
+    const modelVersion = agentModel.specificationVersion;
+
+    const { modelId, provider } = body;
+
+    const providerMap = {
+      v1: {
+        openai: openai(modelId),
+        anthropic: anthropic(modelId),
+        groq: groq(modelId),
+        xai: xai(modelId),
+        google: google(modelId),
+      },
+      v2: {
+        openai: openaiV5(modelId),
+        anthropic: anthropicV5(modelId),
+        groq: groqV5(modelId),
+        xai: xaiV5(modelId),
+        google: googleV5(modelId),
+      },
+    };
+
+    const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
+
+    let model = providerMap[modelVersionKey][provider];
+
+    agent.__updateModel({ model });
+
+    return { message: 'Agent model updated' };
+  } catch (error) {
+    return handleError(error, 'error updating agent model');
   }
 }

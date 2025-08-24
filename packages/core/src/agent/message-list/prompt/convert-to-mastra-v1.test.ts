@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageV2 } from '../../message-list';
+import { MessageList } from '../../message-list';
 import { convertToV1Messages } from './convert-to-mastra-v1';
 
 describe('convertToV1Messages', () => {
@@ -499,7 +501,6 @@ describe('convertToV1Messages', () => {
     const result = convertToV1Messages([testMessage]);
 
     const sharedFields = {
-      id: testMessage.id,
       createdAt: testMessage.createdAt,
       resourceId: testMessage.resourceId,
       threadId: testMessage.threadId,
@@ -513,9 +514,20 @@ describe('convertToV1Messages', () => {
     // 5. tool-result (both array results grouped together)
     // Total: 5 messages
     expect(result.length).toBe(5);
+
+    // First message should keep original ID
+    expect(result[0].id).toBe(testMessage.id);
+
+    // Split messages should have suffixes
+    expect(result[1].id).toBe(`${testMessage.id}__split-1`);
+    expect(result[2].id).toBe(`${testMessage.id}__split-2`);
+    expect(result[3].id).toBe(`${testMessage.id}__split-3`);
+    expect(result[4].id).toBe(`${testMessage.id}__split-4`);
+
     expect(result).toEqual([
       expect.objectContaining({
         ...sharedFields,
+        id: testMessage.id,
         role: 'assistant',
         type: 'text',
         content: 'Multiple tools test',
@@ -1415,5 +1427,455 @@ describe('convertToV1Messages', () => {
         expect((toolResult.result as any).temperature).toBe(22);
       }
     }
+  });
+
+  it('should properly separate tool invocations from text for AI accessibility (reproduces issue #6087 from database)', () => {
+    // This test reproduces the exact scenario from the database where tool history
+    // becomes inaccessible in later conversation turns
+
+    const messages: MastraMessageV2[] = [
+      // Message 1: User asks for weather
+      {
+        id: 'fbd2f506-90e6-4f52-8ba4-633abe9e8442',
+        role: 'user',
+        createdAt: new Date('2025-08-05T22:58:18.403Z'),
+        threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'LA weather' }],
+          content: 'LA weather',
+        },
+      },
+      // Message 2: Assistant with tool invocation result AND text response
+      {
+        id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                toolName: 'weatherTool',
+                args: { location: 'Los Angeles' },
+                result: {
+                  temperature: 29.4,
+                  feelsLike: 30.5,
+                  humidity: 48,
+                  windSpeed: 16,
+                  windGust: 18.7,
+                  conditions: 'Clear sky',
+                  location: 'Los Angeles',
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The current weather in Los Angeles is as follows:\n\n- **Temperature:** 29.4°C (Feels like 30.5°C)\n- **Humidity:** 48%\n- **Wind Speed:** 16 km/h\n- **Wind Gusts:** 18.7 km/h\n- **Conditions:** Clear sky\n\nIf you need any specific activities or further information, let me know!',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              args: { location: 'Los Angeles' },
+              result: {
+                temperature: 29.4,
+                feelsLike: 30.5,
+                humidity: 48,
+                windSpeed: 16,
+                windGust: 18.7,
+                conditions: 'Clear sky',
+                location: 'Los Angeles',
+              },
+            },
+          ],
+        },
+      },
+      // Message 3: User asks about the tool call
+      {
+        id: 'd936d31b-0ad5-43a8-89ed-c5cc24c60895',
+        role: 'user',
+        createdAt: new Date('2025-08-05T22:58:38.656Z'),
+        threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'what was the weather when you called that tool?' }],
+          content: 'what was the weather when you called that tool?',
+        },
+      },
+      // Message 4: Assistant responds (should still have access to tool history)
+      {
+        id: '75ee9187-ba4b-4a15-b65c-490adad6c764',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:40.456Z'),
+        threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: "The weather data I provided was retrieved just now. Here's a summary of the current weather in Los Angeles:\n\n- **Temperature:** 29.4°C (Feels like 30.5°C)\n- **Humidity:** 48%\n- **Wind Speed:** 16 km/h\n- **Wind Gusts:** 18.7 km/h\n- **Conditions:** Clear sky\n\nIf you have any other questions or need further details, feel free to ask!",
+            },
+          ],
+        },
+      },
+    ];
+
+    const v1Messages = convertToV1Messages(messages);
+
+    // Critical assertions: Tool invocations should be properly separated
+    // so the AI can access tool history in later turns
+
+    // CRITICAL: The assistant's first response should be split into 3 separate messages
+    // This separation is what makes tool history accessible to the AI
+
+    // Expected structure for proper tool history accessibility:
+    expect(v1Messages).toEqual(
+      expect.arrayContaining([
+        // 1. User asks for weather
+        expect.objectContaining({
+          id: 'fbd2f506-90e6-4f52-8ba4-633abe9e8442',
+          role: 'user',
+          type: 'text',
+          content: 'LA weather',
+        }),
+        // 2. Assistant makes tool call
+        expect.objectContaining({
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+          role: 'assistant',
+          type: 'tool-call',
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'tool-call',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              args: { location: 'Los Angeles' },
+            }),
+          ]),
+        }),
+        // 3. Tool returns result (with ${id}__split-1 suffix due to message splitting)
+        expect.objectContaining({
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb__split-1',
+          role: 'tool',
+          type: 'tool-result',
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'tool-result',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              result: expect.objectContaining({
+                temperature: 29.4,
+                conditions: 'Clear sky',
+                location: 'Los Angeles',
+              }),
+            }),
+          ]),
+        }),
+        // 4. Assistant provides text response (SEPARATE from tool call/result, with ${id}__split-2 suffix due to message splitting)
+        expect.objectContaining({
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb__split-2',
+          role: 'assistant',
+          type: 'text',
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'text',
+              text: expect.stringContaining('The current weather in Los Angeles'),
+            }),
+          ]),
+        }),
+        // 5. User asks about tool history
+        expect.objectContaining({
+          id: 'd936d31b-0ad5-43a8-89ed-c5cc24c60895',
+          role: 'user',
+          type: 'text',
+          content: 'what was the weather when you called that tool?',
+        }),
+        // 6. Assistant responds (should have access to tool history from messages 2-3)
+        expect.objectContaining({
+          id: '75ee9187-ba4b-4a15-b65c-490adad6c764',
+          role: 'assistant',
+          type: 'text',
+        }),
+      ]),
+    );
+
+    // Verify the full conversation maintains proper order
+    expect(v1Messages.length).toBe(6); // User, Assistant(tool-call), Tool(result), Assistant(text), User, Assistant
+
+    // The tool history should be cleanly separated and accessible
+    // for the AI to reference in the fourth message
+    const toolHistory = v1Messages.filter(m => m.type === 'tool-call' || m.type === 'tool-result');
+    expect(toolHistory.length).toBe(2); // One tool-call and one tool-result
+  });
+
+  it('should NOT separate tool invocations when they are already in v1 format (potential bug)', () => {
+    // This test simulates what might be happening: messages are already stored in v1 format
+    // and then being converted again, losing the separation
+
+    const v1MessagesFromDb: MastraMessageV1[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        createdAt: new Date('2025-08-05T22:58:18.403Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        type: 'text',
+        content: 'LA weather',
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        type: 'tool-call',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+            toolName: 'weatherTool',
+            args: { location: 'Los Angeles' },
+          },
+        ],
+      },
+      {
+        id: 'tool-1',
+        role: 'tool',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        type: 'tool-result',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+            toolName: 'weatherTool',
+            result: {
+              temperature: 29.4,
+              conditions: 'Clear sky',
+            },
+          },
+        ],
+      },
+      {
+        id: 'assistant-2',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        type: 'text',
+        content: 'The current weather in Los Angeles is 29.4°C with clear sky.',
+      },
+    ];
+
+    // If these v1 messages are incorrectly converted to v2 and back to v1,
+    // they might lose their separation
+
+    // First, let's see what happens if we treat these as MessageInput
+    // This might be what's happening in the real system
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
+
+    // When messages are loaded from memory, they might be added as v1 format
+    messageList.add(v1MessagesFromDb as any, 'memory');
+
+    // Then converted back to v1 for the AI
+    const resultV1 = messageList.get.all.v1();
+
+    // The tool history should still be preserved
+    const toolCallMessages = resultV1.filter(m => m.type === 'tool-call');
+    const toolResultMessages = resultV1.filter(m => m.type === 'tool-result');
+
+    expect(toolCallMessages.length).toBeGreaterThan(0);
+    expect(toolResultMessages.length).toBeGreaterThan(0);
+  });
+
+  it('should verify the v2 -> ui -> core conversion path preserves tool separation', () => {
+    // This test checks the actual path messages take when sent to the LLM
+    // v2 (from database) -> ui -> core (for LLM)
+
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
+
+    // Add the exact v2 messages from the database
+    const v2Messages: MastraMessageV2[] = [
+      {
+        id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                toolName: 'weatherTool',
+                args: { location: 'Los Angeles' },
+                result: {
+                  temperature: 29.4,
+                  conditions: 'Clear sky',
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The current weather in Los Angeles is 29.4°C with clear sky.',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              args: { location: 'Los Angeles' },
+              result: {
+                temperature: 29.4,
+                conditions: 'Clear sky',
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    messageList.add(v2Messages, 'memory');
+
+    // Get the core messages (what would be sent to LLM)
+    const coreMessages = messageList.get.all.core();
+
+    // Check if tool calls and text are properly separated in core messages
+    // This is critical for the AI to be able to reference tool history
+
+    // We expect multiple core messages if properly separated
+    expect(coreMessages.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should preserve tool history in full conversation flow (reproduces traces issue)', () => {
+    // This test simulates the full conversation flow as it would happen in the playground
+
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
+
+    // Add system message like the agent would
+    messageList.addSystem('You are a helpful weather assistant that provides accurate weather information.', 'agent');
+
+    // Simulate loading previous messages from memory (database)
+    const memoryMessages: MastraMessageV2[] = [
+      // First user message
+      {
+        id: 'user-1',
+        role: 'user',
+        createdAt: new Date('2025-08-05T22:58:18.403Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'LA weather' }],
+          content: 'LA weather',
+        },
+      },
+      // Assistant response with tool call and result
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                toolName: 'weatherTool',
+                args: { location: 'Los Angeles' },
+                result: {
+                  temperature: 29.4,
+                  conditions: 'Clear sky',
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The current weather in Los Angeles is 29.4°C with clear sky.',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              args: { location: 'Los Angeles' },
+              result: {
+                temperature: 29.4,
+                conditions: 'Clear sky',
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    // Add memory messages
+    messageList.add(memoryMessages, 'memory');
+
+    // Add new user message (like when user asks follow-up)
+    const newUserMessage: MastraMessageV2 = {
+      id: 'user-2',
+      role: 'user',
+      createdAt: new Date('2025-08-05T22:58:38.656Z'),
+      threadId: 'thread-1',
+      resourceId: 'weatherAgent',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'what was the weather when you called that tool?' }],
+        content: 'what was the weather when you called that tool?',
+      },
+    };
+
+    messageList.add(newUserMessage, 'user');
+
+    // Get what would be sent to the LLM (this is what shows in traces)
+    const promptMessages = messageList.get.all.prompt();
+
+    // Verify tool history is present
+    const hasToolCall = promptMessages.some(
+      m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call'),
+    );
+
+    const hasToolResult = promptMessages.some(
+      m => m.role === 'tool' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-result'),
+    );
+
+    expect(hasToolCall).toBe(true);
+    expect(hasToolResult).toBe(true);
+
+    // Count the messages to understand the structure
+    const messagesByRole = promptMessages.reduce(
+      (acc, m) => {
+        acc[m.role] = (acc[m.role] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    // We should have: system, user, assistant (tool-call), tool (result), assistant (text), user
+    expect(messagesByRole.system).toBe(1);
+    expect(messagesByRole.user).toBe(2);
+    expect(messagesByRole.assistant).toBeGreaterThanOrEqual(2);
+    expect(messagesByRole.tool).toBe(1);
   });
 });

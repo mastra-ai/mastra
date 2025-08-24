@@ -497,6 +497,14 @@ const messagesV1 = await mastra.getStorage().getMessages({ threadId: 'your-threa
 const messagesV2 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id', format: 'v2' });
 ```
 
+You can also retrieve messages using an array of message IDs. Note that unlike `getMessages`, this defaults to the V2 format:
+
+```typescript copy
+const messagesV1 = await mastra.getStorage().getMessagesById({ messageIds: messageIdArr, format: 'v1' });
+
+const messagesV2 = await mastra.getStorage().getMessagesById({ messageIds: messageIdArr });
+```
+
 ## Storage Providers
 
 Mastra supports the following providers:

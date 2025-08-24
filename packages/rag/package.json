@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -37,18 +37,18 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.0-0 <0.14.0-0",
+    "@mastra/core": ">=0.14.0-0 <0.15.0-0",
     "ai": "^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "^1.2.10",
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.24",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/big.js": "^6.2.2",
     "@types/node": "^20.19.0",
-    "ai": "^4.3.16",
+    "ai": "^4.3.19",
     "dotenv": "^17.0.0",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",

@@ -1,4 +1,4 @@
-import type { Schema, LanguageModelV1 } from 'ai';
+import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault, ZodNull } from 'zod';
 import type { ZodTypeAny } from 'zod';
@@ -119,7 +119,7 @@ type StringConstraints = {
   uuid?: boolean;
   cuid?: boolean;
   emoji?: boolean;
-  regex?: { pattern: string; flags?: string };
+  regex?: string;
 };
 
 type NumberConstraints = {
@@ -140,6 +140,12 @@ type DateConstraints = {
   minDate?: string;
   maxDate?: string;
   dateFormat?: string;
+};
+
+export type ModelInformation = {
+  modelId: string;
+  provider: string;
+  supportsStructuredOutputs: boolean;
 };
 
 /**
@@ -182,14 +188,14 @@ type DateConstraints = {
  * ```
  */
 export abstract class SchemaCompatLayer {
-  private model: LanguageModelV1;
+  private model: ModelInformation;
 
   /**
    * Creates a new schema compatibility instance.
    *
    * @param model - The language model this compatibility layer applies to
    */
-  constructor(model: LanguageModelV1) {
+  constructor(model: ModelInformation) {
     this.model = model;
   }
 
@@ -198,7 +204,7 @@ export abstract class SchemaCompatLayer {
    *
    * @returns The language model instance
    */
-  getModel(): LanguageModelV1 {
+  getModel(): ModelInformation {
     return this.model;
   }
 
@@ -392,10 +398,7 @@ export abstract class SchemaCompatLayer {
         if (handleChecks.includes(check.kind as StringCheckType)) {
           switch (check.kind) {
             case 'regex': {
-              constraints.regex = {
-                pattern: check.regex.source,
-                flags: check.regex.flags,
-              };
+              constraints.regex = `A string that must match the regex pattern: ${check.regex.source}, with flags: ${check.regex.flags}`;
               break;
             }
             case 'emoji': {

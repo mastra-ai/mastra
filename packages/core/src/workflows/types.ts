@@ -3,7 +3,8 @@ import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
 
-export type { ChunkType, MastraWorkflowStream } from '../stream/MastraWorkflowStream';
+export type { ChunkType } from '../stream/types';
+export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
@@ -198,3 +199,22 @@ export interface WorkflowRunState {
   suspendedPaths: Record<string, number[]>;
   timestamp: number;
 }
+
+type SerializedStep = {
+  id: string;
+  description: string;
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+  resumeSchema: string | undefined;
+  suspendSchema: string | undefined;
+};
+
+export type WorkflowInfo = {
+  steps: Record<string, SerializedStep>;
+  allSteps: Record<string, SerializedStep>;
+  name: string | undefined;
+  description: string | undefined;
+  stepGraph: SerializedStepFlowEntry[];
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+};

@@ -1,12 +1,12 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
-
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase, type RequireOnly, type Resolve } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
-import type { CoreTool } from '../tools';
+import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
@@ -33,7 +33,7 @@ export abstract class MemoryProcessor extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] {
+  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] | Promise<CoreMessage[]> {
     return messages;
   }
 }
@@ -70,7 +70,7 @@ export abstract class MastraMemory extends MastraBase {
 
   protected _storage?: MastraStorage;
   vector?: MastraVector;
-  embedder?: EmbeddingModel<string>;
+  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
   private processors: MemoryProcessor[] = [];
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
@@ -155,7 +155,7 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public getTools(_config?: MemoryConfig): Record<string, CoreTool> {
+  public getTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     return {};
   }
 
@@ -198,12 +198,12 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  protected applyProcessors(
+  protected async applyProcessors(
     messages: CoreMessage[],
     opts: {
       processors?: MemoryProcessor[];
     } & MemoryProcessorOpts,
-  ): CoreMessage[] {
+  ): Promise<CoreMessage[]> {
     const processors = opts.processors || this.processors;
     if (!processors || processors.length === 0) {
       return messages;
@@ -212,7 +212,7 @@ export abstract class MastraMemory extends MastraBase {
     let processedMessages = [...messages];
 
     for (const processor of processors) {
-      processedMessages = processor.process(processedMessages, {
+      processedMessages = await processor.process(processedMessages, {
         systemMessage: opts.systemMessage,
         newMessages: opts.newMessages,
         memorySystemMessage: opts.memorySystemMessage,

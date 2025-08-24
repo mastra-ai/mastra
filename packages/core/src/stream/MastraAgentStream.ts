@@ -1,80 +1,7 @@
 import { ReadableStream, TransformStream } from 'stream/web';
-
-export type ChunkType = {
-  type: string;
-  runId: string;
-  from: string;
-  payload: Record<string, any>;
-};
-
-function convertFullStreamChunkToMastra(value: any, ctx: { runId: string }, write: (chunk: any) => void) {
-  if (value.type === 'step-start') {
-    write({
-      type: 'step-start',
-      runId: ctx.runId,
-      from: 'AGENT',
-      payload: {
-        messageId: value.messageId,
-        request: { body: JSON.parse(value.request!.body ?? '{}') },
-        warnings: value.warnings,
-      },
-    });
-  } else if (value.type === 'tool-call') {
-    write({
-      type: 'tool-call',
-      runId: ctx.runId,
-      from: 'AGENT',
-      payload: {
-        toolCallId: value.toolCallId,
-        args: value.args,
-        toolName: value.toolName,
-      },
-    });
-  } else if (value.type === 'tool-result') {
-    write({
-      type: 'tool-result',
-      runId: ctx.runId,
-      from: 'AGENT',
-      payload: {
-        toolCallId: value.toolCallId,
-        toolName: value.toolName,
-        result: value.result,
-      },
-    });
-  } else if (value.type === 'text-delta') {
-    write({
-      type: 'text-delta',
-      runId: ctx.runId,
-      from: 'AGENT',
-      payload: {
-        text: value.textDelta,
-      },
-    });
-  } else if (value.type === 'step-finish') {
-    write({
-      type: 'step-finish',
-      runId: ctx.runId,
-      from: 'AGENT',
-      payload: {
-        reason: value.finishReason,
-        usage: value.usage,
-        response: value.response,
-        messageId: value.messageId,
-        providerMetadata: value.providerMetadata,
-      },
-    });
-  } else if (value.type === 'finish') {
-    write({
-      type: 'finish',
-      runId: ctx.runId,
-      from: 'AGENT',
-      payload: {
-        usage: value.usage,
-        providerMetadata: value.providerMetadata,
-      },
-    });
-  }
-}
+import { convertFullStreamChunkToMastra } from './aisdk/v4/transform';
+import type { ChunkType } from './types';
+import { ChunkFrom } from './types';
 
 export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
   #usageCount = {
@@ -145,7 +72,7 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
         controller.enqueue({
           type: 'start',
           runId,
-          from: 'AGENT',
+          from: ChunkFrom.AGENT,
           payload: {},
         });
 
@@ -165,30 +92,31 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
           });
 
           for await (const chunk of stream) {
-            convertFullStreamChunkToMastra(chunk, { runId }, chunk => {
-              switch (chunk.type) {
+            const transformedChunk = convertFullStreamChunkToMastra(chunk, { runId });
+
+            if (transformedChunk) {
+              switch (transformedChunk.type) {
                 case 'text-delta':
-                  this.#bufferedText.push(chunk.payload.text);
+                  this.#bufferedText.push(transformedChunk.payload.text);
                   break;
                 case 'tool-call':
-                  this.#toolCalls.push(chunk.payload);
+                  this.#toolCalls.push(transformedChunk.payload);
                   break;
                 case 'tool-result':
-                  this.#toolResults.push(chunk.payload);
+                  this.#toolResults.push(transformedChunk.payload);
                   break;
                 case 'step-finish':
-                  if (chunk.payload.reason) {
-                    this.#finishReason = chunk.payload.reason;
+                  if (transformedChunk.payload.reason) {
+                    this.#finishReason = transformedChunk.payload.reason;
                   }
                   break;
                 case 'finish':
-                  updateUsageCount(chunk.payload.usage);
-                  chunk.payload.totalUsage = this.#usageCount;
+                  updateUsageCount(transformedChunk.payload.usage);
+                  transformedChunk.payload.totalUsage = this.#usageCount;
                   break;
               }
-
-              controller.enqueue(chunk);
-            });
+              controller.enqueue(transformedChunk);
+            }
           }
 
           controller.close();

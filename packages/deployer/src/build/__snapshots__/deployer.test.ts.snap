@@ -56,3 +56,16 @@ const deployer = getDeployer();
 export { deployer };
 "
 `;
+
+exports[`getDeployer > should support json imports 1`] = `
+"import { TestDeployer } from '@mastra/deployer/test';
+
+var name = "example-json-name";
+
+const deployer = new TestDeployer({
+  name
+});
+
+export { deployer };
+"
+`;

@@ -6,13 +6,8 @@ import { Memory } from '@mastra/memory';
 import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
-import {
-  PIIDetector,
-  LanguageDetector,
-  PromptInjectionDetector,
-  ModerationInputProcessor,
-} from '@mastra/core/agent/input-processor/processors';
-import { MCPClient } from '@mastra/mcp';
+import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const memory = new Memory();
 
@@ -48,8 +43,8 @@ export const chefAgent = new Agent({
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
   instructions: `
     YOU MUST USE THE TOOL cooking-tool
-    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever 
-    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. 
+    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
+    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
   model: openai('gpt-4o-mini'),
@@ -109,7 +104,8 @@ const vegetarianProcessor: InputProcessor = {
 };
 
 const piiDetector = new PIIDetector({
-  model: google('gemini-2.0-flash-001'),
+  // model: google('gemini-2.0-flash-001'),
+  model: openai('gpt-4o'),
   redactionMethod: 'mask',
   preserveFormat: true,
   includeDetections: true,
@@ -126,31 +122,34 @@ const promptInjectionDetector = new PromptInjectionDetector({
   strategy: 'block',
 });
 
-const moderationDetector = new ModerationInputProcessor({
+const moderationDetector = new ModerationProcessor({
   model: google('gemini-2.0-flash-001'),
   strategy: 'block',
+  chunkWindow: 10,
 });
 
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
-    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever 
-    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes. 
+    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
+    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
   model: openai.responses('gpt-4o'),
+  // model: cerebras('qwen-3-coder-480b'),
   tools: async () => {
     return {
       web_search_preview: openai.tools.webSearchPreview(),
+      cooking_tool: cookingTool,
     };
   },
   workflows: {
     myWorkflow,
   },
   inputProcessors: [
-    // piiDetector,
+    piiDetector,
     // vegetarianProcessor,
-    languageDetector,
+    // languageDetector,
     // promptInjectionDetector,
     // moderationDetector,
     {
@@ -187,4 +186,42 @@ export const chefAgentResponses = new Agent({
       },
     },
   ],
+});
+
+export const agentThatHarassesYou = new Agent({
+  name: 'Agent That Harasses You',
+  instructions: `
+    You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
+    `,
+  model: openai('gpt-4o'),
+  outputProcessors: [moderationDetector],
+});
+
+const answerRelevance = createAnswerRelevancyScorer({
+  model: openai('gpt-4o'),
+});
+
+console.log(`answerRelevance`, answerRelevance);
+
+export const evalAgent = new Agent({
+  name: 'Eval Agent',
+  instructions: `
+    You are a helpful assistant with a weather tool.
+    `,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherInfo,
+  },
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+  scorers: {
+    answerRelevance: {
+      scorer: answerRelevance,
+    },
+  },
 });

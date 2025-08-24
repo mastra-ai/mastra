@@ -10,8 +10,16 @@ import type {
   StorageGetMessagesArg,
   PaginationInfo,
   MastraMessageV2,
+  OutputSchema,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput, UIMessageWithMetadata } from '@mastra/core/agent';
+import type {
+  AgentExecutionOptions,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  ToolsInput,
+  UIMessageWithMetadata,
+} from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -65,6 +73,7 @@ export interface GetAgentResponse {
   workflows: Record<string, GetWorkflowResponse>;
   provider: string;
   modelId: string;
+  modelVersion: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
 }
@@ -88,6 +97,18 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
 } & WithoutMethods<
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
+
+export type StreamVNextParams<OUTPUT extends OutputSchema | undefined = undefined> = {
+  messages: MessageListInput;
+  output?: OUTPUT;
+  runtimeContext?: RuntimeContext | Record<string, any>;
+  clientTools?: ToolsInput;
+} & WithoutMethods<Omit<AgentExecutionOptions<OUTPUT>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
+
+export type UpdateModelParams = {
+  modelId: string;
+  provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+};
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];

@@ -7,24 +7,53 @@ import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
 import { attachmentsToParts } from './attachments-to-parts';
 
-const makePushOrCombine = (v1Messages: MastraMessageV1[]) => (msg: MastraMessageV1) => {
-  const previousMessage = v1Messages.at(-1);
-  if (
-    msg.role === previousMessage?.role &&
-    Array.isArray(previousMessage.content) &&
-    Array.isArray(msg.content) &&
-    // we were creating new messages for tool calls before and not appending to the assistant message
-    // so don't append here so everything works as before
-    (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
-  ) {
-    for (const part of msg.content) {
-      // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
-      // I'm not sure what's adding `never` to the union but this code definitely works..
-      previousMessage.content.push(part);
+const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
+  // Track how many times each ID has been used to create unique IDs for split messages
+  const idUsageCount = new Map<string, number>();
+
+  // Pattern to detect if an ID already has our split suffix
+  const SPLIT_SUFFIX_PATTERN = /__split-\d+$/;
+
+  return (msg: MastraMessageV1) => {
+    const previousMessage = v1Messages.at(-1);
+    if (
+      msg.role === previousMessage?.role &&
+      Array.isArray(previousMessage.content) &&
+      Array.isArray(msg.content) &&
+      // we were creating new messages for tool calls before and not appending to the assistant message
+      // so don't append here so everything works as before
+      (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
+    ) {
+      for (const part of msg.content) {
+        // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
+        // I'm not sure what's adding `never` to the union but this code definitely works..
+        previousMessage.content.push(part);
+      }
+    } else {
+      // When pushing a new message, check if we need to deduplicate the ID
+      let baseId = msg.id;
+
+      // Check if this ID already has a split suffix and extract the base ID
+      const hasSplitSuffix = SPLIT_SUFFIX_PATTERN.test(baseId);
+      if (hasSplitSuffix) {
+        // This ID already has a split suffix, don't add another one
+        v1Messages.push(msg);
+        return;
+      }
+
+      const currentCount = idUsageCount.get(baseId) || 0;
+
+      // If we've seen this ID before, append our unique split suffix
+      if (currentCount > 0) {
+        msg.id = `${baseId}__split-${currentCount}`;
+      }
+
+      // Increment the usage count for this base ID
+      idUsageCount.set(baseId, currentCount + 1);
+
+      v1Messages.push(msg);
     }
-  } else {
-    v1Messages.push(msg);
-  }
+  };
 };
 export function convertToV1Messages(messages: Array<MastraMessageV2>) {
   const v1Messages: MastraMessageV1[] = [];
@@ -36,6 +65,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
     if (!message?.content) continue;
     const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
     const { role } = message;
+
     const fields = {
       id: message.id,
       createdAt: message.createdAt,

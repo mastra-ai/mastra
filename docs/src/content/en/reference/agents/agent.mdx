@@ -1,32 +1,35 @@
 ---
-title: "Reference: Agent | Agents | Mastra Docs"
-description: "Documentation for the Agent class in Mastra, which provides the foundation for creating AI agents with various capabilities."
+title: "Reference: Agent Class | Agents | Mastra Docs"
+description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
 ---
 
-# Agent
+# Agent Class
 
 The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
 
-## Importing
+## Usage example
 
-```typescript
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "test-agent",
+  instructions: 'message for agent',
+  model: openai("gpt-4o")
+});
 ```
 
-## Constructor
-
-Creates a new Agent instance with the specified configuration.
-
-```typescript
-constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
-```
-
-### Parameters
-
-<br />
+## Constructor parameters
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "Optional unique identifier for the agent. Defaults to `name` if not provided.",
+    },
     {
       name: "name",
       type: "string",
@@ -37,75 +40,108 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       name: "description",
       type: "string",
       isOptional: true,
-      description:
-        "An optional description of the agent\'s purpose and capabilities.",
+      description: "Optional description of the agent's purpose and capabilities.",
     },
     {
       name: "instructions",
       type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
       isOptional: false,
-      description:
-        "Instructions that guide the agent's behavior. Can be a static string or a function that returns a string.",
+      description: "Instructions that guide the agent's behavior. Can be a static string or a function that returns a string dynamically.",
     },
     {
       name: "model",
       type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
-      description:
-        "The language model to use for generating responses. Can be a model instance or a function that returns a model.",
+      description: "The language model used by the agent. Can be provided statically or resolved at runtime.",
     },
     {
       name: "tools",
       type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,
-      description:
-        "Tools that the agent can use. Can be a static object or a function that returns tools.",
-    },
-    {
-      name: "inputProcessors",
-      type: "InputProcessor[] | ({ runtimeContext: RuntimeContext }) => InputProcessor[] | Promise<InputProcessor[]>",
-      isOptional: true,
-      description:
-        "Input processors that run sequentially before messages are sent to the language model. These middleware components can intercept, modify, validate, or filter messages. Each processor receives an array of MastraMessageV2 objects and an abort function for early termination. Can be a static array or a function that returns processors based on runtime context.",
-    },
-    {
-      name: "defaultGenerateOptions",
-      type: "AgentGenerateOptions",
-      isOptional: true,
-      description: "Default options to use when calling generate().",
-    },
-    {
-      name: "defaultStreamOptions",
-      type: "AgentStreamOptions",
-      isOptional: true,
-      description: "Default options to use when calling stream().",
+      description: "Tools that the agent can access. Can be provided statically or resolved dynamically.",
     },
     {
       name: "workflows",
-      type: "Record<string, NewWorkflow> | ({ runtimeContext: RuntimeContext }) => Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>",
+      type: "Record<string, Workflow> | ({ runtimeContext: RuntimeContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
       isOptional: true,
-      description:
-        "Workflows that the agent can execute. Can be a static object or a function that returns workflows.",
+      description: "Workflows that the agent can execute. Can be static or dynamically resolved.",
+    },
+    {
+      name: "defaultGenerateOptions",
+      type: "AgentGenerateOptions | ({ runtimeContext: RuntimeContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      isOptional: true,
+      description: "Default options used when calling `generate()`.",
+    },
+    {
+      name: "defaultStreamOptions",
+      type: "AgentStreamOptions | ({ runtimeContext: RuntimeContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      isOptional: true,
+      description: "Default options used when calling `stream()`.",
+    },
+    {
+      name: "defaultVNextStreamOptions",
+      type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+      isOptional: true,
+      description: "Default options used when calling `stream()` in vNext mode.",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      isOptional: true,
+      description: "Reference to the Mastra runtime instance (injected automatically).",
+    },
+    {
+      name: "scorers",
+      type: "MastraScorers | ({ runtimeContext: RuntimeContext }) => MastraScorers | Promise<MastraScorers>",
+      isOptional: true,
+      description: "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
     },
     {
       name: "evals",
       type: "Record<string, Metric>",
       isOptional: true,
-      description: "Evaluation metrics for assessing agent performance.",
+      description: "Evaluation metrics for scoring agent responses.",
     },
     {
       name: "memory",
       type: "MastraMemory | ({ runtimeContext: RuntimeContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
-      description:
-        "Memory system for the agent to store and retrieve information. Can be a static memory instance or a function that returns a memory instance based on runtime context.",
+      description: "Memory module used for storing and retrieving stateful context.",
     },
     {
       name: "voice",
       type: "CompositeVoice",
       isOptional: true,
-      description:
-        "Voice capabilities for speech-to-text and text-to-speech functionality.",
+      description: "Voice settings for speech input and output.",
+    },
+    {
+      name: "inputProcessors",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      isOptional: true,
+      description: "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
+      isOptional: true,
+      description: "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
     },
   ]}
 />
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "Agent<TAgentId, TTools, TMetrics>",
+      description: "A new Agent instance with the specified configuration.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Agents overview](../../docs/agents/overview.mdx)
+- [Calling Agents](../../examples/agents/calling-agents.mdx)

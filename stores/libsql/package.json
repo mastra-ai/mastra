@@ -1,6 +1,6 @@
 {
   "name": "@mastra/libsql",
-  "version": "0.13.0",
+  "version": "0.13.4",
   "description": "Libsql provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@libsql/client": "^0.15.10"
+    "@libsql/client": "^0.15.12"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -41,6 +41,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
+    "@mastra/core": ">=0.13.0-0 <0.15.0-0"
   }
 }

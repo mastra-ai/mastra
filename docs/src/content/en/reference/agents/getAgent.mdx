@@ -1,54 +1,44 @@
 ---
-title: "Reference: getAgent() | Agent Config | Agents | Mastra Docs"
-description: API Reference for getAgent.
+title: "Reference: Agent.getAgent() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getAgent()` method in Mastra, which retrieves an agent by name."
 ---
 
-# `getAgent()`
+# Agent.getAgent()
 
-Retrieve an agent based on the provided configuration
+The `.getAgent()` method is used to retrieve an agent. The method accepts a single `string` parameter for the agent's name.
 
-```ts showLineNumbers copy
-async function getAgent({
-  connectionId,
-  agent,
-  apis,
-  logger,
-}: {
-  connectionId: string;
-  agent: Record<string, any>;
-  apis: Record<string, IntegrationApi>;
-  logger: any;
-}): Promise<(props: { prompt: string }) => Promise<any>> {
-  return async (props: { prompt: string }) => {
-    return { message: "Hello, world!" };
-  };
-}
+## Usage example
+
+```typescript copy
+mastra.getAgent("testAgent");
 ```
 
-## API Signature
 
-### Parameters
+## Parameters
 
 <PropertiesTable
   content={[
     {
-      name: "connectionId",
-      type: "string",
-      description: "The connection ID to use for the agent's API calls.",
-    },
-    {
-      name: "agent",
-      type: "Record<string, any>",
-      description: "The agent configuration object.",
-    },
-    {
-      name: "apis",
-      type: "Record<string, IntegrationAPI>",
-      description: "A map of API names to their respective API objects.",
+      name: "name",
+      type: "TAgentName extends keyof TAgents",
+      description: "The name of the agent to retrieve. Must be a valid agent name that exists in the Mastra configuration.",
     },
   ]}
 />
 
-### Returns
+## Returns
 
-<PropertiesTable content={[]} />
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "TAgents[TAgentName]",
+      description: "The agent instance with the specified name. Throws an error if the agent is not found.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Agents overview](../../docs/agents/overview.mdx)
+- [Dynamic agents](../../docs/agents/dynamic-agents.mdx)

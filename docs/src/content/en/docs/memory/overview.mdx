@@ -1,3 +1,5 @@
+import { Steps } from "nextra/components";
+
 # Memory overview
 
 Memory is how agents manage the context that's available to them, it's a condensation of all chat messages into their context window.
@@ -18,13 +20,15 @@ The fastest way to see memory in action is using the built-in development playgr
 
 If you haven't already, create a new Mastra project following the main [Getting Started guide](/docs/getting-started/installation).
 
-**1. Install the memory package:**
+<Steps>
+
+### Install the memory package
 
 ```bash npm2yarn copy
 npm install @mastra/memory@latest
 ```
 
-**2. Create an agent and attach a `Memory` instance:**
+### Create an agent and attach a `Memory` instance
 
 ```typescript filename="src/mastra/agents/index.ts" {6-18}
 import { Agent } from "@mastra/core/agent";
@@ -47,15 +51,15 @@ export const myMemoryAgent = new Agent({
 });
 ```
 
-**3. Start the Development Server:**
+### Start the Development Server
 
 ```bash npm2yarn copy
 npm run dev
 ```
 
-**4. Open the playground (http://localhost:4111) and select your `MemoryAgent`:**
+### Open the playground and select your `MemoryAgent`
 
-Send a few messages and notice that it remembers information across turns:
+Open the playground at [http://localhost:4111](http://localhost:4111). Send a few messages and notice that it remembers information across turns:
 
 ```
 ➡️ You: My favorite color is blue.
@@ -63,6 +67,8 @@ Send a few messages and notice that it remembers information across turns:
 ➡️ You: What is my favorite color?
 ⬅️ Agent: Your favorite color is blue.
 ```
+
+</Steps>
 
 ## Memory Threads
 

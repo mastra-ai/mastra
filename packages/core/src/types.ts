@@ -16,3 +16,7 @@ export type RequireOnly<T, K extends keyof T> = DeepPartial<T> & Required<Pick<T
  * Provides clearer type hints for the passed type
  */
 export type Resolve<T> = T extends Function ? T : { [K in keyof T]: T[K] };
+
+export type NonEmpty<T extends string> = T extends '' ? never : T;
+
+export type MastraIdGenerator = () => NonEmpty<string>;
