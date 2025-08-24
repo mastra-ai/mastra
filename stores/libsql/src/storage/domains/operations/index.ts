@@ -220,7 +220,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
 
     const result = await this.client.execute({
       sql: statement,
-      args: whereClause?.args ?? args,
+      args: [...(whereClause?.args ?? []), ...(args ?? [])],
     });
 
     return result.rows as R[];
@@ -236,7 +236,6 @@ export class StoreOperationsLibSQL extends StoreOperations {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
     const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? `${whereClause.sql}` : ''}`;
-    const args = whereClause?.args ?? [];
 
     const result = await this.client.execute({
       sql: statement,
@@ -260,10 +259,10 @@ export class StoreOperationsLibSQL extends StoreOperations {
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     });
-    return executeWriteOperationWithRetry(() => this.doUpdate(args), `update table ${args.tableName}`);
+    return executeWriteOperationWithRetry(() => this.executeUpdate(args), `update table ${args.tableName}`);
   }
 
-  private async doUpdate({
+  private async executeUpdate({
     tableName,
     keys,
     data,
@@ -313,15 +312,43 @@ export class StoreOperationsLibSQL extends StoreOperations {
   }
 
   /**
-   * Updates multiple records in batch. Each record can be updated based on single or composite keys.
-   * @param args - Batch update arguments
-   * @param args.tableName - Name of the table to update
-   * @param args.updates - Array of update operations
-   * @param args.updates[].keys - Key-value pairs to identify the record to update
-   * @param args.updates[].data - Data to update in the record
-   * @returns Promise that resolves when all updates are complete
+   * Public batch update method with retry logic
    */
-  private async doBatchUpdate({
+  public batchUpdate(args: {
+    tableName: TABLE_NAMES<true>;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<void> {
+    const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
+      logger: this.logger,
+      maxRetries: this.maxRetries,
+      initialBackoffMs: this.initialBackoffMs,
+    });
+
+    return executeWriteOperationWithRetry(
+      () => this.executeBatchUpdate(args),
+      `batch update in table ${args.tableName}`,
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: args.tableName,
+          },
+        },
+        error,
+      );
+    });
+  }
+
+  /**
+   * Updates multiple records in batch. Each record can be updated based on single or composite keys.
+   */
+  private async executeBatchUpdate({
     tableName,
     updates,
   }: {
@@ -345,14 +372,14 @@ export class StoreOperationsLibSQL extends StoreOperations {
   }
 
   /**
-   * Public batch update method with retry logic
+   * Public batch delete method with retry logic
    */
-  public batchUpdate(args: {
+  public batchDelete({
+    tableName,
+    keys,
+  }: {
     tableName: TABLE_NAMES<true>;
-    updates: Array<{
-      keys: Record<string, any>;
-      data: Record<string, any>;
-    }>;
+    keys: Array<Record<string, any>>;
   }): Promise<void> {
     const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
       logger: this.logger,
@@ -361,36 +388,8 @@ export class StoreOperationsLibSQL extends StoreOperations {
     });
 
     return executeWriteOperationWithRetry(
-      () => this.doBatchUpdate(args),
-      `batch update in table ${args.tableName}`,
-    ).catch(error => {
-      throw new MastraError(
-        {
-          id: 'LIBSQL_STORE_BATCH_UPDATE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName: args.tableName,
-          },
-        },
-        error,
-      );
-    });
-  }
-
-  /**
-   * Public batch delete method with retry logic
-   */
-  public batchDelete(args: { tableName: TABLE_NAMES<true>; keys: Array<Record<string, any>> }): Promise<void> {
-    const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
-      logger: this.logger,
-      maxRetries: this.maxRetries,
-      initialBackoffMs: this.initialBackoffMs,
-    });
-
-    return executeWriteOperationWithRetry(
-      () => this.doBatchDelete(args),
-      `batch delete from table ${args.tableName}`,
+      () => this.executeBatchDelete({ tableName, keys }),
+      `batch delete from table ${tableName}`,
     ).catch(error => {
       throw new MastraError(
         {
@@ -398,7 +397,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            tableName: args.tableName,
+            tableName,
           },
         },
         error,
@@ -408,13 +407,8 @@ export class StoreOperationsLibSQL extends StoreOperations {
 
   /**
    * Deletes multiple records in batch. Each record can be deleted based on single or composite keys.
-   * @param args - Batch delete arguments
-   * @param args.tableName - Name of the table to delete from
-   * @param args.keys - Array of key objects to identify records to delete
-   * @returns Promise that resolves when all deletes are complete
    */
-
-  private async doBatchDelete({
+  private async executeBatchDelete({
     tableName,
     keys,
   }: {

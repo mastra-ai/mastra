@@ -1,8 +1,14 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { ObservabilityStorage, safelyParseJSON, TABLE_AI_SPANS } from '@mastra/core/storage';
+import {
+  AI_SPAN_SCHEMA,
+  ObservabilityStorage,
+  safelyParseJSON,
+  TABLE_AI_SPANS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
-import { prepareWhereClause } from '../utils';
+import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow } from '../utils';
 
 export class ObservabilityLibSQL extends ObservabilityStorage {
   private operations: StoreOperationsLibSQL;
@@ -46,7 +52,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
       return {
         traceId,
-        spans: spans.map(span => this.transformFromSqlRow<AISpanRecord>(span)),
+        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({ tableName: TABLE_AI_SPANS, sqlRow: span })),
       };
     } catch (error) {
       throw new MastraError(
@@ -94,58 +100,18 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  /**
-   * Transforms SQL row data back to AISpanRecord format
-   * Reverses the transformations done in prepareStatement
-   */
-  private transformFromSqlRow<T = AISpanRecord>(sqlRow: Record<string, any>): T {
-    const result: Record<string, any> = {};
-
-    const jsonColumns = new Set(['scope', 'attributes', 'metadata', 'events', 'links', 'input', 'output', 'error']);
-    const dateColumns = new Set(['startAt', 'endAt', 'createdAt', 'updatedAt']);
-
-    for (const [key, value] of Object.entries(sqlRow)) {
-      if (value === null || value === undefined) {
-        result[key] = value;
-        continue;
-      }
-
-      if (dateColumns.has(key) && typeof value === 'string') {
-        result[key] = new Date(value);
-        continue;
-      }
-
-      if (jsonColumns.has(key) && typeof value === 'string') {
-        result[key] = safelyParseJSON(value);
-        continue;
-      }
-
-      result[key] = value;
-    }
-
-    return result as T;
-  }
-
-  async getAITracesPaginated(
-    args: AITracesPaginatedArg,
-  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
-    const { filter, pagination } = args;
+  async getAITracesPaginated({
+    filter,
+    pagination,
+  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
 
-    const whereClause = prepareWhereClause({
+    const filters: Record<string, any> = {
       ...filter,
-      ...(pagination?.dateRange?.start
-        ? {
-            startAt: new Date(pagination.dateRange.start).toISOString(),
-          }
-        : {}),
-      ...(pagination?.dateRange?.end
-        ? {
-            endAt: new Date(pagination.dateRange.end).toISOString(),
-          }
-        : {}),
-    });
+      ...buildDateRangeFilter(pagination?.dateRange, 'startAt'),
+    };
+    const whereClause = prepareWhereClause(filters, AI_SPAN_SCHEMA);
     const orderBy = 'startAt DESC';
 
     let count = 0;
@@ -193,7 +159,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           perPage,
           hasMore: spans.length === perPage,
         },
-        spans: spans.map(span => this.transformFromSqlRow<AISpanRecord>(span)),
+        spans: spans.map(span => transformFromSqlRow<AISpanRecord>({ tableName: TABLE_AI_SPANS, sqlRow: span })),
       };
     } catch (error) {
       throw new MastraError(
