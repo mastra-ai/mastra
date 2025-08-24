@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraStorage, AITraceRecord } from '@mastra/core/storage';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { getAITraceHandler, getAITracesPaginatedHandler } from './observability';
 import * as errorHandler from './error';
+import { getAITraceHandler, getAITracesPaginatedHandler } from './observability';
 
 // Mock the error handler
 vi.mock('./error', () => ({
