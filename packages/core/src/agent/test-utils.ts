@@ -2,9 +2,9 @@ import { expect } from 'vitest';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, MemoryConfig } from '../memory';
 import type { StorageGetMessagesArg } from '../storage';
-import { MessageList } from './message-list';
 import type { Resolve, RequireOnly } from '../types';
 import { deepMerge } from '../utils';
+import { MessageList } from './message-list';
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
