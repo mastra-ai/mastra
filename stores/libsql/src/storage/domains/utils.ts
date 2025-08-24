@@ -86,20 +86,18 @@ export function prepareUpdateStatement({
   args: InValue[];
 } {
   const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+  const schema = TABLE_SCHEMAS[tableName];
 
   // Prepare SET clause
   const updateColumns = Object.keys(updates).map(col => parseSqlIdentifier(col, 'column name'));
   const updateValues = Object.values(updates).map(transformToSqlValue);
   const setClause = updateColumns.map(col => `${col} = ?`).join(', ');
 
-  // Prepare WHERE clause
-  const keyColumns = Object.keys(keys).map(col => parseSqlIdentifier(col, 'column name'));
-  const keyValues = Object.values(keys).map(transformToSqlValue);
-  const whereClause = keyColumns.map(col => `${col} = ?`).join(' AND ');
+  const whereClause = prepareWhereClause(keys, schema);
 
   return {
-    sql: `UPDATE ${parsedTableName} SET ${setClause} WHERE ${whereClause}`,
-    args: [...updateValues, ...keyValues],
+    sql: `UPDATE ${parsedTableName} SET ${setClause}${whereClause.sql}`,
+    args: [...updateValues, ...whereClause.args],
   };
 }
 
@@ -124,15 +122,11 @@ export function prepareDeleteStatement({
   args: InValue[];
 } {
   const parsedTableName = parseSqlIdentifier(tableName, 'table name');
-
-  // Prepare WHERE clause
-  const keyColumns = Object.keys(keys).map(col => parseSqlIdentifier(col, 'column name'));
-  const keyValues = Object.values(keys).map(transformToSqlValue);
-  const whereClause = keyColumns.map(col => `${col} = ?`).join(' AND ');
+  const whereClause = prepareWhereClause(keys, TABLE_SCHEMAS[tableName]);
 
   return {
-    sql: `DELETE FROM ${parsedTableName} WHERE ${whereClause}`,
-    args: keyValues,
+    sql: `DELETE FROM ${parsedTableName}${whereClause.sql}`,
+    args: whereClause.args,
   };
 }
 
