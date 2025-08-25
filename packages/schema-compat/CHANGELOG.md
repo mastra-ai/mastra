@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- [#6982](https://github.com/mastra-ai/mastra/pull/6982) [`94e9f54`](https://github.com/mastra-ai/mastra/commit/94e9f547d66ef7cd01d9075ab53b5ca9a1cae100) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix AI peerdeps for NPM install
+
 ## 0.10.7
 
 ### Patch Changes

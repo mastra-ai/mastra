@@ -1,5 +1,16 @@
 # @mastra/inngest
 
+## 0.12.0-alpha.1
+
+### Minor Changes
+
+- [#6971](https://github.com/mastra-ai/mastra/pull/6971) [`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246) Thanks [@epinzur](https://github.com/epinzur)! - "updated ai tracing in workflows"
+
+### Patch Changes
+
+- Updated dependencies [[`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246)]:
+  - @mastra/core@0.14.2-alpha.1
+
 ## 0.11.11-alpha.0
 
 ### Patch Changes
