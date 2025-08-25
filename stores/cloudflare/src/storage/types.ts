@@ -12,6 +12,8 @@ import type {
   EvalRow,
   StorageResourceType,
   TABLE_SCORERS,
+  TABLE_AI_SPANS,
+  AISpanRecord,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -77,6 +79,7 @@ export type RecordTypes = {
   [TABLE_SCORERS]: ScoreRowData;
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
+  [TABLE_AI_SPANS]: AISpanRecord;
 };
 
 export type ListOptions = {
