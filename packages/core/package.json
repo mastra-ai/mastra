@@ -140,6 +140,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./utils/zod-to-json": {
+      "import": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.js"
+      },
+      "require": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
