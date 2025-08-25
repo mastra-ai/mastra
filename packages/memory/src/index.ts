@@ -1,12 +1,13 @@
-import { generateEmptyFromSchema } from '@mastra/core';
+import { deepMerge, generateEmptyFromSchema } from '@mastra/core';
 import type { MastraMessageV1, ToolAction } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MessageInput } from '@mastra/core/agent/message-list';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart } from 'ai';
+import type { CoreMessage, DeepPartial, TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
@@ -16,6 +17,7 @@ import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+import type { RequireOnly, Resolve } from '@mastra/core/base';
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -237,7 +239,7 @@ export class Memory extends MastraMemory {
         last: threadConfig.lastMessages,
         vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
-      threadConfig: config,
+      threadConfig,
       format: 'v2',
     });
     // Using MessageList here just to convert mixed input messages to single type output messages
@@ -304,6 +306,37 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
+    const config = this.getMergedThreadConfig();
+
+    if (config.semanticRecall) {
+      if (!this.vector) {
+        throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
+      }
+      const { vector } = this;
+      const storedMessages = await this.storage.getMessages({
+        format: 'v2',
+        threadId,
+      });
+
+      const embeddingTextsAndIds = this.getEmbeddingTextAndIds(storedMessages);
+      const promises: Promise<any>[] = [];
+      storedMessages.forEach(async (message, i) => {
+        if (!message.content || !embeddingTextsAndIds[i]) return;
+
+        const { textForEmbedding } = embeddingTextsAndIds[i];
+        const { dimension } = await this.embedMessageContent(textForEmbedding);
+        const { indexName } = await this.createEmbeddingIndex(dimension);
+
+        const storedVectorIds = message.content?.metadata?.vectorIds;
+
+        if (Array.isArray(storedVectorIds)) {
+          storedVectorIds.forEach(vectorId => {
+            promises.push(vector.deleteVector({ indexName, id: vectorId }));
+          });
+        }
+      });
+    }
+
     await this.storage.deleteThread({ threadId });
   }
 
@@ -562,7 +595,7 @@ export class Memory extends MastraMemory {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     // Then strip working memory tags from all messages
-    const updatedMessages = messages
+    const messagesWithoutWorkingMemory = messages
       .map(m => {
         if (MessageList.isMastraMessageV1(m)) {
           return this.updateMessageToHideWorkingMemory(m);
@@ -573,75 +606,58 @@ export class Memory extends MastraMemory {
       })
       .filter((m): m is MastraMessageV1 | MastraMessageV2 => Boolean(m));
 
+    const v2Messages = new MessageList().add(messagesWithoutWorkingMemory, 'memory').get.all.v2();
+
     const config = this.getMergedThreadConfig(memoryConfig);
 
+    let embeddingTextsAndIds: ({
+      textForEmbedding: string;
+      vectorIds: string[];
+    } | null)[] = [];
+
+    let updatedMessages = v2Messages;
+    if (this.vector && config.semanticRecall) {
+      embeddingTextsAndIds = this.getEmbeddingTextAndIds(v2Messages);
+
+      updatedMessages.forEach((message, i) => {
+        if (!embeddingTextsAndIds[i]) return;
+        message.content.metadata ||= {};
+        message.content.metadata.vectorIds = embeddingTextsAndIds[i].vectorIds;
+      });
+    }
+
     const result = this.storage.saveMessages({
-      messages: new MessageList().add(updatedMessages, 'memory').get.all.v2(),
+      messages: updatedMessages,
       format: 'v2',
     });
 
-    if (this.vector && config.semanticRecall) {
-      let indexName: Promise<string>;
-      await Promise.all(
-        updatedMessages.map(async message => {
-          let textForEmbedding: string | null = null;
+    let indexName: string;
+    await Promise.all(
+      embeddingTextsAndIds.map(async (el, i) => {
+        if (!this.vector) {
+          throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
+        }
 
-          if (MessageList.isMastraMessageV2(message)) {
-            if (
-              message.content.content &&
-              typeof message.content.content === 'string' &&
-              message.content.content.trim() !== ''
-            ) {
-              textForEmbedding = message.content.content;
-            } else if (message.content.parts && message.content.parts.length > 0) {
-              // Extract text from all text parts, concatenate
-              const joined = message.content.parts
-                .filter(part => part.type === 'text')
-                .map(part => (part as TextPart).text)
-                .join(' ')
-                .trim();
-              if (joined) textForEmbedding = joined;
-            }
-          } else if (MessageList.isMastraMessageV1(message)) {
-            if (message.content && typeof message.content === 'string' && message.content.trim() !== '') {
-              textForEmbedding = message.content;
-            } else if (message.content && Array.isArray(message.content) && message.content.length > 0) {
-              // Extract text from all text parts, concatenate
-              const joined = message.content
-                .filter(part => part.type === 'text')
-                .map(part => part.text)
-                .join(' ')
-                .trim();
-              if (joined) textForEmbedding = joined;
-            }
-          }
+        const message = updatedMessages[i];
+        if (!el || !message) return;
 
-          if (!textForEmbedding) return;
+        const { textForEmbedding, vectorIds } = el;
+        const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
 
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
+        indexName ||= await this.createEmbeddingIndex(dimension).then(result => result.indexName);
 
-          if (typeof indexName === `undefined`) {
-            indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);
-          }
-
-          if (typeof this.vector === `undefined`) {
-            throw new Error(
-              `Tried to upsert embeddings to index ${indexName} but this Memory instance doesn't have an attached vector db.`,
-            );
-          }
-
-          await this.vector.upsert({
-            indexName: await indexName,
-            vectors: embeddings,
-            metadata: chunks.map(() => ({
-              message_id: message.id,
-              thread_id: message.threadId,
-              resource_id: message.resourceId,
-            })),
-          });
-        }),
-      );
-    }
+        await this.vector.upsert({
+          indexName,
+          vectors: embeddings,
+          ids: vectorIds,
+          metadata: chunks.map(() => ({
+            message_id: message.id,
+            thread_id: message.threadId,
+            resource_id: message.resourceId,
+          })),
+        });
+      }),
+    );
 
     if (format === `v1`) return new MessageList().add(await result, 'memory').get.all.v1(); // for backwards compat convert to v1 message format
     return result;
@@ -973,20 +989,156 @@ ${
   }
 
   /**
-   * Updates the metadata of a list of messages
+   * Updates content or other properties for a list of messages.
+   * Also updates embeddings if semantic recall is enabled.
    * @param messages - The list of messages to update
-   * @returns The list of updated messages
+   * @returns Promise that resolves to the list of updated messages
    */
   public async updateMessages({
     messages,
   }: {
-    messages: Partial<MastraMessageV2> & { id: string }[];
+    messages: Resolve<RequireOnly<MastraMessageV2, 'id'>>[];
   }): Promise<MastraMessageV2[]> {
     if (messages.length === 0) return [];
 
-    // TODO: Possibly handle updating the vector db here when a message is updated.
+    const config = this.getMergedThreadConfig();
+    try {
+      let embeddingTextsAndIds: ({
+        textForEmbedding: string;
+        vectorIds: string[];
+      } | null)[] = [];
 
-    return this.storage.updateMessages({ messages });
+      let storedMessages: MastraMessageV2[] = [];
+      let storedMessagesById: Record<string, DeepPartial<MastraMessageV2>> = {};
+
+      if (config.semanticRecall) {
+        if (!this.vector) {
+          throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
+        }
+        embeddingTextsAndIds = this.getEmbeddingTextAndIds(messages);
+        // fetch all passed messages to get stored vector chunk count
+        storedMessages = (
+          await this.storage.getMessages({
+            format: 'v2',
+            threadId: '',
+            selectBy: {
+              include: [
+                ...messages.map(msg => ({
+                  id: msg.id,
+                  threadId: msg.threadId,
+                })),
+              ],
+            },
+          })
+        ).flat(1);
+
+        storedMessagesById = storedMessages.reduce(
+          (acc: Record<string, (typeof messages)[number]>, msg) => Object.assign(acc, { [msg.id]: msg }),
+          {},
+        );
+      }
+
+      const updatedMessages = messages.map((message, i) => {
+        // remove createdAt so that storage.updateMessages doesn't invalidate stored dates
+        const { createdAt, ...rest } = message;
+        if (!message.content || !embeddingTextsAndIds[i]) return rest;
+        return deepMerge(rest, {
+          content: {
+            metadata: {
+              vectorIds: embeddingTextsAndIds[i].vectorIds,
+            },
+          },
+        });
+      });
+      const result = this.storage.updateMessages({ messages: updatedMessages });
+
+      if (embeddingTextsAndIds.length && this.vector) {
+        const vector = this.vector;
+        const promises: Promise<void | string[]>[] = [];
+        // update embeddings
+        embeddingTextsAndIds.forEach(async (el, i) => {
+          const message = messages[i];
+          if (!el || !message?.content) return;
+
+          const storedMessage = storedMessagesById[message.id];
+          if (!storedMessage) {
+            throw new Error(`Message with id ${message.id} not retrieved from storage`);
+          }
+
+          const { textForEmbedding, vectorIds } = el;
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
+          const indexName = await this.createEmbeddingIndex(dimension).then(result => result.indexName);
+
+          // delete embeddings that won't be replaced in the upsert
+          const storedVectorIds = storedMessage.content?.metadata?.vectorIds;
+
+          if (Array.isArray(storedVectorIds)) {
+            storedVectorIds.forEach(vectorId => {
+              promises.push(vector.deleteVector({ indexName, id: vectorId }));
+            });
+          }
+
+          promises.push(
+            vector.upsert({
+              indexName,
+              vectors: embeddings,
+              ids: vectorIds,
+              metadata: chunks.map(() => ({
+                message_id: message.id,
+                thread_id: message.threadId,
+                resource_id: storedMessage.resourceId,
+              })),
+            }),
+          );
+        });
+
+        await Promise.all(promises);
+      }
+      return result;
+    } catch (error) {
+      throw error; // TODO: handle error
+    }
+  }
+
+  protected getMessageEmbeddingIds(messageId: string, chunkCount: number): string[] {
+    return new Array(chunkCount).fill(null).map((_, chunkIndex) => `${messageId}:${chunkIndex}`);
+  }
+
+  protected getEmbeddingTextAndIds(messages: DeepPartial<MastraMessageV2>[]): ({
+    textForEmbedding: string;
+    vectorIds: string[];
+  } | null)[] {
+    return messages.map(message => {
+      const textForEmbedding: string | null = this.prepMessageForEmbedding(message);
+      if (!textForEmbedding) return null;
+
+      const chunks = this.chunkText(textForEmbedding);
+      const vectorIds = chunks.map(() => this.generateId());
+      return { textForEmbedding, vectorIds };
+    }, []);
+  }
+
+  protected prepMessageForEmbedding(message: DeepPartial<MastraMessageV2>): string | null {
+    let textForEmbedding: string | null = null;
+
+    // if (MessageList.isMastraMessageV2(message)) {
+    if (
+      message.content?.content &&
+      typeof message.content.content === 'string' &&
+      message.content.content.trim() !== ''
+    ) {
+      textForEmbedding = message.content.content;
+    } else if (message.content?.parts && message.content.parts.length > 0) {
+      // Extract text from all text parts, concatenate
+      const joined = message.content.parts
+        .filter(part => part?.type === 'text')
+        .map(part => (part as TextPart).text)
+        .join(' ')
+        .trim();
+      if (joined) textForEmbedding = joined;
+    }
+
+    return textForEmbedding;
   }
 
   /**
@@ -1024,11 +1176,64 @@ ${
       throw new Error('All message IDs must be non-empty strings');
     }
 
+    const config = this.getMergedThreadConfig();
+
+    // get vector IDs
+    let storedMessages: MastraMessageV2[] = [];
+    let embeddingTextsAndIds: ({
+      textForEmbedding: string;
+      vectorIds: string[];
+    } | null)[] = [];
+
+    if (config.semanticRecall) {
+      if (!this.vector) {
+        throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
+      }
+      storedMessages = await this.storage.getMessages({
+        // TODO: replace with getMessagesById
+        format: 'v2',
+        threadId: '', // query fails silently with empty string thread IDs
+        selectBy: {
+          include: [
+            ...input.map(el => {
+              if (typeof el === 'string') {
+                return { id: el };
+              }
+              return el;
+            }),
+          ],
+        },
+      });
+
+      embeddingTextsAndIds = this.getEmbeddingTextAndIds(storedMessages);
+    }
     // Delete from storage
     await this.storage.deleteMessages(messageIds);
 
-    // TODO: Delete from vector store if semantic recall is enabled
-    // This would require getting the messages first to know their threadId/resourceId
-    // and then querying the vector store to delete associated embeddings
+    // Delete from vector store
+    if (embeddingTextsAndIds.length && this.vector) {
+      const vector = this.vector;
+      let promises: Promise<any>[] = [];
+      storedMessages.forEach(async (message, i) => {
+        if (!embeddingTextsAndIds[i]) return;
+
+        const { textForEmbedding } = embeddingTextsAndIds[i];
+        const { dimension } = await this.embedMessageContent(textForEmbedding);
+        const { indexName } = await this.createEmbeddingIndex(dimension);
+        const vectorIds = message.content?.metadata?.vectorIds;
+        if (Array.isArray(vectorIds)) {
+          vectorIds.forEach(vectorId => {
+            promises.push(
+              vector.deleteVector({
+                indexName,
+                id: vectorId,
+              }),
+            );
+          });
+        }
+      }, []);
+
+      await Promise.all(promises);
+    }
   }
 }
