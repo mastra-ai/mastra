@@ -10,8 +10,8 @@
     "mastra-dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/openai": "2.0.15",
-    "@ai-sdk/react": "2.0.15",
+    "@ai-sdk/openai": "2.0.19",
+    "@ai-sdk/react": "2.0.22",
     "@mastra/core": "0.0.0-ai-v5-20250625173645",
     "@mastra/libsql": "0.0.0-ai-v5-20250625173645",
     "@mastra/loggers": "0.0.0-ai-v5-20250625173645",
