@@ -1,0 +1,169 @@
+---
+title: "リファレンス: Coralogix | 観測性 | Mastra ドキュメント"
+description: 包括的なGenAI監視とトレーシングのためのCoralogix AI ObservabilityとMastraの統合に関するドキュメント。
+---
+
+# Coralogix
+
+Coralogixは、LLMアプリケーションの監視に特化したAI観測性機能を提供するフルスタック観測性プラットフォームです。包括的なAIアプリケーション監視のために、OpenTelemetryのGenAIセマンティック規約と拡張属性をサポートしています。
+
+## 設定
+
+CoralogixをMastraで使用するには、次の環境変数を設定してください：
+
+```env
+CX_TOKEN=your-coralogix-private-key
+CX_ENDPOINT=https://ingress.your-region.coralogix.com/v1/traces
+CX_APPLICATION_NAME=your-application-name
+CX_SUBSYSTEM_NAME=your-subsystem-name
+```
+
+### 環境変数
+
+- `CX_TOKEN`: Coralogixプライベートキー（必須）
+- `CX_ENDPOINT`: 地域に対応するCoralogix OTLPトレースエンドポイント（必須）
+- `CX_APPLICATION_NAME`: Coralogixのアプリケーション名（必須）
+- `CX_SUBSYSTEM_NAME`: Coralogixのサブシステム名（必須）
+
+### Coralogixリージョン
+
+Coralogixは複数のリージョンで運営されています。お客様のリージョンに適したエンドポイントを使用してください：
+
+- **US1**: `https://ingress.coralogix.us/v1/traces`
+- **US2**: `https://ingress.us2.coralogix.com/v1/traces`
+- **EU1**: `https://ingress.coralogix.com/v1/traces`
+- **EU2**: `https://ingress.eu2.coralogix.com/v1/traces`
+- **AP1**: `https://ingress.app.coralogix.in/v1/traces`
+- **AP2**: `https://ingress.coralogixsg.com/v1/traces`
+
+## インストール
+
+まず、Coralogixパッケージをインストールします：
+
+```bash
+npm install @mastra/coralogix
+# または
+pnpm add @mastra/coralogix
+```
+
+## 実装
+
+Coralogix AI ObservabilityをMastraで使用するための設定方法：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { CoralogixExporter } from "@mastra/coralogix";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new CoralogixExporter({
+        token: process.env.CX_TOKEN,
+        endpoint: process.env.CX_ENDPOINT,
+        applicationName: process.env.CX_APPLICATION_NAME,
+        subsystemName: process.env.CX_SUBSYSTEM_NAME,
+        debug: false, // デバッグログを有効にする（デフォルト: false）
+      }),
+    },
+  },
+});
+```
+
+### 高度な設定
+
+環境変数を使用せずにインライン設定も可能です：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { CoralogixExporter } from "@mastra/coralogix";
+
+export const mastra = new Mastra({
+  telemetry: {
+    serviceName: "ai-chat-bot",
+    enabled: true,
+    sampling: {
+      type: "ratio",
+      probability: 1.0, // AI観測性のためにすべてのトレースをサンプリング
+    },
+    export: {
+      type: "custom",
+      exporter: new CoralogixExporter({
+        token: "your-private-key",
+        endpoint: "https://ingress.coralogix.com/v1/traces",
+        applicationName: "ChatBot",
+        subsystemName: "Production",
+        debug: false,
+      }),
+    },
+  },
+});
+```
+
+## 機能
+
+Coralogix AI Observabilityは、AIアプリケーション監視のための特化した機能を提供します：
+
+### GenAIセマンティック規約
+
+Mastraは標準のOpenTelemetry GenAI属性でAI呼び出しを自動的にインストルメント化します：
+
+- **モデル情報**: `gen_ai.request.model`, `gen_ai.response.model`
+- **トークン使用量**: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`
+- **リクエストパラメータ**: `gen_ai.request.temperature`, `gen_ai.request.max_tokens`など
+- **レスポンス詳細**: `gen_ai.response.finish_reasons`, `gen_ai.response.id`
+
+### 拡張属性
+
+Coralogixは標準を以下の追加属性で拡張します：
+
+- **ツール呼び出し**: 名前、引数、説明を含む詳細な関数呼び出し情報
+- **メッセージ内容**: プロンプトと補完の完全な内容（有効時）
+- **ユーザーコンテキスト**: リクエストユーザー識別
+- **サービス階層**: OpenAIサービス階層情報
+
+### デバッグログ
+
+テレメトリエクスポートの問題をトラブルシューティングするために、CoralogixExporterでデバッグログを有効にできます：
+
+```typescript
+export: {
+  type: "custom",
+  exporter: new CoralogixExporter({
+    // ... その他の設定
+    debug: true, // デバッグログを有効化（デフォルト: false）
+  }),
+}
+```
+
+## ダッシュボード
+
+AIアプリケーションを監視するためにCoralogixダッシュボードにアクセス：
+
+1. [coralogix.com](https://coralogix.com/)にアクセス
+2. **APM** → **Traces**でAIトレースを確認
+3. **AI Observability**機能を使用して以下を分析：
+   - トークン使用パターン
+   - モデルパフォーマンスメトリクス
+   - ツール使用分析
+   - エラー率とパターン
+
+## プライバシーとセキュリティ
+
+AIアプリケーションでCoralogixを使用する際：
+
+- **トークンセキュリティ**: Coralogixプライベートキーを安全に保存し、環境変数を使用
+- **データ保持**: Coralogixで適切な保持ポリシーを設定
+- **アクセス制御**: CoralogixのRBAC機能を使用してAI観測性データへのアクセスを制御
+- **デバッグモード**: 機密データの漏洩を避けるため、開発環境でのみデバッグログを有効化
+
+## ベストプラクティス
+
+1. **サンプリング**: 大容量アプリケーションに適切なサンプリング率を使用
+2. **サービス命名**: AIアプリケーションを整理するための説明的なサービス名を使用
+3. **アプリケーション階層**: 意味のあるアプリケーションとサブシステム名を使用してトレースを整理
+4. **環境変数**: 値をハードコーディングするのではなく、設定には環境変数を使用
+5. **監視**: 異常なトークン使用やエラーパターンのアラートを設定

@@ -1,0 +1,60 @@
+{
+  "name": "@mastra/coralogix",
+  "version": "0.1.0",
+  "description": "Coralogix AI Observability exporter for Mastra using OpenTelemetry",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "mastra",
+    "coralogix",
+    "observability",
+    "opentelemetry",
+    "ai",
+    "telemetry"
+  ],
+  "author": "Mastra Team",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/coralogix"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
+  "peerDependencies": {
+    "@opentelemetry/core": "^2.0.1",
+    "@opentelemetry/sdk-trace-base": "^2.0.1"
+  },
+  "dependencies": {
+    "@opentelemetry/otlp-transformer": "^0.203.0",
+    "@opentelemetry/resources": "^2.0.1",
+    "@opentelemetry/semantic-conventions": "^1.36.0"
+  },
+  "devDependencies": {
+    "@opentelemetry/core": "^2.0.1",
+    "@opentelemetry/sdk-trace-base": "^2.0.1",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0"
+  }
+}

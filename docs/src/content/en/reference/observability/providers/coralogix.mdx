@@ -1,0 +1,169 @@
+---
+title: "Reference: Coralogix | Observability | Mastra Docs"
+description: Documentation for integrating Coralogix AI Observability with Mastra for comprehensive GenAI monitoring and tracing.
+---
+
+# Coralogix
+
+Coralogix is a full-stack observability platform that provides specialized AI Observability features for monitoring LLM applications. It supports OpenTelemetry's GenAI semantic conventions along with extended attributes for comprehensive AI application monitoring.
+
+## Configuration
+
+To use Coralogix with Mastra, configure these environment variables:
+
+```env
+CX_TOKEN=your-coralogix-private-key
+CX_ENDPOINT=https://ingress.your-region.coralogix.com/v1/traces
+CX_APPLICATION_NAME=your-application-name
+CX_SUBSYSTEM_NAME=your-subsystem-name
+```
+
+### Environment Variables
+
+- `CX_TOKEN`: Your Coralogix private key (required)
+- `CX_ENDPOINT`: Coralogix OTLP traces endpoint for your region (required)
+- `CX_APPLICATION_NAME`: Application name in Coralogix (required)
+- `CX_SUBSYSTEM_NAME`: Subsystem name in Coralogix (required)
+
+### Coralogix Regions
+
+Coralogix operates in multiple regions. Use the appropriate endpoint for your region:
+
+- **US1**: `https://ingress.coralogix.us/v1/traces`
+- **US2**: `https://ingress.us2.coralogix.com/v1/traces`
+- **EU1**: `https://ingress.coralogix.com/v1/traces`
+- **EU2**: `https://ingress.eu2.coralogix.com/v1/traces`
+- **AP1**: `https://ingress.app.coralogix.in/v1/traces`
+- **AP2**: `https://ingress.coralogixsg.com/v1/traces`
+
+## Installation
+
+First, install the Coralogix package:
+
+```bash
+npm install @mastra/coralogix
+# or
+pnpm add @mastra/coralogix
+```
+
+## Implementation
+
+Here's how to configure Mastra to use Coralogix AI Observability:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { CoralogixExporter } from "@mastra/coralogix";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new CoralogixExporter({
+        token: process.env.CX_TOKEN,
+        endpoint: process.env.CX_ENDPOINT,
+        applicationName: process.env.CX_APPLICATION_NAME,
+        subsystemName: process.env.CX_SUBSYSTEM_NAME,
+        debug: false, // Enable debug logging (default: false)
+      }),
+    },
+  },
+});
+```
+
+### Advanced Configuration
+
+You can also use inline configuration without environment variables:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { CoralogixExporter } from "@mastra/coralogix";
+
+export const mastra = new Mastra({
+  telemetry: {
+    serviceName: "ai-chat-bot",
+    enabled: true,
+    sampling: {
+      type: "ratio",
+      probability: 1.0, // Sample all traces for AI observability
+    },
+    export: {
+      type: "custom",
+      exporter: new CoralogixExporter({
+        token: "your-private-key",
+        endpoint: "https://ingress.coralogix.com/v1/traces",
+        applicationName: "ChatBot",
+        subsystemName: "Production",
+        debug: false,
+      }),
+    },
+  },
+});
+```
+
+## Features
+
+Coralogix AI Observability provides specialized features for monitoring AI applications:
+
+### GenAI Semantic Conventions
+
+Mastra automatically instruments your AI calls with standard OpenTelemetry GenAI attributes:
+
+- **Model Information**: `gen_ai.request.model`, `gen_ai.response.model`
+- **Token Usage**: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`
+- **Request Parameters**: `gen_ai.request.temperature`, `gen_ai.request.max_tokens`, etc.
+- **Response Details**: `gen_ai.response.finish_reasons`, `gen_ai.response.id`
+
+### Extended Attributes
+
+Coralogix extends the standard with additional attributes:
+
+- **Tool Calls**: Detailed function call information including names, arguments, and descriptions
+- **Message Content**: Full prompt and completion content (when enabled)
+- **User Context**: Request user identification
+- **Service Tiers**: OpenAI service tier information
+
+### Debug Logging
+
+You can enable debug logging in the CoralogixExporter to troubleshoot telemetry export issues:
+
+```typescript
+export: {
+  type: "custom",
+  exporter: new CoralogixExporter({
+    // ... other config
+    debug: true, // Enable debug logging (default: false)
+  }),
+}
+```
+
+## Dashboard
+
+Access your Coralogix dashboard to monitor your AI applications:
+
+1. Go to [coralogix.com](https://coralogix.com/)
+2. Navigate to **APM** → **Traces** to see your AI traces
+3. Use the **AI Observability** features to analyze:
+   - Token usage patterns
+   - Model performance metrics
+   - Tool usage analytics
+   - Error rates and patterns
+
+## Privacy and Security
+
+When using Coralogix with AI applications:
+
+- **Token Security**: Store your Coralogix private key securely and use environment variables
+- **Data Retention**: Configure appropriate retention policies in Coralogix
+- **Access Control**: Use Coralogix's RBAC features to control access to AI observability data
+- **Debug Mode**: Only enable debug logging in development environments to avoid exposing sensitive data
+
+## Best Practices
+
+1. **Sampling**: Use appropriate sampling rates for high-volume applications
+2. **Service Naming**: Use descriptive service names to organize your AI applications
+3. **Application Hierarchy**: Organize traces using meaningful application and subsystem names
+4. **Environment Variables**: Use environment variables for configuration rather than hardcoding values
+5. **Monitoring**: Set up alerts for unusual token usage or error patterns

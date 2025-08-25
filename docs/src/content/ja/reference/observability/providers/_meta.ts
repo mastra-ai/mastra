@@ -3,6 +3,7 @@ const meta = {
   dash0: "Dash0",
   signoz: "SigNoz",
   braintrust: "Braintrust",
+  coralogix: "Coralogix",
   langsmith: "LangSmith",
   langfuse: "Langfuse",
   langwatch: "LangWatch",
