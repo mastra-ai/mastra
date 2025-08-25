@@ -2914,6 +2914,7 @@ describe('Workflow', () => {
           setTimeout(async () => {
             const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
             expect(currentExecResult?.status).toBe('running');
+            expect(currentExecResult?.steps['final']?.status).toBe('running');
           }, 500);
         }
       }
@@ -9368,6 +9369,24 @@ describe('Workflow', () => {
           'multi-resume-step-2': { result: 30 },
         });
       }
+    });
+  });
+
+  describe('AI Workflow Tracing', () => {
+    it('should provide full TypeScript support for aiTracingContext', () => {
+      const typedStep = createStep({
+        id: 'typed-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, aiTracingContext }) => {
+          expect(aiTracingContext).toBeDefined();
+          expect(typeof aiTracingContext.parentAISpan).toBeDefined();
+
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      expect(typedStep).toBeDefined();
     });
   });
 });

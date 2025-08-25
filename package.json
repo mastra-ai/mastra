@@ -59,7 +59,7 @@
     "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm",
     "test:observability": "pnpm --filter ./observability/* test",
     "lint-staged": "lint-staged",
-    "lint": "turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@mastra/playground\" lint",
+    "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@internal/playground\" lint",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
     "prettier:format": "prettier --write . --log-level warn",
@@ -68,7 +68,7 @@
     "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' || true",
     "prettier:changed": "pnpm --silent list-prettier-files | xargs prettier --write --log-level warn",
     "typecheck": "pnpm --filter \"!./explorations/**/*\" -r typecheck",
-    "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@mastra/playground\" lint -- --fix",
+    "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@internal/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
     "setup": "pnpm install --ignore-scripts && pnpm run build:cli"

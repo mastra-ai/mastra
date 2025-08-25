@@ -3,7 +3,7 @@
  * @param objectName
  * @returns boolean
  */
-export const isObjectEmpty = (objectName: Object) => {
+export const isObjectEmpty = (objectName: object) => {
   return objectName && Object.keys(objectName).length === 0 && objectName.constructor === Object;
 };
 
@@ -61,7 +61,7 @@ export const flattenObject = (object: Record<string, any>, endKeys: string[] = [
 
   function recurseDip(obj: Record<string, any>, path: string[]) {
     for (const [key, value] of Object.entries(obj)) {
-      let newPath = [...path, key];
+      const newPath = [...path, key];
       if (value && value.constructor === Object) {
         const hasOnlyEndKeys = endKeys?.length ? endKeys.every(v => Object.keys(value).includes(v)) : false;
         if (hasOnlyEndKeys) {
