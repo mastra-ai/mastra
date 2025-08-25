@@ -4,6 +4,9 @@ import type { AITracingConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSub } from '../events/pubsub';
+import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -20,6 +23,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
+import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
 
@@ -50,6 +54,7 @@ export interface Config<
   server?: ServerConfig;
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
+  pubsub?: PubSub;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -63,6 +68,13 @@ export interface Config<
 
   // @deprecated add memory to your Agent directly instead
   memory?: never;
+
+  events?: {
+    [topic: string]: (
+      event: Event,
+      cb?: () => Promise<void>,
+    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  };
 }
 
 @InstrumentClass({
@@ -100,6 +112,10 @@ export class Mastra<
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
+  #pubsub: PubSub;
+  #events: {
+    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  } = {};
 
   /**
    * @deprecated use getTelemetry() instead
@@ -120,6 +136,10 @@ export class Mastra<
    */
   get memory() {
     return this.#memory;
+  }
+
+  get pubsub() {
+    return this.#pubsub;
   }
 
   public getIdGenerator() {
@@ -171,6 +191,38 @@ export class Mastra<
         handler: m.handler,
         path: m.path || '/api/*',
       }));
+    }
+
+    /*
+    Events
+    */
+    if (config?.pubsub) {
+      this.#pubsub = config.pubsub;
+    } else {
+      this.#pubsub = new EventEmitterPubSub();
+    }
+
+    this.#events = {};
+    for (const topic in config?.events ?? {}) {
+      if (!Array.isArray(config?.events?.[topic])) {
+        this.#events[topic] = [config?.events?.[topic] as any];
+      } else {
+        this.#events[topic] = config?.events?.[topic] ?? [];
+      }
+    }
+
+    const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
+    const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
+      try {
+        await workflowEventProcessor.process(event, cb);
+      } catch (e) {
+        console.error('Error processing event', e);
+      }
+    };
+    if (this.#events.workflows) {
+      this.#events.workflows.push(workflowEventCb);
+    } else {
+      this.#events.workflows = [workflowEventCb];
     }
 
     /*
@@ -1001,12 +1053,49 @@ do:
     }
   }
 
+  public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.subscribe(topic, listener);
+  }
+
+  public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.unsubscribe(topic, listener);
+  }
+
+  public async startEventEngine() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.subscribe(topic, listener);
+      }
+    }
+  }
+
+  public async stopEventEngine() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.unsubscribe(topic, listener);
+      }
+    }
+
+    await this.#pubsub.flush();
+  }
+
   /**
    * Shutdown Mastra and clean up all resources
    */
   async shutdown(): Promise<void> {
     // Shutdown AI tracing registry and all instances
     await shutdownAITracingRegistry();
+    await this.stopEventEngine();
 
     this.#logger?.info('Mastra shutdown completed');
   }

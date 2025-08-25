@@ -390,7 +390,7 @@ export class Machine<
               }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
             } as WorkflowContext,
             emit: (event: string, ...args: any[]) => {
-              // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
+              // (this.#workflowInstance.name, 'emitting', event, ...args);
               this.emit(event, ...args);
             },
             suspend: async (payload?: any, softSuspend?: any) => {

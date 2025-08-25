@@ -560,5 +560,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
   );
 
+  await mastra.startEventEngine();
+
   return server;
 }

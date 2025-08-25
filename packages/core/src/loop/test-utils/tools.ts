@@ -618,10 +618,10 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             onInputAvailable: (options: any) => {
               recordedCalls.push({ type: 'onInputAvailable', options });
             },
-            onInputStart: options => {
+            onInputStart: (options: any) => {
               recordedCalls.push({ type: 'onInputStart', options });
             },
-            onInputDelta: options => {
+            onInputDelta: (options: any) => {
               recordedCalls.push({ type: 'onInputDelta', options });
             },
           },

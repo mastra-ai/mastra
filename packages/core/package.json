@@ -70,6 +70,16 @@
         "default": "./dist/network/vNext/index.cjs"
       }
     },
+    "./workflows/evented": {
+      "import": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.cjs"
+      }
+    },
     "./vector/filter": {
       "import": {
         "types": "./dist/vector/filter/index.d.ts",
