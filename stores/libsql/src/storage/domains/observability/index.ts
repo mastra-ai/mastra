@@ -43,7 +43,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       const spans = await this.operations.loadMany<AISpanRecord>({
         tableName: TABLE_AI_SPANS,
         whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
-        orderBy: 'startAt DESC',
+        orderBy: 'startedAt DESC',
       });
 
       if (!spans || spans.length === 0) {
@@ -109,10 +109,10 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
     const filtersWithDateRange: Record<string, any> = {
       ...filters,
-      ...buildDateRangeFilter(pagination?.dateRange, 'startAt'),
+      ...buildDateRangeFilter(pagination?.dateRange, 'startedAt'),
     };
     const whereClause = prepareWhereClause(filtersWithDateRange, AI_SPAN_SCHEMA);
-    const orderBy = 'startAt DESC';
+    const orderBy = 'startedAt DESC';
 
     let count = 0;
     try {
