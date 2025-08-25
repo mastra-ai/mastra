@@ -1,5 +1,14 @@
 # @mastra/cloudflare-d1
 
+## 0.12.8-alpha.0
+
+### Patch Changes
+
+- [#6979](https://github.com/mastra-ai/mastra/pull/6979) [`9205c9b`](https://github.com/mastra-ai/mastra/commit/9205c9b93836a87ece94734d1039ec2a19fabea0) Thanks [@tlgimenes](https://github.com/tlgimenes)! - chore: remove console.log
+
+- Updated dependencies [[`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246)]:
+  - @mastra/core@0.14.2-alpha.1
+
 ## 0.12.7
 
 ### Patch Changes

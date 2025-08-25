@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- [#6982](https://github.com/mastra-ai/mastra/pull/6982) [`94e9f54`](https://github.com/mastra-ai/mastra/commit/94e9f547d66ef7cd01d9075ab53b5ca9a1cae100) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix AI peerdeps for NPM install
+
+- Updated dependencies [[`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246)]:
+  - @mastra/core@0.14.2-alpha.1
+
 ## 1.1.0
 
 ### Minor Changes

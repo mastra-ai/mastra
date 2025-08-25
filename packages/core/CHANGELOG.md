@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.14.2-alpha.1
+
+### Patch Changes
+
+- [#6971](https://github.com/mastra-ai/mastra/pull/6971) [`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246) Thanks [@epinzur](https://github.com/epinzur)! - "updated ai tracing in workflows"
+
+- Updated dependencies [[`94e9f54`](https://github.com/mastra-ai/mastra/commit/94e9f547d66ef7cd01d9075ab53b5ca9a1cae100)]:
+  - @mastra/schema-compat@0.10.8-alpha.0
+
 ## 0.14.2-alpha.0
 
 ### Patch Changes

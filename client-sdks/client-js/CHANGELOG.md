@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 0.10.24-alpha.1
+
+### Patch Changes
+
+- [#6972](https://github.com/mastra-ai/mastra/pull/6972) [`00ef6c1`](https://github.com/mastra-ai/mastra/commit/00ef6c1d3c76708712acd3de7f39c4d6b0f3b427) Thanks [@roaminro](https://github.com/roaminro)! - add credentials option for fetch requests
+
+- Updated dependencies [[`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246)]:
+  - @mastra/core@0.14.2-alpha.1
+
 ## 0.10.24-alpha.0
 
 ### Patch Changes
