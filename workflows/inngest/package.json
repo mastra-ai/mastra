@@ -28,7 +28,7 @@
     "@inngest/realtime": "^0.3.1",
     "@opentelemetry/api": "^1.9.0",
     "inngest": "^3.40.1",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "inngest-cli": "1.8.2",
