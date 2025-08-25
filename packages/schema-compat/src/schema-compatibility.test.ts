@@ -163,7 +163,7 @@ describe('SchemaCompatLayer', () => {
       expect(result.description).toContain('maxLength');
     });
 
-    it.only('should preserve constraints not in handleChecks', () => {
+    it('should preserve constraints not in handleChecks', () => {
       const arraySchema = z.array(z.string()).min(2).max(10);
       // Only handle 'min', so 'max' should be preserved as a validator
       const result = compatibility.defaultZodArrayHandler(arraySchema, ['min']);
