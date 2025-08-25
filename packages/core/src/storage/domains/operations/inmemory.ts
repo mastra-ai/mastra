@@ -4,7 +4,7 @@ import type { StorageColumn } from '../../types';
 import { StoreOperations } from './base';
 
 export class StoreOperationsInMemory extends StoreOperations {
-  data: Record<TABLE_NAMES<true>, Map<string, Record<string, any>>>;
+  data: Record<TABLE_NAMES, Map<string, Record<string, any>>>;
 
   constructor() {
     super();

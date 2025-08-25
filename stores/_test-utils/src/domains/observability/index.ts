@@ -330,7 +330,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       describe('filtering', () => {
         it('should filter by span type', async () => {
           const result = await storage.getAITracesPaginated({
-            filter: { spanType: AISpanType.WORKFLOW_RUN },
+            filters: { spanType: AISpanType.WORKFLOW_RUN },
             pagination: { page: 0, perPage: 10 },
           });
 
@@ -345,7 +345,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         it('should filter by name', async () => {
           const result = await storage.getAITracesPaginated({
-            filter: { name: 'workflow-trace-1' },
+            filters: { name: 'workflow-trace-1' },
             pagination: { page: 0, perPage: 10 },
           });
 
@@ -357,7 +357,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         it('should return empty results for non-matching filters', async () => {
           const result = await storage.getAITracesPaginated({
-            filter: { name: 'non-existent-trace' },
+            filters: { name: 'non-existent-trace' },
             pagination: { page: 0, perPage: 10 },
           });
 
