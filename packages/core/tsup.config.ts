@@ -54,6 +54,7 @@ export default defineConfig({
     'src/test-utils/llm-mock.ts',
     'src/agent/input-processor/index.ts',
     'src/processors/index.ts',
+    'src/zod-to-json.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
