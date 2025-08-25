@@ -188,7 +188,7 @@ export interface AITraceRecord {
 }
 
 export interface AITracesPaginatedArg {
-  filter?: {
+  filters?: {
     name?: string;
     spanType?: AISpanType;
   };
