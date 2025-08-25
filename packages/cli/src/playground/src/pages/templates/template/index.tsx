@@ -45,7 +45,6 @@ export default function Template() {
 
   // Fetch agent builder workflow info for step pre-population
   const { data: workflowInfo } = useAgentBuilderWorkflow();
-
   const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
   const { streamInstall, streamResult, isStreaming, installationResult } = useStreamTemplateInstall(workflowInfo);
 
@@ -202,12 +201,8 @@ export default function Template() {
           </Crumb>
         </Breadcrumb>
       </Header>
-      <div
-        className={cn(
-          'max-w-[80rem] w-full px-[1.5rem] lg:px-[3rem] mx-auto grid gap-y-[1rem] h-full overflow-y-scroll',
-        )}
-      >
-        <div className="p-[1.5rem]">
+      <div className={cn('w-full lg:px-[3rem] h-full overflow-y-scroll')}>
+        <div className="p-[1.5rem] max-w-[80rem] mx-auto grid gap-y-[1rem]">
           <TemplateInfo
             isLoading={isLoadingTemplate}
             title={template?.title}
