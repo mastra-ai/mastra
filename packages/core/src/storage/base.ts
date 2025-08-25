@@ -185,30 +185,25 @@ export abstract class MastraStorage extends MastraBase {
     }
   }
 
-  abstract createTable({
-    tableName,
-  }: {
-    tableName: TABLE_NAMES<true>;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void>;
+  abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
 
-  abstract clearTable({ tableName }: { tableName: TABLE_NAMES<true> }): Promise<void>;
+  abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
 
-  abstract dropTable({ tableName }: { tableName: TABLE_NAMES<true> }): Promise<void>;
+  abstract dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
 
   abstract alterTable(args: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void>;
 
-  abstract insert({ tableName, record }: { tableName: TABLE_NAMES<true>; record: Record<string, any> }): Promise<void>;
+  abstract insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void>;
 
   abstract batchInsert({
     tableName,
     records,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     records: Record<string, any>[];
   }): Promise<void>;
 
@@ -219,7 +214,7 @@ export abstract class MastraStorage extends MastraBase {
     return this.batchInsert({ tableName: TABLE_TRACES, records });
   }
 
-  abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES<true>; keys: Record<string, any> }): Promise<R | null>;
+  abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
