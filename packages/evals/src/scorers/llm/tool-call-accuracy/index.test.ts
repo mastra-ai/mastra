@@ -5,7 +5,7 @@ import { createToolCallAccuracyScorerLLM } from './index';
 
 describe('createToolCallAccuracyScorerLLM', () => {
   const mockModel = openai('gpt-4o-mini');
-  
+
   const availableTools = [
     { name: 'weather-tool', description: 'Get weather information for a location' },
     { name: 'calculator-tool', description: 'Perform mathematical calculations' },
@@ -51,15 +51,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       }));
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is the weather in Paris?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is the weather in Paris?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'Let me check the weather in Paris for you.',
             toolInvocations: [
               createToolInvocation({
@@ -92,15 +94,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       }));
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'Hello, how are you?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'Hello, how are you?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'I am doing well, thank you for asking!',
           }),
         ],
@@ -125,15 +129,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is the weather in Paris?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is the weather in Paris?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'The weather in Paris is 15°C and cloudy.',
             toolInvocations: [
               createToolInvocation({
@@ -165,15 +171,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is the weather today?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is the weather today?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'Let me calculate that and check your calendar.',
             toolInvocations: [
               createToolInvocation({
@@ -211,15 +219,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is the weather in London?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is the weather in London?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'The weather in London is 10°C.',
             toolInvocations: [
               createToolInvocation({
@@ -256,15 +266,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'Hello, how are you?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'Hello, how are you?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'Hello! I am doing well, thank you for asking.',
           }),
         ],
@@ -287,15 +299,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is the weather in Tokyo?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is the weather in Tokyo?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'I cannot provide weather information without checking.',
           }),
         ],
@@ -320,15 +334,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is the weather in Paris and what are the top tourist attractions?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is the weather in Paris and what are the top tourist attractions?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'Let me get you the weather and tourist information for Paris.',
             toolInvocations: [
               createToolInvocation({
@@ -365,16 +381,19 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'I need help with something' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'I need help with something',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
-            content: 'I would be happy to help! Could you please provide more details about what you need assistance with?',
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
+            content:
+              'I would be happy to help! Could you please provide more details about what you need assistance with?',
           }),
         ],
       });
@@ -397,22 +416,24 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'Test query' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'Test query',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'Test response',
           }),
         ],
       });
 
       const result = await scorer.run(testRun);
-      
+
       // When no evaluations and no missing tools, default to 1.0
       expect(result.score).toBe(1.0);
     });
@@ -430,15 +451,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is the weather in InvalidCity?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is the weather in InvalidCity?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'I encountered an error getting the weather.',
             toolInvocations: [
               {
@@ -454,7 +477,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const result = await scorer.run(testRun);
-      
+
       // Tool selection was still appropriate even if execution failed
       expect(result.score).toBe(1.0);
     });
@@ -472,15 +495,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'Compare weather in Paris and London' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'Compare weather in Paris and London',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'Checking weather for both cities.',
             toolInvocations: [
               createToolInvocation({
@@ -515,10 +540,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
     it('should evaluate multi-step tool usage correctly', async () => {
       const scorer = createToolCallAccuracyScorerLLM({
         model: mockModel,
-        availableTools: [
-          ...availableTools,
-          { name: 'email-tool', description: 'Send emails' },
-        ],
+        availableTools: [...availableTools, { name: 'email-tool', description: 'Send emails' }],
       });
 
       // Mock the run method to return expected results
@@ -528,15 +550,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'Schedule an outdoor picnic for this weekend if the weather is good' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'Schedule an outdoor picnic for this weekend if the weather is good',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: 'I will check the weather and schedule the picnic.',
             toolInvocations: [
               createToolInvocation({
@@ -579,15 +603,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
       });
 
       const testRun = createAgentTestRun({
-        inputMessages: [createUIMessage({ 
-          id: '1', 
-          role: 'user', 
-          content: 'What is 15% of 240?' 
-        })],
+        inputMessages: [
+          createUIMessage({
+            id: '1',
+            role: 'user',
+            content: 'What is 15% of 240?',
+          }),
+        ],
         output: [
-          createUIMessage({ 
-            id: '2', 
-            role: 'assistant', 
+          createUIMessage({
+            id: '2',
+            role: 'assistant',
             content: '15% of 240 is 36. I also found some helpful tips about percentages and checked the weather.',
             toolInvocations: [
               createToolInvocation({
