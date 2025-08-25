@@ -1,0 +1,222 @@
+---
+title: "Reference: AISDKV5OutputStream | Agents | Mastra Docs"
+description: "Documentation for the AISDKV5OutputStream class, the AI SDK v5 compatible streaming interface returned by agent.streamVNext() when using format: 'aisdk'."
+---
+
+import { Callout } from "nextra/components";
+import { TSDocPropertiesTable } from "@/components/tsdoc-properties-table";
+
+# AISDKV5OutputStream
+
+<Callout type="warning">
+  **Experimental API**: This type is part of the experimental [`streamVNext()`](../streamVNext) method. The API may change as we refine the feature based on feedback.
+</Callout>
+
+The `AISDKV5OutputStream` class is the streaming interface returned by [`agent.streamVNext()`](../streamVNext) when using the `format: 'aisdk'` parameter. It provides AI SDK v5 compatible methods for integration with frontend frameworks like Next.js.
+
+```typescript
+// Returns AISDKV5OutputStream
+const stream = await agent.streamVNext("Hello", { format: 'aisdk' });
+
+// Use with AI SDK v5 compatible methods
+return stream.toUIMessageStreamResponse();
+```
+
+
+### Streaming properties
+
+<TSDocPropertiesTable 
+  properties={["fullStream", "textStream", "objectStream", "elementStream"]}
+  code={`import type { AISDKV5OutputStream } from '@mastra/core'
+    export default AISDKV5OutputStream
+    `}
+/>
+
+
+## AI SDK v5 Integration Methods
+
+### toUIMessageStreamResponse()
+
+Creates a Response object compatible with AI SDK v5's `useChat` hook.
+
+```typescript
+// In an API route (e.g., Next.js)
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  
+  const stream = await agent.streamVNext(messages, {
+    format: 'aisdk'
+  });
+  
+  return stream.toUIMessageStreamResponse({
+    sendFinish: true,
+    sendReasoning: true,
+    onFinish: async (event) => {
+      console.log('Stream finished:', event);
+    }
+  });
+}
+```
+
+### toTextStreamResponse()
+
+Creates a simple text stream Response.
+
+```typescript
+const stream = await agent.streamVNext("Generate text", {
+  format: 'aisdk'
+});
+
+return stream.toTextStreamResponse({
+  headers: {
+    'Content-Type': 'text/plain; charset=utf-8',
+  }
+});
+```
+
+### toUIMessageStream()
+
+Returns a UI message stream for custom processing.
+
+```typescript
+const stream = await agent.streamVNext("Hello", {
+  format: 'aisdk'
+});
+
+const uiStream = stream.toUIMessageStream({
+  sendFinish: true,
+  sendReasoning: true,
+  onError: (error) => {
+    console.error('Stream error:', error);
+  }
+});
+
+// Process the UI stream
+for await (const chunk of uiStream) {
+  console.log('UI chunk:', chunk);
+}
+```
+
+## Streaming Properties
+
+<TSDocPropertiesTable 
+  properties={["fullStream", "textStream", "objectStream", "elementStream"]}
+  code={`import type { AISDKV5OutputStream } from '@mastra/core'
+    export default AISDKV5OutputStream
+    `}
+/>
+
+<PropertiesTable
+  content={[
+    {
+      name: "fullStream",
+      type: "ReadableStream<TextStreamPart>",
+      description: "AI SDK v5 formatted stream with TextStreamPart chunks for complete control."
+    },
+    {
+      name: "textStream",
+      type: "ReadableStream<string>",
+      description: "Stream of only text content, compatible with streaming text responses."
+    },
+    {
+      name: "objectStream",
+      type: "ReadableStream<OUTPUT>",
+      description: "Stream of structured output objects when using an output schema."
+    },
+    {
+      name: "elementStream",
+      type: "ReadableStream<any>",
+      description: "Stream of individual array elements when output schema is an array."
+    }
+  ]}
+/>
+
+## Usage with useChat Hook
+
+The primary use case for `AISDKV5OutputStream` is integration with AI SDK v5's `useChat` hook in React/Next.js applications:
+
+### API Route
+
+```typescript
+// app/api/chat/route.ts
+import { agent } from '@/mastra/agents';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  
+  const stream = await agent.streamVNext(messages, {
+    format: 'aisdk',
+    modelSettings: {
+      temperature: 0.7,
+    }
+  });
+  
+  return stream.toUIMessageStreamResponse();
+}
+```
+
+### Frontend Component
+
+```tsx
+// app/chat/page.tsx
+'use client';
+
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+  });
+  
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.role}: {m.content}
+        </div>
+      ))}
+      
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Say something..."
+        />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  );
+}
+```
+
+## Promise-based Properties
+
+All the same promise-based properties as `MastraModelOutput` are available:
+
+- `text` - Resolves to complete text response
+- `usage` - Token usage statistics
+- `reasoning` - Reasoning text for supported models
+- `toolCalls` - Array of tool calls made
+- `toolResults` - Array of tool execution results
+- `object` - Structured output when using schemas
+- `error` - Error object if streaming failed
+
+## getFullOutput()
+
+Consumes the stream and returns all output data in AI SDK v5 format:
+
+```typescript
+const stream = await agent.streamVNext("Task", {
+  format: 'aisdk'
+});
+
+const fullOutput = await stream.getFullOutput();
+console.log(fullOutput.text);
+console.log(fullOutput.usage);
+```
+
+## Related types
+
+- [MastraModelOutput](/reference/agents/MastraModelOutput) - The Mastra format stream interface
+- [Agent.streamVNext()](/reference/agents/streamVNext) - Method that returns this stream interface
+- [ChunkType](/reference/agents/ChunkType) - Types of chunks emitted during streaming

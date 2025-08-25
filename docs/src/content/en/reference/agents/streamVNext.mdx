@@ -31,7 +31,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
   content={[
     {
       name: "messages",
-      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      type: "string | string[] | MessageInput[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
       description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
     },
     {
@@ -44,6 +44,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
 />
 
 ### Options parameters
+
 
 <PropertiesTable
   content={[
@@ -191,8 +192,8 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "memoryOptions",
       type: "MemoryConfig",
       isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.options` instead. Configuration options for memory management.",
+      deprecated:
+        "Use `memory.options` instead. Configuration options for memory management.",
     },
     {
       name: "onFinish",
@@ -212,8 +213,8 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "resourceId",
       type: "string",
       isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+      deprecated:
+        "Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
     },
     {
       name: "telemetry",
@@ -333,8 +334,8 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       name: "threadId",
       type: "string",
       isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+      deprecated:
+        "Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
     },
     {
       name: "toolChoice",
@@ -478,6 +479,65 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
   ]}
 />
 
+## Stream interfaces
+
+The stream object returned provides different interfaces based on the format:
+
+### MastraModelOutput
+
+The default 'mastra' format returns a [`MastraModelOutput`](./streamVNextTypes/MastraModelOutput)
+
+
+```typescript
+const stream = await agent.streamVNext("Hello");
+
+// Stream in Mastra format
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'text-delta') {
+    console.log(chunk.payload.text);
+  }
+}
+
+// Get complete output
+const fullOutput = await stream.getFullOutput();
+```
+
+### AISDKV5OutputStream
+
+The 'aisdk' format returns an [`AISDKV5OutputStream`](./streamVNextTypes/AISDKV5OutputStream)
+
+```typescript
+const stream = await agent.streamVNext("Hello", { format: 'aisdk' });
+
+// Stream in AI SDK v5 format
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'text-delta') {
+    console.log(chunk.text);
+  }
+}
+
+// Use with frontend frameworks
+return stream.toUIMessageStreamResponse();
+```
+
+### Common properties
+
+Both stream types share these promise-based accessors:
+- `stream.text` - Complete text response
+- `stream.usage` - Token usage statistics  
+- `stream.reasoning` - Reasoning text (if supported)
+- `stream.toolCalls` - Array of tool calls made
+- `stream.toolResults` - Array of tool results
+- `stream.object` - JSON object validated against the provided 'output' schema
+
+## Stream types reference
+
+For detailed information about the stream interfaces and chunk types:
+
+- [MastraModelOutput](./streamVNextTypes/MastraModelOutput) - Complete reference for the Mastra format stream
+- [AISDKV5OutputStream](./streamVNextTypes/AISDKV5OutputStream) - Complete reference for the AI SDK format stream  
+- [ChunkType](./streamVNextTypes/ChunkType) - All possible chunk types emitted during streaming
+
 ## Extended usage example
 
 ### Mastra Format (Default)
@@ -536,13 +596,10 @@ await agent.streamVNext("message for agent", {
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
-  modelSettings: {
-    temperature: 0.7,
   },
   memory: {
     thread: "user-123",
     resource: "test-app"
-  },
   },
   toolChoice: "auto",
   // Structured output with better DX

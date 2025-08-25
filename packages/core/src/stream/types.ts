@@ -17,11 +17,6 @@ export enum ChunkFrom {
   WORKFLOW = 'WORKFLOW',
 }
 
-interface BaseChunkType {
-  runId: string;
-  from: ChunkFrom;
-}
-
 interface ResponseMetadataPayload {
   signature?: string;
   [key: string]: any;
@@ -231,39 +226,83 @@ interface TripwirePayload {
   tripwireReason: string;
 }
 
+type MastraStreamChunk<
+  T extends string,
+  PAYLOAD extends Record<string, any> | never = never,
+  OUTPUT extends OutputSchema = undefined,
+> = {
+  type: T;
+  runId: string;
+  from: ChunkFrom;
+  payload: T extends 'object' ? never : PAYLOAD;
+} & (T extends 'object' ? { object: PartialSchemaOutput<OUTPUT> } : {});
+
+type ResponseMetadataChunk = MastraStreamChunk<'response-metadata', ResponseMetadataPayload>;
+type TextStartChunk = MastraStreamChunk<'text-start', TextStartPayload>;
+type TextDeltaChunk = MastraStreamChunk<'text-delta', TextDeltaPayload>;
+type TextEndChunk = MastraStreamChunk<'text-end', TextEndPayload>;
+type ReasoningStartChunk = MastraStreamChunk<'reasoning-start', ReasoningStartPayload>;
+type ReasoningDeltaChunk = MastraStreamChunk<'reasoning-delta', ReasoningDeltaPayload>;
+type ReasoningEndChunk = MastraStreamChunk<'reasoning-end', ReasoningEndPayload>;
+type ReasoningSignatureChunk = MastraStreamChunk<'reasoning-signature', ReasoningSignaturePayload>;
+type RedactedReasoningChunk = MastraStreamChunk<'redacted-reasoning', RedactedReasoningPayload>;
+type SourceChunk = MastraStreamChunk<'source', SourcePayload>;
+type FileChunk = MastraStreamChunk<'file', FilePayload>;
+type ToolCallChunk = MastraStreamChunk<'tool-call', ToolCallPayload>;
+type ToolResultChunk = MastraStreamChunk<'tool-result', ToolResultPayload>;
+type ToolCallInputStreamingStartChunk = MastraStreamChunk<
+  'tool-call-input-streaming-start',
+  ToolCallInputStreamingStartPayload
+>;
+type ToolCallDeltaChunk = MastraStreamChunk<'tool-call-delta', ToolCallDeltaPayload>;
+type ToolCallInputStreamingEndChunk = MastraStreamChunk<
+  'tool-call-input-streaming-end',
+  ToolCallInputStreamingEndPayload
+>;
+type FinishChunk = MastraStreamChunk<'finish', FinishPayload>;
+type ErrorChunk = MastraStreamChunk<'error', ErrorPayload>;
+type RawChunk = MastraStreamChunk<'raw', RawPayload>;
+type StartChunk = MastraStreamChunk<'start', StartPayload>;
+type StepStartChunk = MastraStreamChunk<'step-start', StepStartPayload>;
+type StepFinishChunk = MastraStreamChunk<'step-finish', StepFinishPayload>;
+type ToolErrorChunk = MastraStreamChunk<'tool-error', ToolErrorPayload>;
+type AbortChunk = MastraStreamChunk<'abort', AbortPayload>;
+export type ObjectChunk<OUTPUT extends OutputSchema = undefined> = MastraStreamChunk<'object', never, OUTPUT>;
+type ToolOutputChunk = MastraStreamChunk<'tool-output', ToolOutputPayload>;
+type StepOutputChunk = MastraStreamChunk<'step-output', StepOutputPayload>;
+type WatchChunk = MastraStreamChunk<'watch', WatchPayload>;
+type TripwireChunk = MastraStreamChunk<'tripwire', TripwirePayload>;
+
 export type ChunkType<OUTPUT extends OutputSchema = undefined> =
-  | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
-  | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
-  | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
-  | (BaseChunkType & { type: 'text-end'; payload: TextEndPayload })
-  | (BaseChunkType & { type: 'reasoning-start'; payload: ReasoningStartPayload })
-  | (BaseChunkType & { type: 'reasoning-delta'; payload: ReasoningDeltaPayload })
-  | (BaseChunkType & { type: 'reasoning-end'; payload: ReasoningEndPayload })
-  | (BaseChunkType & { type: 'reasoning-signature'; payload: ReasoningSignaturePayload })
-  | (BaseChunkType & { type: 'redacted-reasoning'; payload: RedactedReasoningPayload })
-  | (BaseChunkType & { type: 'source'; payload: SourcePayload })
-  | (BaseChunkType & { type: 'file'; payload: FilePayload })
-  | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
-  | (BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload })
-  | (BaseChunkType & { type: 'tool-call-input-streaming-start'; payload: ToolCallInputStreamingStartPayload })
-  | (BaseChunkType & { type: 'tool-call-delta'; payload: ToolCallDeltaPayload })
-  | (BaseChunkType & { type: 'tool-call-input-streaming-end'; payload: ToolCallInputStreamingEndPayload })
-  | (BaseChunkType & { type: 'finish'; payload: FinishPayload })
-  | (BaseChunkType & { type: 'error'; payload: ErrorPayload })
-  | (BaseChunkType & { type: 'raw'; payload: RawPayload })
-  | (BaseChunkType & { type: 'start'; payload: StartPayload })
-  | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
-  | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload })
-  | (BaseChunkType & { type: 'tool-error'; payload: ToolErrorPayload })
-  | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
-  | (BaseChunkType & {
-      type: 'object';
-      object: PartialSchemaOutput<OUTPUT>;
-    })
-  | (BaseChunkType & { type: 'tool-output'; payload: ToolOutputPayload })
-  | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
-  | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
-  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload });
+  | ResponseMetadataChunk
+  | TextStartChunk
+  | TextDeltaChunk
+  | TextEndChunk
+  | ReasoningStartChunk
+  | ReasoningDeltaChunk
+  | ReasoningEndChunk
+  | ReasoningSignatureChunk
+  | RedactedReasoningChunk
+  | SourceChunk
+  | FileChunk
+  | ToolCallChunk
+  | ToolResultChunk
+  | ToolCallInputStreamingStartChunk
+  | ToolCallDeltaChunk
+  | ToolCallInputStreamingEndChunk
+  | FinishChunk
+  | ErrorChunk
+  | RawChunk
+  | StartChunk
+  | StepStartChunk
+  | StepFinishChunk
+  | ToolErrorChunk
+  | AbortChunk
+  | ObjectChunk<OUTPUT>
+  | ToolOutputChunk
+  | StepOutputChunk
+  | WatchChunk
+  | TripwireChunk;
 
 export type OnResult = (result: {
   warnings: Record<string, any>;

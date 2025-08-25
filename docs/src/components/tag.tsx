@@ -3,19 +3,20 @@ import { cn } from "@/lib/utils";
 import { useThemeDetector } from "@/hooks/use-theme-detector";
 
 type TagProps = {
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  className?: string;
 } & (
   | {
       text: "new";
       showAbbr?: boolean;
     }
   | {
-      text: "experimental" | "advanced" | "realtime";
+      text: "experimental" | "advanced" | "realtime" | "deprecated";
       showAbbr?: true;
     }
 );
 
-export const Tag = ({ children, text, showAbbr }: TagProps) => {
+export const Tag = ({ children, text, showAbbr, className }: TagProps) => {
   const isDark = useThemeDetector();
 
   // Set default showAbbr based on text type
@@ -80,6 +81,20 @@ export const Tag = ({ children, text, showAbbr }: TagProps) => {
         },
       },
     },
+    {
+      name: "deprecated",
+      abbr: "dep.",
+      color: {
+        light: {
+          bg: "bg-[hsla(0,0%,93%,1)]",
+          text: "text-[hsla(var(--tag-red),1)]",
+        },
+        dark: {
+          bg: "bg-[hsla(var(--tag-red),0.06)]",
+          text: "text-[hsla(var(--tag-red),1)]",
+        },
+      },
+    },
   ];
   const tag = tags.find((t) => t.name === text);
   const theme = isDark ? "dark" : "light";
@@ -92,6 +107,7 @@ export const Tag = ({ children, text, showAbbr }: TagProps) => {
           `m-tag font-medium text-xs shrink-0 px-2 pr-[0.44rem] py-0.5 rounded-md`,
           tag?.color[theme].bg,
           tag?.color[theme].text,
+          className,
         )}
       >
         {finalShowAbbr ? tag?.abbr : text}

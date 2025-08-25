@@ -1,0 +1,206 @@
+---
+title: "Reference: ChunkType | Agents | Mastra Docs"
+description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
+---
+
+import { Callout } from "nextra/components";
+
+# ChunkType
+
+<Callout type="warning">
+  **Experimental API**: This type is part of the experimental [`streamVNext()`](../streamVNext) method. The API may change as we refine the feature based on feedback.
+</Callout>
+
+The `ChunkType` type defines the mastra format of stream chunks that can be emitted during streaming responses from agents.
+
+## Base properties
+
+All chunks include these base properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "Unique identifier for this execution run"
+    },
+    {
+      name: "from",
+      type: "'AGENT' | 'USER' | 'SYSTEM' | 'WORKFLOW'",
+      description: "Source of the chunk"
+    }
+  ]}
+/>
+
+## Type definition
+```typescript
+type ChunkType<OUTPUT = unknown> = BaseChunkType & (
+  | { type: 'response-metadata'; payload: ResponseMetadataPayload }
+  | { type: 'text-start'; payload: TextStartPayload }
+  | { type: 'text-delta'; payload: TextDeltaPayload }
+  | { type: 'text-end'; payload: TextEndPayload }
+  | { type: 'reasoning-start'; payload: ReasoningStartPayload }
+  | { type: 'reasoning-delta'; payload: ReasoningDeltaPayload }
+  | { type: 'reasoning-end'; payload: ReasoningEndPayload }
+  | { type: 'tool-call'; payload: ToolCallPayload }
+  | { type: 'tool-result'; payload: ToolResultPayload }
+  | { type: 'finish'; payload: FinishPayload }
+  | { type: 'error'; payload: ErrorPayload }
+  | { type: 'object'; object: OUTPUT }
+  // ... and more
+)
+```
+
+## Common chunk types
+
+### text-delta
+
+Incremental text being generated.
+
+```typescript
+{
+  type: 'text-delta',
+  payload: {
+    id: string;
+    text: string;
+    providerMetadata?: SharedV2ProviderMetadata;
+  }
+}
+```
+
+### tool-call
+
+A tool is being called.
+
+```typescript
+{
+  type: 'tool-call',
+  payload: {
+    toolCallId: string;
+    toolName: string;
+    args?: Record<string, any>;
+    providerExecuted?: boolean;
+    providerMetadata?: SharedV2ProviderMetadata;
+  }
+}
+```
+
+### tool-result
+
+Result from a tool execution.
+
+```typescript
+{
+  type: 'tool-result',
+  payload: {
+    toolCallId: string;
+    toolName: string;
+    result: any;
+    isError?: boolean;
+    providerExecuted?: boolean;
+  }
+}
+```
+
+### reasoning-delta
+
+Incremental reasoning text (for models that support reasoning).
+
+```typescript
+{
+  type: 'reasoning-delta',
+  payload: {
+    id: string;
+    text: string;
+    providerMetadata?: SharedV2ProviderMetadata;
+  }
+}
+```
+
+### object
+
+Partial structured output object (when using output schemas).
+
+```typescript
+{
+  type: 'object',
+  object: Partial<OUTPUT>
+}
+```
+
+### finish
+
+Stream has completed successfully.
+
+```typescript
+{
+  type: 'finish',
+  payload: {
+    stepResult: {
+      reason: LanguageModelV2FinishReason;
+      warnings?: LanguageModelV2CallWarning[];
+    };
+    output: {
+      usage: LanguageModelV2Usage;
+    };
+    messages: {
+      all: CoreMessage[];
+      user: CoreMessage[];
+      nonUser: CoreMessage[];
+    };
+  }
+}
+```
+
+### error
+
+An error occurred during streaming.
+
+```typescript
+{
+  type: 'error',
+  payload: {
+    error: unknown;
+  }
+}
+```
+
+## Usage example
+
+```typescript
+const stream = await agent.streamVNext("Hello");
+
+for await (const chunk of stream.fullStream) {
+  switch (chunk.type) {
+    case 'text-delta':
+      console.log('Text:', chunk.payload.text);
+      break;
+    
+    case 'tool-call':
+      console.log('Calling tool:', chunk.payload.toolName);
+      break;
+    
+    case 'tool-result':
+      console.log('Tool result:', chunk.payload.result);
+      break;
+    
+    case 'reasoning-delta':
+      console.log('Reasoning:', chunk.payload.text);
+      break;
+    
+    case 'finish':
+      console.log('Finished:', chunk.payload.stepResult.reason);
+      console.log('Usage:', chunk.payload.output.usage);
+      break;
+    
+    case 'error':
+      console.error('Error:', chunk.payload.error);
+      break;
+  }
+}
+```
+
+## Related types
+
+- [MastraModelOutput](/reference/agents/streamVNextTypes/MastraModelOutput) - The stream object that emits these chunks
+- [Agent.streamVNext()](/reference/agents/streamVNext) - Method that returns streams emitting these chunks

@@ -1,29 +1,10 @@
 "use client";
 import React from "react";
 import { T } from "gt-next/client";
+import { ContentItem, Property } from "./properties-table-types";
+import { Tag } from "@/components/tag";
 
-interface Parameter {
-  name: string;
-  type: string;
-  isOptional?: boolean;
-  description: string;
-}
-
-interface Property {
-  type: string;
-  parameters: Parameter[];
-}
-
-interface ContentItem {
-  name: string;
-  type: string;
-  isOptional?: boolean;
-  description: string;
-  properties?: Property[];
-  defaultValue?: string;
-}
-
-interface PropertiesTableProps {
+export interface PropertiesTableProps {
   content?: ContentItem[];
 }
 
@@ -90,24 +71,42 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
             id={item.name}
             className="flex flex-col gap-1 py-3 border-b first:pt-2 first:pb-3 border-neutral-300 dark:border-neutral-900"
           >
-            <div className="flex flex-row gap-2 group items-start">
-              <h3 className="font-mono text-sm font-medium cursor-pointer">
-                {item.name}
-                <span>
-                  {item.isOptional ? (
-                    <T id="components.properties_table.2">{"?:"}</T>
-                  ) : (
-                    <T id="components.properties_table.3">{":"}</T>
-                  )}
-                </span>
-              </h3>
-              <div className="text-sm leading-5 text-zinc-500">{item.type}</div>
-              {item.defaultValue && (
+            <div className="flex flex-row gap-2 group items-start justify-between">
+              <div className="flex flex-row gap-2 items-start">
+                <h3 className="font-mono text-sm font-medium cursor-pointer">
+                  {item.name}
+                  <span>
+                    {item.isOptional ? (
+                      <T id="components.properties_table.2">{"?:"}</T>
+                    ) : (
+                      <T id="components.properties_table.3">{":"}</T>
+                    )}
+                  </span>
+                </h3>
                 <div className="text-sm leading-5 text-zinc-500">
-                  = {item.defaultValue}
+                  {item.type}
                 </div>
-              )}
+                {item.defaultValue && (
+                  <div className="text-sm leading-5 text-zinc-500">
+                    = {item.defaultValue}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                {item.isExperimental && (
+                  <Tag text="experimental" className="inline!" />
+                )}
+                {item.deprecated && (
+                  <Tag text="deprecated" className="inline!" />
+                )}
+              </div>
             </div>
+            {item?.deprecated && (
+              <div className="text-sm leading-5 text-zinc-500">
+                {item.deprecated}
+              </div>
+            )}
             <div className="text-sm leading-5 text-zinc-500">
               {item.description}
             </div>

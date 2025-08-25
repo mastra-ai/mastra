@@ -494,7 +494,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
             runId: chunk.runId,
             type: 'object',
             object: result.emitValue as PartialSchemaOutput<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
-          });
+          } as ChunkType<OUTPUT>);
         }
       }
 

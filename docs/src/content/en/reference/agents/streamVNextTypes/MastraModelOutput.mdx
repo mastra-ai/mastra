@@ -1,0 +1,152 @@
+---
+title: "Reference: MastraModelOutput | Agents | Mastra Docs"
+description: "Documentation for the MastraModelOutput class, the streaming interface returned by agent.streamVNext() in Mastra format."
+---
+
+import { Callout } from "nextra/components";
+import { TSDocPropertiesTable } from "@/components/tsdoc-properties-table";
+
+# MastraModelOutput
+
+<Callout type="warning">
+  **Experimental API**: This type is part of the experimental [`streamVNext()`](../streamVNext) method. The API may change as we refine the feature based on feedback.
+</Callout>
+
+The `MastraModelOutput` class is the streaming interface returned by [`agent.streamVNext()`](../streamVNext) when using the default Mastra format (or when `format` parameter is not specified). It provides multiple ways to consume and process streaming responses from agents.
+
+```typescript
+// Returns MastraModelOutput
+const stream = await agent.streamVNext("Hello");
+
+// Consume the stream
+for await (const chunk of stream.fullStream) {
+  console.log(chunk);
+}
+
+// Or get complete output
+const fullOutput = await stream.getFullOutput();
+```
+
+## Properties
+
+### Streaming properties
+
+<TSDocPropertiesTable 
+  properties={["fullStream", "textStream", "objectStream", "elementStream"]}
+  code={`
+    import type { MastraModelOutput } from '@mastra/core'
+    export default MastraModelOutput
+    `}
+/>
+
+### Promise-based properties
+
+<TSDocPropertiesTable 
+  properties={["text", "usage", "reasoning", "reasoningText", "toolCalls", "toolResults", "object", "finishReason", "error"]}
+  code={`import type { MastraModelOutput } from '@mastra/core'
+    export default MastraModelOutput
+    `}
+/>
+
+## Methods
+<PropertiesTable
+  content={[
+     {
+      name: "getFullOutput",
+      type: `Promise<FullOutput>`,
+      description: "Returns complete output including text, usage, tool calls, and all metadata."
+    },
+    {
+      name: "consumeStream",
+      type: `(options?: {
+        onError?: (error: Error) => void;
+      }) => Promise<void>`,
+      description: "Manually consume the entire stream with optional error handling."
+    }
+  ]}
+/>
+
+## Usage examples
+
+### Real-time text streaming
+
+```typescript
+const stream = await agent.streamVNext("Tell me a story");
+
+// Stream text in real-time
+for await (const text of stream.textStream) {
+  console.log(text);
+}
+```
+
+### JSON object streaming
+
+```typescript
+import { z } from 'zod';
+
+const schema = z.object({
+  name: z.string(),
+  age: z.number(),
+  city: z.string()
+});
+
+const stream = await agent.streamVNext("Extract user info", {
+  output: schema
+});
+
+// Stream partial objects as they're built
+for await (const json of stream.objectStream) {
+  console.log(json);
+  // { name: "John" }
+  // { name: "John", age: 30 }
+  // { name: "John", age: 30, city: "NYC" }
+}
+
+// Or wait for complete object to be resolved and validated
+const completeObject = await stream.object;
+```
+
+### Processing all chunks 
+
+```typescript
+const stream = await agent.streamVNext("Complex task");
+
+for await (const chunk of stream.fullStream) {
+  switch (chunk.type) {
+    case 'text-delta':
+      handleText(chunk.payload.text);
+      break;
+    case 'tool-call':
+      handleToolCall(chunk.payload);
+      break;
+    case 'reasoning-delta':
+      handleReasoning(chunk.payload.text);
+      break;
+    case 'finish':
+      handleCompletion(chunk.payload);
+      break;
+  }
+}
+```
+
+### Promise-based access
+
+```typescript
+const stream = await agent.streamVNext("Analyze this");
+
+// Access individual promises
+const [text, usage, toolCalls] = await Promise.all([
+  stream.text,
+  stream.usage,
+  stream.toolCalls
+]);
+
+console.log(`Response: ${text}`);
+console.log(`Tokens used: ${usage.totalTokens}`);
+console.log(`Tools called: ${toolCalls.length}`);
+```
+
+## Related types
+
+- [ChunkType](/reference/agents/streamVNextTypes/ChunkType) - Types of chunks emitted in the stream
+- [Agent.streamVNext()](/reference/agents/streamVNext) - Method that returns this stream interface
