@@ -1,4 +1,4 @@
-import { exec as execNodejs, spawn as nodeSpawn } from 'child_process';
+import { exec as execNodejs, spawn as nodeSpawn, type SpawnOptions } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { copyFile } from 'fs/promises';
 import { createRequire } from 'module';
@@ -112,7 +112,7 @@ export async function isInsideGitRepo(cwd: string): Promise<boolean> {
 export function spawnWithOutput(
   command: string,
   args: string[],
-  options: any,
+  options: SpawnOptions,
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolvePromise, rejectPromise) => {
     const childProcess = nodeSpawn(command, args, {
@@ -124,10 +124,12 @@ export function spawnWithOutput(
       rejectPromise(error);
     });
     childProcess.stdout?.on('data', chunk => {
+      process.stdout.write(chunk);
       stdout += chunk?.toString?.() ?? String(chunk);
     });
     childProcess.stderr?.on('data', chunk => {
       stderr += chunk?.toString?.() ?? String(chunk);
+      process.stderr.write(chunk);
     });
     childProcess.on('close', code => {
       if (code === 0) {

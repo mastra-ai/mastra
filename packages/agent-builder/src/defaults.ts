@@ -2,8 +2,9 @@ import { spawn as nodeSpawn } from 'child_process';
 import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
 import { join, dirname, relative, isAbsolute, resolve } from 'path';
 import { createTool } from '@mastra/core/tools';
+import ignore from 'ignore';
 import { z } from 'zod';
-import { exec, spawnSWPM } from './utils';
+import { exec, spawnSWPM, spawnWithOutput } from './utils';
 
 export class AgentBuilderDefaults {
   static DEFAULT_INSTRUCTIONS = (
@@ -407,7 +408,7 @@ export const mastra = new Mastra({
     network: 'src/mastra/networks',
   };
 
-  static DEFAULT_TOOLS = async (projectPath?: string, mode: 'template' | 'code-editor' = 'code-editor') => {
+  static DEFAULT_TOOLS = async (projectPath: string, mode: 'template' | 'code-editor' = 'code-editor') => {
     const agentBuilderTools = {
       readFile: createTool({
         id: 'read-file',
@@ -707,7 +708,7 @@ export const mastra = new Mastra({
           }),
         }),
         execute: async ({ context }) => {
-          return await AgentBuilderDefaults.performSmartSearch(context);
+          return await AgentBuilderDefaults.performSmartSearch(context, projectPath);
         },
       }),
 
@@ -1113,14 +1114,14 @@ export const mastra = new Mastra({
    */
   static async createMastraProject({ features, projectName }: { features?: string[]; projectName?: string }) {
     try {
-      const args = ['pnpx', 'create', 'mastra@latest', projectName ?? '', '-l', 'openai', '-k', 'skip'];
+      const args = ['pnpx', 'create-mastra@latest', projectName ?? '', '-l', 'openai', '-k', 'skip'];
 
       if (features && features.length > 0) {
         args.push('--components', features.join(','));
       }
       args.push('--example');
 
-      const { stdout, stderr } = await exec(args.join(' '));
+      const { stdout, stderr } = await spawnWithOutput(args[0]!, args.slice(1), {});
 
       return {
         success: true,
@@ -1130,6 +1131,7 @@ export const mastra = new Mastra({
         error: stderr,
       };
     } catch (error) {
+      console.log(error);
       return {
         success: false,
         message: `Failed to create project: ${error instanceof Error ? error.message : String(error)}`,
@@ -2290,21 +2292,24 @@ export const mastra = new Mastra({
   /**
    * Perform intelligent search with context
    */
-  static async performSmartSearch(context: {
-    query: string;
-    type?: 'text' | 'regex' | 'fuzzy' | 'semantic';
-    scope?: {
-      paths?: string[];
-      fileTypes?: string[];
-      excludePaths?: string[];
-      maxResults?: number;
-    };
-    context?: {
-      beforeLines?: number;
-      afterLines?: number;
-      includeDefinitions?: boolean;
-    };
-  }) {
+  static async performSmartSearch(
+    context: {
+      query: string;
+      type?: 'text' | 'regex' | 'fuzzy' | 'semantic';
+      scope?: {
+        paths?: string[];
+        fileTypes?: string[];
+        excludePaths?: string[];
+        maxResults?: number;
+      };
+      context?: {
+        beforeLines?: number;
+        afterLines?: number;
+        includeDefinitions?: boolean;
+      };
+    },
+    projectPath: string,
+  ) {
     try {
       const { query, type = 'text', scope = {}, context: searchContext = {} } = context;
 
@@ -2347,7 +2352,9 @@ export const mastra = new Mastra({
       // Add search paths
       rgCommand += ` "${query}" ${paths.join(' ')}`;
 
-      const { stdout } = await exec(rgCommand);
+      const { stdout } = await exec(rgCommand, {
+        cwd: projectPath,
+      });
       const lines = stdout.split('\n').filter(line => line.trim());
 
       const matches: Array<{
@@ -2537,6 +2544,19 @@ export const mastra = new Mastra({
         projectPath,
       } = context;
 
+      const gitignorePath = join(projectPath || process.cwd(), '.gitignore');
+      let gitignoreFilter: ignore.Ignore | undefined;
+
+      try {
+        const gitignoreContent = await readFile(gitignorePath, 'utf-8');
+        gitignoreFilter = ignore().add(gitignoreContent);
+      } catch (err: any) {
+        if (err.code !== 'ENOENT') {
+          console.error(`Error reading .gitignore file:`, err);
+        }
+        // If .gitignore doesn't exist, gitignoreFilter remains undefined, meaning no files are ignored by gitignore.
+      }
+
       // Resolve path relative to project directory if it's not absolute
       const resolvedPath = isAbsolute(path) ? path : resolve(projectPath || process.cwd(), path);
 
@@ -2550,11 +2570,13 @@ export const mastra = new Mastra({
       }> = [];
 
       async function processDirectory(dirPath: string, currentDepth: number = 0) {
+        if (gitignoreFilter?.ignores(dirPath)) return;
         if (currentDepth > maxDepth) return;
 
         const entries = await readdir(dirPath);
 
         for (const entry of entries) {
+          if (gitignoreFilter?.ignores(entry)) continue;
           if (!includeHidden && entry.startsWith('.')) continue;
 
           const fullPath = join(dirPath, entry);

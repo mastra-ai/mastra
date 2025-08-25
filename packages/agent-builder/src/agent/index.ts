@@ -104,7 +104,7 @@ export class AgentBuilder extends Agent {
       temperature: 0.3, // Lower temperature for more consistent code generation
       instructions: enhancedInstructions,
       context: enhancedContext,
-    };
+    } satisfies AgentGenerateOptions<any, any>;
 
     this.logger.debug(`[AgentBuilder:${this.name}] Starting generation with enhanced context`, {
       projectPath: this.builderConfig.projectPath,
