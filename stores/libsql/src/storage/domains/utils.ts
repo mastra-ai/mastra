@@ -53,6 +53,9 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
       // returning an undefined value will cause libsql to throw
       return null;
     }
+    if (v === null) {
+      return null;
+    }
     if (v instanceof Date) {
       return v.toISOString();
     }

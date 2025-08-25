@@ -7,6 +7,7 @@ export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
+export const TABLE_AI_SPAN = 'mastra_ai_spans';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -15,7 +16,8 @@ export type TABLE_NAMES =
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
-  | typeof TABLE_SCORERS;
+  | typeof TABLE_SCORERS
+  | typeof TABLE_AI_SPAN;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -23,6 +25,10 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
     type: 'text',
   },
   traceId: {
+    type: 'text',
+    nullable: true,
+  },
+  spanId: {
     type: 'text',
     nullable: true,
   },
@@ -129,6 +135,29 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   },
 };
 
+export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
+  // TODO: figure out how to support composite primary key, then we can remove the id column
+  id: { type: 'text', nullable: false, primaryKey: true }, // combination of traceId and spanId
+  traceId: { type: 'text', nullable: false },
+  spanId: { type: 'text', nullable: false },
+  parentSpanId: { type: 'text', nullable: true },
+  name: { type: 'text', nullable: false },
+  scope: { type: 'jsonb', nullable: true }, // Mastra package info {"core-version": "0.1.0"}
+  spanType: { type: 'integer', nullable: false }, // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
+  attributes: { type: 'jsonb', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  events: { type: 'jsonb', nullable: true },
+  links: { type: 'jsonb', nullable: true },
+  other: { type: 'text', nullable: true },
+  startTime: { type: 'bigint', nullable: false },
+  endTime: { type: 'bigint', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
+  input: { type: 'jsonb', nullable: true },
+  output: { type: 'jsonb', nullable: true },
+  error: { type: 'jsonb', nullable: true },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -219,6 +248,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     endTime: { type: 'bigint', nullable: false },
     createdAt: { type: 'timestamp', nullable: false },
   },
+  [TABLE_AI_SPAN]: AI_SPAN_SCHEMA,
   [TABLE_RESOURCES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     workingMemory: { type: 'text', nullable: true },

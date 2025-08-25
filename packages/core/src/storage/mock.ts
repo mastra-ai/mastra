@@ -10,6 +10,8 @@ import { InMemoryLegacyEvals } from './domains/legacy-evals/inmemory';
 import type { InMemoryEvals } from './domains/legacy-evals/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
+import { ObservabilityInMemory } from './domains/observability';
+import type { InMemoryAiSpans } from './domains/observability';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import type { InMemoryScores } from './domains/scores/inmemory';
@@ -25,11 +27,13 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageGetTracesPaginatedArg,
+  StorageGetAiTracesPaginatedArg,
   StoragePagination,
   StorageResourceType,
   ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
+  AITrace,
 } from './types';
 
 export class InMemoryStore extends MastraStorage {
@@ -58,6 +62,11 @@ export class InMemoryStore extends MastraStorage {
       operations: operationsStorage,
     });
 
+    const observabilityStorage = new ObservabilityInMemory({
+      collection: database.mastra_ai_spans as InMemoryAiSpans,
+      operations: operationsStorage,
+    });
+
     const memoryStorage = new InMemoryMemory({
       collection: {
         threads: database.mastra_threads as InMemoryThreads,
@@ -78,6 +87,7 @@ export class InMemoryStore extends MastraStorage {
       traces: tracesStorage,
       scores: scoresStorage,
       memory: memoryStorage,
+      observability: observabilityStorage,
     };
   }
 
@@ -295,6 +305,48 @@ export class InMemoryStore extends MastraStorage {
 
   async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {
     return this.stores.traces.batchTraceInsert(args);
+  }
+
+  /**
+   * OBSERVABILITY - AI SPANS
+   */
+
+  async createAISpan(span: Record<string, any>): Promise<void> {
+    return this.stores.observability.createAISpan(span);
+  }
+
+  async getAISpan(id: string): Promise<Record<string, any> | null> {
+    return this.stores.observability.getAISpan(id);
+  }
+
+  async getAITrace(traceId: string): Promise<AITrace | null> {
+    return this.stores.observability.getAITrace(traceId);
+  }
+
+  async getAITracesPaginated(
+    args: StorageGetAiTracesPaginatedArg,
+  ): Promise<PaginationInfo & { spans: Record<string, any>[] }> {
+    return this.stores.observability.getAITracesPaginated(args);
+  }
+
+  async updateAISpan(id: string, updates: Partial<Record<string, any>>): Promise<void> {
+    return this.stores.observability.updateAISpan(id, updates);
+  }
+
+  async deleteAISpan(id: string): Promise<void> {
+    return this.stores.observability.deleteAISpan(id);
+  }
+
+  async batchCreateAISpan(args: { records: Record<string, any>[] }): Promise<void> {
+    return this.stores.observability.batchCreateAISpan(args);
+  }
+
+  async batchUpdateAISpan(args: { records: { id: string; updates: Partial<Record<string, any>> }[] }): Promise<void> {
+    return this.stores.observability.batchUpdateAISpan(args);
+  }
+
+  async batchDeleteAISpan(args: { ids: string[] }): Promise<void> {
+    return this.stores.observability.batchDeleteAISpan(args);
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

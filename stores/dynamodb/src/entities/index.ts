@@ -1,5 +1,6 @@
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Service } from 'electrodb';
+import { aiSpanEntity } from './ai-span';
 import { evalEntity } from './eval';
 import { messageEntity } from './message';
 import { resourceEntity } from './resource';
@@ -11,6 +12,7 @@ import { workflowSnapshotEntity } from './workflow-snapshot';
 export function getElectroDbService(client: DynamoDBDocumentClient, tableName: string) {
   return new Service(
     {
+      ai_span: aiSpanEntity,
       thread: threadEntity,
       message: messageEntity,
       eval: evalEntity,

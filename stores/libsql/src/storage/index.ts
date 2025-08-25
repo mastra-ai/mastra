@@ -18,12 +18,14 @@ import type {
   StorageGetTracesArg,
   StorageDomains,
   ThreadSortOptions,
+  AITrace,
 } from '@mastra/core/storage';
 
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { LegacyEvalsLibSQL } from './domains/legacy-evals';
 import { MemoryLibSQL } from './domains/memory';
+import { ObservabilityLibSQL } from './domains/observability';
 import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
 import { TracesLibSQL } from './domains/traces';
@@ -101,6 +103,7 @@ export class LibSQLStore extends MastraStorage {
     const workflows = new WorkflowsLibSQL({ client: this.client, operations });
     const memory = new MemoryLibSQL({ client: this.client, operations });
     const legacyEvals = new LegacyEvalsLibSQL({ client: this.client });
+    const observability = new ObservabilityLibSQL({ client: this.client, operations });
 
     this.stores = {
       operations,
@@ -109,6 +112,7 @@ export class LibSQLStore extends MastraStorage {
       workflows,
       memory,
       legacyEvals,
+      observability,
     };
   }
 
@@ -420,6 +424,43 @@ export class LibSQLStore extends MastraStorage {
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
+  }
+
+  // AI Span methods - delegate to observability store
+  async createAISpan(span: Record<string, any>): Promise<void> {
+    return this.stores.observability.createAISpan(span);
+  }
+
+  async getAISpan(id: string): Promise<Record<string, any> | null> {
+    return this.stores.observability.getAISpan(id);
+  }
+
+  async getAITracesPaginated(args: any): Promise<any> {
+    return this.stores.observability.getAITracesPaginated(args);
+  }
+
+  async getAITrace(traceId: string): Promise<AITrace | null> {
+    return this.stores.observability.getAITrace(traceId);
+  }
+
+  async updateAISpan(id: string, updates: Partial<Record<string, any>>): Promise<void> {
+    return this.stores.observability.updateAISpan(id, updates);
+  }
+
+  async deleteAISpan(id: string): Promise<void> {
+    return this.stores.observability.deleteAISpan(id);
+  }
+
+  async batchCreateAISpan(args: { records: Record<string, any>[] }): Promise<void> {
+    return this.stores.observability.batchCreateAISpan(args);
+  }
+
+  async batchUpdateAISpan(args: { records: { id: string; updates: Partial<Record<string, any>> }[] }): Promise<void> {
+    return this.stores.observability.batchUpdateAISpan(args);
+  }
+
+  async batchDeleteAISpan(args: { ids: string[] }): Promise<void> {
+    return this.stores.observability.batchDeleteAISpan(args);
   }
 }
 

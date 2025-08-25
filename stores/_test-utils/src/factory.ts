@@ -15,6 +15,7 @@ import { createWorkflowsTests } from './domains/workflows';
 import { createTraceTests } from './domains/traces';
 import { createEvalsTests } from './domains/evals';
 import { createOperationsTests } from './domains/operations';
+import { createObservabilityTests } from './domains/observability';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/evals/data';
@@ -55,5 +56,10 @@ export function createTestSuite(storage: MastraStorage) {
     createMemoryTest({ storage });
 
     createScoresTest({ storage });
+
+    const observabilityUnsupportedProviders = ['DynamoDBStore', 'MSSQLStore'];
+    if (!observabilityUnsupportedProviders.includes(storage.constructor.name)) {
+      createObservabilityTests({ storage });
+    }
   });
 }

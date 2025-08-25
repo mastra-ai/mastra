@@ -3,6 +3,7 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   StoreOperations,
+  TABLE_AI_SPAN,
   TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -49,6 +50,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_SCORERS]: 'score',
       [TABLE_TRACES]: 'trace',
       [TABLE_RESOURCES]: 'resource',
+      [TABLE_AI_SPAN]: 'ai_span',
     };
     return mapping[tableName] || null;
   }
@@ -235,7 +237,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
         id: 'STORAGE_DYNAMODB_STORE_CLEAR_TABLE_INVALID_ARGS',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: 'No entity defined for tableName',
+        text: `No entity defined for tableName, ${entityName}, table name: ${tableName}`,
         details: { tableName },
       });
     }
@@ -291,6 +293,11 @@ export class StoreOperationsDynamoDB extends StoreOperations {
           case 'score':
             // Score entity uses 'id' as its PK
             if (!item.id) throw new Error(`Missing required key 'id' for entity 'score'`);
+            key.id = item.id;
+            break;
+          case 'ai_span':
+            // AI span entity uses 'id' as its PK
+            if (!item.id) throw new Error(`Missing required key 'id' for entity 'ai_span'`);
             key.id = item.id;
             break;
           default:

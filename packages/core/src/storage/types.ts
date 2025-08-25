@@ -1,3 +1,4 @@
+import type { AISpanType } from '../ai-tracing';
 import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
@@ -132,6 +133,45 @@ export type StorageGetTracesPaginatedArg = {
   attributes?: Record<string, string>;
   filters?: Record<string, any>;
 } & PaginationArgs;
+
+export type StorageGetAiTracesPaginatedArg = {
+  filters?: Record<string, any> & {
+    name?: string;
+    spanType?: AISpanType;
+    dateRange?: {
+      start?: Date | string; // Date or ISO string
+      end?: Date | string; // Date or ISO string
+    };
+    attributes?: Record<string, any>;
+    error?: Record<string, any>;
+  };
+} & PaginationArgs;
+
+export interface AISpanRecord {
+  id: string;
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  scope: Record<string, any> | null;
+  spanType: AISpanType;
+  attributes: Record<string, any> | null;
+  metadata: Record<string, any> | null;
+  events: Record<string, any> | null;
+  links: Record<string, any> | null;
+  other: string | null;
+  startTime: number;
+  endTime: number;
+  createdAt: Date;
+  input: Record<string, any> | null;
+  output: Record<string, any> | null;
+  error: Record<string, any> | null;
+}
+
+export type AITrace = {
+  traceId: string;
+  spans: AISpanRecord[];
+};
 
 export type StorageResourceType = {
   id: string;

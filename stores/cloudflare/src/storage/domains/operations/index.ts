@@ -4,6 +4,7 @@ import {
   ensureDate,
   serializeDate,
   StoreOperations,
+  TABLE_AI_SPAN,
   TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_SCORERS,
@@ -133,6 +134,9 @@ export class StoreOperationsCloudflare extends StoreOperations {
         return `${prefix}${tableName}:${evalId}`;
       case TABLE_SCORERS:
         if (!record.id) throw new Error('Score ID is required');
+        return `${prefix}${tableName}:${record.id}`;
+      case TABLE_AI_SPAN:
+        if (!record.id) throw new Error('AI Span ID is required');
         return `${prefix}${tableName}:${record.id}`;
       default:
         throw new Error(`Unsupported table: ${tableName}`);
@@ -444,7 +448,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
         ...record,
         createdAt: record.createdAt ? serializeDate(record.createdAt) : undefined,
         updatedAt: record.updatedAt ? serializeDate(record.updatedAt) : undefined,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : '',
       } as RecordTypes[TABLE_NAMES];
 
       // Validate record type
@@ -520,7 +523,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
             ...record,
             createdAt: record.createdAt ? serializeDate(record.createdAt as Date) : undefined,
             updatedAt: record.updatedAt ? serializeDate(record.updatedAt as Date) : undefined,
-            metadata: record.metadata ? JSON.stringify(record.metadata) : undefined,
           } as RecordTypes[T];
 
           await this.putKV({ tableName: input.tableName, key, value: processedRecord });

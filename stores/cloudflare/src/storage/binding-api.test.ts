@@ -1,6 +1,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { createTestSuite } from '@internal/storage-test-utils';
 import {
+  TABLE_AI_SPAN,
   TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -23,6 +24,7 @@ export interface Env {
   [TABLE_TRACES]: KVNamespace;
   [TABLE_SCORERS]: KVNamespace;
   [TABLE_RESOURCES]: KVNamespace;
+  [TABLE_AI_SPAN]: KVNamespace;
 }
 
 dotenv.config();
@@ -42,6 +44,7 @@ const mf = new Miniflare({
     TABLE_TRACES,
     TABLE_RESOURCES,
     TABLE_SCORERS,
+    TABLE_AI_SPAN,
   ],
 });
 
@@ -59,6 +62,7 @@ const kvBindings = {
   [TABLE_TRACES]: (await mf.getKVNamespace(TABLE_TRACES)) as KVNamespace,
   [TABLE_RESOURCES]: (await mf.getKVNamespace(TABLE_RESOURCES)) as KVNamespace,
   [TABLE_SCORERS]: (await mf.getKVNamespace(TABLE_SCORERS)) as KVNamespace,
+  [TABLE_AI_SPAN]: (await mf.getKVNamespace(TABLE_AI_SPAN)) as KVNamespace,
 };
 
 // Set bindings in test config

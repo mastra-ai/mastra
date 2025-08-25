@@ -15,6 +15,7 @@ import {
   TABLE_RESOURCES,
   TABLE_SCORERS,
   TABLE_SCHEMAS,
+  TABLE_AI_SPAN,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -24,6 +25,7 @@ import type {
   TracesStorage,
   MemoryStorage,
   LegacyEvalsStorage,
+  ObservabilityStorage,
 } from './domains';
 import type {
   EvalRow,
@@ -38,6 +40,8 @@ import type {
   StorageGetTracesArg,
   PaginationArgs,
   StorageGetTracesPaginatedArg,
+  StorageGetAiTracesPaginatedArg,
+  AITrace,
 } from './types';
 
 export type StorageDomains = {
@@ -47,6 +51,7 @@ export type StorageDomains = {
   scores: ScoresStorage;
   traces: TracesStorage;
   memory: MemoryStorage;
+  observability: ObservabilityStorage;
 };
 
 export function ensureDate(date: Date | string | undefined): Date | undefined {
@@ -299,6 +304,30 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }>;
 
+  /**
+   * OBSERVABILITY - AI SPANS
+   */
+
+  abstract createAISpan(span: Record<string, any>): Promise<void>;
+
+  abstract getAISpan(id: string): Promise<Record<string, any> | null>;
+
+  abstract getAITrace(traceId: string): Promise<AITrace | null>;
+
+  abstract getAITracesPaginated(
+    args: StorageGetAiTracesPaginatedArg,
+  ): Promise<PaginationInfo & { spans: Record<string, any>[] }>;
+
+  abstract updateAISpan(id: string, updates: Partial<Record<string, any>>): Promise<void>;
+
+  abstract deleteAISpan(id: string): Promise<void>;
+
+  abstract batchCreateAISpan(args: { records: Record<string, any>[] }): Promise<void>;
+
+  abstract batchUpdateAISpan(args: { records: { id: string; updates: Partial<Record<string, any>> }[] }): Promise<void>;
+
+  abstract batchDeleteAISpan(args: { ids: string[] }): Promise<void>;
+
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
     if (this.shouldCacheInit && (await this.hasInitialized)) {
@@ -334,6 +363,11 @@ export abstract class MastraStorage extends MastraBase {
       this.createTable({
         tableName: TABLE_SCORERS,
         schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      }),
+
+      this.createTable({
+        tableName: TABLE_AI_SPAN,
+        schema: TABLE_SCHEMAS[TABLE_AI_SPAN],
       }),
     ];
 

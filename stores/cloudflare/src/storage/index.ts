@@ -11,6 +11,7 @@ import {
   TABLE_EVALS,
   TABLE_SCORERS,
   TABLE_TRACES,
+  TABLE_AI_SPAN,
 } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
@@ -26,12 +27,15 @@ import type {
   PaginationArgs,
   StorageDomains,
   StorageResourceType,
+  StorageGetAiTracesPaginatedArg,
+  AITrace,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { LegacyEvalsStorageCloudflare } from './domains/legacy-evals';
 import { MemoryStorageCloudflare } from './domains/memory';
+import { ObservabilityStorageCloudflare } from './domains/observability';
 import { StoreOperationsCloudflare } from './domains/operations';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { TracesStorageCloudflare } from './domains/traces';
@@ -64,8 +68,10 @@ export class CloudflareStore extends MastraStorage {
       TABLE_EVALS,
       TABLE_SCORERS,
       TABLE_TRACES,
+      TABLE_AI_SPAN,
     ] as const;
 
+    console.log('config.bindings', config.bindings);
     for (const table of requiredTables) {
       if (!(table in config.bindings)) {
         throw new Error(`Missing KV binding for table: ${table}`);
@@ -96,6 +102,7 @@ export class CloudflareStore extends MastraStorage {
         this.bindings = config.bindings;
         this.namespacePrefix = config.keyPrefix?.trim() || '';
         this.logger.info('Using Cloudflare KV Workers Binding API');
+        console.log('Using Cloudflare KV Workers Binding API');
       } else {
         this.validateRestConfig(config);
         this.accountId = config.accountId.trim();
@@ -103,6 +110,7 @@ export class CloudflareStore extends MastraStorage {
         this.client = new Cloudflare({
           apiToken: config.apiToken.trim(),
         });
+        console.log('Using Cloudflare KV REST API');
         this.logger.info('Using Cloudflare KV REST API');
       }
 
@@ -133,6 +141,10 @@ export class CloudflareStore extends MastraStorage {
         operations,
       });
 
+      const observability = new ObservabilityStorageCloudflare({
+        operations,
+      });
+
       this.stores = {
         operations,
         legacyEvals,
@@ -140,6 +152,7 @@ export class CloudflareStore extends MastraStorage {
         traces,
         memory,
         scores,
+        observability,
       };
     } catch (error) {
       throw new MastraError(
@@ -433,6 +446,44 @@ export class CloudflareStore extends MastraStorage {
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
+  }
+
+  async createAISpan(span: Record<string, any>): Promise<void> {
+    return this.stores.observability.createAISpan(span);
+  }
+
+  async getAISpan(id: string): Promise<Record<string, any> | null> {
+    return this.stores.observability.getAISpan(id);
+  }
+
+  async getAITrace(traceId: string): Promise<AITrace | null> {
+    return this.stores.observability.getAITrace(traceId);
+  }
+
+  async getAITracesPaginated(
+    args: StorageGetAiTracesPaginatedArg,
+  ): Promise<PaginationInfo & { spans: Record<string, any>[] }> {
+    return this.stores.observability.getAITracesPaginated(args);
+  }
+
+  async updateAISpan(id: string, updates: Record<string, any>): Promise<void> {
+    return this.stores.observability.updateAISpan(id, updates);
+  }
+
+  async deleteAISpan(id: string): Promise<void> {
+    return this.stores.observability.deleteAISpan(id);
+  }
+
+  async batchCreateAISpan(args: { records: Record<string, any>[] }): Promise<void> {
+    return this.stores.observability.batchCreateAISpan(args);
+  }
+
+  async batchUpdateAISpan(args: { records: { id: string; updates: Record<string, any> }[] }): Promise<void> {
+    return this.stores.observability.batchUpdateAISpan(args);
+  }
+
+  async batchDeleteAISpan(args: { ids: string[] }): Promise<void> {
+    return this.stores.observability.batchDeleteAISpan(args);
   }
 
   async close(): Promise<void> {
