@@ -3,7 +3,7 @@ import { type ProcessStep } from './shared';
 import { ProcessStepListItem } from './process-step-list-item';
 
 type ProcessStepListProps = {
-  currentStep: any;
+  currentStep: ProcessStep | null;
   steps: ProcessStep[];
   className?: string;
 };

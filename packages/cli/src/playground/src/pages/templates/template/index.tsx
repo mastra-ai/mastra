@@ -22,7 +22,6 @@ import {
 import { Link, useParams } from 'react-router';
 import { useEffect, useState } from 'react';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
-// import { streamResult } from './mock';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
@@ -48,8 +47,6 @@ export default function Template() {
   const { data: workflowInfo } = useAgentBuilderWorkflow();
   const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
   const { streamInstall, streamResult, isStreaming, installationResult } = useStreamTemplateInstall(workflowInfo);
-
-  /// const isStreaming = true;
 
   const providerOptions = [
     { value: 'openai', label: 'OpenAI' },

@@ -9,7 +9,7 @@ export function ProcessStepProgressBar({ steps }: { steps: ProcessStep[] }) {
   return (
     <div className="flex justify-center flex-col gap-[1rem] content-center w-full">
       <div className="grid grid-cols-[0_repeat(9,1fr)] w-full">
-        {steps.map((step: any, idx: number) => {
+        {steps.map((step: ProcessStep, idx: number) => {
           return (
             <div
               key={step.id}

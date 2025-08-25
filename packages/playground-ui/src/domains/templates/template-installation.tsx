@@ -72,7 +72,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {/* Header */}
       <div className="text-center">
         <h3 className="text-lg font-semibold text-icon5">{getPhaseMessage()}</h3>
-        {streamResult.runId && (
+        {streamResult?.runId && (
           <div className="mt-[0.5rem] text-[0.75rem] text-icon3">Run ID: {streamResult.runId}</div>
         )}
       </div>

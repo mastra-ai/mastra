@@ -32,7 +32,7 @@ export function ProcessStepListItem({ stepId, step, isActive, position }: Proces
         className={cn('w-[1.75rem] h-[1.75rem] rounded-full flex items-center justify-center self-center', {
           'border border-gray-500 border-dashed': step.status === 'pending',
           '[&>svg]:text-white [&>svg]:w-[1rem] [&>svg]:h-[1rem]': step.status !== 'running',
-          'w-[1.75rem] h-[1.75rem] [&>svg]:w-[1.75rem] [&>svg]:h-[1.75rem]': step.status === 'running',
+          'w-[1.75rem] h-[1.75rem]': step.status === 'running',
           'bg-green-900': step.status === 'success',
           'bg-red-900': step.status === 'failed',
         })}
