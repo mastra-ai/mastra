@@ -3,10 +3,7 @@ import { generateStaticParamsFor, importPage } from "nextra/pages";
 import { useMDXComponents as getMDXComponents } from "@/mdx-components";
 import { Suspense } from "react";
 
-export const generateStaticParams = generateStaticParamsFor(
-  "mdxPath",
-  "locale",
-);
+export const generateStaticParams = generateStaticParamsFor("mdxPath", "locale");
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
@@ -16,11 +13,9 @@ export async function generateMetadata(props: any) {
 
   const url = `${baseUrl}/${locale}/${mdxPath?.join("/")}`;
   const title = metadata.title;
-  const description = metadata.description;
+  const description = metadata.description as string;
 
-  const image = metadata.image
-    ? metadata.image
-    : `${baseUrl}/api/og/docs?title=${title}&description=${description}`;
+  const image = `${baseUrl}/api/og/docs?title=${title}&description=${description}`;
   return {
     title,
     description,
@@ -49,10 +44,10 @@ const Wrapper = getMDXComponents().wrapper;
 export default async function Page(props: any) {
   const { locale, mdxPath } = await props.params;
   const result = await importPage(mdxPath, locale);
-  const { default: MDXContent, toc, metadata } = result;
+  const { default: MDXContent, toc, metadata, sourceCode } = result;
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <Wrapper toc={toc} metadata={metadata}>
+      <Wrapper toc={toc} metadata={metadata} sourceCode={sourceCode}>
         <MDXContent {...props} params={props.params} />
       </Wrapper>
     </Suspense>
