@@ -888,9 +888,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       payload: { runId: params.runId },
     });
 
-    const result = await super.execute<TInput, TOutput>({
-      ...params,
-    });
+    const result = await super.execute<TInput, TOutput>(params);
 
     await params.emitter.emit('watch-v2', {
       type: 'finish',
@@ -1235,7 +1233,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
-    writableStream,
+    _writableStream,
     aiTracingContext,
   }: {
     step: Step<string, any, any>;
@@ -1250,7 +1248,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    writableStream?: WritableStream<ChunkType>;
+    _writableStream?: WritableStream<ChunkType>;
     aiTracingContext?: AITracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const stepAISpan = aiTracingContext?.parentAISpan?.createChildSpan({
@@ -1804,7 +1802,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               });
 
               return result ? index : null;
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e: unknown) {
               // End condition span with error
               evalSpan?.error({
