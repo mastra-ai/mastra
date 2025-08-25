@@ -14,7 +14,7 @@ export function getStatusIcon(status: string) {
   }
 }
 
-export type Step = {
+export type ProcessStep = {
   id: string;
   status: string;
   description: string;

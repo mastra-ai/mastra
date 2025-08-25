@@ -1,8 +1,8 @@
 import { cn } from '@/lib/utils';
 import Spinner from '../../spinner';
-import { type Step } from './shared';
+import { type ProcessStep } from './shared';
 
-export function StepProgressBar({ steps }: { steps: Step[] }) {
+export function ProcessStepProgressBar({ steps }: { steps: ProcessStep[] }) {
   const totalSteps = steps.length;
   const completedSteps = steps.filter(step => step.status === 'success').length;
 

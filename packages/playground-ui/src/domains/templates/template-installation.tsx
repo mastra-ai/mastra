@@ -1,7 +1,7 @@
 import { Container } from './shared';
 import Spinner from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
-import { StepList, StepProgressBar, type Step } from '@/components/ui/elements';
+import { ProcessStepList, ProcessStepProgressBar, type ProcessStep } from '@/components/ui/elements/steps';
 import { OctagonXIcon } from 'lucide-react';
 
 type TemplateInstallationProps = {
@@ -59,7 +59,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
     }
   };
 
-  const steps: Step[] = visibleSteps.map(([stepId, stepData]: [string, any]) => ({
+  const steps: ProcessStep[] = visibleSteps.map(([stepId, stepData]: [string, any]) => ({
     id: stepId,
     status: stepData?.status,
     description: stepData?.description,
@@ -80,7 +80,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {/* Progress Bar */}
       {hasSteps && totalSteps > 0 && !['error'].includes(phase) && (
         <div className="max-w-[30rem] w-full mx-auto px-[1.5rem]">
-          <StepProgressBar steps={steps} />
+          <ProcessStepProgressBar steps={steps} />
         </div>
       )}
 
@@ -98,7 +98,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       )}
 
       {/* Dynamic Steps Display */}
-      {hasSteps && <StepList steps={steps} currentStep={currentStep} className="pb-[1rem]" />}
+      {hasSteps && <ProcessStepList steps={steps} currentStep={currentStep} className="pb-[1rem]" />}
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (

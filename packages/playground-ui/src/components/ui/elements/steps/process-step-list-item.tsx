@@ -1,15 +1,15 @@
 import { cn } from '@/lib/utils';
 import { getStatusIcon } from './shared';
-import type { Step } from './shared';
+import type { ProcessStep } from './shared';
 
-type StepListItemProps = {
+type ProcessStepListItemProps = {
   stepId: string;
-  step: Step;
+  step: ProcessStep;
   isActive: boolean;
   position: number;
 };
 
-export function StepListItem({ stepId, step, isActive, position }: StepListItemProps) {
+export function ProcessStepListItem({ stepId, step, isActive, position }: ProcessStepListItemProps) {
   // Always format the step ID as the title
   const formatStepTitle = (stepId: string) => {
     return stepId.charAt(0).toUpperCase() + stepId.slice(1).replace(/-/g, ' ');
