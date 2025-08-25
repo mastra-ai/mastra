@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Resolve serialized zod output - This function takes the string output ot the `jsonSchemaToZod` function
+ * Resolve serialized zod output - This function takes the string output of the `jsonSchemaToZod` function
  * and instantiates the zod object correctly.
  *
  * @param obj - serialized zod object

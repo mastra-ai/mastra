@@ -404,7 +404,6 @@ export class MastraLLMV1 extends MastraBase {
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);
-      debugger;
 
       const argsForExecute: OriginalGenerateObjectOptions<Z> = {
         ...rest,
