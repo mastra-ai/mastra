@@ -285,13 +285,13 @@ importers:
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
         specifier: ^3.0.2
-        version: 3.0.2(rollup@4.46.2)
+        version: 3.0.2(rollup@4.46.4)
       cloudflare:
         specifier: ^4.5.0
         version: 4.5.0(encoding@0.1.13)
       rollup:
-        specifier: ~4.46.2
-        version: 4.46.2
+        specifier: ~4.46.4
+        version: 4.46.4
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -337,7 +337,7 @@ importers:
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
         specifier: ^3.0.2
-        version: 3.0.2(rollup@4.46.2)
+        version: 3.0.2(rollup@4.46.4)
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -389,7 +389,7 @@ importers:
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
         specifier: ^3.0.2
-        version: 3.0.2(rollup@4.46.2)
+        version: 3.0.2(rollup@4.46.4)
       fs-extra:
         specifier: ^11.3.0
         version: 11.3.0
@@ -621,7 +621,7 @@ importers:
         version: 7.52.8(@types/node@20.19.9)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.46.2)
+        version: 3.0.3(rollup@4.46.4)
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
@@ -638,8 +638,8 @@ importers:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3))
       ts-jest:
-        specifier: ^29.3.4
-        version: 29.4.0(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3)
+        specifier: ^29.4.1
+        version: 29.4.1(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -676,7 +676,7 @@ importers:
         version: 7.52.8(@types/node@20.19.9)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.46.2)
+        version: 3.0.3(rollup@4.46.4)
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
@@ -696,8 +696,8 @@ importers:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3))
       ts-jest:
-        specifier: ^29.3.4
-        version: 29.4.0(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3)
+        specifier: ^29.4.1
+        version: 29.4.1(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -709,7 +709,7 @@ importers:
     dependencies:
       mem0ai:
         specifier: ^2.1.36
-        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250821.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
+        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -771,7 +771,7 @@ importers:
         version: 7.52.8(@types/node@20.19.9)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.46.2)
+        version: 3.0.3(rollup@4.46.4)
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
@@ -785,8 +785,8 @@ importers:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3))
       ts-jest:
-        specifier: ^29.3.4
-        version: 29.4.0(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3)
+        specifier: ^29.4.1
+        version: 29.4.1(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -913,8 +913,8 @@ importers:
         specifier: workspace:^
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
-        specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        specifier: ^0.62.1
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1026,7 +1026,7 @@ importers:
         version: 4.17.2
       rollup:
         specifier: ^4.42.0
-        version: 4.46.2
+        version: 4.46.4
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -1107,8 +1107,8 @@ importers:
         specifier: ^1.9.0
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
-        specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        specifier: ^0.62.1
+        version: 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1244,7 +1244,7 @@ importers:
         version: 14.1.0
       rollup:
         specifier: ^4.42.0
-        version: 4.46.2
+        version: 4.46.4
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -1290,13 +1290,13 @@ importers:
         version: 7.52.8(@types/node@20.19.9)
       '@rollup/plugin-commonjs':
         specifier: ^28.0.6
-        version: 28.0.6(rollup@4.46.2)
+        version: 28.0.6(rollup@4.46.4)
       '@rollup/plugin-json':
         specifier: ^6.1.0
-        version: 6.1.0(rollup@4.46.2)
+        version: 6.1.0(rollup@4.46.4)
       '@rollup/plugin-node-resolve':
         specifier: ^16.0.1
-        version: 16.0.1(rollup@4.46.2)
+        version: 16.0.1(rollup@4.46.4)
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -1314,13 +1314,13 @@ importers:
         version: link:../cli
       rollup:
         specifier: ^4.42.0
-        version: 4.46.2
+        version: 4.46.4
       rollup-plugin-esbuild:
         specifier: ^6.2.1
-        version: 6.2.1(esbuild@0.25.8)(rollup@4.46.2)
+        version: 6.2.1(esbuild@0.25.8)(rollup@4.46.4)
       rollup-plugin-node-externals:
         specifier: ^8.0.1
-        version: 8.0.1(rollup@4.46.2)
+        version: 8.0.1(rollup@4.46.4)
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
@@ -1344,25 +1344,25 @@ importers:
         version: 0.1.82
       '@optimize-lodash/rollup-plugin':
         specifier: ^5.0.2
-        version: 5.0.2(rollup@4.46.2)
+        version: 5.0.2(rollup@4.46.4)
       '@rollup/plugin-alias':
         specifier: ^5.1.1
-        version: 5.1.1(rollup@4.46.2)
+        version: 5.1.1(rollup@4.46.4)
       '@rollup/plugin-commonjs':
         specifier: ^28.0.6
-        version: 28.0.6(rollup@4.46.2)
+        version: 28.0.6(rollup@4.46.4)
       '@rollup/plugin-esm-shim':
         specifier: ^0.1.8
-        version: 0.1.8(rollup@4.46.2)
+        version: 0.1.8(rollup@4.46.4)
       '@rollup/plugin-json':
         specifier: ^6.1.0
-        version: 6.1.0(rollup@4.46.2)
+        version: 6.1.0(rollup@4.46.4)
       '@rollup/plugin-node-resolve':
         specifier: ^16.0.1
-        version: 16.0.1(rollup@4.46.2)
+        version: 16.0.1(rollup@4.46.4)
       '@rollup/plugin-virtual':
         specifier: ^3.0.2
-        version: 3.0.2(rollup@4.46.2)
+        version: 3.0.2(rollup@4.46.4)
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -1397,14 +1397,14 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0
       rollup:
-        specifier: ~4.46.2
-        version: 4.46.2
+        specifier: ~4.46.4
+        version: 4.46.4
       rollup-plugin-esbuild:
         specifier: ^6.2.1
-        version: 6.2.1(esbuild@0.25.8)(rollup@4.46.2)
+        version: 6.2.1(esbuild@0.25.8)(rollup@4.46.4)
       rollup-plugin-node-externals:
         specifier: ^8.0.1
-        version: 8.0.1(rollup@4.46.2)
+        version: 8.0.1(rollup@4.46.4)
       typescript-paths:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.8.3)
@@ -1456,7 +1456,7 @@ importers:
         version: 0.4.8(hono@4.8.12)(openapi-types@12.1.3)(zod@3.25.76)
       rollup-plugin-visualizer:
         specifier: ^5.14.0
-        version: 5.14.0(rollup@4.46.2)
+        version: 5.14.0(rollup@4.46.4)
       superjson:
         specifier: ^2.2.2
         version: 2.2.2
@@ -1614,7 +1614,7 @@ importers:
         specifier: ^14.1.1
         version: 14.1.1
       '@modelcontextprotocol/sdk':
-        specifier: ^1.17.0
+        specifier: ^1.17.3
         version: 1.17.3
       date-fns:
         specifier: ^4.1.0
@@ -1699,7 +1699,7 @@ importers:
         specifier: workspace:^
         version: link:../mcp
       '@modelcontextprotocol/sdk':
-        specifier: ^1.13.0
+        specifier: ^1.17.3
         version: 1.17.3
       date-fns:
         specifier: ^4.1.0
@@ -1766,7 +1766,7 @@ importers:
   packages/mcp-registry-registry:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.13.0
+        specifier: ^1.17.3
         version: 1.17.3
       uuid:
         specifier: ^11.1.0
@@ -2506,7 +2506,7 @@ importers:
         version: 9.1.2(@types/react@19.1.9)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)))
       '@storybook/react-vite':
         specifier: ^9.1.2
-        version: 9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(rollup@4.46.2)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)))(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
+        version: 9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(rollup@4.46.4)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)))(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.9
@@ -2533,7 +2533,7 @@ importers:
         version: 8.5.6
       rollup-plugin-node-externals:
         specifier: ^8.0.1
-        version: 8.0.1(rollup@4.46.2)
+        version: 8.0.1(rollup@4.46.4)
       storybook:
         specifier: ^9.1.2
         version: 9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
@@ -2551,7 +2551,7 @@ importers:
         version: 6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)
       vite-plugin-dts:
         specifier: ^4.5.4
-        version: 4.5.4(@types/node@20.19.9)(rollup@4.46.2)(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
+        version: 4.5.4(@types/node@20.19.9)(rollup@4.46.4)(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
       vite-plugin-lib-inject-css:
         specifier: ^2.2.2
         version: 2.2.2(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
@@ -2863,8 +2863,8 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250821.0
-        version: 4.20250821.0
+        specifier: ^4.20250823.0
+        version: 4.20250823.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2890,7 +2890,7 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250813.1
+        specifier: ^4.20250816.0
         version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
@@ -2909,8 +2909,8 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250821.0
-        version: 4.20250821.0
+        specifier: ^4.20250823.0
+        version: 4.20250823.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2936,7 +2936,7 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250813.1
+        specifier: ^4.20250816.0
         version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
@@ -3524,8 +3524,8 @@ importers:
         version: 3.25.76
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250821.0
-        version: 4.20250821.0
+        specifier: ^4.20250823.0
+        version: 4.20250823.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -5472,8 +5472,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20250821.0':
-    resolution: {integrity: sha512-dbmorEqYnTMhSWh3lW3uBiufbzjvhrHsBD4SVNvhdhE1EdkkvAqhBzOyKRJxnQX04Afxm/txhdFe66eZrPPPkQ==}
+  '@cloudflare/workers-types@4.20250823.0':
+    resolution: {integrity: sha512-z5pCggF3jG//h083+GEWCyQLW0A5GHq20akG+jN6ChyHQi/yZj1FcQcMhnvbBY4PiGq+SBiEj/LClG/lDPm+jg==}
 
   '@codemirror/autocomplete@6.18.6':
     resolution: {integrity: sha512-PHHBXFomUs5DF+9tCOM/UoW6XQ4R44lLNNhRaW9PKPTU0D7lIjRg3ElxaJnTwsl/oHiR93WSXDBrekhoUGCPtg==}
@@ -7285,8 +7285,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.4.1
 
-  '@opentelemetry/auto-instrumentations-node@0.62.0':
-    resolution: {integrity: sha512-h5g+VNJjiyX6u/IQpn36ZCHOENg1QW0GgBOHBcFGnHBBhmTww4R3brExdeuYbvLj3UQY09n+UHFEoMOqkhq07A==}
+  '@opentelemetry/auto-instrumentations-node@0.62.1':
+    resolution: {integrity: sha512-FmPlWS7Dg6E3kP0vv19Pyhq3sqSi8tyn8IZh2RV73UsrcEZeQ3gUTf2Ar8iPRgbsxTukQHRoMGcaCVBsFVRVPw==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.4.1
@@ -7478,8 +7478,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@opentelemetry/instrumentation-aws-sdk@0.56.0':
-    resolution: {integrity: sha512-Jl2B/FYEb6tBCk9G31CMomKPikGU2g+CEhrGddDI0o1YeNpg3kAO9dExF+w489/IJUGZX6/wudyNvV7z4k9NjQ==}
+  '@opentelemetry/instrumentation-aws-sdk@0.57.0':
+    resolution: {integrity: sha512-RfbyjaeZzX3mPhuaRHlSAQyfX3skfeWOl30jrqSXtE9k0DPdnIqpHhdYS0C/DEDuZbwTmruVJ4cUwMBw5Z6FAg==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
@@ -7526,8 +7526,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
 
-  '@opentelemetry/instrumentation-cucumber@0.18.0':
-    resolution: {integrity: sha512-i+cUbLHvRShuevtM0NwjQR9wnABhmYw8+dbgD57LNBde7xkuSDot0CTzX+pYn32djtQ1bPYZiLf+uwS0JsMUrw==}
+  '@opentelemetry/instrumentation-cucumber@0.18.1':
+    resolution: {integrity: sha512-gTfT7AuA0UH0TvqWOXnyr2KCv7mvZsOUmqCrtnU/RDcZ9J3nIX4OBfl7VVXE0fJlLqP7KIDggQ8O9g7rmaVLhA==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
@@ -7538,8 +7538,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@opentelemetry/instrumentation-dataloader@0.21.0':
-    resolution: {integrity: sha512-Xu4CZ1bfhdkV3G6iVHFgKTgHx8GbKSqrTU01kcIJRGHpowVnyOPEv1CW5ow+9GU2X4Eki8zoNuVUenFc3RluxQ==}
+  '@opentelemetry/instrumentation-dataloader@0.21.1':
+    resolution: {integrity: sha512-hNAm/bwGawLM8VDjKR0ZUDJ/D/qKR3s6lA5NV+btNaPVm2acqhPcT47l2uCVi+70lng2mywfQncor9v8/ykuyw==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
@@ -7664,8 +7664,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@opentelemetry/instrumentation-kafkajs@0.12.0':
-    resolution: {integrity: sha512-bIe4aSAAxytp88nzBstgr6M7ZiEpW6/D1/SuKXdxxuprf18taVvFL2H5BDNGZ7A14K27haHqzYqtCTqFXHZOYg==}
+  '@opentelemetry/instrumentation-kafkajs@0.13.0':
+    resolution: {integrity: sha512-FPQyJsREOaGH64hcxlzTsIEQC4DYANgTwHjiB7z9lldmvua1LRMVn3/FfBlzXoqF179B0VGYviz6rn75E9wsDw==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
@@ -7754,8 +7754,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@opentelemetry/instrumentation-mysql2@0.49.0':
-    resolution: {integrity: sha512-dCub9wc02mkJWNyHdVEZ7dvRzy295SmNJa+LrAJY2a/+tIiVBQqEAajFzKwp9zegVVnel9L+WORu34rGLQDzxA==}
+  '@opentelemetry/instrumentation-mysql2@0.50.0':
+    resolution: {integrity: sha512-PoOMpmq73rOIE3nlTNLf3B1SyNYGsp7QXHYKmeTZZnJ2Ou7/fdURuOhWOI0e6QZ5gSem18IR1sJi6GOULBQJ9g==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
@@ -7808,8 +7808,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@opentelemetry/instrumentation-pg@0.55.0':
-    resolution: {integrity: sha512-yfJ5bYE7CnkW/uNsnrwouG/FR7nmg09zdk2MSs7k0ZOMkDDAE3WBGpVFFApGgNu2U+gtzLgEzOQG4I/X+60hXw==}
+  '@opentelemetry/instrumentation-pg@0.56.0':
+    resolution: {integrity: sha512-A/J4SlGX8Y0Wwp7Y66fsNCFT/1h9lmBzqwTnfWW/bULtcKFqkQfqhs3G8+4cRxX02UI2z7T1aW5bsyc6QSYc1Q==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
@@ -7868,8 +7868,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@opentelemetry/instrumentation-runtime-node@0.17.0':
-    resolution: {integrity: sha512-O+xc0woqrSjue5IgpCCMvlgsuDrq6DDEfiHW3S3vRMCjXE1ZoPjaDE/K6EURorN+tjnzZQN1gOMSrscSGAbjHg==}
+  '@opentelemetry/instrumentation-runtime-node@0.17.1':
+    resolution: {integrity: sha512-c1FlAk+bB2uF9a8YneGmNPTl7c/xVaan4mmWvbkWcOmH/ipKqR1LaKUlz/BMzLrJLjho1EJlG2NrS2w2Arg+nw==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
@@ -7916,8 +7916,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
 
-  '@opentelemetry/instrumentation-winston@0.48.0':
-    resolution: {integrity: sha512-QuKbswAaQfRULhtlYbeNC9gOAXPxOSCE4BjIzuY1oEsc84kIsHUjn3yvY9Q83s3eg3j0JycNcAMi8u0yTl5PIQ==}
+  '@opentelemetry/instrumentation-winston@0.48.1':
+    resolution: {integrity: sha512-XyOuVwdziirHHYlsw+BWrvdI/ymjwnexupKA787zQQ+D5upaE/tseZxjfQa7+t4+FdVLxHICaMTmkSD4yZHpzQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': ^1.3.0
@@ -8895,103 +8895,103 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/rollup-android-arm-eabi@4.46.2':
-    resolution: {integrity: sha512-Zj3Hl6sN34xJtMv7Anwb5Gu01yujyE/cLBDB2gnHTAHaWS1Z38L7kuSG+oAh0giZMqG060f/YBStXtMH6FvPMA==}
+  '@rollup/rollup-android-arm-eabi@4.46.4':
+    resolution: {integrity: sha512-B2wfzCJ+ps/OBzRjeds7DlJumCU3rXMxJJS1vzURyj7+KBHGONm7c9q1TfdBl4vCuNMkDvARn3PBl2wZzuR5mw==}
     cpu: [arm]
     os: [android]
 
-  '@rollup/rollup-android-arm64@4.46.2':
-    resolution: {integrity: sha512-nTeCWY83kN64oQ5MGz3CgtPx8NSOhC5lWtsjTs+8JAJNLcP3QbLCtDDgUKQc/Ro/frpMq4SHUaHN6AMltcEoLQ==}
+  '@rollup/rollup-android-arm64@4.46.4':
+    resolution: {integrity: sha512-FGJYXvYdn8Bs6lAlBZYT5n+4x0ciEp4cmttsvKAZc/c8/JiPaQK8u0c/86vKX8lA7OY/+37lIQSe0YoAImvBAA==}
     cpu: [arm64]
     os: [android]
 
-  '@rollup/rollup-darwin-arm64@4.46.2':
-    resolution: {integrity: sha512-HV7bW2Fb/F5KPdM/9bApunQh68YVDU8sO8BvcW9OngQVN3HHHkw99wFupuUJfGR9pYLLAjcAOA6iO+evsbBaPQ==}
+  '@rollup/rollup-darwin-arm64@4.46.4':
+    resolution: {integrity: sha512-/9qwE/BM7ATw/W/OFEMTm3dmywbJyLQb4f4v5nmOjgYxPIGpw7HaxRi6LnD4Pjn/q7k55FGeHe1/OD02w63apA==}
     cpu: [arm64]
     os: [darwin]
 
-  '@rollup/rollup-darwin-x64@4.46.2':
-    resolution: {integrity: sha512-SSj8TlYV5nJixSsm/y3QXfhspSiLYP11zpfwp6G/YDXctf3Xkdnk4woJIF5VQe0of2OjzTt8EsxnJDCdHd2xMA==}
+  '@rollup/rollup-darwin-x64@4.46.4':
+    resolution: {integrity: sha512-QkWfNbeRuzFnv2d0aPlrzcA3Ebq2mE8kX/5Pl7VdRShbPBjSnom7dbT8E3Jmhxo2RL784hyqGvR5KHavCJQciw==}
     cpu: [x64]
     os: [darwin]
 
-  '@rollup/rollup-freebsd-arm64@4.46.2':
-    resolution: {integrity: sha512-ZyrsG4TIT9xnOlLsSSi9w/X29tCbK1yegE49RYm3tu3wF1L/B6LVMqnEWyDB26d9Ecx9zrmXCiPmIabVuLmNSg==}
+  '@rollup/rollup-freebsd-arm64@4.46.4':
+    resolution: {integrity: sha512-+ToyOMYnSfV8D+ckxO6NthPln/PDNp1P6INcNypfZ7muLmEvPKXqduUiD8DlJpMMT8LxHcE5W0dK9kXfJke9Zw==}
     cpu: [arm64]
     os: [freebsd]
 
-  '@rollup/rollup-freebsd-x64@4.46.2':
-    resolution: {integrity: sha512-pCgHFoOECwVCJ5GFq8+gR8SBKnMO+xe5UEqbemxBpCKYQddRQMgomv1104RnLSg7nNvgKy05sLsY51+OVRyiVw==}
+  '@rollup/rollup-freebsd-x64@4.46.4':
+    resolution: {integrity: sha512-cGT6ey/W+sje6zywbLiqmkfkO210FgRz7tepWAzzEVgQU8Hn91JJmQWNqs55IuglG8sJdzk7XfNgmGRtcYlo1w==}
     cpu: [x64]
     os: [freebsd]
 
-  '@rollup/rollup-linux-arm-gnueabihf@4.46.2':
-    resolution: {integrity: sha512-EtP8aquZ0xQg0ETFcxUbU71MZlHaw9MChwrQzatiE8U/bvi5uv/oChExXC4mWhjiqK7azGJBqU0tt5H123SzVA==}
+  '@rollup/rollup-linux-arm-gnueabihf@4.46.4':
+    resolution: {integrity: sha512-9fhTJyOb275w5RofPSl8lpr4jFowd+H4oQKJ9XTYzD1JWgxdZKE8bA6d4npuiMemkecQOcigX01FNZNCYnQBdA==}
     cpu: [arm]
     os: [linux]
 
-  '@rollup/rollup-linux-arm-musleabihf@4.46.2':
-    resolution: {integrity: sha512-qO7F7U3u1nfxYRPM8HqFtLd+raev2K137dsV08q/LRKRLEc7RsiDWihUnrINdsWQxPR9jqZ8DIIZ1zJJAm5PjQ==}
+  '@rollup/rollup-linux-arm-musleabihf@4.46.4':
+    resolution: {integrity: sha512-+6kCIM5Zjvz2HwPl/udgVs07tPMIp1VU2Y0c72ezjOvSvEfAIWsUgpcSDvnC7g9NrjYR6X9bZT92mZZ90TfvXw==}
     cpu: [arm]
     os: [linux]
 
-  '@rollup/rollup-linux-arm64-gnu@4.46.2':
-    resolution: {integrity: sha512-3dRaqLfcOXYsfvw5xMrxAk9Lb1f395gkoBYzSFcc/scgRFptRXL9DOaDpMiehf9CO8ZDRJW2z45b6fpU5nwjng==}
+  '@rollup/rollup-linux-arm64-gnu@4.46.4':
+    resolution: {integrity: sha512-SWuXdnsayCZL4lXoo6jn0yyAj7TTjWE4NwDVt9s7cmu6poMhtiras5c8h6Ih6Y0Zk6Z+8t/mLumvpdSPTWub2Q==}
     cpu: [arm64]
     os: [linux]
 
-  '@rollup/rollup-linux-arm64-musl@4.46.2':
-    resolution: {integrity: sha512-fhHFTutA7SM+IrR6lIfiHskxmpmPTJUXpWIsBXpeEwNgZzZZSg/q4i6FU4J8qOGyJ0TR+wXBwx/L7Ho9z0+uDg==}
+  '@rollup/rollup-linux-arm64-musl@4.46.4':
+    resolution: {integrity: sha512-vDknMDqtMhrrroa5kyX6tuC0aRZZlQ+ipDfbXd2YGz5HeV2t8HOl/FDAd2ynhs7Ki5VooWiiZcCtxiZ4IjqZwQ==}
     cpu: [arm64]
     os: [linux]
 
-  '@rollup/rollup-linux-loongarch64-gnu@4.46.2':
-    resolution: {integrity: sha512-i7wfGFXu8x4+FRqPymzjD+Hyav8l95UIZ773j7J7zRYc3Xsxy2wIn4x+llpunexXe6laaO72iEjeeGyUFmjKeA==}
+  '@rollup/rollup-linux-loongarch64-gnu@4.46.4':
+    resolution: {integrity: sha512-mCBkjRZWhvjtl/x+Bd4fQkWZT8canStKDxGrHlBiTnZmJnWygGcvBylzLVCZXka4dco5ymkWhZlLwKCGFF4ivw==}
     cpu: [loong64]
     os: [linux]
 
-  '@rollup/rollup-linux-ppc64-gnu@4.46.2':
-    resolution: {integrity: sha512-B/l0dFcHVUnqcGZWKcWBSV2PF01YUt0Rvlurci5P+neqY/yMKchGU8ullZvIv5e8Y1C6wOn+U03mrDylP5q9Yw==}
+  '@rollup/rollup-linux-ppc64-gnu@4.46.4':
+    resolution: {integrity: sha512-YMdz2phOTFF+Z66dQfGf0gmeDSi5DJzY5bpZyeg9CPBkV9QDzJ1yFRlmi/j7WWRf3hYIWrOaJj5jsfwgc8GTHQ==}
     cpu: [ppc64]
     os: [linux]
 
-  '@rollup/rollup-linux-riscv64-gnu@4.46.2':
-    resolution: {integrity: sha512-32k4ENb5ygtkMwPMucAb8MtV8olkPT03oiTxJbgkJa7lJ7dZMr0GCFJlyvy+K8iq7F/iuOr41ZdUHaOiqyR3iQ==}
+  '@rollup/rollup-linux-riscv64-gnu@4.46.4':
+    resolution: {integrity: sha512-r0WKLSfFAK8ucG024v2yiLSJMedoWvk8yWqfNICX28NHDGeu3F/wBf8KG6mclghx4FsLePxJr/9N8rIj1PtCnw==}
     cpu: [riscv64]
     os: [linux]
 
-  '@rollup/rollup-linux-riscv64-musl@4.46.2':
-    resolution: {integrity: sha512-t5B2loThlFEauloaQkZg9gxV05BYeITLvLkWOkRXogP4qHXLkWSbSHKM9S6H1schf/0YGP/qNKtiISlxvfmmZw==}
+  '@rollup/rollup-linux-riscv64-musl@4.46.4':
+    resolution: {integrity: sha512-IaizpPP2UQU3MNyPH1u0Xxbm73D+4OupL0bjo4Hm0496e2wg3zuvoAIhubkD1NGy9fXILEExPQy87mweujEatA==}
     cpu: [riscv64]
     os: [linux]
 
-  '@rollup/rollup-linux-s390x-gnu@4.46.2':
-    resolution: {integrity: sha512-YKjekwTEKgbB7n17gmODSmJVUIvj8CX7q5442/CK80L8nqOUbMtf8b01QkG3jOqyr1rotrAnW6B/qiHwfcuWQA==}
+  '@rollup/rollup-linux-s390x-gnu@4.46.4':
+    resolution: {integrity: sha512-aCM29orANR0a8wk896p6UEgIfupReupnmISz6SUwMIwTGaTI8MuKdE0OD2LvEg8ondDyZdMvnaN3bW4nFbATPA==}
     cpu: [s390x]
     os: [linux]
 
-  '@rollup/rollup-linux-x64-gnu@4.46.2':
-    resolution: {integrity: sha512-Jj5a9RUoe5ra+MEyERkDKLwTXVu6s3aACP51nkfnK9wJTraCC8IMe3snOfALkrjTYd2G1ViE1hICj0fZ7ALBPA==}
+  '@rollup/rollup-linux-x64-gnu@4.46.4':
+    resolution: {integrity: sha512-0Xj1vZE3cbr/wda8d/m+UeuSL+TDpuozzdD4QaSzu/xSOMK0Su5RhIkF7KVHFQsobemUNHPLEcYllL7ZTCP/Cg==}
     cpu: [x64]
     os: [linux]
 
-  '@rollup/rollup-linux-x64-musl@4.46.2':
-    resolution: {integrity: sha512-7kX69DIrBeD7yNp4A5b81izs8BqoZkCIaxQaOpumcJ1S/kmqNFjPhDu1LHeVXv0SexfHQv5cqHsxLOjETuqDuA==}
+  '@rollup/rollup-linux-x64-musl@4.46.4':
+    resolution: {integrity: sha512-kM/orjpolfA5yxsx84kI6bnK47AAZuWxglGKcNmokw2yy9i5eHY5UAjcX45jemTJnfHAWo3/hOoRqEeeTdL5hw==}
     cpu: [x64]
     os: [linux]
 
-  '@rollup/rollup-win32-arm64-msvc@4.46.2':
-    resolution: {integrity: sha512-wiJWMIpeaak/jsbaq2HMh/rzZxHVW1rU6coyeNNpMwk5isiPjSTx0a4YLSlYDwBH/WBvLz+EtsNqQScZTLJy3g==}
+  '@rollup/rollup-win32-arm64-msvc@4.46.4':
+    resolution: {integrity: sha512-cNLH4psMEsWKILW0isbpQA2OvjXLbKvnkcJFmqAptPQbtLrobiapBJVj6RoIvg6UXVp5w0wnIfd/Q56cNpF+Ew==}
     cpu: [arm64]
     os: [win32]
 
-  '@rollup/rollup-win32-ia32-msvc@4.46.2':
-    resolution: {integrity: sha512-gBgaUDESVzMgWZhcyjfs9QFK16D8K6QZpwAaVNJxYDLHWayOta4ZMjGm/vsAEy3hvlS2GosVFlBlP9/Wb85DqQ==}
+  '@rollup/rollup-win32-ia32-msvc@4.46.4':
+    resolution: {integrity: sha512-OiEa5lRhiANpv4SfwYVgQ3opYWi/QmPDC5ve21m8G9pf6ZO+aX1g2EEF1/IFaM1xPSP7mK0msTRXlPs6mIagkg==}
     cpu: [ia32]
     os: [win32]
 
-  '@rollup/rollup-win32-x64-msvc@4.46.2':
-    resolution: {integrity: sha512-CvUo2ixeIQGtF6WvuB87XWqPQkoFAFqW+HUo/WzHwuHDvIwZCtjdWXoYCcr06iKGydiqTclC4jU/TNObC/xKZg==}
+  '@rollup/rollup-win32-x64-msvc@4.46.4':
+    resolution: {integrity: sha512-IKL9mewGZ5UuuX4NQlwOmxPyqielvkAPUS2s1cl6yWjjQvyN3h5JTdVFGD5Jr5xMjRC8setOfGQDVgX8V+dkjg==}
     cpu: [x64]
     os: [win32]
 
@@ -12273,6 +12273,11 @@ packages:
     resolution: {integrity: sha512-+CqsMbHPiSTdtSO14O51eMNlrp9N79gmeqmXeouJOhfucAedHw9noVe/n5uJk3tbKE6a+6ZCQg3RPhVhHByAIw==}
     engines: {node: '>=18'}
 
+  handlebars@4.7.8:
+    resolution: {integrity: sha512-vafaFqs8MZkRrSX7sFVUdo3ap/eNiLnb4IakshzvP56X5Nr1iGKAIqdX6tMlm6HcNRIkr6AxO5jFEoJzzpT8aQ==}
+    engines: {node: '>=0.4.7'}
+    hasBin: true
+
   has-bigints@1.1.0:
     resolution: {integrity: sha512-R3pbpkcIqv2Pm3dUwgjclDRVmWpTJW2DcMzcIhEXEx1oh/CEMObMm3KLmRJOdvhM7o4uQBnwr8pzRK2sJWIqfg==}
     engines: {node: '>= 0.4'}
@@ -13291,10 +13296,6 @@ packages:
     resolution: {integrity: sha512-IXO6OCs9yg8tMKzfPZ1YmheJbZCiEsnBdcB03l0OcfK9prKnJb96siuHCr5Fl37/yo9DnKU+TLpxzTUspw9shg==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  local-pkg@1.1.1:
-    resolution: {integrity: sha512-WunYko2W1NcdfAFpuLUoucsgULmgDBRkdxHxWQ7mK0cQqwPiy8E1enjuRBrhLtZkB5iScJ1XIPdhVEFK8aOLSg==}
-    engines: {node: '>=14'}
-
   local-pkg@1.1.2:
     resolution: {integrity: sha512-arhlxbFRmoQHl33a0Zkle/YWlmNwoyt6QNZEIJcqNbdrsix5Lvc4HyyI3EnwxTYlZYc32EbYrQ8SzEZ7dqgg9A==}
     engines: {node: '>=14'}
@@ -13946,6 +13947,9 @@ packages:
     resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
     engines: {node: '>= 0.6'}
 
+  neo-async@2.6.2:
+    resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
+
   neo4j-driver-bolt-connection@5.28.1:
     resolution: {integrity: sha512-nY8GBhjOW7J0rDtpiyJn6kFdk2OiNVZZhZrO8//mwNXnf5VQJ6HqZQTDthH/9pEaX0Jvbastz1xU7ZL8xzqY0w==}
 
@@ -14552,9 +14556,6 @@ packages:
   pkg-types@1.3.1:
     resolution: {integrity: sha512-/Jm5M4RvtBFVkKWRu2BLUTNP8/M2a+UwuAX+ae4770q1qVGtfjG+WTCupoZixokjmHiry8uI+dlY8KXYV5HVVQ==}
 
-  pkg-types@2.2.0:
-    resolution: {integrity: sha512-2SM/GZGAEkPp3KWORxQZns4M+WSeXbC2HEvmOIJe3Cmiv6ieAJvdVhDldtHqM5J1Y7MrR1XhkBT/rMlhh9FdqQ==}
-
   pkg-types@2.3.0:
     resolution: {integrity: sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig==}
 
@@ -14836,9 +14837,6 @@ packages:
   qs@6.14.0:
     resolution: {integrity: sha512-YWWTjgABSKcvs/nWBi9PycY/JiPJqOD4JA6o9Sej2AtvSGarXxKC3OQSk4pAarbdQlKAh5D4FCQkJNkW+GAn3w==}
     engines: {node: '>=0.6'}
-
-  quansync@0.2.10:
-    resolution: {integrity: sha512-t41VRkMYbkHyCYmOvx/6URnN80H7k4X0lLdBMGsz+maAwrJQYB1djpV6vHrQIBE0WBSGqhtEHrK9U3DWWH8v7A==}
 
   quansync@0.2.11:
     resolution: {integrity: sha512-AifT7QEbW9Nri4tAwR5M/uzpBuqfZf+zwaEM/QkzEjj7NBuFD2rBuy0K3dE+8wltbezDV7JMA0WfnCPYRSYbXA==}
@@ -15199,8 +15197,8 @@ packages:
       rollup:
         optional: true
 
-  rollup@4.46.2:
-    resolution: {integrity: sha512-WMmLFI+Boh6xbop+OAGo9cQ3OgX9MIg7xOQjn+pTCwOkk+FNDAeAemXkJ3HzDJrVXleLOFVa1ipuc1AmEx1Dwg==}
+  rollup@4.46.4:
+    resolution: {integrity: sha512-YbxoxvoqNg9zAmw4+vzh1FkGAiZRK+LhnSrbSrSXMdZYsRPDWoshcSd/pldKRO6lWzv/e9TiJAVQyirYIeSIPQ==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
 
@@ -15964,8 +15962,8 @@ packages:
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
 
-  ts-jest@29.4.0:
-    resolution: {integrity: sha512-d423TJMnJGu80/eSgfQ5w/R+0zFJvdtTxwtF9KzFFunOpSeD+79lHJQIiAhluJoyGRbvj9NZJsl9WjCUo0ND7Q==}
+  ts-jest@29.4.1:
+    resolution: {integrity: sha512-SaeUtjfpg9Uqu8IbeDKtdaS0g8lS6FT6OzM3ezrDfErPJPHNDo/Ey+VFGP1bQIDfagYDLyRpd7O15XpG1Es2Uw==}
     engines: {node: ^14.15.0 || ^16.10.0 || ^18.0.0 || >=20.0.0}
     hasBin: true
     peerDependencies:
@@ -16170,6 +16168,11 @@ packages:
 
   ufo@1.6.1:
     resolution: {integrity: sha512-9a4/uxlTWJ4+a5i0ooc1rU7C7YOw3wT+UGqdeNNHWnOF9qcMBgLRS+4IYUqbczewFx4mLEig6gawh7X6mFlEkA==}
+
+  uglify-js@3.19.3:
+    resolution: {integrity: sha512-v3Xu+yuwBXisp6QYTcH4UbH+xYJXqnq2m/LtQVWKWzYc1iehYnLixoQDN9FH6/j9/oybfd6W9Ghwkl8+UMKTKQ==}
+    engines: {node: '>=0.8.0'}
+    hasBin: true
 
   uint8array-extras@1.4.0:
     resolution: {integrity: sha512-ZPtzy0hu4cZjv3z5NW9gfKnNLjoz4y6uv4HlelAjDK7sY/xOkKZv9xK/WQpcsBB3jEybChz9DPC2U/+cusjJVQ==}
@@ -19265,7 +19268,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20250816.0':
     optional: true
 
-  '@cloudflare/workers-types@4.20250821.0': {}
+  '@cloudflare/workers-types@4.20250823.0': {}
 
   '@codemirror/autocomplete@6.18.6':
     dependencies:
@@ -20992,19 +20995,19 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-amqplib': 0.50.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-aws-lambda': 0.54.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-aws-sdk': 0.56.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-aws-sdk': 0.57.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-bunyan': 0.49.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-cassandra-driver': 0.49.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-connect': 0.47.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-cucumber': 0.18.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-dataloader': 0.21.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-cucumber': 0.18.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-dataloader': 0.21.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-dns': 0.47.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-express': 0.52.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-fastify': 0.48.0(@opentelemetry/api@1.9.0)
@@ -21015,7 +21018,7 @@ snapshots:
       '@opentelemetry/instrumentation-hapi': 0.50.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-http': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-ioredis': 0.51.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-kafkajs': 0.12.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-kafkajs': 0.13.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-knex': 0.48.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-koa': 0.51.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-lru-memoizer': 0.48.0(@opentelemetry/api@1.9.0)
@@ -21023,20 +21026,20 @@ snapshots:
       '@opentelemetry/instrumentation-mongodb': 0.56.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-mongoose': 0.50.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-mysql': 0.49.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-mysql2': 0.49.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-mysql2': 0.50.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-nestjs-core': 0.49.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-net': 0.47.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-oracledb': 0.29.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-pg': 0.55.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-pg': 0.56.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-pino': 0.50.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-redis': 0.51.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-restify': 0.49.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-router': 0.48.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-runtime-node': 0.17.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-runtime-node': 0.17.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-socket.io': 0.50.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-tedious': 0.22.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/instrumentation-undici': 0.14.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation-winston': 0.48.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation-winston': 0.48.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-alibaba-cloud': 0.31.3(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
@@ -21322,7 +21325,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-aws-sdk@0.56.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-aws-sdk@0.57.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -21394,7 +21397,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-cucumber@0.18.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-cucumber@0.18.1(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21409,7 +21412,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-dataloader@0.21.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-dataloader@0.21.1(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21583,7 +21586,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-kafkajs@0.12.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-kafkajs@0.13.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21708,7 +21711,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-mysql2@0.49.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-mysql2@0.50.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21788,7 +21791,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-pg@0.55.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-pg@0.56.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -21879,7 +21882,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-runtime-node@0.17.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-runtime-node@0.17.1(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/instrumentation': 0.203.0(@opentelemetry/api@1.9.0)
@@ -21944,7 +21947,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opentelemetry/instrumentation-winston@0.48.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/instrumentation-winston@0.48.1(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/api-logs': 0.203.0
@@ -22270,11 +22273,11 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
 
-  '@optimize-lodash/rollup-plugin@5.0.2(rollup@4.46.2)':
+  '@optimize-lodash/rollup-plugin@5.0.2(rollup@4.46.4)':
     dependencies:
       '@optimize-lodash/transform': 3.0.6
-      '@rollup/pluginutils': 5.2.0(rollup@4.46.2)
-      rollup: 4.46.2
+      '@rollup/pluginutils': 5.2.0(rollup@4.46.4)
+      rollup: 4.46.4
 
   '@optimize-lodash/transform@3.0.6':
     dependencies:
@@ -22947,13 +22950,13 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-beta.19': {}
 
-  '@rollup/plugin-alias@5.1.1(rollup@4.46.2)':
+  '@rollup/plugin-alias@5.1.1(rollup@4.46.4)':
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/plugin-commonjs@28.0.6(rollup@4.46.2)':
+  '@rollup/plugin-commonjs@28.0.6(rollup@4.46.4)':
     dependencies:
-      '@rollup/pluginutils': 5.2.0(rollup@4.46.2)
+      '@rollup/pluginutils': 5.2.0(rollup@4.46.4)
       commondir: 1.0.1
       estree-walker: 2.0.2
       fdir: 6.4.6(picomatch@4.0.2)
@@ -22961,108 +22964,108 @@ snapshots:
       magic-string: 0.30.17
       picomatch: 4.0.2
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/plugin-esm-shim@0.1.8(rollup@4.46.2)':
+  '@rollup/plugin-esm-shim@0.1.8(rollup@4.46.4)':
     dependencies:
       magic-string: 0.30.17
       mlly: 1.7.4
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/plugin-image@3.0.3(rollup@4.46.2)':
+  '@rollup/plugin-image@3.0.3(rollup@4.46.4)':
     dependencies:
-      '@rollup/pluginutils': 5.2.0(rollup@4.46.2)
+      '@rollup/pluginutils': 5.2.0(rollup@4.46.4)
       mini-svg-data-uri: 1.4.4
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/plugin-json@6.1.0(rollup@4.46.2)':
+  '@rollup/plugin-json@6.1.0(rollup@4.46.4)':
     dependencies:
-      '@rollup/pluginutils': 5.2.0(rollup@4.46.2)
+      '@rollup/pluginutils': 5.2.0(rollup@4.46.4)
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/plugin-node-resolve@16.0.1(rollup@4.46.2)':
+  '@rollup/plugin-node-resolve@16.0.1(rollup@4.46.4)':
     dependencies:
-      '@rollup/pluginutils': 5.2.0(rollup@4.46.2)
+      '@rollup/pluginutils': 5.2.0(rollup@4.46.4)
       '@types/resolve': 1.20.2
       deepmerge: 4.3.1
       is-module: 1.0.0
       resolve: 1.22.10
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/plugin-virtual@3.0.2(rollup@4.46.2)':
+  '@rollup/plugin-virtual@3.0.2(rollup@4.46.4)':
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/pluginutils@5.2.0(rollup@4.46.2)':
+  '@rollup/pluginutils@5.2.0(rollup@4.46.4)':
     dependencies:
       '@types/estree': 1.0.8
       estree-walker: 2.0.2
       picomatch: 4.0.2
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  '@rollup/rollup-android-arm-eabi@4.46.2':
+  '@rollup/rollup-android-arm-eabi@4.46.4':
     optional: true
 
-  '@rollup/rollup-android-arm64@4.46.2':
+  '@rollup/rollup-android-arm64@4.46.4':
     optional: true
 
-  '@rollup/rollup-darwin-arm64@4.46.2':
+  '@rollup/rollup-darwin-arm64@4.46.4':
     optional: true
 
-  '@rollup/rollup-darwin-x64@4.46.2':
+  '@rollup/rollup-darwin-x64@4.46.4':
     optional: true
 
-  '@rollup/rollup-freebsd-arm64@4.46.2':
+  '@rollup/rollup-freebsd-arm64@4.46.4':
     optional: true
 
-  '@rollup/rollup-freebsd-x64@4.46.2':
+  '@rollup/rollup-freebsd-x64@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-arm-gnueabihf@4.46.2':
+  '@rollup/rollup-linux-arm-gnueabihf@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-arm-musleabihf@4.46.2':
+  '@rollup/rollup-linux-arm-musleabihf@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-arm64-gnu@4.46.2':
+  '@rollup/rollup-linux-arm64-gnu@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-arm64-musl@4.46.2':
+  '@rollup/rollup-linux-arm64-musl@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-loongarch64-gnu@4.46.2':
+  '@rollup/rollup-linux-loongarch64-gnu@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-ppc64-gnu@4.46.2':
+  '@rollup/rollup-linux-ppc64-gnu@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-riscv64-gnu@4.46.2':
+  '@rollup/rollup-linux-riscv64-gnu@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-riscv64-musl@4.46.2':
+  '@rollup/rollup-linux-riscv64-musl@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-s390x-gnu@4.46.2':
+  '@rollup/rollup-linux-s390x-gnu@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-x64-gnu@4.46.2':
+  '@rollup/rollup-linux-x64-gnu@4.46.4':
     optional: true
 
-  '@rollup/rollup-linux-x64-musl@4.46.2':
+  '@rollup/rollup-linux-x64-musl@4.46.4':
     optional: true
 
-  '@rollup/rollup-win32-arm64-msvc@4.46.2':
+  '@rollup/rollup-win32-arm64-msvc@4.46.4':
     optional: true
 
-  '@rollup/rollup-win32-ia32-msvc@4.46.2':
+  '@rollup/rollup-win32-ia32-msvc@4.46.4':
     optional: true
 
-  '@rollup/rollup-win32-x64-msvc@4.46.2':
+  '@rollup/rollup-win32-x64-msvc@4.46.4':
     optional: true
 
   '@rushstack/node-core-library@5.13.1(@types/node@20.19.9)':
@@ -23535,10 +23538,10 @@ snapshots:
       react-dom: 19.1.1(react@19.1.1)
       storybook: 9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
 
-  '@storybook/react-vite@9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(rollup@4.46.2)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)))(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))':
+  '@storybook/react-vite@9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(rollup@4.46.4)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)))(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))':
     dependencies:
       '@joshwooding/vite-plugin-react-docgen-typescript': 0.6.1(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
-      '@rollup/pluginutils': 5.2.0(rollup@4.46.2)
+      '@rollup/pluginutils': 5.2.0(rollup@4.46.4)
       '@storybook/builder-vite': 9.1.2(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)))(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0))
       '@storybook/react': 9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)))(typescript@5.8.3)
       find-up: 7.0.0
@@ -26768,7 +26771,7 @@ snapshots:
     dependencies:
       magic-string: 0.30.17
       mlly: 1.7.4
-      rollup: 4.46.2
+      rollup: 4.46.4
 
   flat-cache@4.0.1:
     dependencies:
@@ -27197,6 +27200,15 @@ snapshots:
       jws: 4.0.0
     transitivePeerDependencies:
       - supports-color
+
+  handlebars@4.7.8:
+    dependencies:
+      minimist: 1.2.8
+      neo-async: 2.6.2
+      source-map: 0.6.1
+      wordwrap: 1.0.0
+    optionalDependencies:
+      uglify-js: 3.19.3
 
   has-bigints@1.1.0: {}
 
@@ -28415,12 +28427,6 @@ snapshots:
 
   load-tsconfig@0.2.5: {}
 
-  local-pkg@1.1.1:
-    dependencies:
-      mlly: 1.7.4
-      pkg-types: 2.2.0
-      quansync: 0.2.10
-
   local-pkg@1.1.2:
     dependencies:
       mlly: 1.7.4
@@ -28749,10 +28755,10 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250821.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
+  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
     dependencies:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
-      '@cloudflare/workers-types': 4.20250821.0
+      '@cloudflare/workers-types': 4.20250823.0
       '@google/genai': 1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       '@langchain/core': 0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76))
       '@mistralai/mistralai': 1.7.2(zod@3.25.76)
@@ -29244,6 +29250,8 @@ snapshots:
 
   negotiator@1.0.0: {}
 
+  neo-async@2.6.2: {}
+
   neo4j-driver-bolt-connection@5.28.1:
     dependencies:
       buffer: 6.0.3
@@ -29678,7 +29686,7 @@ snapshots:
 
   package-manager-detector@0.2.11:
     dependencies:
-      quansync: 0.2.10
+      quansync: 0.2.11
 
   pako@2.1.0: {}
 
@@ -29876,12 +29884,6 @@ snapshots:
     dependencies:
       confbox: 0.1.8
       mlly: 1.7.4
-      pathe: 2.0.3
-
-  pkg-types@2.2.0:
-    dependencies:
-      confbox: 0.2.2
-      exsolve: 1.0.7
       pathe: 2.0.3
 
   pkg-types@2.3.0:
@@ -30145,8 +30147,6 @@ snapshots:
   qs@6.14.0:
     dependencies:
       side-channel: 1.1.0
-
-  quansync@0.2.10: {}
 
   quansync@0.2.11: {}
 
@@ -30561,54 +30561,54 @@ snapshots:
       semver-compare: 1.0.0
       sprintf-js: 1.1.3
 
-  rollup-plugin-esbuild@6.2.1(esbuild@0.25.8)(rollup@4.46.2):
+  rollup-plugin-esbuild@6.2.1(esbuild@0.25.8)(rollup@4.46.4):
     dependencies:
       debug: 4.4.1(supports-color@8.1.1)
       es-module-lexer: 1.7.0
       esbuild: 0.25.8
       get-tsconfig: 4.10.1
-      rollup: 4.46.2
+      rollup: 4.46.4
       unplugin-utils: 0.2.4
     transitivePeerDependencies:
       - supports-color
 
-  rollup-plugin-node-externals@8.0.1(rollup@4.46.2):
+  rollup-plugin-node-externals@8.0.1(rollup@4.46.4):
     dependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  rollup-plugin-visualizer@5.14.0(rollup@4.46.2):
+  rollup-plugin-visualizer@5.14.0(rollup@4.46.4):
     dependencies:
       open: 8.4.2
       picomatch: 4.0.2
       source-map: 0.7.4
       yargs: 17.7.2
     optionalDependencies:
-      rollup: 4.46.2
+      rollup: 4.46.4
 
-  rollup@4.46.2:
+  rollup@4.46.4:
     dependencies:
       '@types/estree': 1.0.8
     optionalDependencies:
-      '@rollup/rollup-android-arm-eabi': 4.46.2
-      '@rollup/rollup-android-arm64': 4.46.2
-      '@rollup/rollup-darwin-arm64': 4.46.2
-      '@rollup/rollup-darwin-x64': 4.46.2
-      '@rollup/rollup-freebsd-arm64': 4.46.2
-      '@rollup/rollup-freebsd-x64': 4.46.2
-      '@rollup/rollup-linux-arm-gnueabihf': 4.46.2
-      '@rollup/rollup-linux-arm-musleabihf': 4.46.2
-      '@rollup/rollup-linux-arm64-gnu': 4.46.2
-      '@rollup/rollup-linux-arm64-musl': 4.46.2
-      '@rollup/rollup-linux-loongarch64-gnu': 4.46.2
-      '@rollup/rollup-linux-ppc64-gnu': 4.46.2
-      '@rollup/rollup-linux-riscv64-gnu': 4.46.2
-      '@rollup/rollup-linux-riscv64-musl': 4.46.2
-      '@rollup/rollup-linux-s390x-gnu': 4.46.2
-      '@rollup/rollup-linux-x64-gnu': 4.46.2
-      '@rollup/rollup-linux-x64-musl': 4.46.2
-      '@rollup/rollup-win32-arm64-msvc': 4.46.2
-      '@rollup/rollup-win32-ia32-msvc': 4.46.2
-      '@rollup/rollup-win32-x64-msvc': 4.46.2
+      '@rollup/rollup-android-arm-eabi': 4.46.4
+      '@rollup/rollup-android-arm64': 4.46.4
+      '@rollup/rollup-darwin-arm64': 4.46.4
+      '@rollup/rollup-darwin-x64': 4.46.4
+      '@rollup/rollup-freebsd-arm64': 4.46.4
+      '@rollup/rollup-freebsd-x64': 4.46.4
+      '@rollup/rollup-linux-arm-gnueabihf': 4.46.4
+      '@rollup/rollup-linux-arm-musleabihf': 4.46.4
+      '@rollup/rollup-linux-arm64-gnu': 4.46.4
+      '@rollup/rollup-linux-arm64-musl': 4.46.4
+      '@rollup/rollup-linux-loongarch64-gnu': 4.46.4
+      '@rollup/rollup-linux-ppc64-gnu': 4.46.4
+      '@rollup/rollup-linux-riscv64-gnu': 4.46.4
+      '@rollup/rollup-linux-riscv64-musl': 4.46.4
+      '@rollup/rollup-linux-s390x-gnu': 4.46.4
+      '@rollup/rollup-linux-x64-gnu': 4.46.4
+      '@rollup/rollup-linux-x64-musl': 4.46.4
+      '@rollup/rollup-win32-arm64-msvc': 4.46.4
+      '@rollup/rollup-win32-ia32-msvc': 4.46.4
+      '@rollup/rollup-win32-x64-msvc': 4.46.4
       fsevents: 2.3.3
 
   router@2.2.0:
@@ -31542,11 +31542,11 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  ts-jest@29.4.0(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3):
+  ts-jest@29.4.1(@babel/core@7.28.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3)))(typescript@5.8.3):
     dependencies:
       bs-logger: 0.2.6
-      ejs: 3.1.10
       fast-json-stable-stringify: 2.1.0
+      handlebars: 4.7.8
       jest: 29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3))
       json5: 2.2.3
       lodash.memoize: 4.1.2
@@ -31625,7 +31625,7 @@ snapshots:
       picocolors: 1.1.1
       postcss-load-config: 6.0.1(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.4)(yaml@2.8.0)
       resolve-from: 5.0.0
-      rollup: 4.46.2
+      rollup: 4.46.4
       source-map: 0.8.0-beta.0
       sucrase: 3.35.0
       tinyexec: 0.3.2
@@ -31774,6 +31774,9 @@ snapshots:
   typical@7.3.0: {}
 
   ufo@1.6.1: {}
+
+  uglify-js@3.19.3:
+    optional: true
 
   uint8array-extras@1.4.0: {}
 
@@ -32032,16 +32035,16 @@ snapshots:
       - tsx
       - yaml
 
-  vite-plugin-dts@4.5.4(@types/node@20.19.9)(rollup@4.46.2)(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)):
+  vite-plugin-dts@4.5.4(@types/node@20.19.9)(rollup@4.46.4)(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.9)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)):
     dependencies:
       '@microsoft/api-extractor': 7.52.8(@types/node@20.19.9)
-      '@rollup/pluginutils': 5.2.0(rollup@4.46.2)
+      '@rollup/pluginutils': 5.2.0(rollup@4.46.4)
       '@volar/typescript': 2.4.20
       '@vue/language-core': 2.2.0(typescript@5.8.3)
       compare-versions: 6.1.1
       debug: 4.4.1(supports-color@8.1.1)
       kolorist: 1.8.0
-      local-pkg: 1.1.1
+      local-pkg: 1.1.2
       magic-string: 0.30.17
       typescript: 5.8.3
     optionalDependencies:
@@ -32062,7 +32065,7 @@ snapshots:
     dependencies:
       esbuild: 0.21.5
       postcss: 8.5.6
-      rollup: 4.46.2
+      rollup: 4.46.4
     optionalDependencies:
       '@types/node': 20.19.9
       fsevents: 2.3.3
@@ -32074,7 +32077,7 @@ snapshots:
       fdir: 6.4.6(picomatch@4.0.2)
       picomatch: 4.0.2
       postcss: 8.5.6
-      rollup: 4.46.2
+      rollup: 4.46.4
       tinyglobby: 0.2.14
     optionalDependencies:
       '@types/node': 20.19.9
