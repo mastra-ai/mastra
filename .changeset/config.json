@@ -18,7 +18,6 @@
     "!@mastra/*",
     "!docs",
     "@internal/*",
-    "@mastra/memory-integration-tests",
-    "@mastra/playground"
+    "@mastra/memory-integration-tests"
   ]
 }

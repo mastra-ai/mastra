@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.12.1",
+  "version": "0.12.3-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -45,7 +45,7 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.5.0",
-    "rollup": "~4.46.2",
+    "rollup": "~4.46.4",
     "zod": "^3.25.67"
   },
   "devDependencies": {

@@ -9,7 +9,7 @@ import {
   type UIMessage,
   type UseChatOptions,
 } from '@ai-sdk/ui-utils';
-import { Tool, type CoreMessage } from '@mastra/core';
+import { Tool, type CoreMessage, type OutputSchema } from '@mastra/core';
 import { type GenerateReturn } from '@mastra/core/llm';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
@@ -277,8 +277,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
-    params: StreamVNextParams<T>,
+  async generateVNext<OUTPUT extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<OUTPUT>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     const processedParams = {
       ...params,
@@ -1188,8 +1188,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async streamVNext<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
-    params: StreamVNextParams<T>,
+  async streamVNext<OUTPUT extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
