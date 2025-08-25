@@ -8,11 +8,7 @@ import {
   getUserMessageFromRunInput,
   roundToTwoDecimals,
 } from '../../utils';
-import {
-  TOOL_SELECTION_ACCURACY_INSTRUCTIONS,
-  createAnalyzePrompt,
-  createReasonPrompt,
-} from './prompts';
+import { TOOL_SELECTION_ACCURACY_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface ToolCallAccuracyOptions {
   model: MastraLanguageModel;
