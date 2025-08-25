@@ -47,7 +47,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     return (await result.rows)?.some((row: any) => row.name === column);
   }
 
-  private getCreateTableSQL(tableName: TABLE_NAMES<true>, schema: Record<string, StorageColumn>): string {
+  private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
       const parsedColumnName = parseSqlIdentifier(name, 'column name');
@@ -86,7 +86,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     schema,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
@@ -123,7 +123,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     record,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     record: Record<string, any>;
   }): Promise<void> {
     await this.client.execute(
@@ -134,7 +134,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     );
   }
 
-  public insert(args: { tableName: TABLE_NAMES<true>; record: Record<string, any> }): Promise<void> {
+  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
       logger: this.logger,
       maxRetries: this.maxRetries,
@@ -143,13 +143,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     return executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
   }
 
-  async load<R>({
-    tableName,
-    keys,
-  }: {
-    tableName: TABLE_NAMES<true>;
-    keys: Record<string, string>;
-  }): Promise<R | null> {
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
     const parsedKeys = Object.keys(keys).map(key => parseSqlIdentifier(key, 'column name'));
@@ -191,7 +185,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     limit,
     args,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     whereClause?: { sql: string; args: InValue[] };
     orderBy?: string;
     offset?: number;
@@ -230,7 +224,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     whereClause,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     whereClause?: { sql: string; args: InValue[] };
   }): Promise<number> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
@@ -249,11 +243,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     return (result.rows[0]?.count as number) ?? 0;
   }
 
-  public update(args: {
-    tableName: TABLE_NAMES<true>;
-    keys: Record<string, any>;
-    data: Record<string, any>;
-  }): Promise<void> {
+  public update(args: { tableName: TABLE_NAMES; keys: Record<string, any>; data: Record<string, any> }): Promise<void> {
     const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
       logger: this.logger,
       maxRetries: this.maxRetries,
@@ -267,7 +257,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     keys,
     data,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     keys: Record<string, any>;
     data: Record<string, any>;
   }): Promise<void> {
@@ -278,7 +268,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     records,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     records: Record<string, any>[];
   }): Promise<void> {
     if (records.length === 0) return;
@@ -286,7 +276,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     await this.client.batch(batchStatements, 'write');
   }
 
-  public batchInsert(args: { tableName: TABLE_NAMES<true>; records: Record<string, any>[] }): Promise<void> {
+  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
       logger: this.logger,
       maxRetries: this.maxRetries,
@@ -315,7 +305,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
    * Public batch update method with retry logic
    */
   public batchUpdate(args: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     updates: Array<{
       keys: Record<string, any>;
       data: Record<string, any>;
@@ -352,7 +342,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     updates,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     updates: Array<{
       keys: Record<string, any>;
       data: Record<string, any>;
@@ -374,13 +364,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
   /**
    * Public batch delete method with retry logic
    */
-  public batchDelete({
-    tableName,
-    keys,
-  }: {
-    tableName: TABLE_NAMES<true>;
-    keys: Array<Record<string, any>>;
-  }): Promise<void> {
+  public batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Array<Record<string, any>> }): Promise<void> {
     const executeWriteOperationWithRetry = createExecuteWriteOperationWithRetry({
       logger: this.logger,
       maxRetries: this.maxRetries,
@@ -412,7 +396,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     tableName,
     keys,
   }: {
-    tableName: TABLE_NAMES<true>;
+    tableName: TABLE_NAMES;
     keys: Array<Record<string, any>>;
   }): Promise<void> {
     if (keys.length === 0) return;

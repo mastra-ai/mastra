@@ -43,13 +43,7 @@ export function createExecuteWriteOperationWithRetry({
   };
 }
 
-export function prepareStatement({
-  tableName,
-  record,
-}: {
-  tableName: TABLE_NAMES<true>;
-  record: Record<string, any>;
-}): {
+export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): {
   sql: string;
   args: InValue[];
 } {
@@ -78,7 +72,7 @@ export function prepareUpdateStatement({
   updates,
   keys,
 }: {
-  tableName: TABLE_NAMES<true>;
+  tableName: TABLE_NAMES;
   updates: Record<string, any>;
   keys: Record<string, any>;
 }): {
@@ -111,13 +105,7 @@ export function transformToSqlValue(value: any): InValue {
   return typeof value === 'object' ? JSON.stringify(value) : value;
 }
 
-export function prepareDeleteStatement({
-  tableName,
-  keys,
-}: {
-  tableName: TABLE_NAMES<true>;
-  keys: Record<string, any>;
-}): {
+export function prepareDeleteStatement({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): {
   sql: string;
   args: InValue[];
 } {
@@ -257,7 +245,7 @@ export function transformFromSqlRow<T>({
   tableName,
   sqlRow,
 }: {
-  tableName: TABLE_NAMES<true>;
+  tableName: TABLE_NAMES;
   sqlRow: Record<string, any>;
 }): T {
   const result: Record<string, any> = {};

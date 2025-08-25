@@ -101,17 +101,17 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   }
 
   async getAITracesPaginated({
-    filter,
+    filters,
     pagination,
   }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
 
-    const filters: Record<string, any> = {
-      ...filter,
+    const filtersWithDateRange: Record<string, any> = {
+      ...filters,
       ...buildDateRangeFilter(pagination?.dateRange, 'startAt'),
     };
-    const whereClause = prepareWhereClause(filters, AI_SPAN_SCHEMA);
+    const whereClause = prepareWhereClause(filtersWithDateRange, AI_SPAN_SCHEMA);
     const orderBy = 'startAt DESC';
 
     let count = 0;
