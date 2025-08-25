@@ -1,5 +1,4 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import { TABLE_AI_SPANS } from '../../constants';
 import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '../../types';
 import type { StoreOperations } from '../operations';
 import { ObservabilityStorage } from './base';
@@ -24,19 +23,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   private validateCreateAISpan(record: AISpanRecord): void {
     if (!record.spanId) {
       throw new MastraError({
-        id: 'OBSERVABILITY_BATCH_CREATE_AI_SPAN_SPAN_ID_REQUIRED',
+        id: 'OBSERVABILITY_SPAN_ID_REQUIRED',
         domain: ErrorDomain.MASTRA_OBSERVABILITY,
         category: ErrorCategory.SYSTEM,
-        text: 'Span ID is required',
+        text: 'Span ID is required for creating a span',
       });
     }
 
     if (!record.traceId) {
       throw new MastraError({
-        id: 'OBSERVABILITY_BATCH_CREATE_AI_SPAN_TRACE_ID_REQUIRED',
+        id: 'OBSERVABILITY_TRACE_ID_REQUIRED',
         domain: ErrorDomain.MASTRA_OBSERVABILITY,
         category: ErrorCategory.SYSTEM,
-        text: 'Trace ID is required',
+        text: 'Trace ID is required for creating a span',
       });
     }
   }
@@ -131,7 +130,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         id: 'OBSERVABILITY_UPDATE_AI_SPAN_NOT_FOUND',
         domain: ErrorDomain.MASTRA_OBSERVABILITY,
         category: ErrorCategory.SYSTEM,
-        text: 'Span not found',
+        text: 'Span not found for update',
       });
     }
 
@@ -154,10 +153,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       const span = this.collection.get(id);
       if (!span) {
         throw new MastraError({
-          id: 'OBSERVABILITY_UPDATE_AI_SPAN_NOT_FOUND',
+          id: 'OBSERVABILITY_BATCH_UPDATE_AI_SPAN_NOT_FOUND',
           domain: ErrorDomain.MASTRA_OBSERVABILITY,
           category: ErrorCategory.SYSTEM,
-          text: 'Span not found',
+          text: 'Span not found for batch update',
         });
       }
       this.collection.set(id, { ...span, ...record.updates });
