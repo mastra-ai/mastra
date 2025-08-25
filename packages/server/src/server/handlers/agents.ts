@@ -10,8 +10,9 @@ import { xai } from '@ai-sdk/xai';
 import { xai as xaiV5 } from '@ai-sdk/xai-v5';
 import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
+
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 

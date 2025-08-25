@@ -1,11 +1,11 @@
 import { Mastra } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { MockStore } from '@mastra/core/storage';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { LegacyStep as Step, LegacyWorkflow as Workflow } from '@mastra/core/workflows/legacy';
 import { stringify } from 'superjson';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import {
   getLegacyWorkflowsHandler,
