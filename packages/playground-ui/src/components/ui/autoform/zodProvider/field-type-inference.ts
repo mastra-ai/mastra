@@ -12,8 +12,8 @@ export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig):
   if (schema instanceof z.ZodBoolean) return 'boolean';
   if (schema instanceof z.ZodString) {
     const checks = schema._zod.def.checks || [];
-    // @ts-expect-error - zod string_format check has format property
     const hasDateTimeCheck = checks.some(
+      //@ts-expect-error - zod string_format check has format property
       check => check._zod.def.check === 'string_format' && check._zod.def.format === 'datetime',
     );
     if (hasDateTimeCheck) return 'date';
