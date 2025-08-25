@@ -50,7 +50,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (spans.length === 0) {
       return null;
     }
-    spans.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+    spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
     return {
       traceId,
@@ -93,8 +93,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     endDate: Date | undefined,
   ): AISpanRecord[] {
     return spans.filter(span => {
-      if (startDate && span.startAt < startDate) return false;
-      if (endDate && span.startAt > endDate) return false;
+      if (startDate && span.startedAt < startDate) return false;
+      if (endDate && span.startedAt > endDate) return false;
       return true;
     });
   }

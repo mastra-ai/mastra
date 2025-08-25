@@ -141,14 +141,12 @@ export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
   spanType: { type: 'integer', nullable: false }, // WORKFLOW_RUN, WORKFLOW_STEP, AGENT_RUN, AGENT_STEP, TOOL_RUN, TOOL_STEP, etc.
   attributes: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
-  events: { type: 'jsonb', nullable: true },
   links: { type: 'jsonb', nullable: true },
-  other: { type: 'text', nullable: true },
   input: { type: 'jsonb', nullable: true },
   output: { type: 'jsonb', nullable: true },
   error: { type: 'jsonb', nullable: true },
-  startAt: { type: 'timestamp', nullable: false }, // When the span started
-  endAt: { type: 'timestamp', nullable: true }, // When the span ended
+  startedAt: { type: 'timestamp', nullable: false }, // When the span started
+  endedAt: { type: 'timestamp', nullable: true }, // When the span ended
   createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
   updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
 };
