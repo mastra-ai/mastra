@@ -40,7 +40,6 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           parentSpanId: null,
           attributes: expect.objectContaining(span.attributes),
           metadata: expect.objectContaining(span.metadata),
-          events: expect.objectContaining(span.events),
           createdAt: span.createdAt,
           updatedAt: span.updatedAt,
           input: span.input,
@@ -148,8 +147,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const span = createRootSpan({
           name: 'test-span-properties',
           scope: 'test-scope',
-          startAt: new Date('2024-01-01T00:00:00Z'),
-          endAt: new Date('2024-01-01T00:00:01Z'),
+          startedAt: new Date('2024-01-01T00:00:00Z'),
+          endedAt: new Date('2024-01-01T00:00:01Z'),
         });
 
         await storage.batchCreateAISpans({ records: [span] });
@@ -162,8 +161,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           scope: span.scope,
           spanType: span.spanType,
           parentSpanId: span.parentSpanId,
-          startAt: span.startAt,
-          endAt: span.endAt,
+          startedAt: span.startedAt,
+          endedAt: span.endedAt,
           attributes: expect.objectContaining(span.attributes),
           metadata: expect.objectContaining(span.metadata),
         });
@@ -263,28 +262,28 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
             name: 'workflow-trace-1',
             scope: 'test-scope',
             spanType: AISpanType.WORKFLOW_RUN,
-            startAt: new Date('2024-01-01T00:00:00Z'),
+            startedAt: new Date('2024-01-01T00:00:00Z'),
           }),
           // Trace 2: Agent spans
           createRootSpan({
             name: 'agent-trace-1',
             scope: 'test-scope',
             spanType: AISpanType.AGENT_RUN,
-            startAt: new Date('2024-01-02T00:00:00Z'),
+            startedAt: new Date('2024-01-02T00:00:00Z'),
           }),
           // Trace 3: Tool spans
           createRootSpan({
             name: 'tool-trace-1',
             scope: 'test-scope',
             spanType: AISpanType.TOOL_CALL,
-            startAt: new Date('2024-01-03T00:00:00Z'),
+            startedAt: new Date('2024-01-03T00:00:00Z'),
           }),
           // Trace 4: Another workflow
           createRootSpan({
             name: 'workflow-trace-2',
             scope: 'test-scope',
             spanType: AISpanType.WORKFLOW_RUN,
-            startAt: new Date('2024-01-04T00:00:00Z'),
+            startedAt: new Date('2024-01-04T00:00:00Z'),
           }),
         ];
 
@@ -383,8 +382,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
           // All traces should be within the date range
           result.spans.forEach(span => {
-            expect(span.startAt.getTime()).toBeGreaterThanOrEqual(new Date('2024-01-01T00:00:00Z').getTime());
-            expect(span.startAt.getTime()).toBeLessThanOrEqual(new Date('2024-01-02T23:59:59Z').getTime());
+            expect(span.startedAt.getTime()).toBeGreaterThanOrEqual(new Date('2024-01-01T00:00:00Z').getTime());
+            expect(span.startedAt.getTime()).toBeLessThanOrEqual(new Date('2024-01-02T23:59:59Z').getTime());
           });
         });
 
@@ -401,7 +400,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
           // All traces should be after the start date
           result.spans.forEach(span => {
-            expect(span.startAt.getTime()).toBeGreaterThanOrEqual(new Date('2024-01-03T00:00:00Z').getTime());
+            expect(span.startedAt.getTime()).toBeGreaterThanOrEqual(new Date('2024-01-03T00:00:00Z').getTime());
           });
         });
       });

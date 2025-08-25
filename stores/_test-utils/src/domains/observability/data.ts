@@ -7,20 +7,20 @@ export function createSampleAISpanForDB({
   scope,
   traceId,
   parentSpanId,
-  startAt,
-  endAt,
+  startedAt,
+  endedAt,
   spanType,
 }: {
   name: string;
   scope: string;
   traceId?: string;
   parentSpanId?: string | null;
-  startAt?: Date;
-  endAt?: Date;
+  startedAt?: Date;
+  endedAt?: Date;
   spanType?: AISpanType;
 }): AISpanRecord {
-  const now = startAt || new Date();
-  const end = endAt || new Date(now.getTime() + 1000); // 1 second later
+  const now = startedAt || new Date();
+  const end = endedAt || new Date(now.getTime() + 1000); // 1 second later
   const generatedTraceId = traceId || `test-trace-${randomUUID()}`;
   const spanId = `test-span-${randomUUID()}`;
 
@@ -40,16 +40,9 @@ export function createSampleAISpanForDB({
     metadata: {
       runId: `run-${randomUUID()}`,
     },
-    events: {
-      spanStarted: {
-        timestamp: now.toISOString(),
-        data: { name, scope },
-      },
-    },
     links: null,
-    other: null,
-    startAt: now,
-    endAt: end,
+    startedAt: now,
+    endedAt: end,
     createdAt: now,
     updatedAt: null,
     input: [{ role: 'user', content: 'test input' }],
@@ -66,15 +59,15 @@ export function createRootSpan(
     name,
     scope,
     traceId,
-    startAt,
-    endAt,
+    startedAt,
+    endedAt,
     spanType,
   }: {
     name: string;
     scope: string;
     traceId?: string;
-    startAt?: Date;
-    endAt?: Date;
+    startedAt?: Date;
+    endedAt?: Date;
     spanType?: AISpanType;
   } = {
     name: 'test-root-span',
@@ -86,8 +79,8 @@ export function createRootSpan(
     scope,
     traceId,
     parentSpanId: null,
-    startAt,
-    endAt,
+    startedAt,
+    endedAt,
     spanType,
   });
 }
@@ -100,22 +93,22 @@ export function createChildSpan({
   scope,
   parentSpanId,
   traceId,
-  startAt,
-  endAt,
+  startedAt,
+  endedAt,
 }: {
   name: string;
   scope: string;
   parentSpanId: string;
   traceId?: string;
-  startAt?: Date;
-  endAt?: Date;
+  startedAt?: Date;
+  endedAt?: Date;
 }): AISpanRecord {
   return createSampleAISpanForDB({
     name,
     scope,
     traceId,
     parentSpanId,
-    startAt,
-    endAt,
+    startedAt,
+    endedAt,
   });
 }
