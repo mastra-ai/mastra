@@ -170,16 +170,14 @@ export interface AISpanRecord {
   spanType: AISpanType;
   attributes: Record<string, any> | null;
   metadata: Record<string, any> | null;
-  events: Record<string, any> | null;
-  links: Record<string, any> | null;
-  other: string | null;
-  startAt: Date;
-  endAt: Date | null;
+  links: any;
+  startedAt: Date;
+  endedAt: Date | null;
   createdAt: Date;
   updatedAt: Date | null;
-  input: Record<string, any> | null;
-  output: Record<string, any> | null;
-  error: Record<string, any> | null;
+  input: any;
+  output: any;
+  error: any;
 }
 
 export interface AITraceRecord {
