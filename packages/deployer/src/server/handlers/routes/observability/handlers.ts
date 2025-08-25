@@ -38,7 +38,7 @@ export async function getAITracesPaginatedHandler(c: Context) {
       perPage: parseInt(perPage || '10'),
     };
 
-    const filters: AITracesPaginatedArg['filter'] = {};
+    const filters: AITracesPaginatedArg['filters'] = {};
     if (name) filters.name = name;
     if (spanType) {
       if (Object.values(AISpanType).includes(spanType as AISpanType)) {
@@ -73,7 +73,7 @@ export async function getAITracesPaginatedHandler(c: Context) {
       mastra,
       body: {
         pagination,
-        filter: filters,
+        filters,
       },
     });
 

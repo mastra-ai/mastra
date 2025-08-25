@@ -27,7 +27,7 @@ const fetchAITracesFn = async ({
         perPage,
         dateRange,
       },
-      filter: {
+      filters: {
         name,
         spanType,
       },

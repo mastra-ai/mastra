@@ -23,9 +23,9 @@ export class Observability extends BaseResource {
    * @returns Promise containing paginated traces and pagination info
    */
   getTraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
-    const { pagination, filter } = params;
+    const { pagination, filters } = params;
     const { page, perPage, dateRange } = pagination || {};
-    const { name, spanType } = filter || {};
+    const { name, spanType } = filters || {};
     const searchParams = new URLSearchParams();
 
     if (page !== undefined) {

@@ -51,7 +51,7 @@ export async function getAITracesPaginatedHandler({ mastra, body }: Observabilit
       throw new HTTPException(400, { message: 'Request body is required' });
     }
 
-    const { filter, pagination } = body;
+    const { filters, pagination } = body;
 
     if (pagination?.page && pagination.page < 0) {
       throw new HTTPException(400, { message: 'Page must be a non-negative integer' });
@@ -75,7 +75,7 @@ export async function getAITracesPaginatedHandler({ mastra, body }: Observabilit
 
     return storage.getAITracesPaginated({
       pagination,
-      filter,
+      filters,
     });
   } catch (error) {
     handleError(error, 'Error getting AI traces paginated');
