@@ -76,11 +76,14 @@ export async function installNodeVersion({ path }: { path: string }) {
       cwd: path,
     });
     if (!success) {
-      throw new MastraError({
-        id: 'NODE_FAIL_INSTALL_SPECIFIED_VERSION',
-        category: 'USER',
-        domain: 'DEPLOYER',
-      }, error);
+      throw new MastraError(
+        {
+          id: 'NODE_FAIL_INSTALL_SPECIFIED_VERSION',
+          category: 'USER',
+          domain: 'DEPLOYER',
+        },
+        error,
+      );
     }
   }
 }
@@ -91,11 +94,14 @@ export async function installDeps({ path, pm }: { path: string; pm?: string }) {
   const args = ['install'];
   const { success, error } = await runWithExeca({ cmd: pm, args, cwd: path });
   if (!success) {
-    throw new MastraError({
-      id: 'FAIL_INSTALL_DEPS',
-      category: 'USER',
-      domain: 'DEPLOYER',
-    }, error);
+    throw new MastraError(
+      {
+        id: 'FAIL_INSTALL_DEPS',
+        category: 'USER',
+        domain: 'DEPLOYER',
+      },
+      error,
+    );
   }
 }
 
@@ -103,11 +109,14 @@ export async function runInstallCommand({ path, installCommand }: { path: string
   logger.info(`Running install command ${installCommand} in workspace with ${path}`);
   const { success, error } = await runWithExeca({ cmd: 'sh', args: ['-c', installCommand], cwd: path });
   if (!success) {
-    throw new MastraError({
-      id: 'FAIL_CUSTOM_INSTALL_COMMAND',
-      category: 'USER',
-      domain: 'DEPLOYER',
-    }, error);
+    throw new MastraError(
+      {
+        id: 'FAIL_CUSTOM_INSTALL_COMMAND',
+        category: 'USER',
+        domain: 'DEPLOYER',
+      },
+      error,
+    );
   }
 }
 
@@ -120,11 +129,14 @@ export async function runScript({ scriptName, path, args }: { scriptName: string
     cwd: path,
   });
   if (!success) {
-    throw new MastraError({
-      id: 'FAIL_BUILD_SCRIPT',
-      category: 'USER',
-      domain: 'DEPLOYER',
-    }, error);
+    throw new MastraError(
+      {
+        id: 'FAIL_BUILD_SCRIPT',
+        category: 'USER',
+        domain: 'DEPLOYER',
+      },
+      error,
+    );
   }
 }
 
@@ -132,10 +144,13 @@ export async function runBuildCommand({ command, path }: { command: string; path
   logger.info(`Running build command ${command}`);
   const { success, error } = await runWithExeca({ cmd: 'sh', args: ['-c', command], cwd: path });
   if (!success) {
-    throw new MastraError({
-      id: 'FAIL_BUILD_COMMAND',
-      category: 'USER',
-      domain: 'DEPLOYER',
-    }, error);
+    throw new MastraError(
+      {
+        id: 'FAIL_BUILD_COMMAND',
+        category: 'USER',
+        domain: 'DEPLOYER',
+      },
+      error,
+    );
   }
 }

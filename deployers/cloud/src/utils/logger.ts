@@ -125,4 +125,3 @@ export const logger = new PinoLogger({
     redis: transport,
   },
 });
-

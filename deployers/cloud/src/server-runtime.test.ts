@@ -66,7 +66,9 @@ describe('CloudDeployer Server Runtime', () => {
       const entry = deployer.getEntry();
 
       // Check environment variable handling
-      expect(entry).toContain('process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now()');
+      expect(entry).toContain(
+        'process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now()',
+      );
       expect(entry).toContain("process.env.CI !== 'true'");
       expect(entry).toContain('process.env.BUSINESS_API_RUNNER_LOGS_ENDPOINT');
       expect(entry).toContain('process.env.BUSINESS_JWT_TOKEN');
@@ -78,20 +80,20 @@ describe('CloudDeployer Server Runtime', () => {
       const entry = deployer.getEntry();
 
       // Verify logger setup
-      expect(entry).toContain("const logger = new PinoLogger({");
+      expect(entry).toContain('const logger = new PinoLogger({');
       expect(entry).toContain("name: 'MastraCloud'");
       expect(entry).toContain("level: 'debug'");
-      expect(entry).toContain("const existingLogger = mastra?.getLogger()");
-      expect(entry).toContain("new MultiLogger([logger, existingLogger])");
-      expect(entry).toContain("mastra.setLogger({ logger: combinedLogger })");
+      expect(entry).toContain('const existingLogger = mastra?.getLogger()');
+      expect(entry).toContain('new MultiLogger([logger, existingLogger])');
+      expect(entry).toContain('mastra.setLogger({ logger: combinedLogger })');
     });
 
     it('should configure HTTP transport when endpoint is provided', () => {
       // @ts-ignore - accessing private method for testing
       const entry = deployer.getEntry();
 
-      expect(entry).toContain("new HttpTransport({");
-      expect(entry).toContain("url: process.env.BUSINESS_API_RUNNER_LOGS_ENDPOINT");
+      expect(entry).toContain('new HttpTransport({');
+      expect(entry).toContain('url: process.env.BUSINESS_API_RUNNER_LOGS_ENDPOINT');
       expect(entry).toContain("Authorization: 'Bearer ' + process.env.BUSINESS_JWT_TOKEN");
     });
 
@@ -100,47 +102,49 @@ describe('CloudDeployer Server Runtime', () => {
       const entry = deployer.getEntry();
 
       // Check storage initialization
-      expect(entry).toContain("if (mastra?.storage) {");
-      expect(entry).toContain("mastra.storage.init()");
-      
+      expect(entry).toContain('if (mastra?.storage) {');
+      expect(entry).toContain('mastra.storage.init()');
+
       // Check LibSQL setup
-      expect(entry).toContain("const storage = new LibSQLStore({");
-      expect(entry).toContain("url: process.env.MASTRA_STORAGE_URL");
-      expect(entry).toContain("authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN");
-      
-      expect(entry).toContain("const vector = new LibSQLVector({");
-      expect(entry).toContain("connectionUrl: process.env.MASTRA_STORAGE_URL");
-      
-      expect(entry).toContain("await storage.init()");
-      expect(entry).toContain("mastra?.setStorage(storage)");
-      expect(entry).toContain("mastra?.memory?.setStorage(storage)");
-      expect(entry).toContain("mastra?.memory?.setVector(vector)");
+      expect(entry).toContain('const storage = new LibSQLStore({');
+      expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
+      expect(entry).toContain('authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN');
+
+      expect(entry).toContain('const vector = new LibSQLVector({');
+      expect(entry).toContain('connectionUrl: process.env.MASTRA_STORAGE_URL');
+
+      expect(entry).toContain('await storage.init()');
+      expect(entry).toContain('mastra?.setStorage(storage)');
+      expect(entry).toContain('mastra?.memory?.setStorage(storage)');
+      expect(entry).toContain('mastra?.memory?.setVector(vector)');
     });
 
     it('should register hooks for generation and evaluation', () => {
       // @ts-ignore - accessing private method for testing
       const entry = deployer.getEntry();
 
-      expect(entry).toContain("registerHook(AvailableHooks.ON_GENERATION");
-      expect(entry).toContain("evaluate({");
-      expect(entry).toContain("agentName,");
-      expect(entry).toContain("input,");
-      expect(entry).toContain("metric,");
-      expect(entry).toContain("output,");
-      expect(entry).toContain("runId,");
-      expect(entry).toContain("globalRunId: runId,");
-      expect(entry).toContain("instructions,");
+      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
+      expect(entry).toContain('evaluate({');
+      expect(entry).toContain('agentName,');
+      expect(entry).toContain('input,');
+      expect(entry).toContain('metric,');
+      expect(entry).toContain('output,');
+      expect(entry).toContain('runId,');
+      expect(entry).toContain('globalRunId: runId,');
+      expect(entry).toContain('instructions,');
 
-      expect(entry).toContain("registerHook(AvailableHooks.ON_EVALUATION");
-      expect(entry).toContain("await mastra.storage.insert({");
-      expect(entry).toContain("tableName: MastraStorage.TABLE_EVALS");
+      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
+      expect(entry).toContain('await mastra.storage.insert({');
+      expect(entry).toContain('tableName: MastraStorage.TABLE_EVALS');
     });
 
     it('should create node server with correct configuration', () => {
       // @ts-ignore - accessing private method for testing
       const entry = deployer.getEntry();
 
-      expect(entry).toContain("await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });");
+      expect(entry).toContain(
+        'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
+      );
     });
 
     it('should include readiness logging with correct metadata', () => {
@@ -152,11 +156,11 @@ describe('CloudDeployer Server Runtime', () => {
       expect(entry).toContain('message: "Server starting"');
       expect(entry).toContain("operation: 'builder.createNodeServer'");
       expect(entry).toContain('type: "READINESS"');
-      
+
       // Check server started log
       expect(entry).toContain('message: "Server started"');
       expect(entry).toContain('operation_durationMs: Date.now() - createNodeServerStartTime');
-      
+
       // Check runner initialized log
       expect(entry).toContain('message: "Runner Initialized"');
       expect(entry).toContain('durationMs: Date.now() - startTime');
@@ -202,14 +206,14 @@ describe('CloudDeployer Server Runtime', () => {
       const entry = deployer.getEntry();
 
       expect(entry).toContain("if (process.env.CI !== 'true') {");
-      expect(entry).toContain("if (process.env.BUSINESS_API_RUNNER_LOGS_ENDPOINT) {");
+      expect(entry).toContain('if (process.env.BUSINESS_API_RUNNER_LOGS_ENDPOINT) {');
     });
 
     it('should only setup cloud storage when credentials are present', () => {
       // @ts-ignore - accessing private method for testing
       const entry = deployer.getEntry();
 
-      expect(entry).toContain("if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {");
+      expect(entry).toContain('if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {');
     });
   });
 });

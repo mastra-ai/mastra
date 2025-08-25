@@ -40,6 +40,7 @@ await deployer.bundle(mastraDir, outputDirectory);
 ### 1. Dependency Management
 
 Automatically adds cloud-specific dependencies to your package.json:
+
 - `@mastra/loggers` - Cloud-optimized logging
 - `@mastra/libsql` - Serverless SQL storage
 - `@mastra/cloud` - Cloud platform utilities
@@ -47,6 +48,7 @@ Automatically adds cloud-specific dependencies to your package.json:
 ### 2. Server Entry Generation
 
 Creates a production-ready server entry point with:
+
 - Cloud storage initialization (LibSQL)
 - Vector database setup
 - Multi-transport logging
@@ -56,6 +58,7 @@ Creates a production-ready server entry point with:
 ### 3. Instrumentation
 
 Provides OpenTelemetry instrumentation for:
+
 - Distributed tracing
 - Performance monitoring
 - Custom telemetry configuration
@@ -140,6 +143,7 @@ The deployer includes structured readiness logs for monitoring:
 ## Testing
 
 The cloud deployer includes comprehensive tests covering:
+
 - Build pipeline functionality
 - Server runtime generation
 - Dependency management
@@ -147,6 +151,7 @@ The cloud deployer includes comprehensive tests covering:
 - Integration scenarios
 
 Run tests with:
+
 ```bash
 pnpm test
 ```

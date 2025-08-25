@@ -25,7 +25,7 @@ describe('getMastraEntryFile', () => {
   it('should return the first existing mastra entry file', () => {
     const mastraDir = '/test/project';
     const expectedFile = join(mastraDir, MASTRA_DIRECTORY, 'index.ts');
-    
+
     mockFileService.getFirstExistingFile.mockReturnValue(expectedFile);
 
     const result = getMastraEntryFile(mastraDir);
@@ -40,13 +40,13 @@ describe('getMastraEntryFile', () => {
   it('should throw MastraError when no entry file is found', () => {
     const mastraDir = '/test/project';
     const originalError = new Error('No files found');
-    
+
     mockFileService.getFirstExistingFile.mockImplementation(() => {
       throw originalError;
     });
 
     expect(() => getMastraEntryFile(mastraDir)).toThrow(MastraError);
-    
+
     try {
       getMastraEntryFile(mastraDir);
     } catch (error) {

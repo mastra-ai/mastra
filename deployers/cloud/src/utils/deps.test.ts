@@ -28,10 +28,8 @@ describe('deps utils', () => {
     it('should detect pnpm from pnpm-lock.yaml', async () => {
       // Re-import to get fresh module without cache
       const { detectPm } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('pnpm-lock.yaml')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('pnpm-lock.yaml'));
 
       const result = detectPm({ path: '/test/project' });
       expect(result).toBe('pnpm');
@@ -39,10 +37,8 @@ describe('deps utils', () => {
 
     it('should detect npm from package-lock.json', async () => {
       const { detectPm } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('package-lock.json')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('package-lock.json'));
 
       const result = detectPm({ path: '/test/project' });
       expect(result).toBe('npm');
@@ -50,10 +46,8 @@ describe('deps utils', () => {
 
     it('should detect yarn from yarn.lock', async () => {
       const { detectPm } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('yarn.lock')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('yarn.lock'));
 
       const result = detectPm({ path: '/test/project' });
       expect(result).toBe('yarn');
@@ -61,10 +55,8 @@ describe('deps utils', () => {
 
     it('should detect bun from bun.lock', async () => {
       const { detectPm } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('bun.lock')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('bun.lock'));
 
       const result = detectPm({ path: '/test/project' });
       expect(result).toBe('bun');
@@ -72,7 +64,7 @@ describe('deps utils', () => {
 
     it('should default to npm when no lock file found', async () => {
       const { detectPm } = await import('./deps.js');
-      
+
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
       const result = detectPm({ path: '/test/project' });
@@ -81,11 +73,11 @@ describe('deps utils', () => {
 
     it('should search parent directories for lock files', async () => {
       const { detectPm } = await import('./deps.js');
-      
+
       const existsSyncMock = vi.mocked(fs.existsSync);
-      
+
       // Set up mock to find pnpm-lock.yaml in parent directory
-      existsSyncMock.mockImplementation((path) => {
+      existsSyncMock.mockImplementation(path => {
         // Only return true for pnpm-lock.yaml in parent
         return path.toString() === '/test/deep/nested/pnpm-lock.yaml';
       });
@@ -98,20 +90,18 @@ describe('deps utils', () => {
 
     it('should cache results', async () => {
       const { detectPm } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('yarn.lock')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('yarn.lock'));
 
       const path = '/test/cached';
-      
+
       // First call
       const result1 = detectPm({ path });
       expect(result1).toBe('yarn');
-      
+
       // Clear mock to ensure it's not called again
       vi.mocked(fs.existsSync).mockClear();
-      
+
       // Second call should use cache
       const result2 = detectPm({ path });
       expect(result2).toBe('yarn');
@@ -121,11 +111,11 @@ describe('deps utils', () => {
 
   describe('installNodeVersion', () => {
     it('should install node version when .nvmrc exists', async () => {
-      vi.mocked(fs.accessSync).mockImplementation((path) => {
+      vi.mocked(fs.accessSync).mockImplementation(path => {
         if (path.toString().endsWith('.nvmrc')) return;
         throw new Error('File not found');
       });
-      
+
       vi.mocked(runWithExeca).mockResolvedValue({ success: true, error: undefined });
 
       await installNodeVersion({ path: '/test/project' });
@@ -139,11 +129,11 @@ describe('deps utils', () => {
     });
 
     it('should install node version when .node-version exists', async () => {
-      vi.mocked(fs.accessSync).mockImplementation((path) => {
+      vi.mocked(fs.accessSync).mockImplementation(path => {
         if (path.toString().endsWith('.node-version')) return;
         throw new Error('File not found');
       });
-      
+
       vi.mocked(runWithExeca).mockResolvedValue({ success: true, error: undefined });
 
       await installNodeVersion({ path: '/test/project' });
@@ -163,16 +153,16 @@ describe('deps utils', () => {
     });
 
     it('should throw MastraError when n command fails', async () => {
-      vi.mocked(fs.accessSync).mockImplementation((path) => {
+      vi.mocked(fs.accessSync).mockImplementation(path => {
         if (path.toString().endsWith('.nvmrc')) return;
         throw new Error('File not found');
       });
-      
+
       const error = new Error('n command failed');
       vi.mocked(runWithExeca).mockResolvedValue({ success: false, error });
 
       await expect(installNodeVersion({ path: '/test/project' })).rejects.toThrow(MastraError);
-      
+
       try {
         await installNodeVersion({ path: '/test/project' });
       } catch (err) {
@@ -184,9 +174,7 @@ describe('deps utils', () => {
 
   describe('installDeps', () => {
     it('should install dependencies with detected package manager', async () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('pnpm-lock.yaml')
-      );
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('pnpm-lock.yaml'));
       vi.mocked(runWithExeca).mockResolvedValue({ success: true, error: undefined });
 
       await installDeps({ path: '/test/project' });
@@ -218,7 +206,7 @@ describe('deps utils', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
       await expect(installDeps({ path: '/test/project' })).rejects.toThrow(MastraError);
-      
+
       try {
         await installDeps({ path: '/test/project' });
       } catch (err) {
@@ -246,18 +234,15 @@ describe('deps utils', () => {
       const error = new Error('Command failed');
       vi.mocked(runWithExeca).mockResolvedValue({ success: false, error });
 
-      await expect(runInstallCommand({ path: '/test/project', installCommand: 'npm ci' }))
-        .rejects.toThrow(MastraError);
+      await expect(runInstallCommand({ path: '/test/project', installCommand: 'npm ci' })).rejects.toThrow(MastraError);
     });
   });
 
   describe('runScript', () => {
     it('should run npm scripts correctly', async () => {
       const { runScript } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('package-lock.json')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('package-lock.json'));
       vi.mocked(runWithExeca).mockResolvedValue({ success: true, error: undefined });
 
       await runScript({ scriptName: 'build', path: '/test/project' });
@@ -271,10 +256,8 @@ describe('deps utils', () => {
 
     it('should run non-npm scripts without "run"', async () => {
       const { runScript } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('pnpm-lock.yaml')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('pnpm-lock.yaml'));
       vi.mocked(runWithExeca).mockResolvedValue({ success: true, error: undefined });
 
       await runScript({ scriptName: 'build', path: '/test/project' });
@@ -288,10 +271,8 @@ describe('deps utils', () => {
 
     it('should pass additional arguments', async () => {
       const { runScript } = await import('./deps.js');
-      
-      vi.mocked(fs.existsSync).mockImplementation((path) => 
-        path.toString().endsWith('package-lock.json')
-      );
+
+      vi.mocked(fs.existsSync).mockImplementation(path => path.toString().endsWith('package-lock.json'));
       vi.mocked(runWithExeca).mockResolvedValue({ success: true, error: undefined });
 
       await runScript({ scriptName: 'test', path: '/test/project', args: ['--watch', '--coverage'] });
@@ -305,13 +286,12 @@ describe('deps utils', () => {
 
     it('should throw MastraError when script fails', async () => {
       const { runScript } = await import('./deps.js');
-      
+
       const error = new Error('Script failed');
       vi.mocked(runWithExeca).mockResolvedValue({ success: false, error });
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
-      await expect(runScript({ scriptName: 'build', path: '/test/project' }))
-        .rejects.toThrow('Script failed');
+      await expect(runScript({ scriptName: 'build', path: '/test/project' })).rejects.toThrow('Script failed');
     });
   });
 
@@ -333,8 +313,7 @@ describe('deps utils', () => {
       const error = new Error('Build failed');
       vi.mocked(runWithExeca).mockResolvedValue({ success: false, error });
 
-      await expect(runBuildCommand({ command: 'build', path: '/test/project' }))
-        .rejects.toThrow(MastraError);
+      await expect(runBuildCommand({ command: 'build', path: '/test/project' })).rejects.toThrow(MastraError);
     });
   });
 });

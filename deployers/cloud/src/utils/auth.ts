@@ -1,4 +1,4 @@
-export function getAuthEntrypoint () {
+export function getAuthEntrypoint() {
   return `
   import { MastraAuthProvider } from '@mastra/core/server';
 
@@ -31,5 +31,5 @@ export function getAuthEntrypoint () {
     const auth = serverConfig.experimental_auth
     serverConfig.experimental_auth = new MastraCloudAuth(auth)
   }
-  `
+  `;
 }

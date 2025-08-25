@@ -53,7 +53,7 @@ vi.mock('@mastra/deployer', () => {
     _bundle = mockBundle;
     writePackageJson = mockWritePackageJson;
   }
-  
+
   return {
     Deployer: MockDeployer,
     FileService: vi.fn().mockImplementation(() => ({
@@ -71,16 +71,16 @@ describe('CloudDeployer', () => {
     vi.clearAllMocks();
     mockBundle.mockResolvedValue(undefined);
     mockWritePackageJson.mockResolvedValue(undefined);
-    
+
     // Mock process.chdir
     originalChdir = process.chdir;
     process.chdir = vi.fn();
-    
+
     deployer = new CloudDeployer();
-    
+
     // @ts-ignore - accessing protected method for testing
     deployer._bundle = mockBundle;
-    
+
     vi.mocked(copy).mockResolvedValue(undefined);
     vi.mocked(installDeps).mockResolvedValue(undefined);
     vi.mocked(getMastraEntryFile).mockReturnValue('/test/src/mastra/index.ts');
@@ -116,7 +116,7 @@ describe('CloudDeployer', () => {
       const __dirname = dirname(fileURLToPath(import.meta.url));
       expect(copy).toHaveBeenCalledWith(
         join(__dirname, '../templates', 'instrumentation-template.js'),
-        join(outputDirectory, 'instrumentation.mjs')
+        join(outputDirectory, 'instrumentation.mjs'),
       );
     });
   });
@@ -126,25 +126,22 @@ describe('CloudDeployer', () => {
       const outputDirectory = '/test/output';
       const dependencies = new Map<string, string>([
         ['express', '^4.18.0'],
-        ['some-package', '1.0.0']
+        ['some-package', '1.0.0'],
       ]);
 
       // Test the core behavior: CloudDeployer should modify dependencies before calling super
       // We'll manually test this behavior by mimicking what the method does
-      
+
       // Simulate the CloudDeployer.writePackageJson behavior
       dependencies.set('@mastra/loggers', 'latest');
       dependencies.set('@mastra/libsql', 'latest');
       dependencies.set('@mastra/cloud', 'latest');
-      
+
       // Now call the deployer's method (which will call the mocked super)
       await deployer.writePackageJson(outputDirectory, dependencies);
 
       // Verify the parent method was called
-      expect(mockWritePackageJson).toHaveBeenCalledWith(
-        outputDirectory,
-        dependencies
-      );
+      expect(mockWritePackageJson).toHaveBeenCalledWith(outputDirectory, dependencies);
 
       // Verify the dependencies map contains the cloud deps (as we set them)
       expect(dependencies.get('@mastra/loggers')).toBe('latest');
@@ -165,25 +162,25 @@ describe('CloudDeployer', () => {
     it('should install dependencies using npm in the output directory', async () => {
       const outputDirectory = '/test/output';
       const rootDir = '/test/root';
-      
+
       // @ts-ignore - accessing protected method for testing
       await deployer.installDependencies(outputDirectory, rootDir);
 
       expect(installDeps).toHaveBeenCalledWith({
         path: join(outputDirectory, 'output'),
-        pm: 'npm'
+        pm: 'npm',
       });
     });
 
     it('should use process.cwd() as default rootDir', async () => {
       const outputDirectory = '/test/output';
-      
+
       // @ts-ignore - accessing protected method for testing
       await deployer.installDependencies(outputDirectory);
 
       expect(installDeps).toHaveBeenCalledWith({
         path: join(outputDirectory, 'output'),
-        pm: 'npm'
+        pm: 'npm',
       });
     });
   });
@@ -200,7 +197,7 @@ describe('CloudDeployer', () => {
         expect.any(String), // The generated entry code
         '/test/src/mastra/index.ts',
         outputDirectory,
-        [join(mastraDir, MASTRA_DIRECTORY, 'tools')]
+        [join(mastraDir, MASTRA_DIRECTORY, 'tools')],
       );
     });
 
@@ -208,7 +205,7 @@ describe('CloudDeployer', () => {
       const mastraDir = '/test/different/project';
       const outputDirectory = '/test/output';
       const originalCwd = process.cwd();
-      
+
       const chdirSpy = vi.spyOn(process, 'chdir').mockImplementation(() => {});
 
       await deployer.bundle(mastraDir, outputDirectory);
@@ -262,7 +259,9 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
 
       // Check for server creation
-      expect(entry).toContain('await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });');
+      expect(entry).toContain(
+        'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
+      );
 
       // Check for metadata
       expect(entry).toContain(`teamId: "${TEAM_ID}"`);
@@ -288,7 +287,7 @@ describe('CloudDeployer', () => {
     it('should handle getMastraEntryFile error in bundle', async () => {
       const mastraDir = '/test/project';
       const outputDirectory = '/test/output';
-      
+
       vi.mocked(getMastraEntryFile).mockImplementation(() => {
         throw new Error('Entry file not found');
       });
@@ -298,7 +297,7 @@ describe('CloudDeployer', () => {
 
     it('should handle installDeps error', async () => {
       const outputDirectory = '/test/output';
-      
+
       vi.mocked(installDeps).mockRejectedValue(new Error('Install failed'));
 
       // @ts-ignore - accessing protected method for testing
@@ -307,7 +306,7 @@ describe('CloudDeployer', () => {
 
     it('should handle copy error in writeInstrumentationFile', async () => {
       const outputDirectory = '/test/output';
-      
+
       vi.mocked(copy).mockRejectedValue(new Error('Copy failed'));
 
       await expect(deployer.writeInstrumentationFile(outputDirectory)).rejects.toThrow('Copy failed');
@@ -342,12 +341,12 @@ describe('CloudDeployer', () => {
     it('should handle different process.cwd scenarios', async () => {
       const cwdValues = ['/root', '/different/path', '/workspace'];
       const chdirSpy = vi.spyOn(process, 'chdir').mockImplementation(() => {});
-      
+
       for (const cwd of cwdValues) {
         vi.mocked(process.cwd).mockReturnValue(cwd);
-        
+
         await deployer.bundle('/test/project', '/test/output');
-        
+
         expect(chdirSpy).toHaveBeenCalledWith('/test/project');
         expect(chdirSpy).toHaveBeenCalledWith(cwd);
       }
