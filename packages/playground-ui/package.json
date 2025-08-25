@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -23,8 +23,8 @@
         "default": "./dist/tokens.es.js"
       },
       "require": {
-        "default": "./dist/tokens.cjs.js",
-        "types": "./dist/tokens.d.ts"
+        "types": "./dist/tokens.d.ts",
+        "default": "./dist/tokens.cjs.js"
       }
     }
   },

@@ -125,7 +125,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       resourceId: thread.resourceId,
       title: thread.title || `Thread ${thread.id}`,
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
-      updatedAt: now.toISOString(),
+      updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
     };
 
@@ -344,6 +344,62 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
+        },
+        error,
+      );
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    this.logger.debug('Getting messages by ID', { messageIds });
+    if (messageIds.length === 0) return [];
+
+    try {
+      const results = await Promise.all(
+        messageIds.map(id => this.service.entities.message.query.primary({ entity: 'message', id }).go()),
+      );
+
+      const data = results.map(result => result.data).flat(1);
+
+      let parsedMessages = data
+        .map((data: any) => this.parseMessageData(data))
+        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
+
+      // Deduplicate messages by ID (like libsql)
+      const uniqueMessages = parsedMessages.filter(
+        (message, index, self) => index === self.findIndex(m => m.id === message.id),
+      );
+
+      const list = new MessageList().add(uniqueMessages, 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );

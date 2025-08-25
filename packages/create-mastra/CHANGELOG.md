@@ -1,5 +1,9 @@
 # create-mastra
 
+## 0.10.23
+
+## 0.10.23-alpha.0
+
 ## 0.10.22
 
 ### Patch Changes
