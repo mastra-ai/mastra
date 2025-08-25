@@ -54,6 +54,8 @@ export class MemoryLibSQL extends MemoryStorage {
     threadId: string;
     selectBy: StorageGetMessagesArg['selectBy'];
   }) {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 
@@ -107,12 +109,15 @@ export class MemoryLibSQL extends MemoryStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       const messages: MastraMessageV2[] = [];
       const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       if (selectBy?.include?.length) {
@@ -153,7 +158,7 @@ export class MemoryLibSQL extends MemoryStorage {
           id: 'LIBSQL_STORE_GET_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );
@@ -250,6 +255,8 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       const currentOffset = page * perPage;
 
       const conditions: string[] = [`thread_id = ?`];
