@@ -37,7 +37,7 @@ export function validateToolInput<T = any>(
 
   const validation = schema.safeParse(actualInput);
   if (!validation.success) {
-    const errorMessages = validation.error.errors
+    const errorMessages = validation.error.issues
       .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
       .join('\n');
 

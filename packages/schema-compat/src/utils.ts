@@ -1,12 +1,18 @@
 import { jsonSchema } from 'ai';
 import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import { z } from 'zod';
+import type { ZodSchema as ZodSchemaV3, ZodType as ZodTypeV3 } from 'zod/v3';
+import type { ZodType as ZodSchemaV4, ZodType as ZodTypeV4 } from 'zod/v4';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
+import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
+import type { JSONSchema } from 'zod-from-json-schema-v3';
 import type { Targets } from 'zod-to-json-schema';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { SchemaCompatLayer } from './schema-compatibility';
+import { zodToJsonSchema } from './zod-to-json';
+
+type ZodSchema = ZodSchemaV3 | ZodSchemaV4;
+type ZodType = ZodTypeV3 | ZodTypeV4;
 
 /**
  * Converts a Zod schema to an AI SDK Schema with validation support.
@@ -33,18 +39,14 @@ import type { SchemaCompatLayer } from './schema-compatibility';
  */
 // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
 export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
-  return jsonSchema(
-    zodToJsonSchema(zodSchema, {
-      $refStrategy: 'none',
-      target,
-    }) as JSONSchema7,
-    {
-      validate: value => {
-        const result = zodSchema.safeParse(value);
-        return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
-      },
+  const jsonSchemaToUse = zodToJsonSchema(zodSchema, target) as JSONSchema7;
+
+  return jsonSchema(jsonSchemaToUse, {
+    validate: value => {
+      const result = zodSchema.safeParse(value);
+      return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
     },
-  );
+  });
 }
 
 /**
@@ -54,7 +56,7 @@ export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targ
  * @returns True if the value is a Zod type, false otherwise
  * @internal
  */
-function isZodType(value: unknown): value is z.ZodType {
+export function isZodType(value: unknown): value is ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
@@ -92,13 +94,18 @@ function isZodType(value: unknown): value is z.ZodType {
  * const zodSchema = convertSchemaToZod(aiSchema);
  * ```
  */
-export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
+export function convertSchemaToZod(schema: Schema | ZodSchema): ZodType {
   if (isZodType(schema)) {
     return schema;
   } else {
-    const jsonSchemaToConvert = ('jsonSchema' in schema ? schema.jsonSchema : schema) as ZodFromJSONSchema_JSONSchema;
+    const jsonSchemaToConvert = ('jsonSchema' in schema ? schema.jsonSchema : schema) as JSONSchema;
     try {
-      return convertJsonSchemaToZod(jsonSchemaToConvert);
+      if ('toJSONSchema' in z) {
+        // @ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (e: unknown) {
       const errorMessage = `[Schema Builder] Failed to convert schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
       console.error(errorMessage, e);
@@ -117,7 +124,7 @@ export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
  * @returns Processed schema as an AI SDK Schema
  */
 export function applyCompatLayer(options: {
-  schema: Schema | z.ZodSchema;
+  schema: Schema | ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'aiSdkSchema';
 }): Schema;
@@ -132,7 +139,7 @@ export function applyCompatLayer(options: {
  * @returns Processed schema as a JSONSchema7
  */
 export function applyCompatLayer(options: {
-  schema: Schema | z.ZodSchema;
+  schema: Schema | ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema';
 }): JSONSchema7;
@@ -177,11 +184,11 @@ export function applyCompatLayer({
   compatLayers,
   mode,
 }: {
-  schema: Schema | z.ZodSchema;
+  schema: Schema | ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema' | 'aiSdkSchema';
 }): JSONSchema7 | Schema {
-  let zodSchema: z.ZodSchema;
+  let zodSchema: ZodSchema;
 
   if (!isZodType(schema)) {
     // Convert non-zod schema to Zod
@@ -195,10 +202,9 @@ export function applyCompatLayer({
       return mode === 'jsonSchema' ? compat.processToJSONSchema(zodSchema) : compat.processToAISDKSchema(zodSchema);
     }
   }
-
   // If no compatibility applied, convert back to appropriate format
   if (mode === 'jsonSchema') {
-    return zodToJsonSchema(zodSchema, { $refStrategy: 'none', target: 'jsonSchema7' }) as JSONSchema7;
+    return zodToJsonSchema(zodSchema, 'jsonSchema7') as JSONSchema7;
   } else {
     return convertZodSchemaToAISDKSchema(zodSchema);
   }

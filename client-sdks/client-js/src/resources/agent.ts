@@ -12,7 +12,7 @@ import {
 import { Tool, type CoreMessage, type OutputSchema } from '@mastra/core';
 import { type GenerateReturn } from '@mastra/core/llm';
 import type { JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
+import { type ZodType } from 'zod';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { processClientTools } from '../utils/process-client-tools';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -195,15 +195,15 @@ export class Agent extends BaseResource {
   async generate(
     params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
-  async generate<Output extends JSONSchema7 | ZodSchema>(
+  async generate<Output extends JSONSchema7 | ZodType>(
     params: GenerateParams<Output> & { output: Output; experimental_output?: never },
   ): Promise<GenerateReturn<any, Output, undefined>>;
-  async generate<StructuredOutput extends JSONSchema7 | ZodSchema>(
+  async generate<StructuredOutput extends JSONSchema7 | ZodType>(
     params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
   ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generate<
-    Output extends JSONSchema7 | ZodSchema | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
+    Output extends JSONSchema7 | ZodType | undefined = undefined,
+    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
@@ -662,7 +662,7 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async stream<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
     params: StreamParams<T>,
   ): Promise<
     Response & {
