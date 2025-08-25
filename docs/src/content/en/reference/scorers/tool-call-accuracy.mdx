@@ -68,14 +68,14 @@ When `expectedToolOrder` is provided, the scorer validates tool calling sequence
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
 
 // Single tool validation
-const scorer = createToolCallAccuracyScorerCode({ 
-  expectedTool: 'weather-tool' 
+const scorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'weather-tool'
 });
 
 // Strict single tool (no other tools allowed)
-const strictScorer = createToolCallAccuracyScorerCode({ 
-  expectedTool: 'calculator-tool', 
-  strictMode: true 
+const strictScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'calculator-tool',
+  strictMode: true
 });
 
 // Tool order validation
@@ -135,17 +135,17 @@ import { openai } from '@ai-sdk/openai';
 const llmScorer = createToolCallAccuracyScorerLLM({
   model: openai('gpt-4o-mini'),
   availableTools: [
-    { 
-      name: 'weather-tool', 
-      description: 'Get current weather information for any location' 
+    {
+      name: 'weather-tool',
+      description: 'Get current weather information for any location'
     },
-    { 
-      name: 'search-tool', 
-      description: 'Search the web for information' 
+    {
+      name: 'search-tool',
+      description: 'Search the web for information'
     },
-    { 
-      name: 'calendar-tool', 
-      description: 'Check calendar events and scheduling' 
+    {
+      name: 'calendar-tool',
+      description: 'Check calendar events and scheduling'
     }
   ]
 });
@@ -202,34 +202,6 @@ console.log(result.reason); // Explanation of the score
 - **A/B Testing**: Compare different agent implementations
 - **User Intent Alignment**: Ensure tools match user needs
 - **Edge Case Handling**: Evaluate clarification and error scenarios
-
-## Migration Guide
-
-If you were using the previous hybrid scorer with `enableAppropriatenessEval`:
-
-```typescript
-// Old approach (deprecated)
-const scorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weather-tool',
-  enableAppropriatenessEval: true,
-  model: openai('gpt-4o-mini'),
-  availableTools: [...]
-});
-
-// New approach - use separate scorers
-// For deterministic evaluation:
-import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
-const codeScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weather-tool'
-});
-
-// For LLM evaluation:
-import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
-const llmScorer = createToolCallAccuracyScorerLLM({
-  model: openai('gpt-4o-mini'),
-  availableTools: [...]
-});
-```
 
 ## Related
 
