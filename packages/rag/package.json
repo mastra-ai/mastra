@@ -38,7 +38,7 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=0.14.0-0 <0.15.0-0",
-    "ai": "^4.0.0"
+    "ai": "^4.0.0 || ^5.0.0"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "^1.2.10",
