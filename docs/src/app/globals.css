@@ -726,3 +726,18 @@ table td code.nextra-code:not([class*="twoslash-"]) {
     color: var(--content-color);
   }
 }
+
+#headlessui-portal-root ul{
+  border-radius: 12px;
+  padding-inline: 0.25rem;
+  border-width: 0.5px;
+}
+
+#headlessui-portal-root ul li{
+  border-radius: 8px;
+}
+
+.nextra-breadcrumb + div {
+  border-radius: 10px!important;
+}
+
