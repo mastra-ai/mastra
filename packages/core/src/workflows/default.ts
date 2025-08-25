@@ -441,7 +441,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }): Promise<void> {
     let { duration, fn } = entry;
 
-    // Create sleep span
     const sleepSpan = aiTracingContext.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
@@ -552,7 +551,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }): Promise<void> {
     let { date, fn } = entry;
 
-    // Create sleep until span
     const sleepUntilSpan = aiTracingContext.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
@@ -609,7 +607,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ),
       });
 
-      // Update sleep until span with dynamic date/duration
+      // Update sleep until span with dynamic duration
       const time = !date ? 0 : date.getTime() - Date.now();
       sleepUntilSpan?.update({
         attributes: {
@@ -639,7 +637,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     timeout?: number;
     aiTracingContext?: AITracingContext;
   }): Promise<any> {
-    // Create wait event span
     const waitSpan = aiTracingContext?.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_WAIT_EVENT,
       name: `wait: ${event}`,
@@ -652,7 +649,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const startTime = Date.now();
     return new Promise((resolve, reject) => {
       const cb = (eventData: any) => {
-        // End wait span with success
         waitSpan?.end({
           output: eventData,
           attributes: {
@@ -1019,7 +1015,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
-    // Create parallel span for the overall parallel block
     const parallelSpan = aiTracingContext.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_PARALLEL,
       name: `parallel: ${entry.steps.length} branches`,
@@ -1083,7 +1078,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       };
     }
 
-    // End parallel span with results
     if (execResults.status === 'failed') {
       parallelSpan?.error({
         error: new Error(execResults.error),
@@ -1137,7 +1131,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
-    // Create conditional span for the overall conditional block
     const conditionalSpan = aiTracingContext.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: ${entry.conditions.length} conditions`,
@@ -1151,7 +1144,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const truthyIndexes = (
       await Promise.all(
         entry.conditions.map(async (cond, index) => {
-          // Create span for individual condition evaluation
           const evalSpan = conditionalSpan?.createChildSpan({
             type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
             name: `condition ${index}`,
@@ -1206,7 +1198,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               ),
             });
 
-            // End condition span with results
             evalSpan?.end({
               output: result,
               attributes: {
@@ -1231,7 +1222,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             this.logger.trackException(error);
             this.logger.error('Error evaluating condition: ' + error?.stack);
 
-            // End condition span with error
             evalSpan?.error({
               error,
               attributes: {
@@ -1340,7 +1330,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       };
     }
 
-    // End conditional span with final results
     if (execResults.status === 'failed') {
       conditionalSpan?.error({
         error: new Error(execResults.error),
@@ -1437,7 +1426,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       if (result.status !== 'success') {
-        // End loop span with error/suspension
         loopSpan?.end({
           attributes: {
             totalIterations: iteration,
@@ -1446,7 +1434,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return result;
       }
 
-      const conditionSpan = loopSpan?.createChildSpan({
+      const evalSpan = loopSpan?.createChildSpan({
         type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
         name: `condition: ${entry.loopType}`,
         input: result.output,
@@ -1463,7 +1451,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         inputData: result.output,
         runCount: -1,
         aiTracingContext: {
-          parentAISpan: loopSpan,
+          parentAISpan: evalSpan,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -1492,14 +1480,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           writableStream,
         ),
       });
-      conditionSpan?.end({
+      evalSpan?.end({
         output: isTrue,
       });
 
       iteration++;
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
-    // End loop span with success
     loopSpan?.end({
       output: result.output,
       attributes: {

@@ -1015,7 +1015,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }): Promise<void> {
     let { duration, fn } = entry;
 
-    // Create sleep span
     const sleepSpan = aiTracingContext?.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
@@ -1129,7 +1128,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }): Promise<void> {
     let { date, fn } = entry;
 
-    // Create sleep until span
     const sleepUntilSpan = aiTracingContext?.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
@@ -1188,7 +1186,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
       });
 
-      // Update sleep until span with dynamic date/duration
+      // Update sleep until span with dynamic duration
       const time = !date ? 0 : date.getTime() - Date.now();
       sleepUntilSpan?.update({
         attributes: {
@@ -1233,7 +1231,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
-    _writableStream,
+    writableStream,
     aiTracingContext,
   }: {
     step: Step<string, any, any>;
@@ -1248,7 +1246,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
-    _writableStream?: WritableStream<ChunkType>;
+    writableStream?: WritableStream<ChunkType>;
     aiTracingContext?: AITracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const stepAISpan = aiTracingContext?.parentAISpan?.createChildSpan({
@@ -1493,7 +1491,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
 
     const stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
-      let execResults: any;
+      let execResults: {
+        status: 'success' | 'failed' | 'suspended' | 'bailed';
+        output?: any;
+        startedAt: number;
+        endedAt?: number;
+        payload: any;
+        error?: string;
+        resumedAt?: number;
+        resumePayload?: any;
+        suspendedPayload?: any;
+        suspendedAt?: number;
+      };
       let suspended: { payload: any } | undefined;
       let bailed: { payload: any } | undefined;
 
@@ -1502,6 +1511,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId: executionContext.runId,
           mastra: this.mastra!,
           runtimeContext,
+          writableStream,
           inputData: prevOutput,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           aiTracingContext: {
@@ -1574,9 +1584,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       if (execResults.status === 'failed') {
         if (executionContext.retryConfig.attempts > 0 && this.inngestAttempts < executionContext.retryConfig.attempts) {
-          stepAISpan?.error({ error: execResults.error });
-
-          throw execResults.error;
+          const error = new Error(execResults.error);
+          stepAISpan?.error({ error });
+          throw error;
         }
       }
 
@@ -1721,7 +1731,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     writableStream?: WritableStream<ChunkType>;
     aiTracingContext?: AITracingContext;
   }): Promise<StepResult<any, any, any, any>> {
-    // Create conditional span for the overall conditional block
     const conditionalSpan = aiTracingContext?.parentAISpan?.createChildSpan({
       type: AISpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: ${entry.conditions.length} conditions`,
@@ -1736,7 +1745,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       await Promise.all(
         entry.conditions.map((cond, index) =>
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
-            // Create span for individual condition evaluation
             const evalSpan = conditionalSpan?.createChildSpan({
               type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
               name: `condition ${index}`,
@@ -1793,7 +1801,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 ),
               });
 
-              // End condition span with results
               evalSpan?.end({
                 output: result,
                 attributes: {
@@ -1802,8 +1809,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               });
 
               return result ? index : null;
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e: unknown) {
-              // End condition span with error
               evalSpan?.error({
                 error: e instanceof Error ? e : new Error(String(e)),
                 attributes: {
@@ -1878,7 +1885,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       };
     }
 
-    // End conditional span with final results
     if (execResults.status === 'failed') {
       conditionalSpan?.error({
         error: new Error(execResults.error),
