@@ -11,7 +11,6 @@ import {
 import {
   TOOL_SELECTION_ACCURACY_INSTRUCTIONS,
   createAnalyzePrompt,
-  createExtractToolsPrompt,
   createReasonPrompt,
 } from './prompts';
 
@@ -19,10 +18,6 @@ export interface ToolCallAccuracyOptions {
   model: MastraLanguageModel;
   availableTools: Array<{ name: string; description: string }>;
 }
-
-const extractOutputSchema = z.object({
-  toolsCalled: z.array(z.string()),
-});
 
 const analyzeOutputSchema = z.object({
   evaluations: z.array(
@@ -46,13 +41,21 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
       instructions: TOOL_SELECTION_ACCURACY_INSTRUCTIONS,
     },
   })
-    .preprocess({
-      description: 'Extract tool calls from the agent output',
-      outputSchema: extractOutputSchema,
-      createPrompt: ({ run }) => {
-        const agentResponse = getAssistantMessageFromRunOutput(run.output) ?? '';
-        return createExtractToolsPrompt(agentResponse);
-      },
+    .preprocess(async ({ run }) => {
+      const isInputInvalid = !run.input || !run.input.inputMessages || run.input.inputMessages.length === 0;
+      const isOutputInvalid = !run.output || run.output.length === 0;
+
+      if (isInputInvalid || isOutputInvalid) {
+        throw new Error('Input and output messages cannot be null or empty');
+      }
+
+      const { tools: actualTools, toolCallInfos } = extractToolCalls(run.output);
+
+      return {
+        actualTools,
+        hasToolCalls: actualTools.length > 0,
+        toolCallInfos,
+      };
     })
     .analyze({
       description: 'Analyze the appropriateness of tool selections',
@@ -61,12 +64,7 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
         const userInput = getUserMessageFromRunInput(run.input) ?? '';
         const agentResponse = getAssistantMessageFromRunOutput(run.output) ?? '';
 
-        // Also extract actual tool calls from the output for comparison
-        const { tools: actualToolCalls } = extractToolCalls(run.output);
-
-        // Use actual tool calls if available, otherwise use LLM-extracted ones
-        const toolsCalled =
-          actualToolCalls.length > 0 ? actualToolCalls : results.preprocessStepResult?.toolsCalled || [];
+        const toolsCalled = results.preprocessStepResult?.actualTools || [];
 
         return createAnalyzePrompt({
           userInput,

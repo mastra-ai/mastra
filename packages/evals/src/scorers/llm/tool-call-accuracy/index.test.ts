@@ -46,7 +46,9 @@ describe('createToolCallAccuracyScorerLLM', () => {
       scorer.preprocess = vi.fn().mockImplementation(() => ({
         ...scorer,
         preprocessStepResult: {
-          toolsCalled: ['weather-tool'],
+          actualTools: ['weather-tool'],
+          hasToolCalls: true,
+          toolCallInfos: [],
         },
       }));
 
@@ -89,7 +91,9 @@ describe('createToolCallAccuracyScorerLLM', () => {
       scorer.preprocess = vi.fn().mockImplementation(() => ({
         ...scorer,
         preprocessStepResult: {
-          toolsCalled: [],
+          actualTools: [],
+          hasToolCalls: false,
+          toolCallInfos: [],
         },
       }));
 
