@@ -42,21 +42,18 @@ export function AutoForm<T extends Record<string, any>>({
   ...props
 }: AutoFormProps<T> & { readOnly?: boolean }) {
   return (
-    <div>
-      <span>Live & Direct</span>
-      <BaseAutoForm
-        {...props}
-        uiComponents={{ ...ShadcnUIComponents, ...uiComponents }}
-        formComponents={{
-          string: props => <StringField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
-          number: props => <NumberField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
-          boolean: props => <BooleanField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
-          date: props => <DateField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
-          select: props => <SelectField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
-          record: props => <RecordField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
-          ...formComponents,
-        }}
-      />
-    </div>
+    <BaseAutoForm
+      {...props}
+      uiComponents={{ ...ShadcnUIComponents, ...uiComponents }}
+      formComponents={{
+        string: props => <StringField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        number: props => <NumberField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        boolean: props => <BooleanField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        date: props => <DateField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        select: props => <SelectField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        record: props => <RecordField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        ...formComponents,
+      }}
+    />
   );
 }
