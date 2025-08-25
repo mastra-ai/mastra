@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.23",
+  "version": "0.10.24-alpha.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -56,7 +56,7 @@
     "@mastra/mcp": "workspace:^",
     "@opentelemetry/core": "^2.0.1",
     "@opentelemetry/instrumentation": "^0.203.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.62.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.62.1",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.203.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
     "@opentelemetry/resources": "^2.0.1",

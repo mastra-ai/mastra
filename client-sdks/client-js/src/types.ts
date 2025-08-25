@@ -49,6 +49,8 @@ export interface ClientOptions {
   headers?: Record<string, string>;
   /** Abort signal for request */
   abortSignal?: AbortSignal;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 export interface RequestOptions {
@@ -56,6 +58,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 type WithoutMethods<T> = {
