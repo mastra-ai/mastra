@@ -9371,4 +9371,22 @@ describe('Workflow', () => {
       }
     });
   });
+
+  describe('AI Workflow Tracing', () => {
+    it('should provide full TypeScript support for aiTracingContext', () => {
+      const typedStep = createStep({
+        id: 'typed-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, aiTracingContext }) => {
+          expect(aiTracingContext).toBeDefined();
+          expect(typeof aiTracingContext.parentAISpan).toBeDefined();
+
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      expect(typedStep).toBeDefined();
+    });
+  });
 });
