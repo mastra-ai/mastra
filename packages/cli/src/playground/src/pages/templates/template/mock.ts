@@ -240,7 +240,7 @@ export const streamResult = {
         'package-merge': {
           id: 'package-merge',
           description: 'Merge template package.json dependencies into target project',
-          status: 'success',
+          status: 'running',
           startTime: '2025-08-24T23:46:29.595Z',
           stepCallId: '7609c42b-2ae3-4e68-89d9-bf3e8ea30d1d',
           payload: {
@@ -291,7 +291,7 @@ export const streamResult = {
         install: {
           id: 'install',
           description: 'Install packages based on merged package.json',
-          status: 'success',
+          status: 'pending',
           startTime: '2025-08-24T23:46:38.039Z',
           stepCallId: '8f8c228a-0698-41d0-b10e-ce8dc0d6bce2',
           payload: {
@@ -306,7 +306,7 @@ export const streamResult = {
         'programmatic-file-copy': {
           id: 'programmatic-file-copy',
           description: 'Programmatically copy template files to target project based on ordered units',
-          status: 'success',
+          status: 'pending',
           startTime: '2025-08-24T23:46:46.416Z',
           stepCallId: '3dbef3ee-c852-4522-bb70-fdc1a2ad0b1a',
           payload: {
@@ -432,7 +432,7 @@ export const streamResult = {
         'intelligent-merge': {
           id: 'intelligent-merge',
           description: 'Use AgentBuilder to intelligently merge template files',
-          status: 'running',
+          status: 'pending',
           startTime: '2025-08-24T23:46:53.323Z',
           stepCallId: 'd34d8977-1ebe-4360-b908-f534264c561b',
           payload: {
@@ -1263,7 +1263,7 @@ export const streamResult = {
       },
     },
     currentStep: {
-      id: 'validation-and-fix',
+      id: 'package-merge',
       status: 'running',
       startTime: '2025-08-24T23:47:25.984Z',
       stepCallId: '1c9c0029-e45e-4a37-a7a8-a771b9f2ac38',

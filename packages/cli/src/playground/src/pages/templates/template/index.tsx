@@ -47,7 +47,14 @@ export default function Template() {
   // Fetch agent builder workflow info for step pre-population
   const { data: workflowInfo } = useAgentBuilderWorkflow();
   const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
-  const { streamInstall, streamResult, isStreaming, installationResult } = useStreamTemplateInstall(workflowInfo);
+  const {
+    streamInstall,
+    // streamResult,
+    //isStreaming,
+    installationResult,
+  } = useStreamTemplateInstall(workflowInfo);
+
+  const isStreaming = true;
 
   const providerOptions = [
     { value: 'openai', label: 'OpenAI' },
