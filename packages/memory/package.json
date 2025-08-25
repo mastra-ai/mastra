@@ -44,7 +44,7 @@
     "@mastra/schema-compat": "workspace:*",
     "@upstash/redis": "^1.35.3",
     "ai": "^4.3.19",
-    "ai-v5": "npm:ai@5.0.15",
+    "ai-v5": "npm:ai@5.0.22",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
     "pg": "^8.16.3",

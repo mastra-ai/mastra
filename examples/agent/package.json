@@ -8,7 +8,7 @@
   "dependencies": {
     "@ai-sdk/google": "^1.2.22",
     "@ai-sdk/openai": "^1.3.24",
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.19",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
@@ -18,7 +18,7 @@
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
     "ai": "^4.3.19",
-    "ai-v5": "npm:ai@^5.0.15",
+    "ai-v5": "npm:ai@^5.0.22",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
     "typescript": "^5.8.3",
