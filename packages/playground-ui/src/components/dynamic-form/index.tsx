@@ -9,6 +9,7 @@ import z, { ZodObject } from 'zod';
 import { Label } from '../ui/label';
 import { Icon } from '@/ds/icons';
 import { ZodProvider, fieldConfig } from '@autoform/zod/v4';
+import { CustomZodProvider } from '../ui/autoform/zodProvider';
 
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
@@ -55,7 +56,7 @@ export function DynamicForm<T extends z.ZodSchema>({
     return schema;
   };
 
-  const schemaProvider = new ZodProvider(normalizedSchema(schema) as any);
+  const schemaProvider = new CustomZodProvider(normalizedSchema(schema) as any);
 
   const formProps: ExtendableAutoFormProps<any> = {
     schema: schemaProvider,

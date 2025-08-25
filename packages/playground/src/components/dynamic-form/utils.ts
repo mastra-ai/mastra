@@ -23,5 +23,6 @@ export const transformToNestObject = (error: z.ZodError): FieldErrors => {
  * @returns resolved zod object
  */
 export function resolveSerializedZodOutput(obj: any) {
-  return Function('z', `"use strict";return (${obj});`)(z);
+  const result = obj.replace(/(['"])zod(['"])/g, '$1zod/v4$2').replace(/\.record\(/g, '.record(z.string(),');
+  return Function('z', `"use strict";return (${result});`)(z);
 }
