@@ -41,7 +41,7 @@ importers:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
 packages:
