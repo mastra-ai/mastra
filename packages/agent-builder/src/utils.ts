@@ -1,9 +1,13 @@
-import { exec as execNodejs, spawn as nodeSpawn, type SpawnOptions } from 'child_process';
+import { exec as execNodejs, spawn as nodeSpawn } from 'child_process';
+import type { SpawnOptions } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { copyFile } from 'fs/promises';
 import { createRequire } from 'module';
 import { dirname, basename, extname, resolve } from 'path';
 import { promisify } from 'util';
+import { openai } from '@ai-sdk/openai';
+import type { MastraLanguageModel } from '@mastra/core/agent';
+import { MCPClient } from '@mastra/mcp';
 import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
 
@@ -410,3 +414,41 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
   console.log(`📝 Copied with unique name: ${basename(uniqueTargetFile)}`);
   return uniqueTargetFile;
 }
+
+// Helper function to resolve the model to use
+export const resolveModel = (runtimeContext: any): MastraLanguageModel => {
+  const modelFromContext = runtimeContext.get('model');
+  if (modelFromContext) {
+    console.log(`Using model: ${modelFromContext}`);
+    // Type check to ensure it's a MastraLanguageModel
+    if (isValidMastraLanguageModel(modelFromContext)) {
+      return modelFromContext;
+    }
+    throw new Error(
+      'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
+    );
+  }
+  return openai('gpt-4.1'); // Default model
+};
+
+// Type guard to check if object is a valid MastraLanguageModel
+export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
+  return (
+    model && typeof model === 'object' && typeof model.modelId === 'string' && typeof model.generate === 'function'
+  );
+};
+
+export const initializeMcpTools = async () => {
+  const mcpClient = new MCPClient({
+    id: 'mcp-client',
+    servers: {
+      docs: {
+        command: 'npx',
+        args: ['-y', '@mastra/mcp-docs-server'],
+      },
+    },
+  });
+
+  const mcpTools = await mcpClient.getTools();
+  return { docs: mcpTools.docs_mastraDocs, examples: mcpTools.docs_mastraExamples };
+};

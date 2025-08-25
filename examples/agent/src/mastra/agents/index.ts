@@ -7,7 +7,7 @@ import { Agent } from '@mastra/core/agent';
 import { InputProcessor } from '@mastra/core/agent/input-processor';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
-import { AgentBuilder } from '@mastra/agent-builder';
+import { AgentBuilder, workflowBuilderWorkflow } from '@mastra/agent-builder';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
@@ -228,8 +228,24 @@ export const evalAgent = new Agent({
   },
 });
 
-export const agentBuilder = new AgentBuilder({
+// export const agentBuilder = new AgentBuilder({
+//   model: openai('gpt-4.1'),
+//   projectPath: '/Users/daniellew/Documents/Mastra/mastra-agent-builder-test4',
+//   summaryModel: google('gemini-2.0-flash-001'),
+// });
+
+export const workflowBuilderAgent = new Agent({
+  name: 'Workflow Builder Agent',
+  instructions: `
+    You are a Mastra workflow builder agent. You are responsible for building workflows for the Mastra framework.
+    `,
   model: openai('gpt-4.1'),
-  projectPath: '/Users/daniellew/Documents/Mastra/mastra-agent-builder-test4',
-  summaryModel: google('gemini-2.0-flash-001'),
+  workflows: {
+    workflowBuilderWorkflow,
+  },
+  memory: new Memory({
+    options: {
+      lastMessages: 10,
+    },
+  }),
 });

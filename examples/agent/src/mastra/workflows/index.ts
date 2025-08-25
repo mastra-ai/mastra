@@ -1,6 +1,8 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
+export { workflowBuilderWorkflow } from '@mastra/agent-builder';
+
 export const myWorkflow = createWorkflow({
   id: 'my-workflow',
   description: 'My workflow description',

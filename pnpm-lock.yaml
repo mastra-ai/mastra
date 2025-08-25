@@ -5,8 +5,16 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  typescript: ^5.8.3
-  '@types/node': ^20.17.57
+  '@mastra/core': link:../../packages/core
+  '@mastra/loggers': link:../../packages/loggers
+  '@mastra/voice-openai': link:../../voice/openai
+  '@mastra/memory': link:../../packages/memory
+  '@mastra/client-js': link:../../client-sdks/client-js
+  '@mastra/mcp': link:../../packages/mcp
+  '@mastra/libsql': link:../../stores/libsql
+  '@mastra/agent-builder': link:../../packages/agent-builder
+  '@mastra/evals': link:../../packages/evals
+  mastra: link:../../packages/cli
 
 importers:
 
@@ -424,6 +432,66 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.4)(yaml@2.8.0)
+
+  examples/agent:
+    dependencies:
+      '@ai-sdk/google':
+        specifier: ^1.2.22
+        version: 1.2.22(zod@3.25.76)
+      '@ai-sdk/openai':
+        specifier: ^1.3.24
+        version: 1.3.24(zod@3.25.76)
+      '@ai-sdk/openai-v5':
+        specifier: npm:@ai-sdk/openai@2.0.15
+        version: '@ai-sdk/openai@2.0.15(zod@3.25.76)'
+      '@mastra/agent-builder':
+        specifier: link:../../../../packages/agent-builder
+        version: link:../../../../packages/agent-builder
+      '@mastra/client-js':
+        specifier: link:../../../../client-sdks/client-js
+        version: link:../../../../client-sdks/client-js
+      '@mastra/core':
+        specifier: link:../../../../packages/core
+        version: link:../../../../packages/core
+      '@mastra/evals':
+        specifier: link:../../../../packages/evals
+        version: link:../../../../packages/evals
+      '@mastra/libsql':
+        specifier: link:../../../../stores/libsql
+        version: link:../../../../stores/libsql
+      '@mastra/loggers':
+        specifier: link:../../../../packages/loggers
+        version: link:../../../../packages/loggers
+      '@mastra/mcp':
+        specifier: link:../../../../packages/mcp
+        version: link:../../../../packages/mcp
+      '@mastra/memory':
+        specifier: link:../../../../packages/memory
+        version: link:../../../../packages/memory
+      '@mastra/voice-openai':
+        specifier: link:../../../../voice/openai
+        version: link:../../../../voice/openai
+      '@sendgrid/mail':
+        specifier: ^8.1.5
+        version: 8.1.5
+      ai:
+        specifier: ^4.3.19
+        version: 4.3.19(react@19.1.1)(zod@3.25.76)
+      ai-v5:
+        specifier: npm:ai@^5.0.15
+        version: ai@5.0.19(zod@3.25.76)
+      fetch-to-node:
+        specifier: ^2.1.0
+        version: 2.1.0
+      mastra:
+        specifier: link:../../../../packages/cli
+        version: link:../../../../packages/cli
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+      zod:
+        specifier: ^3.25.67
+        version: 3.25.76
 
   examples/dane:
     dependencies:
@@ -9260,6 +9328,18 @@ packages:
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
+
+  '@sendgrid/client@8.1.5':
+    resolution: {integrity: sha512-Jqt8aAuGIpWGa15ZorTWI46q9gbaIdQFA21HIPQQl60rCjzAko75l3D1z7EyjFrNr4MfQ0StusivWh8Rjh10Cg==}
+    engines: {node: '>=12.*'}
+
+  '@sendgrid/helpers@8.0.0':
+    resolution: {integrity: sha512-Ze7WuW2Xzy5GT5WRx+yEv89fsg/pgy3T1E3FS0QEx0/VvRmigMZ5qyVGhJz4SxomegDkzXv/i0aFPpHKN8qdAA==}
+    engines: {node: '>= 12.0.0'}
+
+  '@sendgrid/mail@8.1.5':
+    resolution: {integrity: sha512-W+YuMnkVs4+HA/bgfto4VHKcPKLc7NiZ50/NH2pzO6UHCCFuq8/GNB98YJlLEr/ESDyzAaDr7lVE7hoBwFTT3Q==}
+    engines: {node: '>=12.*'}
 
   '@sevinf/maybe@0.5.0':
     resolution: {integrity: sha512-ARhyoYDnY1LES3vYI0fiG6e9esWfTNcXcO6+MPJJXcnyMV3bim4lnFt45VXouV7y82F4x3YH8nOQ6VztuvUiWg==}
@@ -23665,6 +23745,24 @@ snapshots:
 
   '@sec-ant/readable-stream@0.4.1': {}
 
+  '@sendgrid/client@8.1.5':
+    dependencies:
+      '@sendgrid/helpers': 8.0.0
+      axios: 1.11.0
+    transitivePeerDependencies:
+      - debug
+
+  '@sendgrid/helpers@8.0.0':
+    dependencies:
+      deepmerge: 4.3.1
+
+  '@sendgrid/mail@8.1.5':
+    dependencies:
+      '@sendgrid/client': 8.1.5
+      '@sendgrid/helpers': 8.0.0
+    transitivePeerDependencies:
+      - debug
+
   '@sevinf/maybe@0.5.0': {}
 
   '@shikijs/core@1.29.2':
@@ -25498,6 +25596,14 @@ snapshots:
       possible-typed-array-names: 1.1.0
 
   aws4@1.13.2: {}
+
+  axios@1.11.0:
+    dependencies:
+      follow-redirects: 1.15.9
+      form-data: 4.0.4
+      proxy-from-env: 1.1.0
+    transitivePeerDependencies:
+      - debug
 
   axios@1.11.0(debug@4.4.1):
     dependencies:
@@ -27430,6 +27536,8 @@ snapshots:
   flatbuffers@24.12.23: {}
 
   flatted@3.3.3: {}
+
+  follow-redirects@1.15.9: {}
 
   follow-redirects@1.15.9(debug@4.4.1):
     optionalDependencies:

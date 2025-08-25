@@ -3,15 +3,16 @@ import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 
 import {
-  agentBuilder,
+  // agentBuilder,
   agentThatHarassesYou,
   chefAgent,
   chefAgentResponses,
   dynamicAgent,
   evalAgent,
+  workflowBuilderAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
-import { myWorkflow } from './workflows';
+import { myWorkflow, workflowBuilderWorkflow } from './workflows';
 import { chefModelV2Agent } from './agents/model-v2-agent';
 
 const storage = new LibSQLStore({
@@ -20,7 +21,8 @@ const storage = new LibSQLStore({
 
 export const mastra = new Mastra({
   agents: {
-    agentBuilder,
+    // agentBuilder,
+    workflowBuilderAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
@@ -34,7 +36,7 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow },
+  workflows: { myWorkflow, workflowBuilderWorkflow },
   bundler: {
     sourcemap: true,
   },

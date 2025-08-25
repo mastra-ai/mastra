@@ -2,9 +2,7 @@ import { existsSync } from 'fs';
 import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, dirname, resolve, extname, basename } from 'path';
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import type { MastraLanguageModel } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -38,34 +36,13 @@ import {
   logGitState,
   backupAndReplaceFile,
   renameAndCopyFile,
+  resolveModel,
   gitCheckoutBranch,
   gitClone,
   gitCheckoutRef,
   gitRevParse,
   gitAddAndCommit,
 } from '../utils';
-
-// Helper function to resolve the model to use
-const resolveModel = (runtimeContext: any): MastraLanguageModel => {
-  const modelFromContext = runtimeContext.get('model');
-  if (modelFromContext) {
-    // Type check to ensure it's a MastraLanguageModel
-    if (isValidMastraLanguageModel(modelFromContext)) {
-      return modelFromContext;
-    }
-    throw new Error(
-      'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
-    );
-  }
-  return openai('gpt-4.1'); // Default model
-};
-
-// Type guard to check if object is a valid MastraLanguageModel
-const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
-  return (
-    model && typeof model === 'object' && typeof model.modelId === 'string' && typeof model.generate === 'function'
-  );
-};
 
 // Step 1: Clone template to temp directory
 const cloneTemplateStep = createStep({
@@ -356,7 +333,7 @@ const packageMergeStep = createStep({
       let targetPkgRaw = '{}';
       try {
         targetPkgRaw = await readFile(targetPkgPath, 'utf-8');
-      } catch (e) {
+      } catch {
         console.warn(`No existing package.json at ${targetPkgPath}, creating a new one`);
       }
 
@@ -1658,3 +1635,6 @@ const determineConflictStrategy = (
 const shouldAbortWorkflow = (stepResult: any): boolean => {
   return stepResult?.success === false || stepResult?.error;
 };
+
+// Export workflow builder workflow
+export { workflowBuilderWorkflow, createWorkflowWithBuilder, editWorkflowWithBuilder } from './workflow-builder';

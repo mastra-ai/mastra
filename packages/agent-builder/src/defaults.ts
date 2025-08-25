@@ -2570,16 +2570,19 @@ export const mastra = new Mastra({
       }> = [];
 
       async function processDirectory(dirPath: string, currentDepth: number = 0) {
-        if (gitignoreFilter?.ignores(dirPath)) return;
+        const relativeToProject = relative(projectPath || process.cwd(), dirPath);
+        if (gitignoreFilter?.ignores(relativeToProject)) return;
         if (currentDepth > maxDepth) return;
 
         const entries = await readdir(dirPath);
 
         for (const entry of entries) {
-          if (gitignoreFilter?.ignores(entry)) continue;
+          const entryPath = join(dirPath, entry);
+          const relativeEntryPath = relative(projectPath || process.cwd(), entryPath);
+          if (gitignoreFilter?.ignores(relativeEntryPath)) continue;
           if (!includeHidden && entry.startsWith('.')) continue;
 
-          const fullPath = join(dirPath, entry);
+          const fullPath = entryPath;
           const relativePath = relative(resolvedPath, fullPath);
 
           if (pattern) {
