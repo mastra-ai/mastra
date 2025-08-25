@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
-import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
+import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';

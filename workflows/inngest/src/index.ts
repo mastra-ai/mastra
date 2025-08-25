@@ -1,10 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
-import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
+import type { Agent } from '@mastra/core/agent';
 import { AISpanType } from '@mastra/core/ai-tracing';
 import type { AITracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
+import type { Mastra } from '@mastra/core/mastra';
+import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
@@ -1809,7 +1812,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               });
 
               return result ? index : null;
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e: unknown) {
               evalSpan?.error({
                 error: e instanceof Error ? e : new Error(String(e)),

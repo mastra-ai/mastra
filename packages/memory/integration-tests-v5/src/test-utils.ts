@@ -1,4 +1,5 @@
-import type { CoreMessage, MastraMessageV1 } from '@mastra/core';
+import type { MastraMessageV1 } from '@mastra/core/memory';
+import type { CoreMessage } from '@mastra/core/llm';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 
