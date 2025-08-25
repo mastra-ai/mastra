@@ -4,9 +4,9 @@ import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import type { Mastra } from '@mastra/core';
-import { Telemetry } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Telemetry } from '@mastra/core/telemetry';
 import { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -20,7 +20,6 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
-
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
