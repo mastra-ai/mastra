@@ -2737,9 +2737,6 @@ importers:
       zod:
         specifier: ^3.25.67
         version: 3.25.76
-      zod-to-json-schema:
-        specifier: ^3.24.5
-        version: 3.24.6(zod@3.25.76)
 
   stores/_test-utils:
     dependencies:
