@@ -1,4 +1,6 @@
-export function getPackageManager(): string {
+import type { PackageManager } from '../utils/package-manager';
+
+export function getPackageManager(): PackageManager {
   const userAgent = process.env.npm_config_user_agent || '';
   const execPath = process.env.npm_execpath || '';
 
@@ -25,17 +27,4 @@ export function getPackageManager(): string {
   }
 
   return 'npm'; // Default fallback
-}
-
-export function getPackageManagerInstallCommand(pm: string): string {
-  switch (pm) {
-    case 'npm':
-      return 'install';
-    case 'yarn':
-      return 'add';
-    case 'pnpm':
-      return 'add';
-    default:
-      return 'install';
-  }
 }
