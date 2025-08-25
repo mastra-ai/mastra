@@ -54,6 +54,12 @@ export const mastraClient = new MastraClient({
       description: "An object containing custom HTTP headers to include with every request.",
       isOptional: true,
     },
+    {
+      name: "credentials",
+      type: '"omit" | "same-origin" | "include"',
+      description: "Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info.",
+      isOptional: true,
+    },
   ]}
 />
 
