@@ -1212,7 +1212,6 @@ export class Agent<
           writableStream,
           agentAISpan,
         };
-        console.log({ tool, options });
         return [k, makeCoreTool(tool, options)];
       }),
     );
@@ -1717,8 +1716,6 @@ export class Agent<
           writableStream,
           agentAISpan,
         });
-
-        console.log({ convertedTools });
 
         const messageList = new MessageList({
           threadId,

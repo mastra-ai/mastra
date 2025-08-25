@@ -11,7 +11,6 @@ function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   const defaultValue = getDefaultValueInZodStack(schema);
 
   // Enums
-  console.log({ baseSchema });
   // @ts-expect-error - property entries exists in zod v4 Enums
   const options = baseSchema._zod.def?.entries;
   let optionValues: [string, string][] = [];
@@ -72,7 +71,6 @@ export class CustomZodProvider<T extends z.ZodObject> extends ZodProvider<T> {
 
   validateSchema(values: z.core.output<T>): SchemaValidation {
     const result = super.validateSchema(values);
-    console.log({ result });
     return result;
   }
 
