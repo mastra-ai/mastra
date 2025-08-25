@@ -1,0 +1,338 @@
+---
+title: "AI Tracing | Mastra Observability Documentation"
+description: "Set up AI tracing for Mastra applications"
+---
+
+import Image from "next/image";
+
+# AI Tracing
+
+AI Tracing provides specialized monitoring and debugging for the AI-related operations in your application. When enabled, Mastra automatically creates traces for agent runs, LLM generations, tool calls, and workflow steps with AI-specific context and metadata.
+
+Unlike traditional application tracing, AI Tracing focuses specifically on understanding your AI pipeline — capturing token usage, model parameters, tool execution details, and conversation flows. This makes it easier to debug issues, optimize performance, and understand how your AI systems behave in production.
+
+You create AI traces by:
+
+- **Configuring exporters** to send trace data to observability platforms like Langfuse
+- **Setting sampling strategies** to control which traces are collected
+- **Running agents and workflows** — Mastra automatically instruments them with detailed AI tracing
+
+This provides full visibility into your AI operations with minimal setup, helping you build more reliable and observable AI applications.
+
+> **⚠️ Experimental Feature**: AI Tracing is available as of `@mastra/core 0.14.0` and is currently experimental. The API may change in future releases.
+
+## How It Differs from Standard Tracing
+
+AI Tracing complements Mastra's existing [OpenTelemetry-based tracing](./tracing.mdx) but serves a different purpose:
+
+| Feature | Standard Tracing | AI Tracing |
+|---------|-----------------|------------|
+| **Focus** | Application infrastructure | AI operations only |
+| **Data Format** | OpenTelemetry standard | Provider-native (Langfuse, etc.) |
+| **Timing** | Batch export | Real-time option for debugging |
+| **Metadata** | Generic span attributes | AI-specific (tokens, models, tools) |
+
+## Current Status
+
+**Supported Exporters:**
+- ✅ [Langfuse](https://langfuse.com/) - Full support with real-time mode
+- 🔄 [Braintrust](https://www.braintrust.dev/home) - Coming soon  
+- 🔄 [OpenTelemetry](https://opentelemetry.io/) - Coming soon
+
+**Known Limitations:**
+- Mastra playground traces still use the legacy tracing system
+- API is experimental and may change
+
+For the latest updates, see [GitHub issue #6773](https://github.com/mastra-ai/mastra/issues/6773).
+
+### Basic Configuration
+
+Here's a simple example of enabling AI Tracing:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+import { LangfuseExporter } from '@mastra/langfuse';
+
+export const mastra = new Mastra({
+  // ... other config
+  observability: {
+    instances: {
+      langfuse: {
+        serviceName: 'service',
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+            secretKey: process.env.LANGFUSE_SECRET_KEY!,
+            baseUrl: process.env.LANGFUSE_BASE_URL!,
+            realtime: true,
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+### Configuration Options
+
+The AI tracing config accepts these properties:
+
+```ts
+type AITracingConfig = {
+  // Map of tracing instance names to their configurations
+  instances: Record<string, AITracingInstanceConfig | MastraAITracing>;
+  
+  // Optional function to select which tracing instance to use
+  selector?: TracingSelector;
+};
+
+type AITracingInstanceConfig = {
+  // Name to identify your service in traces
+  serviceName: string;
+  
+  // Control how many traces are sampled
+  sampling?: {
+    type: "always" | "never" | "ratio" | "custom";
+    probability?: number; // For ratio sampling (0.0 to 1.0)
+    sampler?: (context: AITraceContext) => boolean; // For custom sampling
+  };
+  
+  // Array of exporters to send trace data to
+  exporters?: AITracingExporter[];
+  
+  // Array of processors to transform spans before export
+  processors?: AISpanProcessor[];
+};
+```
+
+#### Sampling Configuration
+
+Control which traces are collected and exported:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      langfuse: {
+        serviceName: 'my-service',
+        // Sample all traces (default)
+        sampling: { type: 'always' },
+        exporters: [langfuseExporter],
+      },
+      
+      development: {
+        serviceName: 'dev-service',
+        // Sample 10% of traces
+        sampling: { 
+          type: 'ratio', 
+          probability: 0.1 
+        },
+        exporters: [langfuseExporter],
+      },
+      
+      custom: {
+        serviceName: 'custom-service',
+        // Custom sampling logic
+        sampling: {
+          type: 'custom',
+          sampler: (context) => {
+            // Only trace requests from specific users
+            return context.metadata?.userId === 'debug-user';
+          }
+        },
+        exporters: [langfuseExporter],
+      },
+    },
+  },
+});
+```
+
+#### Langfuse Exporter Configuration
+
+The Langfuse exporter accepts these options:
+
+```ts
+type LangfuseExporterConfig = {
+  // Langfuse API credentials
+  publicKey: string;
+  secretKey: string;
+  baseUrl: string;
+  
+  // Enable realtime mode for immediate trace visibility
+  realtime?: boolean; // defaults to false
+  
+  // Additional options passed to Langfuse client
+  options?: any;
+};
+```
+
+Example with environment variables:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+import { LangfuseExporter } from '@mastra/langfuse';
+
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      langfuse: {
+        serviceName: process.env.SERVICE_NAME || 'mastra-app',
+        sampling: { type: 'always' },
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+            secretKey: process.env.LANGFUSE_SECRET_KEY!,
+            baseUrl: process.env.LANGFUSE_BASE_URL!,
+            realtime: process.env.NODE_ENV === 'development',
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+#### Environment Variables
+
+```env filename=".env" copy
+LANGFUSE_PUBLIC_KEY=pk_lf_...
+LANGFUSE_SECRET_KEY=sk_lf_...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+SERVICE_NAME=my-mastra-app
+```
+
+#### Multi-Instance Configuration
+
+You can configure multiple tracing instances and use a selector to choose which one to use:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      production: {
+        serviceName: 'prod-service',
+        sampling: { type: 'ratio', probability: 0.1 },
+        exporters: [prodLangfuseExporter],
+      },
+      development: {
+        serviceName: 'dev-service',
+        sampling: { type: 'always' },
+        exporters: [devLangfuseExporter],
+      },
+    },
+    selector: (context, availableTracers) => {
+      // Use development tracer for debug sessions
+      if (context.runtimeContext?.get('debug') === 'true') {
+        return 'development';
+      }
+      return 'production';
+    },
+  },
+});
+```
+
+### Span Types and Attributes
+
+AI Tracing automatically creates spans for different AI operations:
+
+#### Agent Runs
+- **Type**: `AGENT_RUN`
+- **Attributes**: Agent ID, instructions, available tools, max steps
+- **Captures**: Agent execution from start to finish
+
+#### LLM Generations  
+- **Type**: `LLM_GENERATION`
+- **Attributes**: Model name, provider, token usage, parameters
+- **Captures**: Individual model calls with prompts and completions
+
+#### Tool Calls
+- **Type**: `TOOL_CALL`
+- **Attributes**: Tool ID, tool type, success status
+- **Captures**: Function/tool executions with inputs and outputs
+
+#### Workflow Operations
+- **Type**: `WORKFLOW_RUN` and `WORKFLOW_STEP`
+- **Attributes**: Workflow/step IDs, status information
+- **Captures**: Workflow execution and individual step processing
+
+#### MCP Tool Calls
+- **Type**: `MCP_TOOL_CALL`
+- **Attributes**: MCP server info, tool ID, success status
+- **Captures**: Model Context Protocol tool executions
+
+### Real-time vs Batch Mode
+
+The Langfuse exporter supports two modes:
+
+**Batch Mode (default)**
+- Traces are buffered and sent periodically
+- Better performance for production
+- Traces may appear with slight delay
+
+**Real-time Mode**
+- Each trace event is immediately flushed
+- Ideal for development and debugging
+- Immediate visibility in Langfuse dashboard
+
+```ts
+new LangfuseExporter({
+  // ... other config
+  realtime: process.env.NODE_ENV === 'development',
+})
+```
+
+### Maintaining Trace Continuity in Workflows
+
+When calling agents from within workflow steps, you can maintain trace continuity by passing the `aiTracingContext` that's automatically provided to each step. This ensures that agent operations appear as child spans under the workflow step.
+
+```ts filename="src/mastra/workflows/support-workflow.ts" showLineNumbers copy
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+import type { AITracingContext } from '@mastra/core/ai-tracing';
+
+const processCustomerQuery = createStep({
+  id: 'process-query',
+  description: 'Process customer support query with AI agent',
+  inputSchema: z.object({
+    query: z.string(),
+    customerId: z.string(),
+  }),
+  outputSchema: z.object({
+    response: z.string(),
+    resolved: z.boolean(),
+  }),
+  execute: async ({ inputData, mastra, ...context }) => {
+    // Extract aiTracingContext from the execution context
+    // Note: TypeScript types don't include this yet, so we cast
+    const { aiTracingContext } = context as { aiTracingContext: AITracingContext };
+    
+    const agent = mastra.getAgent('support-agent');
+    
+    // Pass aiTracingContext to maintain span hierarchy
+    const response = await agent.generate(
+      `Help customer ${inputData.customerId}: ${inputData.query}`,
+      {
+        aiTracingContext, // This creates child spans under the step
+        maxSteps: 3,
+      }
+    );
+    
+    return {
+      response: response.text,
+      resolved: response.finishReason === 'stop',
+    };
+  },
+});
+```
+
+This creates a trace hierarchy like:
+
+```
+Workflow Run: support-workflow
+└── Step: process-query
+    └── Agent Run: support-agent
+        ├── LLM Generation: gpt-4-call-1
+        └── Tool Call: knowledge-base-search
+```
+
+Without passing `aiTracingContext`, the agent operations would create separate trace trees instead of appearing as children of the workflow step.
+
+> **⚠️ Known Issue**: The TypeScript types for workflow step execution parameters don't currently include `aiTracingContext`, requiring the type assertion shown above. This will be fixed in the next release. Additionally, we're working on automatically maintaining trace continuity without requiring manual context passing.
