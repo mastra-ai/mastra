@@ -59,11 +59,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   async getAITracesPaginated({
-    filter,
+    filters,
     pagination,
   }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     const allRootSpans = this.filterForRootSpans(Array.from(this.collection.values()));
-    const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filter);
+    const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filters);
 
     const startDate = pagination?.dateRange?.start;
     const endDate = pagination?.dateRange?.end;
@@ -99,7 +99,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private filterSpansByFilter(spans: AISpanRecord[], filter: AITracesPaginatedArg['filter']): AISpanRecord[] {
+  private filterSpansByFilter(spans: AISpanRecord[], filter: AITracesPaginatedArg['filters']): AISpanRecord[] {
     return spans.filter(span => {
       if (filter?.name && span.name !== filter.name) return false;
       if (filter?.spanType && span.spanType !== filter.spanType) return false;

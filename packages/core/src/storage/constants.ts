@@ -9,7 +9,7 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_AI_SPANS = 'mastra_ai_spans';
 
-export type TABLE_NAMES<IncludeAiSpans extends boolean = false> =
+export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_EVALS
   | typeof TABLE_MESSAGES
@@ -17,13 +17,7 @@ export type TABLE_NAMES<IncludeAiSpans extends boolean = false> =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  /**
-   * TODO: Remove this once we settle on the AI Span storage schema/apis
-   * Table names with optional new tables for gradual migration.
-   * Use `TABLE_NAMES<true>` to include newer tables like AI_SPANS.
-   * Defaults to original tables only for backward compatibility.
-   */
-  | (IncludeAiSpans extends true ? typeof TABLE_AI_SPANS : never);
+  | typeof TABLE_AI_SPANS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -159,7 +153,7 @@ export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
 };
 
-export const TABLE_SCHEMAS: Record<TABLE_NAMES<true>, Record<string, StorageColumn>> = {
+export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
       type: 'text',
