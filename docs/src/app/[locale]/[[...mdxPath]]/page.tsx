@@ -3,7 +3,10 @@ import { generateStaticParamsFor, importPage } from "nextra/pages";
 import { useMDXComponents as getMDXComponents } from "@/mdx-components";
 import { Suspense } from "react";
 
-export const generateStaticParams = generateStaticParamsFor("mdxPath", "locale");
+export const generateStaticParams = generateStaticParamsFor(
+  "mdxPath",
+  "locale",
+);
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
