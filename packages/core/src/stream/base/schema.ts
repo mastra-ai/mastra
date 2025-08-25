@@ -9,7 +9,7 @@ export type PartialSchemaOutput<OUTPUT extends OutputSchema = undefined> = OUTPU
 
 export type InferSchemaOutput<OUTPUT extends OutputSchema> = OUTPUT extends undefined
   ? undefined
-  : OUTPUT extends z4.core.$ZodType<infer OBJECT, any>
+  : OUTPUT extends z4.ZodType<infer OBJECT, any>
     ? OBJECT // Zod v4
     : OUTPUT extends z3.Schema<infer OBJECT, z3.ZodTypeDef, any>
       ? OBJECT // Zod v3
@@ -18,7 +18,7 @@ export type InferSchemaOutput<OUTPUT extends OutputSchema> = OUTPUT extends unde
         : unknown; // Fallback
 
 export type OutputSchema<OBJECT = any> =
-  | z4.core.$ZodType<OBJECT, any>
+  | z4.ZodType<OBJECT, any>
   | z3.Schema<OBJECT, z3.ZodTypeDef, any>
   | Schema<OBJECT>
   | undefined;
