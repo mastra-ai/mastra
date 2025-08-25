@@ -1,6 +1,7 @@
 import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createWorkflow } from '../../workflows';
@@ -8,7 +9,10 @@ import type { LoopRun } from '../types';
 import { createOuterLLMWorkflow } from './outer-llm-step';
 import { llmIterationOutputSchema } from './schema';
 
-export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
+export function workflowLoopStream<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
   telemetry_settings,
   model,
   toolChoice,
@@ -16,7 +20,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
   _internal,
   modelStreamSpan,
   ...rest
-}: LoopRun<Tools>) {
+}: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
       const writer = new WritableStream<ChunkType>({
@@ -35,7 +39,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
           : {}),
       });
 
-      const outerLLMWorkflow = createOuterLLMWorkflow<Tools>({
+      const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
         messageId: messageId!,
         model,
         telemetry_settings,

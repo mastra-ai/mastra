@@ -122,3 +122,43 @@ export const createAgentTestRun = ({
     runId,
   };
 };
+
+export type ToolCallInfo = {
+  toolName: string;
+  toolCallId: string;
+  messageIndex: number;
+  invocationIndex: number;
+};
+
+export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: string[]; toolCallInfos: ToolCallInfo[] } {
+  const toolCalls: string[] = [];
+  const toolCallInfos: ToolCallInfo[] = [];
+
+  for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
+    const message = output[messageIndex];
+    if (message?.toolInvocations) {
+      for (let invocationIndex = 0; invocationIndex < message.toolInvocations.length; invocationIndex++) {
+        const invocation = message.toolInvocations[invocationIndex];
+        if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+          toolCalls.push(invocation.toolName);
+          toolCallInfos.push({
+            toolName: invocation.toolName,
+            toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
+            messageIndex,
+            invocationIndex,
+          });
+        }
+      }
+    }
+  }
+
+  return { tools: toolCalls, toolCallInfos };
+}
+
+export const extractInputMessages = (runInput: ScorerRunInputForAgent | undefined): string[] => {
+  return runInput?.inputMessages?.map(msg => msg.content) || [];
+};
+
+export const extractAgentResponseMessages = (runOutput: ScorerRunOutputForAgent): string[] => {
+  return runOutput.filter(msg => msg.role === 'assistant').map(msg => msg.content);
+};

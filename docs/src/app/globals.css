@@ -14,6 +14,7 @@
   --border-2: hsla(0, 0%, 72%, 1);
   --border-radius-lg: 0.5rem;
   --diff-color: #2ea04326;
+  --button-outline: hsl(143, 97%, 54%);
 }
 
 .dark {
@@ -22,6 +23,7 @@
   --color-text-icon-6: hsla(0, 0%, 100%, 1);
   --primary: #050505;
   --border-2: hsla(0, 0%, 26%, 1);
+  --button-outline: hsla(125, 66%, 50%, 1);
 }
 
 @theme inline {
@@ -724,5 +726,43 @@ table td code.nextra-code:not([class*="twoslash-"]) {
     position: absolute;
     left: 2.6rem;
     color: var(--content-color);
+  }
+}
+
+#headlessui-portal-root ul {
+  border-radius: 12px;
+  padding-inline: 0.25rem;
+  border-width: 0.5px;
+
+  &:focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  &:focus-visible {
+    outline: none !important;
+    box-shadow: transparent !important;
+  }
+}
+
+#headlessui-portal-root ul li {
+  border-radius: 8px;
+}
+
+.nextra-breadcrumb + div {
+  border-radius: 10px !important;
+
+  &:focus-within {
+    outline: 2px solid var(--button-outline);
+  }
+}
+
+.nextra-breadcrumb + div button {
+  &:focus {
+    outline: none;
+    box-shadow: none;
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow: none;
   }
 }

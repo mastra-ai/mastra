@@ -1,44 +1,82 @@
 import { TransformStream } from 'stream/web';
 import { asSchema, isDeepEqualData, parsePartialJson } from 'ai-v5';
-import type { ObjectOptions } from '../../loop/types';
+import type { Schema } from 'ai-v5';
 import { safeValidateTypes } from '../aisdk/v5/compat';
+import { ChunkFrom } from '../types';
+import type { ChunkType } from '../types';
 import { getTransformedSchema, getResponseFormat } from './schema';
+import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, ZodLikePartialSchema } from './schema';
 
 interface ProcessPartialChunkParams {
   /** Text accumulated from streaming so far */
   accumulatedText: string;
   /** Previously parsed object from last emission */
-  previousObject: any;
+  previousObject: unknown;
   /** Previous processing result (handler-specific state) */
-  previousResult?: any;
+  previousResult?: unknown;
 }
 
 interface ProcessPartialChunkResult {
   /** Whether a new value should be emitted */
   shouldEmit: boolean;
   /** The value to emit if shouldEmit is true */
-  emitValue?: any;
+  emitValue?: unknown;
   /** New previous result state for next iteration */
-  newPreviousResult?: any;
+  newPreviousResult?: unknown;
 }
 
-interface ValidateAndTransformFinalResult {
-  /** Whether validation succeeded */
-  success: boolean;
-  /** The validated and transformed value if successful */
-  value?: any;
-  /** Error if validation failed */
-  error?: Error;
-}
+type ValidateAndTransformFinalResult<OUTPUT extends OutputSchema = undefined> =
+  | {
+      /** Whether validation succeeded */
+      success: true;
+      /**
+       * The validated and transformed value if successful
+       */
+      value: InferSchemaOutput<OUTPUT>;
+    }
+  | {
+      /** Whether validation succeeded */
+      success: false;
+      /**
+       * Error if validation failed
+       */
+      error: Error;
+    };
 
 /**
- * Strategy interface for handling different output formats during streaming.
+ * Base class for all output format handlers.
  * Each handler implements format-specific logic for processing partial chunks
  * and validating final results.
  */
-interface OutputFormatHandler {
-  /** The type of output format this handler manages */
-  readonly type: 'object' | 'array' | 'enum';
+abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
+  abstract readonly type: 'object' | 'array' | 'enum';
+  /**
+   * The user-provided schema to validate the final result against.
+   */
+  readonly schema: Schema<InferSchemaOutput<OUTPUT>> | undefined;
+
+  /**
+   * Whether to validate partial chunks. @planned
+   */
+  readonly validatePartialChunks: boolean = false;
+  /**
+   * Partial schema for validating partial chunks as they are streamed. @planned
+   */
+  readonly partialSchema?: ZodLikePartialSchema<InferSchemaOutput<OUTPUT>> | undefined;
+
+  constructor(schema?: OUTPUT, options: { validatePartialChunks?: boolean } = {}) {
+    if (!schema) {
+      this.schema = undefined;
+    } else {
+      this.schema = asSchema(schema);
+    }
+    if (options.validatePartialChunks) {
+      if (schema !== undefined && 'partial' in schema && typeof schema.partial === 'function') {
+        this.validatePartialChunks = true;
+        this.partialSchema = schema.partial() as ZodLikePartialSchema<InferSchemaOutput<OUTPUT>>;
+      }
+    }
+  }
 
   /**
    * Processes a partial chunk of accumulated text and determines if a new value should be emitted.
@@ -48,55 +86,67 @@ interface OutputFormatHandler {
    * @param params.previousResult - Previous processing result (handler-specific state)
    * @returns Promise resolving to processing result with emission decision
    */
-  processPartialChunk(params: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult>;
+  abstract processPartialChunk(params: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult>;
 
   /**
    * Validates and transforms the final parsed value when streaming completes.
    * @param finalValue - The final parsed value to validate
    * @returns Promise resolving to validation result
    */
-  validateAndTransformFinal(finalValue: any): Promise<ValidateAndTransformFinalResult>;
+  abstract validateAndTransformFinal(
+    finalValue: InferSchemaOutput<OUTPUT>,
+  ): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
 }
 
 /**
  * Handles object format streaming. Emits parsed objects when they change during streaming.
  * This is the simplest format - objects are parsed and emitted directly without wrapping.
  */
-class ObjectFormatHandler implements OutputFormatHandler {
+class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'object' as const;
-
-  /**
-   * Creates an object format handler.
-   * @param schema - The original user-provided schema for validation
-   */
-  constructor(schema?: Parameters<typeof asSchema>[0]) {
-    this.schema = schema ? asSchema(schema) : undefined;
-  }
-
-  private schema?: ReturnType<typeof asSchema>;
 
   async processPartialChunk({
     accumulatedText,
     previousObject,
   }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
-    const { value: currentObjectJson } = await parsePartialJson(accumulatedText);
+    const { value: currentObjectJson, state } = await parsePartialJson(accumulatedText);
+
+    // TODO: test partial object chunk validation with schema.partial()
+    if (this.validatePartialChunks && this.partialSchema) {
+      const result = this.partialSchema?.safeParse(currentObjectJson);
+      if (result.success && result.data && result.data !== undefined && !isDeepEqualData(previousObject, result.data)) {
+        return {
+          shouldEmit: true,
+          emitValue: result.data,
+          newPreviousResult: result.data,
+        };
+      }
+      /**
+       * TODO: emit error chunk if partial validation fails?
+       * maybe we need to either not emit the object chunk,
+       * emit our error chunk, or wait until final parse to emit the error chunk?
+       */
+      return { shouldEmit: false };
+    }
 
     if (
       currentObjectJson !== undefined &&
+      currentObjectJson !== null &&
       typeof currentObjectJson === 'object' &&
-      !isDeepEqualData(previousObject, currentObjectJson)
+      !isDeepEqualData(previousObject, currentObjectJson) // avoid emitting duplicates
     ) {
       return {
-        shouldEmit: true,
+        shouldEmit: ['successful-parse', 'repaired-parse'].includes(state),
         emitValue: currentObjectJson,
         newPreviousResult: currentObjectJson,
       };
     }
-
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(finalValue: any): Promise<ValidateAndTransformFinalResult> {
+  async validateAndTransformFinal(
+    finalValue: InferSchemaOutput<OUTPUT>,
+  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     if (!finalValue) {
       return {
         success: false,
@@ -122,13 +172,13 @@ class ObjectFormatHandler implements OutputFormatHandler {
       } else {
         return {
           success: false,
-          error: result.error ?? new Error('Validation failed'),
+          error: result.error ?? new Error('Validation failed', { cause: result.error }),
         };
       }
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error : new Error('Validation failed'),
+        error: error instanceof Error ? error : new Error('Validation failed', { cause: error }),
       };
     }
   }
@@ -139,33 +189,24 @@ class ObjectFormatHandler implements OutputFormatHandler {
  * for better generation reliability. This handler unwraps them and filters incomplete elements.
  * Emits progressive array states as elements are completed.
  */
-class ArrayFormatHandler implements OutputFormatHandler {
+class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'array' as const;
   /** Previously filtered array to track changes */
   private textPreviousFilteredArray: any[] = [];
   /** Whether we've emitted the initial empty array */
   private hasEmittedInitialArray = false;
 
-  /**
-   * Creates an array format handler.
-   * @param schema - The original user-provided schema for validation
-   */
-  constructor(schema?: Parameters<typeof asSchema>[0]) {
-    this.schema = schema ? asSchema(schema) : undefined;
-  }
-
-  private schema?: ReturnType<typeof asSchema>;
-
   async processPartialChunk({
     accumulatedText,
     previousObject,
   }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
     const { value: currentObjectJson, state: parseState } = await parsePartialJson(accumulatedText);
-
+    // TODO: parse/validate partial array elements, emit error chunk if validation fails
+    // using this.partialSchema / this.validatePartialChunks
     if (currentObjectJson !== undefined && !isDeepEqualData(previousObject, currentObjectJson)) {
       // For arrays, extract and filter elements
       const rawElements = (currentObjectJson as any)?.elements || [];
-      const filteredElements: any[] = [];
+      const filteredElements: Partial<InferSchemaOutput<OUTPUT>>[] = [];
 
       // Filter out incomplete elements (like empty objects {})
       for (let i = 0; i < rawElements.length; i++) {
@@ -192,8 +233,8 @@ class ArrayFormatHandler implements OutputFormatHandler {
           this.textPreviousFilteredArray = [];
           return {
             shouldEmit: true,
-            emitValue: [],
-            newPreviousResult: currentObjectJson,
+            emitValue: [] as unknown as Partial<InferSchemaOutput<OUTPUT>>,
+            newPreviousResult: currentObjectJson as Partial<InferSchemaOutput<OUTPUT>>,
           };
         }
       }
@@ -203,8 +244,8 @@ class ArrayFormatHandler implements OutputFormatHandler {
         this.textPreviousFilteredArray = [...filteredElements];
         return {
           shouldEmit: true,
-          emitValue: filteredElements,
-          newPreviousResult: currentObjectJson,
+          emitValue: filteredElements as unknown as Partial<InferSchemaOutput<OUTPUT>>,
+          newPreviousResult: currentObjectJson as Partial<InferSchemaOutput<OUTPUT>>,
         };
       }
     }
@@ -212,7 +253,9 @@ class ArrayFormatHandler implements OutputFormatHandler {
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(_finalValue: any): Promise<ValidateAndTransformFinalResult> {
+  async validateAndTransformFinal(
+    _finalValue: InferSchemaOutput<OUTPUT>,
+  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     const resultValue = this.textPreviousFilteredArray;
 
     if (!resultValue) {
@@ -225,7 +268,7 @@ class ArrayFormatHandler implements OutputFormatHandler {
     if (!this.schema) {
       return {
         success: true,
-        value: resultValue,
+        value: resultValue as InferSchemaOutput<OUTPUT>,
       };
     }
 
@@ -240,69 +283,28 @@ class ArrayFormatHandler implements OutputFormatHandler {
       } else {
         return {
           success: false,
-          error: result.error ?? new Error('Validation failed'),
+          error: result.error ?? new Error('Validation failed', { cause: result.error }),
         };
       }
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error : new Error('Validation failed'),
+        error: error instanceof Error ? error : new Error('Validation failed', { cause: error }),
       };
     }
   }
 }
 
 /**
- * Handles enum format streaming. Enums are wrapped in {result: "value"} objects by the LLM
- * for better generation reliability. This handler unwraps them and provides partial matching
- * during streaming to emit the best possible enum value as it's being generated.
+ * Handles enum format streaming. Enums are wrapped in {result: ""} objects by the LLM
+ * for better generation reliability. This handler unwraps them and provides partial matching.
+ * Emits progressive enum states as they are completed.
+ * Validates the final result against the user-provided schema.
  */
-class EnumFormatHandler implements OutputFormatHandler {
+class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'enum' as const;
   /** Previously emitted enum result to avoid duplicate emissions */
   private textPreviousEnumResult?: string;
-
-  /**
-   * Creates an enum format handler.
-   * @param schema - The original schema containing enum values for partial matching
-   */
-  constructor(schema?: Parameters<typeof asSchema>[0]) {
-    this.schema = schema ? asSchema(schema) : undefined;
-  }
-
-  private schema?: ReturnType<typeof asSchema>;
-
-  async processPartialChunk({
-    accumulatedText,
-    previousObject,
-  }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
-    const { value: currentObjectJson } = await parsePartialJson(accumulatedText);
-
-    if (
-      currentObjectJson !== undefined &&
-      currentObjectJson !== null &&
-      typeof currentObjectJson === 'object' &&
-      !Array.isArray(currentObjectJson) &&
-      'result' in currentObjectJson &&
-      typeof currentObjectJson.result === 'string' &&
-      !isDeepEqualData(previousObject, currentObjectJson)
-    ) {
-      const partialResult = currentObjectJson.result as string;
-      const bestMatch = this.findBestEnumMatch(partialResult);
-
-      // Only emit if we have valid partial matches and the result isn't empty
-      if (partialResult.length > 0 && bestMatch && bestMatch !== this.textPreviousEnumResult) {
-        this.textPreviousEnumResult = bestMatch;
-        return {
-          shouldEmit: true,
-          emitValue: bestMatch,
-          newPreviousResult: currentObjectJson,
-        };
-      }
-    }
-
-    return { shouldEmit: false };
-  }
 
   /**
    * Finds the best matching enum value for a partial result string.
@@ -329,7 +331,40 @@ class EnumFormatHandler implements OutputFormatHandler {
     return possibleEnumValues.length === 1 && firstMatch !== undefined ? firstMatch : partialResult;
   }
 
-  async validateAndTransformFinal(finalValue: any): Promise<ValidateAndTransformFinalResult> {
+  async processPartialChunk({
+    accumulatedText,
+    previousObject,
+  }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
+    const { value: currentObjectJson } = await parsePartialJson(accumulatedText);
+    if (
+      currentObjectJson !== undefined &&
+      currentObjectJson !== null &&
+      typeof currentObjectJson === 'object' &&
+      !Array.isArray(currentObjectJson) &&
+      'result' in currentObjectJson &&
+      typeof currentObjectJson.result === 'string' &&
+      !isDeepEqualData(previousObject, currentObjectJson)
+    ) {
+      const partialResult = currentObjectJson.result as string;
+      const bestMatch = this.findBestEnumMatch(partialResult);
+
+      // Only emit if we have valid partial matches and the result isn't empty
+      if (partialResult.length > 0 && bestMatch && bestMatch !== this.textPreviousEnumResult) {
+        this.textPreviousEnumResult = bestMatch;
+        return {
+          shouldEmit: true,
+          emitValue: bestMatch,
+          newPreviousResult: currentObjectJson,
+        };
+      }
+    }
+
+    return { shouldEmit: false };
+  }
+
+  async validateAndTransformFinal(
+    finalValue: InferSchemaOutput<OUTPUT>,
+  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     // For enums, check the wrapped format and unwrap
     if (!finalValue || typeof finalValue !== 'object' || typeof finalValue.result !== 'string') {
       return {
@@ -377,13 +412,13 @@ class EnumFormatHandler implements OutputFormatHandler {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler({
+function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
   schema,
   transformedSchema,
 }: {
-  schema?: Parameters<typeof asSchema>[0];
-  transformedSchema: ReturnType<typeof getTransformedSchema>;
-}): OutputFormatHandler {
+  schema?: OUTPUT;
+  transformedSchema: ReturnType<typeof getTransformedSchema<OUTPUT>>;
+}) {
   switch (transformedSchema?.outputFormat) {
     case 'array':
       return new ArrayFormatHandler(schema);
@@ -394,6 +429,7 @@ function createOutputHandler({
       return new ObjectFormatHandler(schema);
   }
 }
+
 /**
  * Transforms raw text-delta chunks into structured object chunks for JSON mode streaming.
  *
@@ -405,16 +441,16 @@ function createOutputHandler({
  * - For enums: unwraps from {result: ""} wrapper and provides partial matching
  * - Always passes through original chunks for downstream processing
  */
-export function createObjectStreamTransformer({
+export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
   schema,
   onFinish,
 }: {
-  schema?: Parameters<typeof asSchema>[0];
+  schema?: OUTPUT;
   /**
    * Callback to be called when the stream finishes.
    * @param data The final parsed object / array
    */
-  onFinish: (data: any) => void;
+  onFinish: (data: InferSchemaOutput<OUTPUT>) => void;
 }) {
   const responseFormat = getResponseFormat(schema);
   const transformedSchema = getTransformedSchema(schema);
@@ -423,9 +459,14 @@ export function createObjectStreamTransformer({
   let accumulatedText = '';
   let previousObject: any = undefined;
   let finishReason: string | undefined;
+  let currentRunId: string | undefined;
 
-  return new TransformStream({
+  return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
+      if (chunk.runId) {
+        currentRunId = chunk.runId;
+      }
+
       if (chunk.type === 'finish') {
         finishReason = chunk.payload.stepResult.reason;
         controller.enqueue(chunk);
@@ -449,8 +490,10 @@ export function createObjectStreamTransformer({
         if (result.shouldEmit) {
           previousObject = result.newPreviousResult ?? previousObject;
           controller.enqueue({
+            from: chunk.from,
+            runId: chunk.runId,
             type: 'object',
-            object: result.emitValue,
+            object: result.emitValue as PartialSchemaOutput<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
           });
         }
       }
@@ -466,7 +509,7 @@ export function createObjectStreamTransformer({
       }
 
       if (['tool-calls'].includes(finishReason ?? '')) {
-        onFinish(undefined);
+        onFinish(undefined as InferSchemaOutput<OUTPUT>);
         return;
       }
 
@@ -474,6 +517,8 @@ export function createObjectStreamTransformer({
 
       if (!finalResult.success) {
         controller.enqueue({
+          from: ChunkFrom.AGENT,
+          runId: currentRunId ?? '',
           type: 'error',
           payload: { error: finalResult.error ?? new Error('Validation failed') },
         });
@@ -492,15 +537,15 @@ export function createObjectStreamTransformer({
  * - For arrays: emits opening bracket, new elements, and closing bracket
  * - For objects/no-schema: emits the object as JSON
  */
-export function createJsonTextStreamTransformer(objectOptions: ObjectOptions) {
+export function createJsonTextStreamTransformer<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
   let previousArrayLength = 0;
   let hasStartedArray = false;
   let chunkCount = 0;
-  const outputSchema = getTransformedSchema(objectOptions?.schema);
+  const outputSchema = getTransformedSchema(schema);
 
-  return new TransformStream<any, string>({
+  return new TransformStream<ChunkType<OUTPUT>, string>({
     transform(chunk, controller) {
-      if (chunk.type !== 'object') {
+      if (chunk.type !== 'object' || !chunk.object) {
         return;
       }
 

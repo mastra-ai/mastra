@@ -607,6 +607,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext,
     skipEmits = false,
     writableStream,
+    serializedStepGraph,
   }: {
     workflowId: string;
     runId: string;
@@ -623,6 +624,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext: RuntimeContext;
     skipEmits?: boolean;
     writableStream?: WritableStream<ChunkType>;
+    serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
@@ -633,6 +635,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
+      status: 'running',
     };
 
     const stepAISpan = executionContext.aiSpan?.createChildSpan({
@@ -650,7 +653,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         payload: {
           currentStep: {
             id: step.id,
-            status: 'running',
             ...stepInfo,
           },
           workflowState: {
@@ -658,7 +660,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             steps: {
               ...stepResults,
               [step.id]: {
-                status: 'running',
                 ...stepInfo,
               },
             },
@@ -674,10 +675,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           id: step.id,
           stepCallId,
           ...stepInfo,
-          status: 'running',
         },
       });
     }
+
+    await this.persistStepUpdate({
+      workflowId,
+      runId,
+      serializedStepGraph,
+      stepResults: {
+        ...stepResults,
+        [step.id]: stepInfo,
+      } as Record<string, StepResult<any, any, any, any>>,
+      executionContext,
+      workflowStatus: 'running',
+      runtimeContext,
+    });
 
     const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
@@ -1178,6 +1191,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    serializedStepGraph,
   }: {
     workflowId: string;
     runId: string;
@@ -1201,6 +1215,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
     let isTrue = true;
@@ -1221,6 +1236,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        serializedStepGraph,
       });
 
       // Clear resume for next iteration only if the step has completed resuming
@@ -1284,6 +1300,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    serializedStepGraph,
   }: {
     workflowId: string;
     runId: string;
@@ -1308,6 +1325,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
     const { step, opts } = entry;
     const results: StepResult<any, any, any, any>[] = [];
@@ -1371,6 +1389,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             runtimeContext,
             skipEmits: true,
             writableStream,
+            serializedStepGraph,
           });
         }),
       );
@@ -1592,6 +1611,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        serializedStepGraph,
       });
     } else if (resume?.resumePath?.length && entry.type === 'parallel') {
       const idx = resume.resumePath.shift();
@@ -1738,6 +1758,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        serializedStepGraph,
       });
     } else if (entry.type === 'foreach') {
       execResults = await this.executeForeach({
@@ -1753,6 +1774,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        serializedStepGraph,
       });
     } else if (entry.type === 'sleep') {
       const startedAt = Date.now();
@@ -2045,16 +2067,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       try {
         eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
 
-        await this.persistStepUpdate({
-          workflowId,
-          runId,
-          serializedStepGraph,
-          stepResults,
-          executionContext,
-          workflowStatus: 'running',
-          runtimeContext,
-        });
-
         const { step } = entry;
         execResults = await this.executeStep({
           workflowId,
@@ -2071,6 +2083,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController,
           runtimeContext,
           writableStream,
+          serializedStepGraph,
         });
       } catch (error) {
         execResults = {

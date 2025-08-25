@@ -1,5 +1,18 @@
 # @mastra/deployer
 
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- [#6798](https://github.com/mastra-ai/mastra/pull/6798) [`e9a36bd`](https://github.com/mastra-ai/mastra/commit/e9a36bd03ed032528b60186a318f563ebf59c01a) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.46.4` ↗︎](https://www.npmjs.com/package/rollup/v/4.46.4) (from `~4.46.2`, in `dependencies`)
+
+- [#6924](https://github.com/mastra-ai/mastra/pull/6924) [`de24804`](https://github.com/mastra-ai/mastra/commit/de248044e79b407d211b339ce3ed4dc6e1630704) Thanks [@LekoArts](https://github.com/LekoArts)! - Improve internal mechanism to detect and handle workspace packages
+
+- Updated dependencies [[`0778757`](https://github.com/mastra-ai/mastra/commit/07787570e4addbd501522037bd2542c3d9e26822), [`bf504a8`](https://github.com/mastra-ai/mastra/commit/bf504a833051f6f321d832cc7d631f3cb86d657b), [`e6f5046`](https://github.com/mastra-ai/mastra/commit/e6f50467aff317e67e8bd74c485c3fbe2a5a6db1), [`9613558`](https://github.com/mastra-ai/mastra/commit/9613558e6475f4710e05d1be7553a32ee7bddc20)]:
+  - @mastra/core@0.14.2-alpha.0
+  - @mastra/server@0.14.2-alpha.0
+
 ## 0.14.1
 
 ### Patch Changes

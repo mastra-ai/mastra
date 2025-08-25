@@ -230,11 +230,11 @@ describe('Agent Memory Tests', () => {
       }
 
       expect(flattenAssistantMessages(assistantMessages)).toEqual(
-        expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
+        expect.arrayContaining([expect.stringMatching(/2\s*\+\s*2/), expect.stringContaining('"result"')]),
       );
 
       expect(flattenAssistantMessages(assistantUiMessages)).toEqual(
-        expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
+        expect.arrayContaining([expect.stringMatching(/2\s*\+\s*2/), expect.stringContaining('"result"')]),
       );
     });
 

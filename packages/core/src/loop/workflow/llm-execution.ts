@@ -7,6 +7,7 @@ import { execute } from '../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType, ReasoningStartPayload, TextStartPayload } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
@@ -14,13 +15,13 @@ import type { LoopConfig, OuterLLMRun } from '../types';
 import { AgenticRunState } from './run-state';
 import { llmIterationOutputSchema } from './schema';
 
-type ProcessOutputStreamOptions = {
+type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
   model: LanguageModelV2;
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
   messageList: MessageList;
-  outputStream: MastraModelOutput;
+  outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig;
   controller: ReadableStreamDefaultController<ChunkType>;
@@ -31,7 +32,7 @@ type ProcessOutputStreamOptions = {
   };
 };
 
-async function processOutputStream({
+async function processOutputStream<OUTPUT extends OutputSchema | undefined = undefined>({
   tools,
   messageId,
   messageList,
@@ -41,7 +42,7 @@ async function processOutputStream({
   controller,
   responseFromModel,
   includeRawChunks,
-}: ProcessOutputStreamOptions) {
+}: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream.fullStream) {
     if (!chunk) {
       continue;
@@ -341,7 +342,10 @@ async function processOutputStream({
   }
 }
 
-export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
+export function createLLMExecutionStep<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
   model,
   _internal,
   messageId,
@@ -357,9 +361,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
   options,
   toolCallStreaming,
   controller,
-  objectOptions,
+  output,
   headers,
-}: OuterLLMRun<Tools>) {
+}: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
@@ -388,7 +392,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
             modelSettings,
             telemetry_settings,
             includeRawChunks,
-            objectOptions,
+            output,
             headers,
             onResult: ({
               warnings: warningsFromStream,
@@ -433,7 +437,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
           toolCallStreaming,
           telemetry_settings,
           includeRawChunks,
-          objectOptions,
+          output,
         },
       });
 

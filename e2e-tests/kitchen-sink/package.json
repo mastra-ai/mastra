@@ -13,7 +13,7 @@
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^20.19.0",
-    "@types/react": "^19.1.10",
+    "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.7",
     "execa": "^9.6.0",
     "get-port": "^7.1.0",
@@ -29,7 +29,7 @@
     "playwright": "^1.55.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "tsx": "^4.20.4",
+    "tsx": "^4.20.5",
     "verdaccio": "^6.1.6",
     "verdaccio-auth-memory": "^10.3.1",
     "vitest": "^3.2.4"

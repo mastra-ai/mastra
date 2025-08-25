@@ -8,7 +8,7 @@ import type {
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
 import type { CoreMessage, StepResult } from 'ai-v5';
-import type z from 'zod';
+import type { OutputSchema, PartialSchemaOutput } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
@@ -231,7 +231,7 @@ interface TripwirePayload {
   tripwireReason: string;
 }
 
-export type ChunkType<TObjectSchema = unknown> =
+export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
   | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
@@ -258,7 +258,7 @@ export type ChunkType<TObjectSchema = unknown> =
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
   | (BaseChunkType & {
       type: 'object';
-      object: TObjectSchema extends z.ZodSchema ? Partial<z.infer<TObjectSchema>> : unknown;
+      object: PartialSchemaOutput<OUTPUT>;
     })
   | (BaseChunkType & { type: 'tool-output'; payload: ToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })

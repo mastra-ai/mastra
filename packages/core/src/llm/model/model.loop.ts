@@ -21,6 +21,7 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
+import type { OutputSchema } from '../../stream/base/schema';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
@@ -68,7 +69,7 @@ export class MastraLLMVNext extends MastraBase {
     return this.#model;
   }
 
-  private _applySchemaCompat(schema: ZodSchema | JSONSchema7): Schema {
+  private _applySchemaCompat(schema: OutputSchema): Schema {
     const model = this.#model;
 
     const schemaCompatLayers = [];
@@ -117,7 +118,7 @@ export class MastraLLMVNext extends MastraBase {
     ];
   }
 
-  stream<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined = undefined>({
+  stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
     messages,
     stopWhen = stepCountIs(5),
     tools = {} as Tools,
@@ -127,11 +128,11 @@ export class MastraLLMVNext extends MastraBase {
     telemetry_settings,
     threadId,
     resourceId,
-    objectOptions,
+    output,
     options,
     outputProcessors,
     // ...rest
-  }: ModelLoopStreamArgs<Tools, Z>): MastraModelOutput {
+  }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -141,8 +142,8 @@ export class MastraLLMVNext extends MastraBase {
       tools: Object.keys(tools || {}),
     });
 
-    if (objectOptions?.schema) {
-      objectOptions.schema = this._applySchemaCompat(objectOptions.schema as any);
+    if (output) {
+      output = this._applySchemaCompat(output) as any; // TODO: types for schema compat
     }
 
     try {
@@ -152,7 +153,7 @@ export class MastraLLMVNext extends MastraBase {
       });
       messageList.add(messages, 'input');
 
-      const loopOptions: LoopOptions<Tools> = {
+      const loopOptions: LoopOptions<Tools, OUTPUT> = {
         messageList,
         model: this.#model,
         tools: tools as Tools,
@@ -163,7 +164,7 @@ export class MastraLLMVNext extends MastraBase {
           ...this.experimental_telemetry,
           ...telemetry_settings,
         },
-        objectOptions,
+        output,
         outputProcessors,
         options: {
           ...options,

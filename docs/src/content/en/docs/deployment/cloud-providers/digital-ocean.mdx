@@ -47,6 +47,31 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 ### Configure Resource Settings and Environment Variables
 
 - A Node.js build should be detected automatically.
+- **Configure Build Command**: You need to add a custom build command for the app platform to build your Mastra project successfully. Set the build command based on your package manager:
+
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+    ```
+    npm run build
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```
+    pnpm build
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```
+    yarn build
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```
+    bun run build
+    ```
+  </Tabs.Tab>
+</Tabs>
+
 - Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
 - You may choose to configure the size of your resource here.
 - Other things you may optionally configure include, the region of your resource, the unique app name, and what project the resource belongs to.

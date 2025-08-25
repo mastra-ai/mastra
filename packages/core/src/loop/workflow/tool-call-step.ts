@@ -1,16 +1,14 @@
 import type { ToolCallOptions, ToolSet } from 'ai-v5';
+import type { OutputSchema } from '../../stream/base/schema';
 import { createStep } from '../../workflows';
 import { assembleOperationName, getTracer } from '../telemetry';
 import type { OuterLLMRun } from '../types';
 import { toolCallInputSchema, toolCallOutputSchema } from './schema';
 
-export function createToolCallStep<Tools extends ToolSet = ToolSet>({
-  tools,
-  messageList,
-  options,
-  telemetry_settings,
-  writer,
-}: OuterLLMRun<Tools>) {
+export function createToolCallStep<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({ tools, messageList, options, telemetry_settings, writer }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
