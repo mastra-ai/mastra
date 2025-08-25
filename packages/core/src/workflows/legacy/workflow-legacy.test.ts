@@ -3,10 +3,9 @@ import path from 'path';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-
-import { Mastra } from '../..';
 import { Agent } from '../../agent';
 import { createLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import { RuntimeContext } from '../../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
