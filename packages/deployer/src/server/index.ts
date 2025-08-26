@@ -27,6 +27,7 @@ import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
 import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks/router';
+import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
 import { telemetryRouter } from './handlers/routes/telemetry/router';
 import { toolsRouter } from './handlers/routes/tools/router';
@@ -408,6 +409,8 @@ export async function createHonoServer(
   app.route('/api/memory', memoryRoutes(bodyLimitOptions));
   // Telemetry routes
   app.route('/api/telemetry', telemetryRouter());
+  // Observability routes
+  app.route('/api/observability', observabilityRouter());
   // Legacy Workflow routes
   app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
   // Log routes
