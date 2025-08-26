@@ -1,4 +1,5 @@
-import { z, type ZodType } from 'zod';
+import { z } from 'zod';
+import type { ZodType } from 'zod';
 import originalZodToJsonSchema from 'zod-to-json-schema';
 
 function isZodType(value: unknown): value is ZodType {
