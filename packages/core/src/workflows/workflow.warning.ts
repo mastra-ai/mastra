@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 
 import type { Step } from './step';
-import type { DefaultEngineType, WorkflowConfig } from './workflow';
+import type { DefaultEngineType, WorkflowConfig } from './types';
 import { Workflow as BaseWorkflow } from './workflow';
 
 export * from './index';

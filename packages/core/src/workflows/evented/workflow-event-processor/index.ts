@@ -1,10 +1,12 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
-import type { Mastra, StepFlowEntry, StepResult, Workflow, WorkflowRunState } from '../../..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { Event } from '../../../events';
 import { EventProcessor } from '../../../events/processor';
-import { RuntimeContext } from '../../../runtime-context';
+import type { Event } from '../../../events/types';
+import type { Mastra } from '../../../mastra';
+import { RuntimeContext } from '../../../runtime-context/';
+import type { StepFlowEntry, StepResult, WorkflowRunState } from '../../../workflows/types';
+import type { Workflow } from '../../../workflows/workflow';
 import { StepExecutor } from '../step-executor';
 import { EventedWorkflow } from '../workflow';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
