@@ -33,12 +33,12 @@
     "js-tiktoken": "^1.0.20",
     "node-html-better-parser": "^1.5.2",
     "pathe": "^2.0.3",
-    "zeroentropy": "0.1.0-alpha.6",
-    "zod": "^3.25.67"
+    "zeroentropy": "0.1.0-alpha.6"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.14.0-0 <0.15.0-0",
-    "ai": "^4.0.0 || ^5.0.0"
+    "ai": "^4.0.0 || ^5.0.0",
+    "zod": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "^1.2.10",
@@ -54,7 +54,8 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "@internal/types-builder": "workspace:*",
+    "zod": "^3.25.67"
   },
   "keywords": [
     "rag",

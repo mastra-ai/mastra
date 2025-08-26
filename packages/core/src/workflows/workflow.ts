@@ -1185,7 +1185,7 @@ export class Workflow<
     abort,
     abortSignal,
     runCount,
-    parentAISpan,
+    parentSpan,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1206,7 +1206,7 @@ export class Workflow<
     bail: (result: any) => any;
     abort: () => any;
     runCount?: number;
-    parentAISpan?: AnyAISpan;
+    parentSpan?: AnyAISpan;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1233,8 +1233,8 @@ export class Workflow<
     }
 
     const res = isResume
-      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, parentAISpan })
-      : await run.start({ inputData, runtimeContext, parentAISpan });
+      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, parentSpan })
+      : await run.start({ inputData, runtimeContext, parentSpan });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1440,12 +1440,12 @@ export class Run<
     inputData,
     runtimeContext,
     writableStream,
-    parentAISpan,
+    parentSpan,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
-    parentAISpan?: AnyAISpan;
+    parentSpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1471,7 +1471,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
-      parentAISpan,
+      parentSpan,
     });
 
     if (result.status !== 'suspended') {
@@ -1717,7 +1717,7 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
-    parentAISpan?: AnyAISpan;
+    parentSpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1835,7 +1835,7 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-        parentAISpan: params.parentAISpan,
+        parentSpan: params.parentSpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {

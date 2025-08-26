@@ -16,6 +16,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_traces: new Map(),
       mastra_resources: new Map(),
       mastra_scorers: new Map(),
+      mastra_ai_spans: new Map(),
     };
   }
 

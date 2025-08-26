@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { AISpanType, getSelectedAITracing } from '../ai-tracing';
-import type { AISpan, AnyAISpan, AITracingContext } from '../ai-tracing';
+import type { AISpan, AnyAISpan, TracingContext } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { ChunkType } from '../stream/types';
@@ -162,11 +162,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
-    parentAISpan?: AnyAISpan;
+    parentSpan?: AnyAISpan;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, parentAISpan } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, parentSpan } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
@@ -184,8 +184,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     // if parentSpan passed, use it to build workflowSpan
     // otherwise, attempt to create new trace
     let workflowAISpan: AISpan<AISpanType.WORKFLOW_RUN> | undefined;
-    if (parentAISpan) {
-      workflowAISpan = parentAISpan.createChildSpan({
+    if (parentSpan) {
+      workflowAISpan = parentSpan.createChildSpan({
         type: AISpanType.WORKFLOW_RUN,
         ...spanArgs,
       });
@@ -248,8 +248,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
           },
-          aiTracingContext: {
-            parentAISpan: workflowAISpan,
+          tracingContext: {
+            parentSpan: workflowAISpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -413,7 +413,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
-    aiTracingContext,
+    tracingContext,
   }: {
     workflowId: string;
     runId: string;
@@ -438,11 +438,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
   }): Promise<void> {
     let { duration, fn } = entry;
 
-    const sleepSpan = aiTracingContext.parentAISpan?.createChildSpan({
+    const sleepSpan = tracingContext.parentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
@@ -460,8 +460,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         inputData: prevOutput,
         runCount: -1,
-        aiTracingContext: {
-          parentAISpan: sleepSpan,
+        tracingContext: {
+          parentSpan: sleepSpan,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -523,7 +523,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
-    aiTracingContext,
+    tracingContext,
   }: {
     workflowId: string;
     runId: string;
@@ -548,11 +548,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
   }): Promise<void> {
     let { date, fn } = entry;
 
-    const sleepUntilSpan = aiTracingContext.parentAISpan?.createChildSpan({
+    const sleepUntilSpan = tracingContext.parentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
@@ -571,8 +571,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         inputData: prevOutput,
         runCount: -1,
-        aiTracingContext: {
-          parentAISpan: sleepUntilSpan,
+        tracingContext: {
+          parentSpan: sleepUntilSpan,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -631,14 +631,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     event,
     emitter,
     timeout,
-    aiTracingContext,
+    tracingContext,
   }: {
     event: string;
     emitter: Emitter;
     timeout?: number;
-    aiTracingContext?: AITracingContext;
+    tracingContext?: TracingContext;
   }): Promise<any> {
-    const waitSpan = aiTracingContext?.parentAISpan?.createChildSpan({
+    const waitSpan = tracingContext?.parentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_WAIT_EVENT,
       name: `wait: ${event}`,
       attributes: {
@@ -693,7 +693,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     skipEmits = false,
     writableStream,
     serializedStepGraph,
-    aiTracingContext,
+    tracingContext,
   }: {
     workflowId: string;
     runId: string;
@@ -711,7 +711,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     skipEmits?: boolean;
     writableStream?: WritableStream<ChunkType>;
     serializedStepGraph: SerializedStepFlowEntry[];
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
@@ -725,7 +725,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       status: 'running',
     };
 
-    const stepAISpan = aiTracingContext.parentAISpan?.createChildSpan({
+    const stepAISpan = tracingContext.parentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
       input: prevOutput,
@@ -823,8 +823,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          aiTracingContext: {
-            parentAISpan: stepAISpan,
+          tracingContext: {
+            parentSpan: stepAISpan,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -991,7 +991,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     resume,
     executionContext,
-    aiTracingContext,
+    tracingContext,
     emitter,
     abortController,
     runtimeContext,
@@ -1010,13 +1010,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
-    const parallelSpan = aiTracingContext.parentAISpan?.createChildSpan({
+    const parallelSpan = tracingContext.parentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_PARALLEL,
       name: `parallel: ${entry.steps.length} branches`,
       input: this.getStepOutput(stepResults, prevStep),
@@ -1045,8 +1045,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
           },
-          aiTracingContext: {
-            parentAISpan: parallelSpan,
+          tracingContext: {
+            parentSpan: parallelSpan,
           },
           emitter,
           abortController,
@@ -1102,7 +1102,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     resume,
     executionContext,
-    aiTracingContext,
+    tracingContext,
     emitter,
     abortController,
     runtimeContext,
@@ -1126,13 +1126,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
-    const conditionalSpan = aiTracingContext.parentAISpan?.createChildSpan({
+    const conditionalSpan = tracingContext.parentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: ${entry.conditions.length} conditions`,
       input: prevOutput,
@@ -1162,8 +1162,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               runtimeContext,
               inputData: prevOutput,
               runCount: -1,
-              aiTracingContext: {
-                parentAISpan: evalSpan,
+              tracingContext: {
+                parentSpan: evalSpan,
               },
               getInitData: () => stepResults?.input as any,
               getStepResult: (step: any) => {
@@ -1274,8 +1274,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
           },
-          aiTracingContext: {
-            parentAISpan: conditionalSpan,
+          tracingContext: {
+            parentSpan: conditionalSpan,
           },
           emitter,
           abortController,
@@ -1352,7 +1352,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     resume,
     executionContext,
-    aiTracingContext,
+    tracingContext,
     emitter,
     abortController,
     runtimeContext,
@@ -1377,7 +1377,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
@@ -1386,7 +1386,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
 
-    const loopSpan = aiTracingContext.parentAISpan?.createChildSpan({
+    const loopSpan = tracingContext.parentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_LOOP,
       name: `loop: ${entry.loopType}`,
       input: prevOutput,
@@ -1410,8 +1410,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         executionContext,
         resume: currentResume,
         prevOutput: (result as { output: any }).output,
-        aiTracingContext: {
-          parentAISpan: loopSpan,
+        tracingContext: {
+          parentSpan: loopSpan,
         },
         emitter,
         abortController,
@@ -1451,8 +1451,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         inputData: result.output,
         runCount: -1,
-        aiTracingContext: {
-          parentAISpan: evalSpan,
+        tracingContext: {
+          parentSpan: evalSpan,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -1506,7 +1506,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     resume,
     executionContext,
-    aiTracingContext,
+    tracingContext,
     emitter,
     abortController,
     runtimeContext,
@@ -1532,7 +1532,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
@@ -1552,7 +1552,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     };
 
-    const loopSpan = aiTracingContext.parentAISpan?.createChildSpan({
+    const loopSpan = tracingContext.parentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_LOOP,
       name: `loop: foreach`,
       input: prevOutput,
@@ -1606,7 +1606,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionContext,
             resume,
             prevOutput: item,
-            aiTracingContext,
+            tracingContext,
             emitter,
             abortController,
             runtimeContext,
@@ -1801,7 +1801,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     resume,
     executionContext,
-    aiTracingContext,
+    tracingContext,
     emitter,
     abortController,
     runtimeContext,
@@ -1820,7 +1820,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    aiTracingContext: AITracingContext;
+    tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
@@ -1843,7 +1843,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         executionContext,
         resume,
         prevOutput,
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -1868,7 +1868,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           retryConfig: executionContext.retryConfig,
           executionSpan: executionContext.executionSpan,
         },
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -1961,7 +1961,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         resume,
         executionContext,
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -1978,7 +1978,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         resume,
         executionContext,
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -1994,7 +1994,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         resume,
         executionContext,
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -2011,7 +2011,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         resume,
         executionContext,
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -2074,7 +2074,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         resume,
         executionContext,
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -2195,7 +2195,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         resume,
         executionContext,
-        aiTracingContext,
+        tracingContext,
         emitter,
         abortController,
         runtimeContext,
@@ -2313,7 +2313,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           event: entry.event,
           emitter,
           timeout: entry.timeout,
-          aiTracingContext,
+          tracingContext,
         });
 
         const { step } = entry;
@@ -2328,7 +2328,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             steps: [entry.step.id],
           },
           prevOutput,
-          aiTracingContext,
+          tracingContext,
           emitter,
           abortController,
           runtimeContext,
