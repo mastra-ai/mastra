@@ -90,7 +90,7 @@
     "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.15.0-0",
+    "@mastra/core": ">=0.14.2-0 <0.15.0-0",
     "ai": "^4.0.0 || ^5.0.0",
     "zod": "^3.0.0 || ^4.0.0"
   },
