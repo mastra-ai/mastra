@@ -5,7 +5,7 @@ A multi-turn human-in-the-loop workflow.
 ## Prerequisites
 
 - Node.js v20.0+
-- npm
+- pnpm (recommended) or npm
 - Openai API key
 
 ## Getting Started
@@ -13,7 +13,7 @@ A multi-turn human-in-the-loop workflow.
 1. Clone the repository and navigate to the project directory:
 
    ```bash
-   git clone https://github.com/mastra-ai/mastra
+   git clone https://github.com/mastra-ai/mastra --depth=1
    cd examples/heads-up-game
    ```
 
@@ -32,11 +32,17 @@ A multi-turn human-in-the-loop workflow.
 3. Install dependencies:
 
    ```
-   npm install
+   pnpm install --ignore-workspace
    ```
 
 4. Run the example:
 
    ```bash
-   npm run dev
+   pnpm dev
+   ```
+
+5. Test in Playground:
+
+   ```bash
+   http://localhost:4111
    ```
