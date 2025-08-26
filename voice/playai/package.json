@@ -28,9 +28,7 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "zod": "^3.25.67"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -43,6 +41,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.15.0-0",
+    "zod": "^3.0.0 || ^4.0.0"
   }
 }

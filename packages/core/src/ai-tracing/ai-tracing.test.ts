@@ -18,7 +18,7 @@ import {
 import type {
   AITracingEvent,
   AITracingExporter,
-  AITraceContext,
+  TraceContext,
   LLMGenerationAttributes,
   AITracingInstanceConfig,
   AISpanOptions,
@@ -440,7 +440,7 @@ describe('AI Tracing', () => {
     });
 
     it('should use custom sampler', () => {
-      const shouldSample = (_traceContext: AITraceContext): boolean => {
+      const shouldSample = (_traceContext: TraceContext): boolean => {
         return false;
       };
 

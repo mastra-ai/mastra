@@ -12,6 +12,8 @@ import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+inport type {   AITraceRecord,
+  AISpanRecord } from "@mastra/core/ai-trace"
 import type {
   LegacyWorkflowRuns,
   StorageGetMessagesArg,
@@ -520,4 +522,13 @@ export type GetScorerResponse = MastraScorerEntry & {
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
+}
+
+export interface GetAITraceResponse {
+  trace: AITraceRecord;
+}
+
+export interface GetAITracesResponse {
+  spans: AISpanRecord[];
+  pagination: PaginationInfo;
 }
