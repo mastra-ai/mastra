@@ -1,11 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  AI_SPAN_SCHEMA,
-  ObservabilityStorage,
-  safelyParseJSON,
-  TABLE_AI_SPANS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+import { AI_SPAN_SCHEMA, ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow } from '../utils';

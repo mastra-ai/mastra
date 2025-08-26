@@ -1736,7 +1736,7 @@ export type codespace = {
    */
   idle_timeout_minutes: number | null;
   /**
-   * Text to show user when codespace idle timeout minutes has been overriden by an organization policy
+   * Text to show user when codespace idle timeout minutes has been overridden by an organization policy
    */
   idle_timeout_notice?: string | null;
   /**
@@ -1986,7 +1986,7 @@ export type codespace_with_full_repository = {
    */
   idle_timeout_minutes: number | null;
   /**
-   * Text to show user when codespace idle timeout minutes has been overriden by an organization policy
+   * Text to show user when codespace idle timeout minutes has been overridden by an organization policy
    */
   idle_timeout_notice?: string | null;
   /**
@@ -2721,7 +2721,7 @@ export type dependabot_alert_security_advisory = {
      */
     readonly type: 'CVE' | 'GHSA';
     /**
-     * The value of the advisory identifer.
+     * The value of the advisory identifier.
      */
     readonly value: string;
   }>;
