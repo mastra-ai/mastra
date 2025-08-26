@@ -7,7 +7,7 @@ import { FileTree } from "nextra/components";
 
 # Monorepo Deployment
 
-Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless](./serverless-platforms/) providers may introduce extra requirements, the core setup is the same.
+Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./serverless-platforms/) providers may introduce extra requirements, the core setup is the same.
 
 ## Example pnpm monorepo
 
@@ -62,7 +62,6 @@ In a monorepo setup, all dependency packages used by Mastra must be built when t
 
 ```json filename="package.json"
 {
-  // ...
   "scripts": {
     "dev": "pnpm -r --parallel --filter api --filter web dev",
     "build": "pnpm --filter ui build && pnpm --filter utils build && pnpm --filter web build && pnpm --filter api build"
@@ -76,51 +75,9 @@ In a monorepo with both a Mastra application and a frontend, it's useful to defi
 pnpm --filter api dev
 ```
 
-## Compiler configuration (optional / advanced)
-
-Mastra supports both **CommonJS (CJS)** and **ECMAScript Modules (ESM)**, making it compatible with a variety of JavaScript environments. In a monorepo setup, you can choose the module system that best fits your project.
-
-### Module support
-
-Mastra provides dual builds for each module type:
-
-- **ESM** builds use `.js` or `.mjs` extensions
-- **CJS** builds use `.cjs` extensions
-
-This ensures Mastra can integrate into projects using either module format.
-
-### Build output
-
-When building Mastra in a monorepo, the build system (such as `tsc`, `esbuild`, or `Rollup`) should produce output that matches the selected module format. This ensures optimized builds for both ESM and CJS, maintaining compatibility with modern and legacy environments.
-
-- **ESM** for projects using `import`/`export` syntax
-- **CJS** for environments that use `require`/`module.exports`
-
-### Advanced configuration
-
-In your build pipeline, configure TypeScript to emit the correct module format. Here's an example `tsconfig.json` for ESM output in a monorepo setup:
-
-```json filename="packages/utils/tsconfig.json"
-{
-  "compilerOptions": {
-    "module": "ESNext",
-    "target": "ES2022",
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true,
-    "outDir": "dist",
-    "declaration": true,
-    "allowJs": true
-  },
-  "include": ["src/**/*"]
-}
-```
-> To target CommonJS, change to: `module: "CommonJS"`.
-
 ## Deployment configuration
 
-The example below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](../mastra-cloud/overview.mdx). While the interface may differ between providers, the configuration remains the same.
+The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](../mastra-cloud/overview.mdx). While the interface may differ between providers, the configuration remains the same.
 
 ![Deployment configuration](/image/monorepo/monorepo-mastra-cloud.jpg)
 
