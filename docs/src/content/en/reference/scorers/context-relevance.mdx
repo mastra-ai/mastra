@@ -43,6 +43,32 @@ The `createContextRelevanceScorerLLM()` function creates a scorer that evaluates
           description: "Scale factor to multiply the final score (default: 1)",
           required: false,
         },
+        {
+          name: "penalties",
+          type: "object",
+          description: "Configurable penalty settings for scoring",
+          required: false,
+          children: [
+            {
+              name: "unusedHighRelevanceContext",
+              type: "number",
+              description: "Penalty per unused high-relevance context (default: 0.1)",
+              required: false,
+            },
+            {
+              name: "missingContextPerItem",
+              type: "number",
+              description: "Penalty per missing context item (default: 0.15)",
+              required: false,
+            },
+            {
+              name: "maxMissingContextPenalty",
+              type: "number",
+              description: "Maximum total missing context penalty (default: 0.5)",
+              required: false,
+            },
+          ],
+        },
       ],
     },
   ]}
@@ -83,19 +109,25 @@ Context Relevance uses a sophisticated scoring algorithm that considers:
 
 2. **Usage Detection**: Tracks whether relevant context was actually used in the response
 
-3. **Penalties Applied**:
-   - **Unused High-Relevance**: 10% penalty per unused high-relevance context
-   - **Missing Context**: Up to 50% penalty for identified missing information
+3. **Penalties Applied** (configurable via `penalties` options):
+   - **Unused High-Relevance**: `unusedHighRelevanceContext` penalty per unused high-relevance context (default: 0.1)
+   - **Missing Context**: Up to `maxMissingContextPenalty` for identified missing information (default: 0.5)
 
 ### Scoring Formula
 
 ```
 Base Score = Σ(relevance_weights) / (num_contexts × 1.0)
-Usage Penalty = count(unused_high_relevance) × 0.1
-Missing Penalty = min(count(missing_context) × 0.15, 0.5)
+Usage Penalty = count(unused_high_relevance) × unusedHighRelevanceContext
+Missing Penalty = min(count(missing_context) × missingContextPerItem, maxMissingContextPenalty)
 
 Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 ```
+
+**Default Values**:
+- `unusedHighRelevanceContext` = 0.1 (10% penalty per unused high-relevance context)
+- `missingContextPerItem` = 0.15 (15% penalty per missing context item)
+- `maxMissingContextPenalty` = 0.5 (maximum 50% penalty for missing context)
+- `scale` = 1
 
 ### Score Interpretation
 
@@ -113,6 +145,61 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 | **Position** | Not considered | Critical (rewards early placement) |
 | **Usage** | Tracks and penalizes unused context | Not considered |
 | **Missing** | Identifies and penalizes gaps | Not evaluated |
+
+## Usage Examples
+
+### Basic Configuration
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o'),
+  options: {
+    context: ['Einstein won the Nobel Prize for his work on the photoelectric effect'],
+    scale: 1,
+  },
+});
+```
+
+### Custom Penalty Configuration
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o'),
+  options: {
+    context: ['Context information...'],
+    penalties: {
+      unusedHighRelevanceContext: 0.05, // Lower penalty for unused context
+      missingContextPerItem: 0.2, // Higher penalty per missing item
+      maxMissingContextPenalty: 0.4, // Lower maximum penalty cap
+    },
+    scale: 2, // Double the final score
+  },
+});
+```
+
+### Dynamic Context Extraction
+
+```typescript
+const scorer = createContextRelevanceScorerLLM({
+  model: openai('gpt-4o'),
+  options: {
+    contextExtractor: (input, output) => {
+      // Extract context based on the query
+      const userQuery = input?.inputMessages?.[0]?.content || '';
+      if (userQuery.includes('Einstein')) {
+        return [
+          'Einstein won the Nobel Prize for the photoelectric effect',
+          'He developed the theory of relativity'
+        ];
+      }
+      return ['General physics information'];
+    },
+    penalties: {
+      unusedHighRelevanceContext: 0.15,
+    },
+  },
+});
+```
 
 ## Usage Patterns
 
