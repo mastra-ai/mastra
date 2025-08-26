@@ -3,8 +3,8 @@
   "version": "0.1.2",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo",
-    "dev-no-turbo": "next dev",
+    "dev": "next dev",
+    "dev-turbo": "next dev --turbo",
     "build": "gtx-cli translate && pnpm build:llms-txt && pnpm build:eval-context && next build",
     "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
     "build:eval-context": "tsx src/scripts/build-eval-context.ts",
