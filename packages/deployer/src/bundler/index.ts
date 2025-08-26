@@ -161,8 +161,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    sourcemapEnabled: boolean = false,
-    enableEsmShim: boolean = true,
+    { enableSourcemap = false, enableEsmShim = true }: { enableSourcemap?: boolean; enableEsmShim?: boolean } = {},
   ) {
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
@@ -171,7 +170,7 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: sourcemapEnabled, enableEsmShim },
+      { sourcemap: enableSourcemap, enableEsmShim },
     );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
@@ -383,7 +382,7 @@ export abstract class Bundler extends MastraBundler {
         mastraEntryFile,
         analyzedBundleInfo,
         toolsPaths,
-        sourcemap,
+        { enableSourcemap: sourcemap },
       );
 
       const bundler = await this.createBundler(
