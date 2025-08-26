@@ -163,7 +163,14 @@ export class CloudflareDeployer extends Deployer {
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
   ) {
-    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths);
+    const inputOptions = await super.getBundlerOptions(
+      serverFile,
+      mastraEntryFile,
+      analyzedBundleInfo,
+      toolsPaths,
+      false,
+      false,
+    );
 
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [
