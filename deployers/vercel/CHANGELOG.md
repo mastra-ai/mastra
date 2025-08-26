@@ -1,5 +1,13 @@
 # @mastra/deployer-vercel
 
+## 0.11.16-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec)]:
+  - @mastra/deployer@0.15.0-alpha.3
+  - @mastra/core@0.15.0-alpha.3
+
 ## 0.11.16-alpha.0
 
 ### Patch Changes

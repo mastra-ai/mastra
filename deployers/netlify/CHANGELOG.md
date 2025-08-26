@@ -1,5 +1,17 @@
 # @mastra/deployer-netlify
 
+## 0.12.0-alpha.2
+
+### Minor Changes
+
+- [#7028](https://github.com/mastra-ai/mastra/pull/7028) [`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump core peerdependency
+
+### Patch Changes
+
+- Updated dependencies [[`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec)]:
+  - @mastra/deployer@0.15.0-alpha.3
+  - @mastra/core@0.15.0-alpha.3
+
 ## 0.11.16-alpha.1
 
 ### Patch Changes

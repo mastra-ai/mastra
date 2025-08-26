@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- [#7028](https://github.com/mastra-ai/mastra/pull/7028) [`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix exportsmap
+
 ## 0.10.6-alpha.0
 
 ### Patch Changes

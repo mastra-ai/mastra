@@ -1,5 +1,13 @@
 # @mastra/firecrawl
 
+## 1.2.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec)]:
+  - @mastra/rag@1.2.0-alpha.1
+  - @mastra/core@0.15.0-alpha.3
+
 ## 1.2.14-alpha.0
 
 ### Patch Changes
