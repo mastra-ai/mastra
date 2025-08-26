@@ -12,7 +12,7 @@ import {
   workflowBuilderAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
-import { myWorkflow, workflowBuilderWorkflow } from './workflows';
+import { myWorkflow, workflowBuilderWorkflow, sendEmailWorkflow } from './workflows';
 import { chefModelV2Agent } from './agents/model-v2-agent';
 
 const storage = new LibSQLStore({
@@ -36,19 +36,16 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow, workflowBuilderWorkflow },
+  workflows: { myWorkflow, workflowBuilderWorkflow, sendEmailWorkflow },
   bundler: {
     sourcemap: true,
   },
   serverMiddleware: [
     {
-      handler: (c, next) => {
+      handler: (_c, next) => {
         console.log('Middleware called');
         return next();
       },
     },
   ],
-  // telemetry: {
-  //   enabled: false,
-  // }
 });

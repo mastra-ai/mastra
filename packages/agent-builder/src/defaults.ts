@@ -1524,8 +1524,8 @@ export const mastra = new Mastra({
     // TypeScript validation
     if (validationType.includes('types')) {
       try {
-        const filePattern = files?.length ? files.join(' ') : '';
-        const tscCommand = files?.length ? `npx tsc --noEmit ${filePattern}` : 'npx tsc --noEmit';
+        // Always run full project TypeScript check but filter results to target files
+        const tscCommand = 'npx tsc --noEmit';
         await exec(tscCommand, execOptions);
         validationsPassed.push('types');
       } catch (error: any) {
@@ -1538,12 +1538,25 @@ export const mastra = new Mastra({
           tsOutput = error.message;
         }
 
-        errors.push({
-          type: 'typescript',
-          severity: 'error',
-          message: tsOutput.trim() || `TypeScript validation failed: ${error.message || String(error)}`,
-        });
-        validationsFailed.push('types');
+        // If specific files were provided, filter errors to only include those files
+        if (files && files.length > 0) {
+          const filteredErrors = AgentBuilderDefaults.filterTypeScriptErrors(tsOutput, files, projectPath);
+
+          if (filteredErrors.length > 0) {
+            errors.push(...filteredErrors);
+            validationsFailed.push('types');
+          } else {
+            validationsPassed.push('types');
+          }
+        } else {
+          // No files specified, include all errors
+          errors.push({
+            type: 'typescript',
+            severity: 'error',
+            message: tsOutput.trim() || `TypeScript validation failed: ${error.message || String(error)}`,
+          });
+          validationsFailed.push('types');
+        }
       }
     }
 
@@ -1637,6 +1650,91 @@ export const mastra = new Mastra({
         validationsFailed,
       },
     };
+  }
+
+  /**
+   * Filter TypeScript errors to only include errors from specified files
+   */
+  static filterTypeScriptErrors(
+    tsOutput: string,
+    targetFiles: string[],
+    projectPath?: string,
+  ): Array<{
+    type: 'typescript';
+    severity: 'error' | 'warning';
+    message: string;
+    file?: string;
+    line?: number;
+    column?: number;
+  }> {
+    const errors: Array<{
+      type: 'typescript';
+      severity: 'error' | 'warning';
+      message: string;
+      file?: string;
+      line?: number;
+      column?: number;
+    }> = [];
+
+    if (!tsOutput || !targetFiles.length) {
+      return errors;
+    }
+
+    // Normalize target file paths for comparison
+    const normalizePathForComparison = (filePath: string) => {
+      // Remove projectPath prefix if present
+      if (projectPath && filePath.startsWith(projectPath)) {
+        filePath = filePath.substring(projectPath.length);
+      }
+      // Normalize path separators and remove leading slash
+      return filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    };
+
+    const normalizedTargetFiles = targetFiles.map(normalizePathForComparison);
+
+    // Parse TypeScript error output
+    // TypeScript errors typically look like:
+    // src/workflows/my-workflow.ts(10,5): error TS2322: Type 'string' is not assignable to type 'number'.
+    const errorLines = tsOutput.split('\n').filter(line => line.trim());
+
+    for (const line of errorLines) {
+      // Match TypeScript error format: filename(line,column): error TSxxxx: message
+      const tsErrorMatch = line.match(/^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+TS\d+:\s*(.+)$/);
+
+      if (tsErrorMatch) {
+        const [, filePath, lineStr, columnStr, severity, message] = tsErrorMatch;
+
+        // Ensure all required parts are present
+        if (!filePath || !lineStr || !columnStr || !severity || !message) {
+          continue;
+        }
+
+        const normalizedFilePath = normalizePathForComparison(filePath);
+
+        // Check if this error is from one of our target files
+        const isTargetFile = normalizedTargetFiles.some(targetFile => {
+          const normalizedTarget = normalizePathForComparison(targetFile);
+          return (
+            normalizedFilePath.endsWith(normalizedTarget) ||
+            normalizedTarget.endsWith(normalizedFilePath) ||
+            normalizedFilePath === normalizedTarget
+          );
+        });
+
+        if (isTargetFile) {
+          errors.push({
+            type: 'typescript',
+            severity: severity === 'warning' ? 'warning' : 'error',
+            message: message.trim(),
+            file: filePath,
+            line: parseInt(lineStr, 10),
+            column: parseInt(columnStr, 10),
+          });
+        }
+      }
+    }
+
+    return errors;
   }
 
   /**

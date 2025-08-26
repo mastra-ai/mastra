@@ -5,7 +5,8 @@ import { copyFile } from 'fs/promises';
 import { createRequire } from 'module';
 import { dirname, basename, extname, resolve } from 'path';
 import { promisify } from 'util';
-import { openai } from '@ai-sdk/openai';
+// import { openai } from '@ai-sdk/openai';
+import { openai as openai_v5 } from '@ai-sdk/openai_v5';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { MCPClient } from '@mastra/mcp';
 import { UNIT_KINDS } from './types';
@@ -428,7 +429,7 @@ export const resolveModel = (runtimeContext: any): MastraLanguageModel => {
       'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
     );
   }
-  return openai('gpt-4.1'); // Default model
+  return openai_v5('gpt-4.1'); // Default model
 };
 
 // Type guard to check if object is a valid MastraLanguageModel

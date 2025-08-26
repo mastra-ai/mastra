@@ -3,8 +3,9 @@ import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import { Agent } from '@mastra/core/agent';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { stepCountIs } from 'ai';
 import { z } from 'zod';
-import { AgentBuilderDefaults } from '../defaults';
+import { AgentBuilder } from '../agent';
 import {
   WorkflowBuilderInputSchema,
   WorkflowBuilderResultSchema,
@@ -204,18 +205,20 @@ Focus on:
 
 Use the docs and examples tools to gather comprehensive information.`;
 
-      const result = await researchAgent.generate(researchPrompt, {
-        output: z.object({
-          coreConceptsLearned: z.string().describe('Key concepts about Mastra workflows'),
-          bestPractices: z.string().describe('Best practices for workflow development'),
-          relevantExamples: z.string().describe('Relevant code examples found'),
-          technicalDetails: z.string().describe('Technical implementation details'),
-          recommendations: z.string().describe('Specific recommendations for this project'),
-        }),
-        maxSteps: 10,
+      const researchOutputSchema = z.object({
+        coreConceptsLearned: z.string().describe('Key concepts about Mastra workflows'),
+        bestPractices: z.string().describe('Best practices for workflow development'),
+        relevantExamples: z.string().describe('Relevant code examples found'),
+        technicalDetails: z.string().describe('Technical implementation details'),
+        recommendations: z.string().describe('Specific recommendations for this project'),
       });
 
-      const researchResult = result.object;
+      const result = await researchAgent.generateVNext(researchPrompt, {
+        output: researchOutputSchema,
+        // stopWhen: stepCountIs(10),
+      });
+
+      const researchResult: z.infer<typeof researchOutputSchema> = await result.object;
       if (!researchResult) {
         return {
           success: false,
@@ -280,140 +283,347 @@ const taskExecutionStep = createStep({
     discoveredWorkflows: z.array(z.any()),
     projectStructure: z.any(),
     research: z.any(),
+    projectPath: z.string().optional(),
   }),
   outputSchema: TaskExecutionResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
-    const { action, workflowName, description, requirements, tasks, discoveredWorkflows, projectStructure, research } =
-      inputData;
+  suspendSchema: z.object({
+    questions: z.array(
+      z.object({
+        id: z.string(),
+        question: z.string(),
+        type: z.enum(['choice', 'text', 'boolean']),
+        options: z.array(z.string()).optional(),
+        context: z.string().optional(),
+      }),
+    ),
+    currentProgress: z.string(),
+    completedTasks: z.array(z.string()),
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    answers: z.array(
+      z.object({
+        questionId: z.string(),
+        answer: z.string(),
+      }),
+    ),
+  }),
+  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+    const {
+      action,
+      workflowName,
+      description,
+      requirements,
+      tasks,
+      discoveredWorkflows,
+      projectStructure,
+      research,
+      projectPath,
+    } = inputData;
 
     console.log(`Starting task execution for ${action}ing workflow: ${workflowName}`);
-    console.log(`Executing ${tasks.length} tasks...`);
+    console.log(`Executing ${tasks.length} tasks using AgentBuilder stream...`);
 
     try {
-      const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(process.cwd());
-      const mcpTools = await initializeMcpTools();
+      const currentProjectPath = projectPath || process.cwd();
 
-      const executionAgent = new Agent({
+      const executionAgent = new AgentBuilder({
+        projectPath: currentProjectPath,
         model: resolveModel(runtimeContext),
-        instructions: `You are a Mastra workflow implementation expert. Your task is to execute the approved task list to ${action} a workflow.
+        instructions: `You are executing a workflow ${action} task for: "${workflowName}"
 
-EXECUTION GUIDELINES:
-1. **Follow the Task List**: Execute each task in the correct order, respecting dependencies
-2. **Use Available Tools**: Use the provided file system and code tools to implement the workflow
-3. **Request User Input for Decisions**: If you encounter choices (like email providers, databases, etc.), 
-   USE THE SUSPEND/RESUME PATTERN TO ASK THE USER FOR CLARIFICATION. Do not make assumptions.
-4. **Write Clean Code**: Follow Mastra best practices and conventions
-5. **Handle Errors**: Report any issues clearly and suggest solutions
-6. **Complete All Tasks**: Work through the entire task list systematically
+CRITICAL WORKFLOW EXECUTION REQUIREMENTS:
+1. **EXPLORE PROJECT STRUCTURE FIRST**: Use listDirectory and readFile tools to understand the existing project layout, folder structure, and conventions before creating any files
+2. **FOLLOW PROJECT CONVENTIONS**: Look at existing workflows, agents, and file structures to understand where new files should be placed (typically src/mastra/workflows/, src/mastra/agents/, etc.)
+3. **Use Task Management Tool**: Use the taskManager tool to track and manage your progress through the task list
+4. **COMPLETE EVERY SINGLE TASK**: You MUST complete ALL ${tasks.length} tasks in the provided task list. Do not stop until every task is completed
+5. **Follow Task Dependencies**: Execute tasks in the correct order, respecting dependencies
+6. **Request User Input When Needed**: If you encounter choices (like email providers, databases, etc.) that require user decision, return questions for clarification
+7. **Write Files in Correct Locations**: After exploring the project structure, place workflow files in the appropriate directories following the project's conventions
 
-CRITICAL: If you need to make any decisions during implementation (choosing providers, configurations, etc.), 
-you must suspend the workflow and ask the user for input. DO NOT make assumptions.
-
-AVAILABLE RESEARCH:
-${JSON.stringify(research, null, 2)}
+CRITICAL COMPLETION REQUIREMENTS: 
+- ALWAYS explore the directory structure before creating files to understand where they should go
+- You MUST complete ALL ${tasks.length} tasks before returning status='completed'
+- Use the taskManager tool to track your progress and ensure no tasks are missed
+- If you need to make any decisions during implementation (choosing providers, configurations, etc.), return questions for user clarification
+- DO NOT make assumptions about file locations - explore first!
+- The task list provided is the source of truth - you must complete every single task in it
 
 PROJECT CONTEXT:
 - Action: ${action}
 - Workflow Name: ${workflowName}
 - Description: ${description}
 - Requirements: ${requirements}
+- Project Path: ${currentProjectPath}
 - Discovered Workflows: ${JSON.stringify(discoveredWorkflows, null, 2)}
 - Project Structure: ${JSON.stringify(projectStructure, null, 2)}
 
-Execute all tasks systematically and report progress.`,
-        name: 'Workflow Execution Agent',
-        tools: {
-          ...tools,
-          docs: mcpTools.docs || null,
-          examples: mcpTools.examples || null,
-        },
+AVAILABLE RESEARCH:
+${JSON.stringify(research, null, 2)}
+
+INITIAL TASK LIST:
+${tasks.map(task => `- ${task.id}: ${task.content} (Priority: ${task.priority})`).join('\n')}
+
+${resumeData ? `USER PROVIDED ANSWERS: ${JSON.stringify(resumeData.answers, null, 2)}` : ''}
+
+Start by exploring the project structure, then use the taskManager tool to create your initial task list, and work through each task systematically.
+
+CRITICAL VALIDATION INSTRUCTIONS:
+- When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
+- The validation will automatically filter results to only show errors from your files
+- This prevents confusion from validation errors in unrelated project files
+- Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
+- ALWAYS validate after creating or modifying files to ensure they compile correctly`,
       });
 
-      const completedTasks: string[] = [];
-      const failedTasks: string[] = [];
-      let currentTaskIndex = 0;
+      // Create the execution prompt
+      const executionPrompt = resumeData
+        ? `Continue working on the task list. The user has provided answers to your questions: ${JSON.stringify(resumeData.answers, null, 2)}. 
 
-      // Execute tasks one by one until all are completed
-      while (currentTaskIndex < tasks.length) {
-        const task = tasks[currentTaskIndex];
+CRITICAL: You must complete ALL ${tasks.length} tasks from the original task list. Use the taskManager tool to check your progress and continue with the next tasks. Do not stop until every single task is completed.`
+        : `Begin executing the task list to ${action} the workflow "${workflowName}". 
 
-        if (!task) {
-          currentTaskIndex++;
-          continue;
-        }
+CRITICAL REQUIREMENTS:
+- You MUST complete ALL ${tasks.length} tasks in the provided task list
+- Start by exploring the project directory structure using listDirectory and readFile tools to understand:
+  - Where workflows are typically stored (look for src/mastra/workflows/ or similar)
+  - What the existing file structure looks like
+  - How other workflows are organized and named
+  - Where agent files are stored if needed
+- Then use the taskManager tool to set up your task list and work through each task systematically
+- Ensure you place files in the correct locations
+- DO NOT return status='completed' until ALL ${tasks.length} tasks are finished
 
-        if (task.status === 'completed') {
-          currentTaskIndex++;
-          continue;
-        }
+CRITICAL VALIDATION INSTRUCTIONS:
+- When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
+- The validation will automatically filter results to only show errors from your files
+- This prevents confusion from validation errors in unrelated project files
+- Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
+- ALWAYS validate after creating or modifying files to ensure they compile correctly
 
-        // Check dependencies
-        const hasUnmetDependencies = task.dependencies?.some(depId => !completedTasks.includes(depId));
+TASK LIST TO COMPLETE (${tasks.length} total tasks):
+${tasks.map((task, index) => `${index + 1}. [${task.id}] ${task.content}`).join('\n')}
 
-        if (hasUnmetDependencies) {
-          // Skip this task for now, try next one
-          currentTaskIndex++;
-          continue;
-        }
+You must complete every single one of these tasks before finishing.`;
 
-        console.log(`Executing task ${currentTaskIndex + 1}/${tasks.length}: ${task.content}`);
+      const originalInstructions = await executionAgent.getInstructions({ runtimeContext: runtimeContext });
+      const additionalInstructions = executionAgent.instructions;
 
-        try {
-          const taskPrompt = `Execute this specific task:
-
-TASK: ${task.content}
-PRIORITY: ${task.priority}
-NOTES: ${task.notes || 'None'}
-DEPENDENCIES: ${task.dependencies?.join(', ') || 'None'}
-
-Context from previous completed tasks: ${completedTasks.join(', ')}
-
-Execute this task completely and report when done. If you need user input for any decisions, 
-explain what decision needs to be made and request clarification.`;
-
-          const taskResult = await executionAgent.generate(taskPrompt, {
-            output: z.object({
-              taskCompleted: z.boolean().describe('Whether the task was fully completed'),
-              workDone: z.string().describe('Description of work completed'),
-              filesModified: z.array(z.string()).describe('List of files that were created or modified'),
-              issuesEncountered: z.string().optional().describe('Any issues or blockers encountered'),
-              nextSteps: z.string().optional().describe('What needs to happen next if task is not complete'),
-            }),
-            maxSteps: 20,
-          });
-
-          const result = taskResult.object;
-          if (result?.taskCompleted) {
-            completedTasks.push(task.id);
-            console.log(`✅ Task completed: ${task.content}`);
-          } else {
-            failedTasks.push(task.id);
-            console.log(`❌ Task failed: ${task.content} - ${result?.issuesEncountered || 'Unknown error'}`);
-          }
-        } catch (error) {
-          console.error(`Task execution failed for: ${task.content}`, error);
-          failedTasks.push(task.id);
-        }
-
-        currentTaskIndex++;
+      let enhancedInstructions = originalInstructions as string;
+      if (additionalInstructions) {
+        enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
       }
 
-      const success = failedTasks.length === 0;
+      const enhancedOptions = {
+        stopWhen: stepCountIs(100),
+        temperature: 0.3,
+        instructions: enhancedInstructions,
+      };
+
+      // Loop until all tasks are completed
+      let finalResult: any = null;
+      let completedTaskIds: string[] = [];
+      let allTasksCompleted = false;
+      let iterationCount = 0;
+      const maxIterations = 5; // Prevent infinite loops
+
+      const expectedTaskIds = tasks.map(task => task.id);
+
+      while (!allTasksCompleted && iterationCount < maxIterations) {
+        iterationCount++;
+
+        // Calculate remaining tasks
+        const remainingTaskIds = expectedTaskIds.filter(taskId => !completedTaskIds.includes(taskId));
+        const remainingTasks = tasks.filter(task => remainingTaskIds.includes(task.id));
+
+        console.log(`\n=== EXECUTION ITERATION ${iterationCount} ===`);
+        console.log(`Completed tasks: ${completedTaskIds.length}/${expectedTaskIds.length}`);
+        console.log(`Remaining tasks: ${remainingTaskIds.join(', ')}`);
+
+        // Create prompt for this iteration
+        const iterationPrompt =
+          iterationCount === 1
+            ? executionPrompt
+            : `Continue working on the remaining tasks. You have already completed these tasks: [${completedTaskIds.join(', ')}]
+
+REMAINING TASKS TO COMPLETE (${remainingTasks.length} tasks):
+${remainingTasks.map((task, index) => `${index + 1}. [${task.id}] ${task.content} (Priority: ${task.priority})`).join('\n')}
+
+CRITICAL: You must complete ALL of these remaining ${remainingTasks.length} tasks. Do not stop until every single one is finished.
+
+CRITICAL VALIDATION INSTRUCTIONS:
+- When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
+- The validation will automatically filter results to only show errors from your files
+- This prevents confusion from validation errors in unrelated project files
+- Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
+- ALWAYS validate after creating or modifying files to ensure they compile correctly
+
+${resumeData ? `USER PROVIDED ANSWERS: ${JSON.stringify(resumeData.answers, null, 2)}` : ''}`;
+
+        // Use stream to let the agent manage its own execution
+        const stream = await executionAgent.streamVNext(iterationPrompt, {
+          structuredOutput: {
+            schema: z.object({
+              status: z
+                .enum(['in_progress', 'completed', 'needs_clarification'])
+                .describe('Status - only use "completed" when ALL remaining tasks are finished'),
+              progress: z.string().describe('Current progress description'),
+              completedTasks: z
+                .array(z.string())
+                .describe('List of ALL completed task IDs (including previously completed ones)'),
+              totalTasksRequired: z
+                .number()
+                .describe(`Total number of tasks that must be completed (should be ${tasks.length})`),
+              tasksRemaining: z.array(z.string()).describe('List of task IDs that still need to be completed'),
+              filesModified: z
+                .array(z.string())
+                .describe('List of files that were created or modified - use these exact paths for validateCode tool'),
+              questions: z
+                .array(
+                  z.object({
+                    id: z.string(),
+                    question: z.string(),
+                    type: z.enum(['choice', 'text', 'boolean']),
+                    options: z.array(z.string()).optional(),
+                    context: z.string().optional(),
+                  }),
+                )
+                .optional()
+                .describe('Questions for user if clarification is needed'),
+              message: z.string().describe('Summary of work completed or current status'),
+              error: z.string().optional().describe('Any errors encountered'),
+            }),
+            model: resolveModel(runtimeContext),
+          },
+          ...enhancedOptions,
+        });
+
+        // Process the stream and get the final result
+        let finalMessage = '';
+        for await (const chunk of stream.fullStream) {
+          if (chunk.type === 'text-delta') {
+            finalMessage += chunk.payload.text;
+          }
+
+          if (chunk.type === 'step-finish') {
+            console.log(finalMessage);
+            finalMessage = '';
+          }
+
+          if (chunk.type === 'tool-result') {
+            console.log(chunk);
+          }
+
+          if (chunk.type === 'finish') {
+            console.log(chunk);
+          }
+        }
+
+        await stream.consumeStream();
+        finalResult = await stream.object;
+
+        console.log(`Iteration ${iterationCount} result:`, { finalResult });
+
+        if (!finalResult) {
+          throw new Error(`No result received from agent execution on iteration ${iterationCount}`);
+        }
+
+        // Update completed tasks
+        completedTaskIds = finalResult.completedTasks || [];
+        allTasksCompleted = expectedTaskIds.every(taskId => completedTaskIds.includes(taskId));
+
+        console.log(
+          `After iteration ${iterationCount}: ${completedTaskIds.length}/${expectedTaskIds.length} tasks completed`,
+        );
+
+        // If agent needs clarification, break out and suspend
+        if (finalResult.status === 'needs_clarification' && finalResult.questions && finalResult.questions.length > 0) {
+          console.log(
+            `Agent needs clarification on iteration ${iterationCount}: ${finalResult.questions.length} questions`,
+          );
+          break;
+        }
+
+        // If agent claims completed but not all tasks are done, continue loop
+        if (finalResult.status === 'completed' && !allTasksCompleted) {
+          console.log(
+            `Agent claimed completion but missing tasks: ${expectedTaskIds.filter(id => !completedTaskIds.includes(id)).join(', ')}`,
+          );
+          // Continue to next iteration
+        }
+      }
+
+      if (iterationCount >= maxIterations && !allTasksCompleted) {
+        finalResult.error = `Maximum iterations (${maxIterations}) reached but not all tasks completed`;
+        finalResult.status = 'in_progress';
+      }
+
+      if (!finalResult) {
+        throw new Error('No result received from agent execution');
+      }
+
+      // If the agent needs clarification, suspend the workflow
+      if (finalResult.status === 'needs_clarification' && finalResult.questions && finalResult.questions.length > 0) {
+        console.log(`Agent needs clarification: ${finalResult.questions.length} questions`);
+
+        await suspend({
+          questions: finalResult.questions,
+          currentProgress: finalResult.progress,
+          completedTasks: finalResult.completedTasks || [],
+          message: finalResult.message,
+        });
+
+        // This return won't be reached due to suspension, but TypeScript needs it
+        return {
+          success: false,
+          completedTasks: finalResult.completedTasks || [],
+          filesModified: finalResult.filesModified || [],
+          validationResults: {
+            passed: false,
+            errors: [],
+            warnings: ['Workflow suspended for user clarification'],
+          },
+          message: 'Workflow suspended for user clarification',
+        };
+      }
+
+      // Final validation after loop completion
+      const tasksCompleted = completedTaskIds.length;
+      const tasksExpected = expectedTaskIds.length;
+
+      // Determine success based on loop results
+      const success = allTasksCompleted && !finalResult.error;
       const message = success
-        ? `Successfully executed all ${completedTasks.length} tasks to ${action} the workflow`
-        : `Completed ${completedTasks.length}/${tasks.length} tasks. Failed tasks: ${failedTasks.join(', ')}`;
+        ? `Successfully completed workflow ${action} - all ${tasksExpected} tasks completed after ${iterationCount} iteration(s): ${finalResult.message}`
+        : `Workflow execution finished with issues after ${iterationCount} iteration(s): ${finalResult.message}. Completed: ${tasksCompleted}/${tasksExpected} tasks`;
 
       console.log(message);
+
+      // Build validation results with task completion details
+      const missingTasks = expectedTaskIds.filter(taskId => !completedTaskIds.includes(taskId));
+      const validationErrors = [];
+
+      if (finalResult.error) {
+        validationErrors.push(finalResult.error);
+      }
+
+      if (!allTasksCompleted) {
+        validationErrors.push(
+          `Incomplete tasks: ${missingTasks.join(', ')} (${tasksCompleted}/${tasksExpected} completed)`,
+        );
+      }
+
       return {
         success,
-        completedTasks,
-        filesModified: [], // Would track actual files modified during execution
+        completedTasks: finalResult.completedTasks || [],
+        filesModified: finalResult.filesModified || [],
         validationResults: {
           passed: success,
-          errors: failedTasks.map(id => `Task ${id} failed`),
-          warnings: [],
+          errors: validationErrors,
+          warnings: allTasksCompleted ? [] : [`Missing ${missingTasks.length} tasks: ${missingTasks.join(', ')}`],
         },
         message,
+        error: finalResult.error,
       };
     } catch (error) {
       console.error('Task execution failed:', error);
@@ -470,6 +680,8 @@ export const workflowBuilderWorkflow = createWorkflow({
       research: researchResult,
       previousPlan: undefined,
       userAnswers: undefined,
+      allPreviousQuestions: [],
+      allPreviousAnswers: {},
     };
   })
   // Step 4: Planning and Approval Sub-workflow (loops until approved)
@@ -495,6 +707,7 @@ export const workflowBuilderWorkflow = createWorkflow({
       discoveredWorkflows: discoveryResult.workflows,
       projectStructure: projectResult,
       research: researchResult,
+      projectPath: initData.projectPath || process.cwd(),
     };
   })
   // Step 5: Execute the approved tasks

@@ -48,6 +48,8 @@ const planningIterationStep = createStep({
       research,
       previousPlan,
       userAnswers,
+      allPreviousQuestions,
+      allPreviousAnswers,
     } = inputData;
 
     console.log('Starting planning iteration...');
@@ -67,11 +69,16 @@ PLANNING RESPONSIBILITIES:
 - do not ask about package managers
 - Assume the user is going to use zod for validation
 - You do not need to ask questions if you have none
+- NEVER ask questions that have already been answered before
 5. **Incorporate Feedback**: Use any previous answers or feedback to refine the plan
 
 ${previousPlan ? `PREVIOUS PLAN CONTEXT:\nTasks: ${JSON.stringify(previousPlan.tasks, null, 2)}\nQuestions: ${JSON.stringify(previousPlan.questions, null, 2)}\nReasoning: ${previousPlan.reasoning}` : ''}
 
-${userAnswers ? `USER ANSWERS: ${JSON.stringify(userAnswers, null, 2)}` : ''}
+${allPreviousQuestions && allPreviousQuestions.length > 0 ? `ALL PREVIOUS QUESTIONS ASKED:\n${JSON.stringify(allPreviousQuestions, null, 2)}\n\nDO NOT ASK ANY OF THESE QUESTIONS AGAIN!` : ''}
+
+${allPreviousAnswers && Object.keys(allPreviousAnswers).length > 0 ? `ALL PREVIOUS USER ANSWERS:\n${JSON.stringify(allPreviousAnswers, null, 2)}` : ''}
+
+${userAnswers ? `CURRENT USER ANSWERS: ${JSON.stringify(userAnswers, null, 2)}` : ''}
 
 Based on the context and any user answers, create or refine the task plan.`,
         name: 'Workflow Planning Agent',
@@ -119,7 +126,7 @@ PROJECT CONTEXT:
 
 Create specific tasks and identify any questions that need user clarification.`;
 
-      const result = await planningAgent.generate(planningPrompt, {
+      const result = await planningAgent.generateVNext(planningPrompt, {
         output: z.object({
           tasks: z.array(
             z.object({
@@ -145,10 +152,10 @@ Create specific tasks and identify any questions that need user clarification.`;
           reasoning: z.string().describe('Explanation of the plan and any questions'),
           planComplete: z.boolean().describe('Whether the plan is ready for execution (no more questions)'),
         }),
-        maxSteps: 15,
+        // maxSteps: 15,
       });
 
-      const planResult = result.object;
+      const planResult: z.infer<typeof PlanningIterationResultSchema> = await result.object;
       if (!planResult) {
         return {
           tasks: [],
@@ -164,6 +171,8 @@ Create specific tasks and identify any questions that need user clarification.`;
       if (planResult.questions && planResult.questions.length > 0 && !planResult.planComplete) {
         console.log(`Planning needs user clarification: ${planResult.questions.length} questions`);
 
+        console.log(planResult.questions);
+
         await suspend({
           questions: planResult.questions,
           message: `Please answer ${planResult.questions.length} question(s) to finalize the workflow plan:`,
@@ -173,6 +182,13 @@ Create specific tasks and identify any questions that need user clarification.`;
           },
         });
 
+        // Accumulate all questions and answers for next iteration
+        const accumulatedQuestions = [...(allPreviousQuestions || []), ...planResult.questions];
+        const accumulatedAnswers = {
+          ...(allPreviousAnswers || {}),
+          ...(currentUserAnswers || {}),
+        };
+
         return {
           tasks: planResult.tasks,
           success: false,
@@ -180,11 +196,20 @@ Create specific tasks and identify any questions that need user clarification.`;
           reasoning: planResult.reasoning,
           planComplete: false,
           message: `Planning suspended for user clarification on ${planResult.questions.length} questions`,
+          allPreviousQuestions: accumulatedQuestions,
+          allPreviousAnswers: accumulatedAnswers,
         };
       }
 
       // Plan is complete
       console.log(`Planning complete with ${planResult.tasks.length} tasks`);
+
+      // Include final accumulated answers
+      const finalAccumulatedAnswers = {
+        ...(allPreviousAnswers || {}),
+        ...(currentUserAnswers || {}),
+      };
+
       return {
         tasks: planResult.tasks,
         success: true,
@@ -192,6 +217,8 @@ Create specific tasks and identify any questions that need user clarification.`;
         reasoning: planResult.reasoning,
         planComplete: true,
         message: `Successfully created ${planResult.tasks.length} tasks`,
+        allPreviousQuestions: allPreviousQuestions || [],
+        allPreviousAnswers: finalAccumulatedAnswers,
       };
     } catch (error) {
       console.error('Planning iteration failed:', error);

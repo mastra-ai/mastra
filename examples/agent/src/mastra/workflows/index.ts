@@ -2,6 +2,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 export { workflowBuilderWorkflow } from '@mastra/agent-builder';
+export { sendEmailWorkflow } from './send-email-workflow';
 
 export const myWorkflow = createWorkflow({
   id: 'my-workflow',
@@ -39,10 +40,10 @@ const step2 = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
-  execute: async ({ inputData, mastra, aiTracingContext }) => {
+  execute: async ({ inputData, mastra }) => {
     const agent = mastra.getAgent('chefAgentResponses');
-    const response = await agent.generate(inputData.result, {
-      aiTracingContext,
+    await agent.generate(inputData.result, {
+      aiTracingContext: {},
     });
     return {
       result: 'suh',
