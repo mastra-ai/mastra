@@ -10,7 +10,7 @@ export type StoragePagination = {
 };
 
 export interface StorageColumn {
-  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint';
+  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
   primaryKey?: boolean;
   nullable?: boolean;
   references?: {
