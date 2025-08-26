@@ -206,6 +206,8 @@ export async function createHonoServer(
         app.put(route.path, ...middlewares, handler);
       } else if (route.method === 'DELETE') {
         app.delete(route.path, ...middlewares, handler);
+      } else if (route.method === 'PATCH') {
+        app.patch(route.path, ...middlewares, handler);
       } else if (route.method === 'ALL') {
         app.all(route.path, ...middlewares, handler);
       }
