@@ -27,6 +27,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Configure npm registry
+        run: echo "registry=https://registry.yarnpkg.com" > ~/.npmrc
+
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
