@@ -1,6 +1,7 @@
 import type { Connection } from '@lancedb/lancedb';
-import type { StepResult, WorkflowRun, WorkflowRunState, WorkflowRuns } from '@mastra/core';
+import type { StepResult, WorkflowRunState, WorkflowRuns } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { WorkflowRun } from '@mastra/core/storage';
 import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 
 function parseWorkflowRun(row: any): WorkflowRun {

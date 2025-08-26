@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createServer } from 'http';
-import { createTool } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import type { Prompt, PromptMessage, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { MCPServer } from '../server/server';

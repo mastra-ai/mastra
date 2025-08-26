@@ -1,7 +1,8 @@
 import type { Client, InValue } from '@libsql/client';
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import type { StoreOperationsLibSQL } from '../operations';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
