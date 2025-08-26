@@ -15,6 +15,8 @@ import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives } from '../../action';
 import { MessageList } from '../../agent';
+import { AISpanType } from '../../ai-tracing';
+import type { AISpan } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
@@ -133,6 +135,7 @@ export class MastraLLMVNext extends MastraBase {
     options,
     outputProcessors,
     providerOptions,
+    agentAISpan,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -156,6 +159,21 @@ export class MastraLLMVNext extends MastraBase {
       output = this._applySchemaCompat(output) as any; // TODO: types for schema compat
     }
 
+    const llmAISpan = agentAISpan?.createChildSpan({
+      name: `llm stream: '${model.modelId}'`,
+      type: AISpanType.LLM_GENERATION,
+      input: messages,
+      attributes: {
+        model: model.modelId,
+        provider: model.provider,
+        streaming: true,
+      },
+      metadata: {
+        threadId,
+        resourceId,
+      },
+    });
+
     try {
       const messageList = new MessageList({
         threadId,
@@ -177,6 +195,7 @@ export class MastraLLMVNext extends MastraBase {
         },
         output,
         outputProcessors,
+        llmAISpan,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -265,7 +284,9 @@ export class MastraLLMVNext extends MastraBase {
         },
       };
 
-      return loop(loopOptions);
+      const result = loop(loopOptions);
+      llmAISpan?.end({ output: result });
+      return result;
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {
@@ -282,6 +303,7 @@ export class MastraLLMVNext extends MastraBase {
         },
         e,
       );
+      llmAISpan?.error({ error: mastraError });
       throw mastraError;
     }
   }

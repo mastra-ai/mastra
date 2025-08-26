@@ -184,7 +184,18 @@ export class MastraLLMV1 extends MastraBase {
           new TransformStream({
             // this gets called on each chunk output
             transform(chunk, controller) {
-              //TODO: Would be great to export chunks as events on the span
+              // Create event spans for text chunks
+              if (chunk.type === 'text-delta') {
+                llmSpan.createEventSpan({
+                  type: AISpanType.LLM_CHUNK,
+                  name: `llm chunk: ${chunk.type}`,
+                  output: chunk.textDelta,
+                  attributes: {
+                    chunkType: chunk.type,
+                  },
+                });
+              }
+
               //TODO: Figure out how to get the final usage
               // if (chunk.type === 'response-metadata' && chunk.usage) {
               //   finalUsage = chunk.usage;

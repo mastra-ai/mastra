@@ -9,6 +9,7 @@ import type {
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
+import type { AISpan, AISpanType } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
 import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
 import type { RuntimeContext } from '../../runtime-context';
@@ -43,4 +44,5 @@ export type ModelLoopStreamArgs<
   runtimeContext: RuntimeContext;
   resourceId?: string;
   threadId?: string;
+  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
 } & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;
