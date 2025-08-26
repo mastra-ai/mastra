@@ -1,6 +1,7 @@
-import type { WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';

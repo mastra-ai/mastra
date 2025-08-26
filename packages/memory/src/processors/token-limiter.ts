@@ -1,5 +1,7 @@
-import type { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core/llm';
 import { MemoryProcessor } from '@mastra/core/memory';
+import type { MemoryProcessorOpts } from '@mastra/core/memory';
+
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';

@@ -6,15 +6,15 @@ const mockHandler = (c: Context) => c.text('OK');
 const mockCreateHandler = async () => (c: Context) => c.text('OK');
 
 describe('registerApiRoute', () => {
-  it('should register a valid route', () => {
+  it.each(['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'ALL'] as const)('should register a valid %s route', method => {
     let route = registerApiRoute('/test', {
-      method: 'GET',
+      method,
       handler: mockHandler,
     });
 
     expect(route).toEqual({
       path: '/test',
-      method: 'GET',
+      method,
       handler: mockHandler,
       createHandler: undefined,
       openapi: undefined,
@@ -22,13 +22,13 @@ describe('registerApiRoute', () => {
     });
 
     route = registerApiRoute('/test', {
-      method: 'GET',
+      method,
       createHandler: mockCreateHandler,
     });
 
     expect(route).toEqual({
       path: '/test',
-      method: 'GET',
+      method,
       createHandler: mockCreateHandler,
       handler: undefined,
       openapi: undefined,
