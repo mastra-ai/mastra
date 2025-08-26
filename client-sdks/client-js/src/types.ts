@@ -11,6 +11,8 @@ import type {
   PaginationInfo,
   MastraMessageV2,
   OutputSchema,
+  AITraceRecord,
+  AISpanRecord,
 } from '@mastra/core';
 import type {
   AgentExecutionOptions,
@@ -524,4 +526,13 @@ export type GetScorerResponse = MastraScorerEntry & {
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
+}
+
+export interface GetAITraceResponse {
+  trace: AITraceRecord;
+}
+
+export interface GetAITracesResponse {
+  spans: AISpanRecord[];
+  pagination: PaginationInfo;
 }
