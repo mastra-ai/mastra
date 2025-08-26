@@ -10,6 +10,8 @@ import { InMemoryLegacyEvals } from './domains/legacy-evals/inmemory';
 import type { InMemoryEvals } from './domains/legacy-evals/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
+import { ObservabilityInMemory } from './domains/observability/inmemory';
+import type { InMemoryObservability } from './domains/observability/inmemory';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import type { InMemoryScores } from './domains/scores/inmemory';
@@ -19,6 +21,8 @@ import { WorkflowsInMemory } from './domains/workflows';
 import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 
 import type {
+  AISpanRecord,
+  AITraceRecord,
   EvalRow,
   PaginationArgs,
   PaginationInfo,
@@ -71,6 +75,11 @@ export class InMemoryStore extends MastraStorage {
       collection: database.mastra_evals as InMemoryEvals,
     });
 
+    const observabilityStorage = new ObservabilityInMemory({
+      collection: database.mastra_ai_spans as InMemoryObservability,
+      operations: operationsStorage,
+    });
+
     this.stores = {
       legacyEvals: legacyEvalsStorage,
       operations: operationsStorage,
@@ -78,6 +87,7 @@ export class InMemoryStore extends MastraStorage {
       traces: tracesStorage,
       scores: scoresStorage,
       memory: memoryStorage,
+      observability: observabilityStorage,
     };
   }
 
@@ -88,6 +98,7 @@ export class InMemoryStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
+      aiTracing: true,
     };
   }
 
@@ -218,6 +229,18 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format }) as unknown as Promise<
       MastraMessageV1[] | MastraMessageV2[]
     >;
+  }
+
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessagesById({ messageIds, format });
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -367,6 +390,36 @@ export class InMemoryStore extends MastraStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  }
+
+  async createAISpan(span: AISpanRecord): Promise<void> {
+    return this.stores.observability!.createAISpan(span);
+  }
+
+  async updateAISpan(params: {
+    spanId: string;
+    traceId: string;
+    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+  }): Promise<void> {
+    return this.stores.observability!.updateAISpan(params);
+  }
+
+  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+    return this.stores.observability!.getAITrace(traceId);
+  }
+
+  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+    return this.stores.observability!.batchCreateAISpans(args);
+  }
+
+  async batchUpdateAISpans(args: {
+    records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
+  }): Promise<void> {
+    return this.stores.observability!.batchUpdateAISpans(args);
+  }
+
+  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+    return this.stores.observability!.batchDeleteAITraces(args);
   }
 }
 

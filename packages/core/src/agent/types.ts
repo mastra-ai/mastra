@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { AISpan, AISpanType, AITracingContext } from '../ai-tracing';
+import type { AISpan, AISpanType, TracingContext } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -145,7 +145,7 @@ export type AgentGenerateOptions<
   /** Output processors to use for this generation call (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
   /** AI tracing context for span hierarchy and metadata */
-  aiTracingContext?: AITracingContext;
+  tracingContext?: TracingContext;
 } & (
   | {
       /**
@@ -220,7 +220,7 @@ export type AgentStreamOptions<
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessor[];
   /** AI tracing context for span hierarchy and metadata */
-  aiTracingContext?: AITracingContext;
+  tracingContext?: TracingContext;
 } & (
   | {
       /**

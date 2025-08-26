@@ -10,6 +10,9 @@ import type {
   StorageGetMessagesArg,
   PaginationInfo,
   MastraMessageV2,
+  OutputSchema,
+  AITraceRecord,
+  AISpanRecord,
 } from '@mastra/core';
 import type {
   AgentExecutionOptions,
@@ -46,6 +49,8 @@ export interface ClientOptions {
   headers?: Record<string, string>;
   /** Abort signal for request */
   abortSignal?: AbortSignal;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 export interface RequestOptions {
@@ -53,6 +58,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 type WithoutMethods<T> = {
@@ -97,12 +104,12 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type StreamVNextParams<OUTPUT extends OutputSchema | undefined = undefined> = {
   messages: MessageListInput;
-  output?: T;
+  output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & WithoutMethods<Omit<AgentExecutionOptions<T>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
+} & WithoutMethods<Omit<AgentExecutionOptions<OUTPUT>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
 
 export type UpdateModelParams = {
   modelId: string;
@@ -519,4 +526,13 @@ export type GetScorerResponse = MastraScorerEntry & {
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
+}
+
+export interface GetAITraceResponse {
+  trace: AITraceRecord;
+}
+
+export interface GetAITracesResponse {
+  spans: AISpanRecord[];
+  pagination: PaginationInfo;
 }

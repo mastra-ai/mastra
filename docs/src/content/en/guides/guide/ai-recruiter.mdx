@@ -37,7 +37,12 @@ export const candidateWorkflow = createWorkflow({
     resumeText: z.string(),
   }),
   outputSchema: z.object({
-    question: z.string(),
+    askAboutSpecialty: z.object({
+      question: z.string(),
+    }),
+    askAboutRole: z.object({
+      question: z.string(),
+    }),
   }),
 }).commit();
 ```
@@ -161,7 +166,12 @@ export const candidateWorkflow = createWorkflow({
     resumeText: z.string(),
   }),
   outputSchema: z.object({
-    question: z.string(),
+    askAboutSpecialty: z.object({
+      question: z.string(),
+    }),
+    askAboutRole: z.object({
+      question: z.string(),
+    }),
   }),
 })
   .then(gatherCandidateInfo)
@@ -222,7 +232,9 @@ console.log(JSON.stringify(res, null, 2));
 
 // Get the workflow output value
 if (res.status === "success") {
-  console.log(`Output value: ${res.result.question}`);
+  const question = res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question;
+
+  console.log(`Output value: ${question}`);
 }
 ```
 

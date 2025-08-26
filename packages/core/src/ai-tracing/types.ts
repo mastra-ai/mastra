@@ -29,6 +29,18 @@ export enum AISpanType {
   WORKFLOW_RUN = 'workflow_run',
   /** Workflow step execution with step status, data flow */
   WORKFLOW_STEP = 'workflow_step',
+  /** Workflow conditional execution with condition evaluation */
+  WORKFLOW_CONDITIONAL = 'workflow_conditional',
+  /** Individual condition evaluation within conditional */
+  WORKFLOW_CONDITIONAL_EVAL = 'workflow_conditional_eval',
+  /** Workflow parallel execution */
+  WORKFLOW_PARALLEL = 'workflow_parallel',
+  /** Workflow loop execution */
+  WORKFLOW_LOOP = 'workflow_loop',
+  /** Workflow sleep operation */
+  WORKFLOW_SLEEP = 'workflow_sleep',
+  /** Workflow wait for event operation */
+  WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
 // ============================================================================
@@ -132,6 +144,78 @@ export interface WorkflowStepAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Workflow Conditional attributes
+ */
+export interface WorkflowConditionalAttributes extends AIBaseAttributes {
+  /** Number of conditions evaluated */
+  conditionCount: number;
+  /** Which condition indexes evaluated to true */
+  truthyIndexes?: number[];
+  /** Which steps will be executed */
+  selectedSteps?: string[];
+}
+
+/**
+ * Workflow Conditional Evaluation attributes
+ */
+export interface WorkflowConditionalEvalAttributes extends AIBaseAttributes {
+  /** Index of this condition in the conditional */
+  conditionIndex: number;
+  /** Result of condition evaluation */
+  result?: boolean;
+}
+
+/**
+ * Workflow Parallel attributes
+ */
+export interface WorkflowParallelAttributes extends AIBaseAttributes {
+  /** Number of parallel branches */
+  branchCount: number;
+  /** Step IDs being executed in parallel */
+  parallelSteps?: string[];
+}
+
+/**
+ * Workflow Loop attributes
+ */
+export interface WorkflowLoopAttributes extends AIBaseAttributes {
+  /** Type of loop (foreach, dowhile, dountil) */
+  loopType?: 'foreach' | 'dowhile' | 'dountil';
+  /** Current iteration number (for individual iterations) */
+  iteration?: number;
+  /** Total iterations (if known) */
+  totalIterations?: number;
+  /** Number of steps to run concurrently in foreach loop */
+  concurrency?: number;
+}
+
+/**
+ * Workflow Sleep attributes
+ */
+export interface WorkflowSleepAttributes extends AIBaseAttributes {
+  /** Sleep duration in milliseconds */
+  durationMs?: number;
+  /** Sleep until date */
+  untilDate?: Date;
+  /** Sleep type */
+  sleepType?: 'fixed' | 'dynamic';
+}
+
+/**
+ * Workflow Wait Event attributes
+ */
+export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
+  /** Event name being waited for */
+  eventName?: string;
+  /** Timeout in milliseconds */
+  timeoutMs?: number;
+  /** Whether event was received or timed out */
+  eventReceived?: boolean;
+  /** Wait duration in milliseconds */
+  waitDurationMs?: number;
+}
+
+/**
  * AI-specific span types mapped to their attributes
  */
 export interface AISpanTypeMap {
@@ -141,6 +225,12 @@ export interface AISpanTypeMap {
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [AISpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
+  [AISpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
+  [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: WorkflowConditionalEvalAttributes;
+  [AISpanType.WORKFLOW_PARALLEL]: WorkflowParallelAttributes;
+  [AISpanType.WORKFLOW_LOOP]: WorkflowLoopAttributes;
+  [AISpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
+  [AISpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
   [AISpanType.GENERIC]: AIBaseAttributes;
 }
 
@@ -268,7 +358,7 @@ export enum SamplingStrategyType {
 /**
  * Context for TraceSampling
  */
-export interface AITraceContext {
+export interface TraceContext {
   runtimeContext?: RuntimeContext;
   metadata?: Record<string, any>;
 }
@@ -280,7 +370,7 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.ALWAYS }
   | { type: SamplingStrategyType.NEVER }
   | { type: SamplingStrategyType.RATIO; probability: number }
-  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: AITraceContext) => boolean };
+  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
 
 /**
  * Configuration for a single AI tracing instance
@@ -379,9 +469,7 @@ export type TracingSelector = (
 /**
  * Context for AI tracing that flows through workflow and agent execution
  */
-export interface AITracingContext {
+export interface TracingContext {
   /** Parent AI span for creating child spans in nested operations */
-  parentAISpan?: AnyAISpan;
-  /** User-defined metadata */
-  metadata?: Record<string, any>;
+  parentSpan?: AnyAISpan;
 }
