@@ -53,6 +53,9 @@ export type AgentExecutionOptions<
   /** Telemetry collection settings for observability */
   telemetry?: TelemetrySettings;
 
+  /** Maximum number of steps to run */
+  maxSteps?: number;
+
   /** Conditions for stopping execution (e.g., step count, token limit) */
   stopWhen?: LoopOptions['stopWhen'];
 
