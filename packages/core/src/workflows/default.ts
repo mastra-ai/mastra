@@ -11,8 +11,15 @@ import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
-import type { Emitter, StepFailure, StepResult, StepSuccess } from './types';
-import type { DefaultEngineType, SerializedStepFlowEntry, StepFlowEntry } from './workflow';
+import type {
+  DefaultEngineType,
+  Emitter,
+  SerializedStepFlowEntry,
+  StepFailure,
+  StepFlowEntry,
+  StepResult,
+  StepSuccess,
+} from './types';
 
 export type ExecutionContext = {
   workflowId: string;
