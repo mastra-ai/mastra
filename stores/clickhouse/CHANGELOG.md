@@ -1,5 +1,14 @@
 # @mastra/clickhouse
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- [#7020](https://github.com/mastra-ai/mastra/pull/7020) [`2e58325`](https://github.com/mastra-ai/mastra/commit/2e58325beb170f5b92f856e27d915cd26917e5e6) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Add column to ai spans table to tell if it's an event
+
+- Updated dependencies [[`2e58325`](https://github.com/mastra-ai/mastra/commit/2e58325beb170f5b92f856e27d915cd26917e5e6)]:
+  - @mastra/core@0.14.2-alpha.2
+
 ## 0.13.2
 
 ### Patch Changes
