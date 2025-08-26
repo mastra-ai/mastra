@@ -21,6 +21,10 @@ When they make a guess:
 - If correct: Congratulate them warmly
 - If incorrect: Politely correct them and encourage them to try again
 
-Encourage players to make a guess when they seem to have enough information.`,
+Encourage players to make a guess when they seem to have enough information.
+
+You must return a JSON object with:
+- response: Your response to the user
+- gameWon: true if they guessed correctly, false otherwise`,
   model: openai('gpt-4o'),
 });

@@ -11,12 +11,11 @@ Multi-turn human-in-the-loop workflows enable ongoing interaction between humans
 
 In this example, the multi-turn workflow is used to create a Heads Up game that demonstrates how to create interactive workflows using suspend/resume functionality and conditional logic with `dountil` to repeat a workflow step until a specific condition is met.
 
-This example consists of four main components:
+This example consists of three main components:
 
 1. A [**Famous Person Agent**](#famous-person-agent) that generates a famous person's name.
 2. A [**Game Agent**](#game-agent) that handles the gameplay.
-3. A [**Guess Verifier Agent**](#guess-verifier-agent) that validates responses.
-4. A [**Multi-Turn Workflow**](#multi-turn-workflow) that orchestrates the interaction.
+3. A [**Multi-Turn Workflow**](#multi-turn-workflow) that orchestrates the interaction.
 
 ## Prerequisites
 
@@ -98,44 +97,21 @@ When they make a guess:
 - If correct: Congratulate them warmly
 - If incorrect: Politely correct them and encourage them to try again
 
-Encourage players to make a guess when they seem to have enough information.`,
+Encourage players to make a guess when they seem to have enough information.
+
+You must return a JSON object with:
+- response: Your response to the user
+- gameWon: true if they guessed correctly, false otherwise`,
   model: openai("gpt-4o")
 });
 ```
 
-## Guess verifier agent
-
-The `guessVerifierAgent` validates a user's guess.
-
-```typescript filename="src/mastra/agents/example-guess-verifier-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-
-export const guessVerifierAgent = new Agent({
-  name: "Guess Verifier",
-  instructions: `You are a guess verifier for a "Heads Up" guessing game.
-
-Your job is to determine if a user's guess matches the actual famous person.
-
-Consider:
-- Exact name matches (e.g., "Albert Einstein" vs "Einstein")
-- Common nicknames and variations
-- Spelling variations and typos
-- Partial matches that are clearly the same person
-
-Return a JSON object with:
-- isCorrect: true if the guess matches the person, false otherwise
-
-Be strict but fair - only mark as correct if it's clearly the same person.`,
-  model: openai("gpt-4o")
-});
-```
 
 ## Multi-turn workflow
 
-The main workflow orchestrates the multi-turn interaction using suspend/resume functionality and conditional logic with `dountil` to repeat the `gameStep` until a specific condition is met.
+The workflow coordinates the full interaction using `suspend`/`resume` to pause for human input and `dountil` to repeat the game loop until a condition is met.
 
-The `startStep` uses the `famousPersonAgent`, the `gameStep` uses the `gameAgent` and `guessVerifierAgent` agents.
+The `startStep` generates a name using the `famousPersonAgent`, while the `gameStep` runs the interaction through the `gameAgent`, which handles both questions and guesses and produces structured output that includes a `gameWon` boolean.
 
 ```typescript filename="src/mastra/workflows/example-heads-up-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -143,7 +119,7 @@ import { z } from "zod";
 
 const startStep = createStep({
   id: "start-step",
-  description: "Generate a famous person's name",
+  description: "Get the name of a famous person",
   inputSchema: z.object({
     start: z.boolean()
   }),
@@ -177,7 +153,7 @@ const gameStep = createStep({
     userMessage: z.string()
   }),
   suspendSchema: z.object({
-    agentResponse: z.string()
+    suspendResponse: z.string()
   }),
   outputSchema: z.object({
     famousPerson: z.string(),
@@ -190,47 +166,31 @@ const gameStep = createStep({
     const { userMessage } = resumeData ?? {};
 
     if (!userMessage) {
-      const message = "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!";
-
       await suspend({
-        agentResponse: message
+        suspendResponse: "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!"
       });
-
-      return { famousPerson, gameWon: false, agentResponse: message, guessCount };
-    } else {
-      const guessVerifier = mastra.getAgent("guessVerifierAgent");
-      const verificationResponse = await guessVerifier.generate(
-        [
-          {
-            role: "user",
-            content: `Actual famous person: ${famousPerson}
-              User's guess: "${userMessage}"
-              Is this correct?`
-          }
-        ],
-        {
-          output: z.object({
-            isCorrect: z.boolean()
-          })
-        }
-      );
-
-      const gameWon = verificationResponse.object.isCorrect;
-
-      const agent = mastra.getAgent("gameAgent");
-      const response = await agent.generate(`
-      The famous person is: ${famousPerson}
-      The user asked: "${userMessage}"
-      Is this a correct guess: ${gameWon}
-      Please respond appropriately.
-    `);
-
-      const agentResponse = response.text;
-
-      guessCount++;
-
-      return { famousPerson, gameWon, agentResponse, guessCount };
     }
+
+    const agent = mastra.getAgent("gameAgent");
+    const response = await agent.generate(
+      `
+        The famous person is: ${famousPerson}
+        The user said: "${userMessage}"
+        Please respond appropriately. If this is a guess, tell me if it's correct.
+      `,
+      {
+        output: z.object({
+          response: z.string(),
+          gameWon: z.boolean()
+        })
+      }
+    );
+
+    const { response: agentResponse, gameWon } = response.object;
+
+    guessCount++;
+
+    return { famousPerson, gameWon, agentResponse, guessCount };
   }
 });
 
@@ -270,12 +230,13 @@ export const headsUpWorkflow = createWorkflow({
   .dountil(gameStep, async ({ inputData: { gameWon } }) => gameWon)
   .then(winStep)
   .commit();
+
 ```
 > See [Workflow](../../reference/workflows/workflow.mdx) for a full list of configuration options.
 
 ## Registering the agents and workflow
 
-All three agents and the workflow are registered in the main Mastra instance so they can be accessed by each other.
+To use a workflow or an agent, register them in your main Mastra instance.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
@@ -283,11 +244,10 @@ import { Mastra } from "@mastra/core/mastra";
 import { headsUpWorkflow } from "./workflows/example-heads-up-workflow";
 import { famousPersonAgent } from "./agents/example-famous-person-agent";
 import { gameAgent } from "./agents/example-game-agent";
-import { guessVerifierAgent } from "./agents/example-guess-verifier-agent";
 
 export const mastra = new Mastra({
   workflows: { headsUpWorkflow },
-  agents: { famousPersonAgent, gameAgent, guessVerifierAgent }
+  agents: { famousPersonAgent, gameAgent }
 });
 ```
 
@@ -295,7 +255,6 @@ export const mastra = new Mastra({
   marginTop='mt-16'
   link="https://github.com/mastra-ai/mastra/blob/main/examples/heads-up-game/"
 />
-
 
 ## Related
 
