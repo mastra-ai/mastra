@@ -1,8 +1,8 @@
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 
 export const gameAgent = new Agent({
-  name: "Game Agent",
+  name: 'Game Agent',
   instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
 
 CRITICAL: You know the famous person's name but you must NEVER reveal it in any response.
@@ -22,5 +22,5 @@ When they make a guess:
 - If incorrect: Politely correct them and encourage them to try again
 
 Encourage players to make a guess when they seem to have enough information.`,
-  model: openai("gpt-4o")
+  model: openai('gpt-4o'),
 });
