@@ -1,5 +1,4 @@
 import type { CoreMessage } from 'ai';
-import pMap from 'p-map';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../agent';
 import { MastraError } from '../error';
 import type { RuntimeContext } from '../runtime-context';
@@ -80,16 +79,27 @@ export const runExperiment = async <const TScorer extends readonly MastraScorer[
     });
   }
 
+  const pMap = (await import('p-map')).default;
+
   await pMap(
     data,
     async item => {
       let targetResult: any;
       try {
-        targetResult = await target.generate(item.input, {
-          scorers: {},
-          returnScorerData: true,
-          runtimeContext: item.runtimeContext,
-        });
+        const model = await target.getModel();
+        if (model.specificationVersion === 'v2') {
+          targetResult = await target.generateVNext(item.input, {
+            scorers: {},
+            returnScorerData: true,
+            runtimeContext: item.runtimeContext,
+          });
+        } else {
+          targetResult = await target.generate(item.input, {
+            scorers: {},
+            returnScorerData: true,
+            runtimeContext: item.runtimeContext,
+          });
+        }
       } catch (error) {
         throw new MastraError(
           {

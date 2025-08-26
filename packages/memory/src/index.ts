@@ -1,12 +1,19 @@
-import { generateEmptyFromSchema } from '@mastra/core';
-import type { MastraMessageV1, ToolAction } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
+import type {
+  MastraMessageV1,
+  MemoryConfig,
+  SharedMemoryConfig,
+  StorageThreadType,
+  WorkingMemoryTemplate,
+} from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
+import type { ToolAction } from '@mastra/core/tools';
+import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart } from 'ai';
+import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -522,10 +529,11 @@ export class Memory extends MastraMemory {
       await this.firstEmbed;
     }
 
-    const promise = embedMany({
+    const promise = (this.embedder.specificationVersion === `v2` ? embedManyV5 : embedMany)({
       values: chunks,
-      model: this.embedder,
       maxRetries: 3,
+      // @ts-ignore
+      model: this.embedder,
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;

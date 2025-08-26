@@ -12,6 +12,7 @@ const defaultSettings: AgentSettings = {
     temperature: 0.5,
     topP: 1,
     chatWithGenerate: false,
+    chatWithGenerateVNext: false,
   },
 };
 

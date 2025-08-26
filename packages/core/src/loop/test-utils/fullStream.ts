@@ -18,6 +18,146 @@ import {
 
 export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.fullStream', () => {
+    it('should maintain conversation history in the llm input', async () => {
+      const messageList = new MessageList();
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'test-input' }],
+          },
+          {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'test-input' }],
+          },
+        ],
+        'memory',
+      );
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'test-input' }],
+          },
+        ],
+        'input',
+      );
+      const result = loopFn({
+        runId,
+        model: new MockLanguageModelV2({
+          doStream: async ({ prompt }) => {
+            expect(prompt).toStrictEqual([
+              {
+                role: 'user',
+                content: [{ type: 'text', text: 'test-input' }],
+              },
+              {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'test-input' }],
+              },
+              {
+                role: 'user',
+                content: [{ type: 'text', text: 'test-input' }],
+              },
+            ]);
+
+            return {
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'response-id',
+                  modelId: 'response-model-id',
+                  timestamp: new Date(5000),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Hello' },
+                { type: 'text-delta', id: '1', delta: ', ' },
+                { type: 'text-delta', id: '1', delta: `world!` },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+            };
+          },
+        }),
+        messageList,
+      });
+
+      const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+      expect(data).toMatchInlineSnapshot(`
+              [
+                {
+                  "type": "start",
+                },
+                {
+                  "request": {},
+                  "type": "start-step",
+                  "warnings": [],
+                },
+                {
+                  "id": "1",
+                  "providerMetadata": undefined,
+                  "type": "text-start",
+                },
+                {
+                  "id": "1",
+                  "providerMetadata": undefined,
+                  "text": "Hello",
+                  "type": "text-delta",
+                },
+                {
+                  "id": "1",
+                  "providerMetadata": undefined,
+                  "text": ", ",
+                  "type": "text-delta",
+                },
+                {
+                  "id": "1",
+                  "providerMetadata": undefined,
+                  "text": "world!",
+                  "type": "text-delta",
+                },
+                {
+                  "id": "1",
+                  "providerMetadata": undefined,
+                  "type": "text-end",
+                },
+                {
+                  "finishReason": "stop",
+                  "providerMetadata": undefined,
+                  "response": {
+                    "headers": undefined,
+                    "id": "response-id",
+                    "modelId": "response-model-id",
+                    "timestamp": 1970-01-01T00:00:05.000Z,
+                  },
+                  "type": "finish-step",
+                  "usage": {
+                    "cachedInputTokens": undefined,
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "reasoningTokens": undefined,
+                    "totalTokens": 13,
+                  },
+                },
+                {
+                  "finishReason": "stop",
+                  "totalUsage": {
+                    "cachedInputTokens": undefined,
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "reasoningTokens": undefined,
+                    "totalTokens": 13,
+                  },
+                  "type": "finish",
+                },
+              ]
+            `);
+    });
+
     it('should send text deltas', async () => {
       const messageList = new MessageList();
       messageList.add(

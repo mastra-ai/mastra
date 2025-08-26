@@ -1,33 +1,19 @@
 import type {
   ModelMessage,
-  TelemetrySettings,
   UIMessage,
   ToolSet,
   DeepPartial,
   streamText,
-  StreamTextResult as OriginalStreamTextResult,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
-import type { ObjectOptions } from '../../loop/types';
+import type { z, ZodSchema } from 'zod';
+import type { LoopOptions } from '../../loop/types';
+import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
 import type { RuntimeContext } from '../../runtime-context';
-import type { ToolAction, VercelTool, VercelToolV5 } from '../../tools';
-import type { inferOutput, TripwireProperties } from './shared.types';
-
-type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
-
-type MastraCustomLLMOptions = {
-  tools?: ToolsInput;
-  telemetry?: TelemetrySettings;
-  threadId?: string;
-  resourceId?: string;
-  runtimeContext: RuntimeContext;
-  runId?: string;
-};
-
-type MastraCustomLLMOptionsKeys = keyof MastraCustomLLMOptions;
+import type { OutputSchema } from '../../stream/base/schema';
+import type { inferOutput } from './shared.types';
 
 export type OriginalStreamTextOptions<
   TOOLS extends ToolSet,
@@ -46,27 +32,15 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
-  OriginalStreamTextOptions<Tools, Output>,
-  MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish' | 'onFinish'
-> &
-  MastraCustomLLMOptions & {
-    onStepFinish?: StreamTextOnStepFinishCallback<inferOutput<Output>>;
-    onFinish?: StreamTextOnFinishCallback<inferOutput<Output>>;
-    experimental_output?: Output;
-  };
-
-export type StreamTextWithMessagesArgs<
-  Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+export type ModelLoopStreamArgs<
+  TOOLS extends ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   messages: UIMessage[] | ModelMessage[];
-  objectOptions?: ObjectOptions;
-} & StreamTextOptions<Tools, Output>;
-
-export type StreamTextResult<
-  Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = Omit<OriginalStreamTextResult<Tools, DeepPartial<inferOutput<Output>>>, 'experimental_output'> & {
-  object?: inferOutput<Output>;
-} & TripwireProperties;
+  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+  outputProcessors?: OutputProcessor[];
+  runtimeContext: RuntimeContext;
+  resourceId?: string;
+  threadId?: string;
+} & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;

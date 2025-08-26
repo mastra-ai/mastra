@@ -1,13 +1,18 @@
 import { ReadableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { createWorkflow } from '../../workflows';
 import type { LoopRun } from '../types';
 import { createOuterLLMWorkflow } from './outer-llm-step';
 import { llmIterationOutputSchema } from './schema';
 
-export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
+export function workflowLoopStream<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
   telemetry_settings,
   model,
   toolChoice,
@@ -15,9 +20,15 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
   _internal,
   modelStreamSpan,
   ...rest
-}: LoopRun<Tools>) {
+}: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
+      const writer = new WritableStream<ChunkType>({
+        write: chunk => {
+          controller.enqueue(chunk);
+        },
+      });
+
       const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
       modelStreamSpan.setAttributes({
@@ -28,7 +39,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
           : {}),
       });
 
-      const outerLLMWorkflow = createOuterLLMWorkflow<Tools>({
+      const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
         messageId: messageId!,
         model,
         telemetry_settings,
@@ -37,6 +48,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
         toolChoice,
         modelStreamSpan,
         controller,
+        writer,
         ...rest,
       });
 
@@ -68,7 +80,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
             controller.enqueue({
               type: 'step-finish',
               runId: rest.runId,
-              from: 'AGENT',
+              from: ChunkFrom.AGENT,
               payload: inputData,
             });
           }
@@ -102,7 +114,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
           return inputData.stepResult.isContinued;
         })
         .map(({ inputData }) => {
-          const toolCalls = rest.messageList.get.response.v3().filter((message: any) => message.role === 'tool');
+          const toolCalls = rest.messageList.get.response.aiV5
+            .model()
+            .filter((message: any) => message.role === 'tool');
           inputData.output.toolCalls = toolCalls;
 
           return inputData;
@@ -123,7 +137,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
       controller.enqueue({
         type: 'start',
         runId: rest.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {},
       });
 
@@ -135,7 +149,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
         inputData: {
           messageId: messageId!,
           messages: {
-            all: rest.messageList.get.input.aiV5.model(),
+            all: rest.messageList.get.all.aiV5.model(),
             user: rest.messageList.get.input.aiV5.model(),
             nonUser: [],
           },
@@ -156,7 +170,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet>({
       controller.enqueue({
         type: 'finish',
         runId: rest.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: executionResult.result,
       });
 

@@ -1,25 +1,25 @@
-import type { ObjectStreamPart, StreamObjectResult, TextStreamPart } from 'ai';
 import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import type { StreamTextResult } from '../llm';
 import type { IMastraLogger } from '../logger';
+import type { ChunkType } from '../stream';
+import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
 
 /**
  * Implementation of processor state management
  */
-class ProcessorState {
+export class ProcessorState {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
-  public streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [];
+  public streamParts: ChunkType[] = [];
 
   constructor(private readonly processorName: string) {}
 
   // Internal methods for the runner
-  addPart(part: TextStreamPart<any> | ObjectStreamPart<any>): void {
+  addPart(part: ChunkType): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
-      this.accumulatedText += part.textDelta;
+      this.accumulatedText += part.payload.text;
     }
     this.streamParts.push(part);
   }
@@ -106,10 +106,10 @@ export class ProcessorRunner {
    * Process a stream part through all output processors with state management
    */
   async processPart(
-    part: TextStreamPart<any> | ObjectStreamPart<any>,
+    part: ChunkType,
     processorStates: Map<string, ProcessorState>,
   ): Promise<{
-    part: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined;
+    part: ChunkType | null | undefined;
     blocked: boolean;
     reason?: string;
   }> {
@@ -118,7 +118,7 @@ export class ProcessorRunner {
     }
 
     try {
-      let processedPart: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined = part;
+      let processedPart: ChunkType | null | undefined = part;
 
       for (const processor of this.outputProcessors) {
         try {
@@ -161,9 +161,7 @@ export class ProcessorRunner {
     }
   }
 
-  async runOutputProcessorsForStream(
-    streamResult: StreamObjectResult<any, any, any> | StreamTextResult<any, any>,
-  ): Promise<ReadableStream<any>> {
+  async runOutputProcessorsForStream(streamResult: MastraModelOutput): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
         const reader = streamResult.fullStream.getReader();

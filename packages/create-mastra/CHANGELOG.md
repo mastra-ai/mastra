@@ -1,5 +1,35 @@
 # create-mastra
 
+## 0.10.24-alpha.1
+
+## 0.10.24-alpha.0
+
+### Patch Changes
+
+- [#6948](https://github.com/mastra-ai/mastra/pull/6948) [`a8070e6`](https://github.com/mastra-ai/mastra/commit/a8070e63ab384ae14a214faaf8634c53b7064bc3) Thanks [@taofeeq-deru](https://github.com/taofeeq-deru)! - Preserve run state in workflows after viewing traces
+
+## 0.10.23
+
+## 0.10.23-alpha.0
+
+## 0.10.22
+
+### Patch Changes
+
+- 8f8409a: Inject analytics instance into create cmd
+- 97c1d5e: Add new `scorers` subcommand for managing scorers.
+  Refactor cli to be more modular.
+- 6313063: Implement model switcher in playground
+- 36928f0: Use right icon for anthropic in model switcher
+
+## 0.10.22-alpha.6
+
+## 0.10.22-alpha.5
+
+## 0.10.22-alpha.4
+
+## 0.10.22-alpha.3
+
 ## 0.10.22-alpha.2
 
 ### Patch Changes

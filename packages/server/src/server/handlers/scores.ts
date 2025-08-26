@@ -15,7 +15,7 @@ async function getScorersFromSystem({
 
   const scorersMap = new Map<string, MastraScorerEntry & { agentIds: string[]; workflowIds: string[] }>();
 
-  for (const [agentId, agent] of Object.entries(agents)) {
+  for (const [_agentId, agent] of Object.entries(agents)) {
     const scorers =
       (await agent.getScorers({
         runtimeContext,
@@ -24,12 +24,12 @@ async function getScorersFromSystem({
     if (Object.keys(scorers).length > 0) {
       for (const [scorerId, scorer] of Object.entries(scorers)) {
         if (scorersMap.has(scorerId)) {
-          scorersMap.get(scorerId)?.agentIds.push(agentId);
+          scorersMap.get(scorerId)?.agentIds.push(agent.name);
         } else {
           scorersMap.set(scorerId, {
             workflowIds: [],
             ...scorer,
-            agentIds: [agentId],
+            agentIds: [agent.name],
           });
         }
       }

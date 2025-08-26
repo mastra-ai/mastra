@@ -40,7 +40,7 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-    await fsExtra.copy(join(dirname(__dirname), 'src/playground/dist'), playgroundServePath, {
+    await fsExtra.copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
       overwrite: true,
     });
   }
@@ -76,12 +76,7 @@ export class DevBundler extends Bundler {
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
-    await writeTelemetryConfig({
-      entryFile,
-      outputDir,
-      options: { sourcemap: sourcemapEnabled },
-      logger: this.logger,
-    });
+    await writeTelemetryConfig(entryFile, outputDir, this.logger);
 
     const mastraFolder = dirname(entryFile);
     const fileService = new FileService();
