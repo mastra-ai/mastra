@@ -9374,7 +9374,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ result: z.string() }),
         execute: async ({ inputData, tracingContext }) => {
           expect(tracingContext).toBeDefined();
-          expect(typeof tracingContext.parentSpan).toBeDefined();
+          expect(typeof tracingContext.currentSpan).toBeDefined();
 
           return { result: `processed: ${inputData.value}` };
         },
