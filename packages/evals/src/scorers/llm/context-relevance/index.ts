@@ -9,6 +9,11 @@ export interface ContextRelevanceOptions {
   scale?: number;
   context?: string[];
   contextExtractor?: (input: ScorerRunInputForAgent, output: ScorerRunOutputForAgent) => string[];
+  penalties?: {
+    unusedHighRelevanceContext?: number; // Penalty per unused high-relevance context (default: 0.1)
+    missingContextPerItem?: number; // Penalty per missing context item (default: 0.15)
+    maxMissingContextPenalty?: number; // Maximum total missing context penalty (default: 0.5)
+  };
 }
 
 const analyzeOutputSchema = z.object({
@@ -24,6 +29,13 @@ const analyzeOutputSchema = z.object({
   missingContext: z.array(z.string()).optional().default([]),
   overallAssessment: z.string(),
 });
+
+// Default penalty constants for maintainability and clarity
+const DEFAULT_PENALTIES = {
+  UNUSED_HIGH_RELEVANCE_CONTEXT: 0.1, // 10% penalty per unused high-relevance context
+  MISSING_CONTEXT_PER_ITEM: 0.15, // 15% penalty per missing context item
+  MAX_MISSING_CONTEXT_PENALTY: 0.5, // Maximum 50% penalty for missing context
+} as const;
 
 export function createContextRelevanceScorerLLM({
   model,
@@ -99,11 +111,17 @@ export function createContextRelevanceScorerLLM({
         evaluation => evaluation.relevanceLevel === 'high' && !evaluation.wasUsed,
       ).length;
 
-      const usagePenalty = highRelevanceUnused * 0.1; // 10% penalty per unused high-relevance context
+      // Extract penalty configurations with defaults
+      const penalties = options.penalties || {};
+      const unusedPenaltyRate = penalties.unusedHighRelevanceContext ?? DEFAULT_PENALTIES.UNUSED_HIGH_RELEVANCE_CONTEXT;
+      const missingPenaltyRate = penalties.missingContextPerItem ?? DEFAULT_PENALTIES.MISSING_CONTEXT_PER_ITEM;
+      const maxMissingPenalty = penalties.maxMissingContextPenalty ?? DEFAULT_PENALTIES.MAX_MISSING_CONTEXT_PENALTY;
+
+      const usagePenalty = highRelevanceUnused * unusedPenaltyRate;
 
       // Penalty for missing important context
       const missingContext = results.analyzeStepResult?.missingContext || [];
-      const missingContextPenalty = Math.min(missingContext.length * 0.15, 0.5); // Up to 50% penalty
+      const missingContextPenalty = Math.min(missingContext.length * missingPenaltyRate, maxMissingPenalty);
 
       const finalScore = Math.max(0, relevanceScore - usagePenalty - missingContextPenalty);
       const scaledScore = finalScore * (options.scale || 1);

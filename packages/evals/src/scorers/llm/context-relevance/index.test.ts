@@ -61,6 +61,135 @@ describe('Context Relevance Scorer', () => {
     });
   });
 
+  describe('Penalty Configuration Tests', () => {
+    it('should create scorer with custom penalty configurations', () => {
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['Sample context'],
+          penalties: {
+            unusedHighRelevanceContext: 0.2, // Double the default
+            missingContextPerItem: 0.1, // Lower than default
+            maxMissingContextPenalty: 0.4, // Lower than default
+          },
+        },
+      });
+
+      expect(scorer.name).toBe('Context Relevance (LLM)');
+      expect(scorer.description).toContain('Evaluates how relevant and useful the provided context was');
+    });
+
+    it('should create scorer with partial penalty configurations', () => {
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['Sample context'],
+          penalties: {
+            unusedHighRelevanceContext: 0.05, // Only override this one
+          },
+        },
+      });
+
+      expect(scorer).toBeDefined();
+    });
+
+    it('should use default penalty values when none are specified', () => {
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['Test context'],
+        },
+      });
+
+      expect(scorer).toBeDefined();
+      expect(scorer.name).toBe('Context Relevance (LLM)');
+    });
+
+    it('should accept custom unused high-relevance context penalty', () => {
+      const customPenalty = 0.25; // Higher than default 0.1
+      
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['Test context'],
+          penalties: {
+            unusedHighRelevanceContext: customPenalty,
+          },
+        },
+      });
+
+      expect(scorer).toBeDefined();
+      expect(scorer.name).toBe('Context Relevance (LLM)');
+    });
+
+    it('should accept custom missing context penalty configuration', () => {
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['Test context'],
+          penalties: {
+            missingContextPerItem: 0.1, // Lower than default 0.15
+            maxMissingContextPenalty: 0.3, // Lower than default 0.5
+          },
+        },
+      });
+
+      expect(scorer).toBeDefined();
+      expect(scorer.name).toBe('Context Relevance (LLM)');
+    });
+
+    it('should accept all penalty configurations together', () => {
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['Test context'],
+          penalties: {
+            unusedHighRelevanceContext: 0.2,
+            missingContextPerItem: 0.1,
+            maxMissingContextPenalty: 0.4,
+          },
+        },
+      });
+
+      expect(scorer).toBeDefined();
+      expect(scorer.name).toBe('Context Relevance (LLM)');
+    });
+
+    it('should handle edge case penalty values', () => {
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['Test context'],
+          penalties: {
+            unusedHighRelevanceContext: 0, // No penalty
+            missingContextPerItem: 0.5, // High penalty per item
+            maxMissingContextPenalty: 1.0, // Maximum possible penalty
+          },
+        },
+      });
+
+      expect(scorer).toBeDefined();
+    });
+
+    it('should work with contextExtractor and custom penalties', () => {
+      const contextExtractor = () => ['Dynamic context'];
+      
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          contextExtractor,
+          penalties: {
+            unusedHighRelevanceContext: 0.15,
+            missingContextPerItem: 0.2,
+          },
+        },
+      });
+
+      expect(scorer).toBeDefined();
+      expect(scorer.name).toBe('Context Relevance (LLM)');
+    });
+  });
+
   describe('Context Extraction', () => {
     it('should handle static context from options', async () => {
       const context = ['Einstein won the Nobel Prize for his discovery of the photoelectric effect'];
