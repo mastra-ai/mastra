@@ -6,14 +6,13 @@ import type {
   UIMessageWithMetadata,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { AITraceRecord, AISpanRecord } from '@mastra/core/ai-trace';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
-inport type {   AITraceRecord,
-  AISpanRecord } from "@mastra/core/ai-trace"
 import type {
   LegacyWorkflowRuns,
   StorageGetMessagesArg,
