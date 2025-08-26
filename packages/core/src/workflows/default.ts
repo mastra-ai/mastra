@@ -1,9 +1,8 @@
 import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import { AISpanType, getSelectedAITracing } from '../ai-tracing';
+import { AISpanType, getSelectedAITracing, wrapMastra } from '../ai-tracing';
 import type { AISpan, AnyAISpan, TracingContext } from '../ai-tracing';
-import { wrapMastra } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { ChunkType } from '../stream/types';

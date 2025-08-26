@@ -2,6 +2,7 @@ import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { z, ZodSchema } from 'zod';
+import type { TracingContext } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { LoopConfig, LoopOptions } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
@@ -11,7 +12,6 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
-import type { TracingContext } from '../ai-tracing';
 
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
