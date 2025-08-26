@@ -1,14 +1,15 @@
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
-import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
+import { deepMerge } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, SharedMemoryConfig } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const resourceId = 'resource';
 const NUMBER_OF_WORKERS = 2;
@@ -57,7 +58,54 @@ const createTestMessage = (
   };
 };
 
-export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
+const createTestMessageV2 = (threadId: string, message: string, props?: Partial<MastraMessageV2>): MastraMessageV2 => {
+  messageCounter++;
+
+  const defaults: MastraMessageV2 = {
+    id: randomUUID(),
+    threadId,
+    resourceId,
+    createdAt: new Date(Date.now() + messageCounter * 1000),
+    role: 'user',
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'text',
+          text: message,
+        },
+      ],
+      content: message,
+    },
+  };
+
+  return deepMerge<MastraMessageV2>(defaults, props ?? {});
+};
+
+const createMessageV2Updates = (
+  messages: { id: string; text: string }[],
+  threadId: string,
+): Parameters<typeof Memory.prototype.updateMessages>[0] => {
+  return {
+    messages: messages.map(msg => ({
+      id: msg.id,
+      threadId,
+      resourceId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: msg.text,
+          },
+        ],
+        content: msg.text,
+      },
+    })),
+  };
+};
+
+export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
     messageCounter = 0;
     const threads = await memory.getThreadsByResourceId({ resourceId });
@@ -300,6 +348,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           result.messages.every((m, i) => i === 0 || (m as any).createdAt >= (result.messages[i - 1] as any).createdAt),
         ).toBe(true);
       });
+
       it('should embed and recall both string and TextPart messages', async () => {
         // Plain string messages (semantically unrelated)
         const stringWeather = createTestMessage(thread.id, 'The weather is rainy and cold.', 'user', 'text');
@@ -593,6 +642,208 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
         });
         expect(result.messages[0].content).toEqual(complexMessage);
+      });
+    });
+
+    describe('Message Updates', () => {
+      const repeat = (text: string, count: number) => Array(count).fill(text).join('\n');
+
+      it('should not update embeddings if message text is not passed', async () => {
+        if (!memory.vector) return;
+        const upsertVectorSpy = vi.spyOn(memory.vector, 'upsert');
+        const deleteVectorSpy = vi.spyOn(memory.vector, 'deleteVector');
+
+        const thread = await memory.saveThread({
+          thread: createTestThread('Message Updates Test Thread 1'),
+        });
+
+        const messagesThread = [createTestMessageV2(thread.id, 'The sky is blue today')];
+
+        await memory.saveMessages({ messages: messagesThread });
+        expect(upsertVectorSpy).toHaveBeenCalled();
+
+        // update metadata
+        const updateResult = await memory.updateMessages({
+          messages: [
+            {
+              id: messagesThread[0].id,
+              threadId: thread.id,
+              content: {
+                format: 2,
+                metadata: {
+                  createdAt: Date.now(),
+                },
+              },
+            },
+          ],
+        });
+
+        expect(updateResult.length).toBe(1);
+        expect(deleteVectorSpy).not.toHaveBeenCalled();
+      });
+
+      it('should update embeddings when message content is updated', async () => {
+        const thread = await memory.saveThread({
+          thread: createTestThread('Message Updates Test Thread 1'),
+        });
+
+        const messagesThread = [
+          createTestMessageV2(thread.id, 'The sky is blue today'),
+          createTestMessageV2(thread.id, 'Lush, green fields'), // if the search returns this message, one of the updates likely failed
+          createTestMessageV2(thread.id, 'Message 3'),
+        ];
+
+        await memory.saveMessages({ messages: messagesThread });
+        // Update some of the stored messages
+        const updates = [
+          {
+            id: messagesThread[0].id,
+            text: 'Message 1',
+          },
+          {
+            id: messagesThread[2].id,
+            text: 'Oceans are vast and blue',
+          },
+        ];
+
+        await memory.updateMessages(createMessageV2Updates(updates, thread.id));
+
+        // the search should yield the final message instead of the first
+        const searchQuery = 'blue';
+
+        const threadScopeResult = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId, // resourceId is defined globally in this file
+          vectorMessageSearch: searchQuery,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+              // scope: 'thread' // Default
+            },
+          },
+        });
+
+        expect(threadScopeResult.messagesV2).toHaveLength(1);
+        expect(threadScopeResult.messagesV2[0].id).toBe(updates[1].id);
+        expect(threadScopeResult.messagesV2[0].content.content).toBe(updates[1].text);
+      });
+
+      it('should update all embeddings for messages with multiple chunks', async () => {
+        const thread1 = await memory.createThread({
+          resourceId,
+          title: 'Chunked Message Update Thread',
+        });
+
+        const originalContent = repeat('The quick brown fox jumps over the lazy dog', 1000);
+        const firstMessage = createTestMessageV2(thread1.id, originalContent);
+        await memory.saveMessages({
+          format: 'v2',
+          messages: [
+            firstMessage,
+            createTestMessageV2(thread1.id, repeat('This is a long message to test chunking with', 1000)), // insert a duplicate, which will be returned by the query if firstMessage's embeddings aren't updated
+          ],
+        });
+
+        const updatedContent = repeat('This is a long message to test chunk updates with', 1000);
+
+        // replace firstMessage's content with the text we'll query for later
+        await memory.updateMessages(
+          createMessageV2Updates(
+            [
+              {
+                id: firstMessage.id,
+                text: updatedContent,
+              },
+            ],
+            thread1.id,
+          ),
+        );
+
+        const recall = await memory.rememberMessages({
+          threadId: thread1.id,
+          resourceId,
+          vectorMessageSearch: updatedContent,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+            },
+          },
+        });
+
+        expect(recall.messagesV2[0]?.content.content).toEqual(updatedContent);
+      });
+
+      it('should remove excess embeddings when an updated message has fewer chunks', async () => {
+        if (!memory.vector) {
+          throw new Error('Memory must have a vector store');
+        }
+
+        const vectorQuerySpy = vi.spyOn(memory.vector, 'query');
+
+        const thread1 = await memory.createThread({
+          resourceId,
+          title: 'Chunked Message Update Thread',
+        });
+
+        const initialContent = repeat('This is a long message to test chunking with', 1000);
+        const initialMessage = createTestMessageV2(thread1.id, initialContent);
+        const saveResult = await memory.saveMessages({
+          format: 'v2',
+          messages: [initialMessage],
+        });
+
+        const originalVectorIds = saveResult[0]?.content.metadata?.vectorIds;
+        if (!Array.isArray(originalVectorIds)) {
+          throw new Error(`Vector IDs should be an array; received ${JSON.stringify(originalVectorIds)}`);
+        }
+        // verify the original message has multiple embeddings
+        expect(originalVectorIds.length).toBeGreaterThan(1);
+
+        const updatedContent = 'This';
+
+        // replace the message's content with something shorter
+        const updateResult = await memory.updateMessages(
+          createMessageV2Updates(
+            [
+              {
+                id: initialMessage.id,
+                text: updatedContent,
+              },
+            ],
+            thread1.id,
+          ),
+        );
+
+        const updatedVectorIds = updateResult[0].content.metadata?.vectorIds;
+        if (!Array.isArray(updatedVectorIds)) {
+          throw new Error(`Updated vector IDs should be an array; received ${JSON.stringify(updatedVectorIds)}`);
+        }
+
+        expect(updatedVectorIds).toHaveLength(1);
+
+        // search for embeddings matching the original message text
+        await memory.rememberMessages({
+          threadId: thread1.id,
+          resourceId,
+          vectorMessageSearch: initialContent,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 10,
+              messageRange: 0,
+              scope: 'thread',
+            },
+          },
+        });
+
+        const vectorQueryResults = vectorQuerySpy.mock.settledResults;
+        const lastQueryResult = vectorQueryResults[vectorQueryResults.length - 1].value;
+        expect(lastQueryResult).toHaveLength(1);
+        expect(lastQueryResult[0].id).toEqual(updatedVectorIds[0]);
       });
     });
 
