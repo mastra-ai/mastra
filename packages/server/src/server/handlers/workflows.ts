@@ -4,7 +4,7 @@ import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, WatchEvent, WorkflowInfo } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
-import { getWorkflowInfo } from '../utils';
+import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 
 interface WorkflowContext extends Context {
@@ -34,10 +34,15 @@ async function getWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
 
   let workflow;
 
-  try {
-    workflow = mastra.getWorkflow(workflowId);
-  } catch (error) {
-    logger.debug('Error getting workflow, searching agents for workflow', error);
+  // First check registry for temporary workflows
+  workflow = WorkflowRegistry.getWorkflow(workflowId);
+
+  if (!workflow) {
+    try {
+      workflow = mastra.getWorkflow(workflowId);
+    } catch (error) {
+      logger.debug('Error getting workflow, searching agents for workflow', error);
+    }
   }
 
   if (!workflow) {

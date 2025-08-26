@@ -15,7 +15,7 @@ export class BaseResource {
    */
   public async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     let lastError: Error | null = null;
-    const { baseUrl, retries = 3, backoffMs = 100, maxBackoffMs = 1000, headers = {} } = this.options;
+    const { baseUrl, retries = 3, backoffMs = 100, maxBackoffMs = 1000, headers = {}, credentials } = this.options;
 
     let delay = backoffMs;
 
@@ -35,6 +35,7 @@ export class BaseResource {
             // 'x-mastra-client-type': 'js',
           },
           signal: this.options.abortSignal,
+          credentials: options.credentials ?? credentials,
           body:
             options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
         });

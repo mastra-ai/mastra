@@ -39,7 +39,7 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
-    "ai": "^4.0.0",
+    "ai": "^4.0.0 || ^5.0.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {

@@ -45,3 +45,39 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
   };
 }
+
+/**
+ * Workflow Registry for temporarily registering additional workflows
+ * that are not part of the user's Mastra instance (e.g., internal template workflows)
+ */
+export class WorkflowRegistry {
+  private static additionalWorkflows: Record<string, Workflow> = {};
+
+  /**
+   * Register a workflow temporarily
+   */
+  static registerTemporaryWorkflow(id: string, workflow: Workflow): void {
+    this.additionalWorkflows[id] = workflow;
+  }
+
+  /**
+   * Get a workflow by ID from the registry (returns undefined if not found)
+   */
+  static getWorkflow(workflowId: string): Workflow | undefined {
+    return this.additionalWorkflows[workflowId];
+  }
+
+  /**
+   * Clean up a temporary workflow
+   */
+  static cleanup(workflowId: string): void {
+    delete this.additionalWorkflows[workflowId];
+  }
+
+  /**
+   * Get all registered temporary workflow IDs (for debugging)
+   */
+  static getRegisteredWorkflowIds(): string[] {
+    return Object.keys(this.additionalWorkflows);
+  }
+}
