@@ -35,10 +35,11 @@ jobs:
           node-version: '20.19.1' # Adjust version as needed
           cache: 'npm'
           cache-dependency-path: './integration-generator/package-lock.json'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         working-directory: ./integration-generator
-        run: npm ci # Uses package-lock.json for exact versions
+        run: npm ci --registry=https://registry.yarnpkg.com # Uses package-lock.json for exact versions
 
       - name: Extract branch name
         id: extract_branch

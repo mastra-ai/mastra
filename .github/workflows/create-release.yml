@@ -69,6 +69,7 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install
@@ -78,7 +79,7 @@ jobs:
 
       - name: Setup npm auth
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          echo "//registry.yarnpkg.com/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
       - name: Exit prerelease mode
         id: exit-prerelease-mode
@@ -166,6 +167,7 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install

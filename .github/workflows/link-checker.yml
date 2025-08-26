@@ -16,6 +16,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.x'
+          registry-url: 'https://registry.yarnpkg.com'
       - name: Check links
         run: npx --force --ignore-engine github:wardpeet/broken-link-checker ${{ github.event.deployment_status.target_url }}/docs -roef
 
@@ -32,9 +33,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies for docs
-        run: npm ci
+        run: npm ci --registry=https://registry.yarnpkg.com
         working-directory: docs
 
       - name: Set deployment URL as env var
