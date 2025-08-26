@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useEffect, useState } from 'react';
 import { VoiceAttachmentAdapter } from '../attachments/voice-adapter';

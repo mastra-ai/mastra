@@ -1,17 +1,4 @@
 import type {
-  MastraMessageV1,
-  AiMessageType,
-  CoreMessage,
-  QueryResult,
-  StorageThreadType,
-  WorkflowRuns,
-  WorkflowRun,
-  LegacyWorkflowRuns,
-  StorageGetMessagesArg,
-  PaginationInfo,
-  MastraMessageV2,
-} from '@mastra/core';
-import type {
   AgentExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
@@ -19,11 +6,23 @@ import type {
   UIMessageWithMetadata,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
-
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
+import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorer, MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type {
+  AITraceRecord,
+  AISpanRecord,
+  LegacyWorkflowRuns,
+  StorageGetMessagesArg,
+  PaginationInfo,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
+import type { OutputSchema } from '@mastra/core/stream';
+import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,
@@ -46,6 +45,8 @@ export interface ClientOptions {
   headers?: Record<string, string>;
   /** Abort signal for request */
   abortSignal?: AbortSignal;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 export interface RequestOptions {
@@ -53,6 +54,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 type WithoutMethods<T> = {
@@ -97,12 +100,12 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
+export type StreamVNextParams<OUTPUT extends OutputSchema | undefined = undefined> = {
   messages: MessageListInput;
-  output?: T;
+  output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & WithoutMethods<Omit<AgentExecutionOptions<T>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
+} & WithoutMethods<Omit<AgentExecutionOptions<OUTPUT>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
 
 export type UpdateModelParams = {
   modelId: string;
@@ -519,4 +522,13 @@ export type GetScorerResponse = MastraScorerEntry & {
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
+}
+
+export interface GetAITraceResponse {
+  trace: AITraceRecord;
+}
+
+export interface GetAITracesResponse {
+  spans: AISpanRecord[];
+  pagination: PaginationInfo;
 }

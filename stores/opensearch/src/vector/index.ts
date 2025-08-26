@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -8,8 +9,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
-} from '@mastra/core';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+} from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';

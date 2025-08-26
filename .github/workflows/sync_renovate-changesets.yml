@@ -52,6 +52,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.19.1
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Check for package.json changes in examples and e2e-tests
         id: check-examples
@@ -72,3 +73,8 @@ jobs:
       - name: Install dependencies
         if: steps.check-examples.outputs.examples_changed == 'true'
         run: bash ./.github/scripts/install-deps.bash ${{ github.event.pull_request.base.sha }}
+
+      - name: Approve PR
+        run: gh pr review ${{ github.event.pull_request.number }} --approve
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}

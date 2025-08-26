@@ -87,7 +87,7 @@ class MessageConverter {
  *
  * @example
  * ```typescript
- * import { convertMessages } from '@mastra/core';
+ * import { convertMessages } from '@mastra/core/agent';
  *
  * // Convert AI SDK v5 UI messages to v4 Core messages
  * const v4CoreMessages = convertMessages(v5UIMessages).to('AIV4.Core');

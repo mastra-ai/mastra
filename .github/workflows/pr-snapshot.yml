@@ -2,8 +2,6 @@ name: PR Snapshot version
 
 on:
   workflow_dispatch:
-    branches:
-      - '**'
     inputs:
       tag:
         description: 'Optional tag for snapshot version and npm publish (defaults to slugified branch name)'
@@ -22,6 +20,12 @@ jobs:
       pull-requests: read
 
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
       - name: Check if branch is main
         if: github.ref == 'refs/heads/main'
         run: |
@@ -41,13 +45,14 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install
 
       - name: Setup npm auth
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          echo "//registry.yarnpkg.com/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
       - name: Generate slugified branch name
         id: slugify

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.14.1",
+  "version": "0.14.2-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -68,6 +68,16 @@
       "require": {
         "types": "./dist/network/vNext/index.d.ts",
         "default": "./dist/network/vNext/index.cjs"
+      }
+    },
+    "./workflows/evented": {
+      "import": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.cjs"
       }
     },
     "./vector/filter": {
@@ -140,6 +150,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./utils/zod-to-json": {
+      "import": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.js"
+      },
+      "require": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -161,7 +181,7 @@
     "@ai-sdk/ui-utils": "^1.2.11",
     "@mastra/schema-compat": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.62.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.62.1",
     "@opentelemetry/core": "^2.0.1",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.203.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
@@ -192,7 +212,7 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
-    "zod": "^3.0.0"
+    "zod": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",

@@ -166,7 +166,6 @@ describe('Workflow', () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          console.log('suspend');
           await suspend();
           return undefined;
         })
@@ -2914,6 +2913,7 @@ describe('Workflow', () => {
           setTimeout(async () => {
             const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
             expect(currentExecResult?.status).toBe('running');
+            expect(currentExecResult?.steps['final']?.status).toBe('running');
           }, 500);
         }
       }
@@ -4612,7 +4612,6 @@ describe('Workflow', () => {
 
       // @ts-ignore
       const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        console.log('tool call context', context);
         return { name: context.name };
       });
 
@@ -5089,8 +5088,7 @@ describe('Workflow', () => {
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
         })
-        .mockImplementationOnce(({ resumeData }) => {
-          console.log('resumeData', resumeData);
+        .mockImplementationOnce(() => {
           return { improvedOutput: 'human intervention output' };
         });
       const explainResponseAction = vi.fn().mockResolvedValue({
@@ -6071,8 +6069,6 @@ describe('Workflow', () => {
 
           value = value + 1;
           condition = value >= 10;
-
-          console.log(value);
 
           return {
             value,
@@ -7116,8 +7112,7 @@ describe('Workflow', () => {
         const otherVal = getStepResult(cloneStep(otherStep, { id: 'other-clone' }))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       });
-      const last = vi.fn().mockImplementation(async ({ inputData }) => {
-        console.log('inputData', inputData);
+      const last = vi.fn().mockImplementation(async () => {
         return { success: true };
       });
       const finalStep = createStep({
@@ -9368,6 +9363,24 @@ describe('Workflow', () => {
           'multi-resume-step-2': { result: 30 },
         });
       }
+    });
+  });
+
+  describe('AI Workflow Tracing', () => {
+    it('should provide full TypeScript support for tracingContext', () => {
+      const typedStep = createStep({
+        id: 'typed-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          expect(tracingContext).toBeDefined();
+          expect(typeof tracingContext.parentSpan).toBeDefined();
+
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      expect(typedStep).toBeDefined();
     });
   });
 });

@@ -40,7 +40,7 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-    await fsExtra.copy(join(dirname(__dirname), 'src/playground/dist'), playgroundServePath, {
+    await fsExtra.copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
       overwrite: true,
     });
   }

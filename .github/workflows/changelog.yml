@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: '20.19.1'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install
@@ -52,7 +52,7 @@ jobs:
 
       - name: Setup npm auth
         run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          echo "//registry.yarnpkg.com/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
       - name: Build core
         run: pnpm build:core

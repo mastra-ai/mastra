@@ -416,7 +416,7 @@ Mastra automatically handles AI SDK v4 data using its internal `MessageList` cla
 For cases where you need to manually convert messages between AI SDK and Mastra formats, use the `convertMessages` utility:
 
 ```typescript
-import { convertMessages } from '@mastra/core';
+import { convertMessages } from '@mastra/core/agent';
 
 // Convert AI SDK v4 messages to v5
 const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI');

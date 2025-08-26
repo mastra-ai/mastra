@@ -32,12 +32,13 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install
 
       - name: Lint
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./integrations/**/*" --filter "!@mastra/playground" lint
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./integrations/**/*" --filter "!@internal/playground" lint
       - name: Format
         run: pnpm prettier --check .
 
@@ -67,6 +68,7 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install
@@ -105,6 +107,7 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install

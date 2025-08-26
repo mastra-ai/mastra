@@ -50,7 +50,9 @@ describe('MastraLLMVNext', () => {
 
     for await (const chunk of result.fullStream) {
       console.log(chunk.type);
-      console.log(chunk.payload);
+      if ('payload' in chunk) {
+        console.log(chunk.payload);
+      }
     }
   }, 10000);
 
@@ -79,12 +81,10 @@ describe('MastraLLMVNext', () => {
         },
       ],
       runtimeContext: new RuntimeContext(),
-      objectOptions: {
-        schema: z.object({
-          name: z.string(),
-          age: z.number(),
-        }),
-      },
+      output: z.object({
+        name: z.string(),
+        age: z.number(),
+      }),
     });
 
     for await (const chunk of result.objectStream) {
@@ -103,12 +103,10 @@ describe('MastraLLMVNext', () => {
         },
       ],
       runtimeContext: new RuntimeContext(),
-      objectOptions: {
-        schema: z.object({
-          name: z.string(),
-          age: z.number(),
-        }),
-      },
+      output: z.object({
+        name: z.string(),
+        age: z.number(),
+      }),
     });
 
     const res = await result.getFullOutput();
@@ -125,12 +123,10 @@ describe('MastraLLMVNext', () => {
         },
       ],
       runtimeContext: new RuntimeContext(),
-      objectOptions: {
-        schema: z.object({
-          name: z.string(),
-          age: z.number(),
-        }),
-      },
+      output: z.object({
+        name: z.string(),
+        age: z.number(),
+      }),
     });
 
     const res = await result.aisdk.v5.getFullOutput();
@@ -147,12 +143,10 @@ describe('MastraLLMVNext', () => {
         },
       ],
       runtimeContext: new RuntimeContext(),
-      objectOptions: {
-        schema: z.object({
-          name: z.string(),
-          age: z.number(),
-        }),
-      },
+      output: z.object({
+        name: z.string(),
+        age: z.number(),
+      }),
     });
 
     for await (const chunk of result.fullStream) {
@@ -173,12 +167,10 @@ describe('MastraLLMVNext', () => {
         },
       ],
       runtimeContext: new RuntimeContext(),
-      objectOptions: {
-        schema: z.object({
-          name: z.string(),
-          age: z.number(),
-        }),
-      },
+      output: z.object({
+        name: z.string(),
+        age: z.number(),
+      }),
     });
 
     for await (const chunk of result.aisdk.v5.fullStream) {
