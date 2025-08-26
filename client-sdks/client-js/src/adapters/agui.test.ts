@@ -1,9 +1,6 @@
 import type { Message, BaseEvent } from '@ag-ui/client';
 import { describe, it, expect, vi } from 'vitest';
 import { generateUUID, convertMessagesToMastraMessages, AGUIAdapter } from './agui';
-import { Agent } from '@mastra/core/agent';
-import { MockLanguageModelV1 } from 'ai/test';
-import { simulateReadableStream } from 'ai';
 
 describe('generateUUID', () => {
   it('should generate a valid UUID v4 string', () => {
@@ -184,32 +181,6 @@ describe('convertMessagesToMastraMessages', () => {
 
 describe('AGUIAdapter', () => {
   it('should correctly pass parameters to agent stream method', async () => {
-    // Create a real agent with MockLanguageModelV1
-    const mockModel = new MockLanguageModelV1({
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: [
-            { type: 'text-delta', textDelta: 'Hello' },
-            { type: 'text-delta', textDelta: ' from' },
-            { type: 'text-delta', textDelta: ' agent' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              logprobs: undefined,
-              usage: { completionTokens: 3, promptTokens: 10 },
-            },
-          ],
-        }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
-    });
-
-    const agent = new Agent({
-      name: 'Test Agent',
-      instructions: 'You are a test agent',
-      model: mockModel,
-    });
-
     // Create a mock client agent that simulates the expected behavior
     const clientAgent = {
       stream: vi.fn().mockImplementation(async (params: any) => {

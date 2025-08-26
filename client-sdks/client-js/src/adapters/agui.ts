@@ -14,7 +14,7 @@ import type {
   ToolCallStartEvent,
 } from '@ag-ui/client';
 import { AbstractAgent, EventType } from '@ag-ui/client';
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core/llm';
 import { Observable } from 'rxjs';
 import type { Agent } from '../resources/agent';
 

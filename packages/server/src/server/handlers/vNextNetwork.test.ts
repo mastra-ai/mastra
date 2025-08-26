@@ -1,9 +1,9 @@
-import type { Workflow } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { NewAgentNetwork } from '@mastra/core/network/vNext';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
+import type { Workflow } from '@mastra/core/workflows';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';

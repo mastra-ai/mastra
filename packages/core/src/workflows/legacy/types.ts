@@ -1,9 +1,8 @@
 import type { Query } from 'sift';
 import type { z } from 'zod';
-
-import type { Mastra } from '../..';
 import type { IAction, IExecutionContext, MastraUnion } from '../../action';
 import type { BaseLogMessage, RegisteredLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { RuntimeContext } from '../../runtime-context';
 import type { LegacyStep as Step } from './step';
 import type { LegacyWorkflow } from './workflow';

@@ -2,7 +2,6 @@ import { openai } from '@ai-sdk/openai';
 import type { UIMessage } from '@ai-sdk/ui-utils';
 import { describe, it } from 'vitest';
 import { z } from 'zod';
-import { createStep, createWorkflow } from '../..';
 import type { CoreMessage, MemoryConfig, StorageGetMessagesArg, StorageThreadType } from '../../';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent';
@@ -10,6 +9,7 @@ import type { MastraMessageV1 } from '../../memory';
 import { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools/index';
+import { createStep, createWorkflow } from '../../workflows';
 import { NewAgentNetwork } from './index';
 
 class MockMemory extends MastraMemory {

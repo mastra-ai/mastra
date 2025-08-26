@@ -1,6 +1,6 @@
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
 
 function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
   return Object.entries(steps).reduce<any>((acc, [key, step]) => {
