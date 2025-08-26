@@ -44,7 +44,7 @@ export function createTestSuite(storage: MastraStorage) {
         storage.clearTable({ tableName: TABLE_RESOURCES }),
         storage.clearTable({ tableName: TABLE_SCORERS }),
         storage.clearTable({ tableName: TABLE_TRACES }),
-        storage.clearTable({ tableName: TABLE_AI_SPANS }),
+        storage.supports.aiTracing && storage.clearTable({ tableName: TABLE_AI_SPANS }),
       ]);
     });
 

@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { AITracingContext } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorers } from '../scores';
@@ -18,7 +18,7 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
   inputData: TStepInput;
   resumeData?: TResumeSchema;
   runCount: number;
-  aiTracingContext: AITracingContext;
+  tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
   getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined
     ? unknown
