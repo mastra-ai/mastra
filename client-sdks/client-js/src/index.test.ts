@@ -1,8 +1,8 @@
+import type { ServerDetailInfo } from '@mastra/core/mcp';
+import type { ScoringEntityType, ScoringSource } from '@mastra/core/scores';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from './client';
 import type { McpServerListResponse } from './types';
-import type { ServerDetailInfo } from '@mastra/core/mcp';
-import { ScoringEntityType, ScoringSource } from '@mastra/core/scores';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -384,6 +384,7 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           output += new TextDecoder().decode(value);
         }
       }

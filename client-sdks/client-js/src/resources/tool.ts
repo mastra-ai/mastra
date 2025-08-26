@@ -1,8 +1,8 @@
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { GetToolResponse, ClientOptions } from '../types';
 
-import { BaseResource } from './base';
 import { parseClientRuntimeContext } from '../utils';
+import { BaseResource } from './base';
 
 export class Tool extends BaseResource {
   constructor(
