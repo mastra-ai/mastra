@@ -90,6 +90,8 @@ export class StepExecutor extends MastraBase {
         [EMITTER_SYMBOL]: params.emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
         engine: {},
         abortSignal: abortController?.signal,
+        // TODO
+        tracingContext: {},
       });
 
       const endedAt = Date.now();
@@ -242,6 +244,8 @@ export class StepExecutor extends MastraBase {
       [EMITTER_SYMBOL]: emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
       engine: {},
       abortSignal: abortController?.signal,
+      // TODO
+      tracingContext: {},
     });
   }
 
@@ -305,6 +309,8 @@ export class StepExecutor extends MastraBase {
         [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
         engine: {},
         abortSignal: abortController?.signal,
+        // TODO
+        tracingContext: {},
       });
     } catch (e) {
       console.error('error evaluating condition', e);
@@ -372,6 +378,8 @@ export class StepExecutor extends MastraBase {
         [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
         engine: {},
         abortSignal: abortController?.signal,
+        // TODO
+        tracingContext: {},
       });
 
       return result.getTime() - Date.now();
