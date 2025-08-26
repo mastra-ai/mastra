@@ -1,5 +1,18 @@
 # mastra
 
+## 0.11.0-alpha.3
+
+### Minor Changes
+
+- [#7032](https://github.com/mastra-ai/mastra/pull/7032) [`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump zod peerdep to 3.25.0 to support both v3/v4
+
+### Patch Changes
+
+- Updated dependencies [[`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c)]:
+  - @mastra/deployer@0.15.0-alpha.4
+  - @mastra/core@0.15.0-alpha.4
+  - @mastra/mcp@0.11.0-alpha.3
+
 ## 0.10.24-alpha.2
 
 ### Patch Changes
