@@ -1435,20 +1435,12 @@ export class Run<
     inputData,
     runtimeContext,
     writableStream,
-<<<<<<< HEAD
-    parentSpan,
-=======
-    currentAISpan,
->>>>>>> f33dd2e72 (implemented auto wrapping)
+    currentSpan,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
-<<<<<<< HEAD
-    parentSpan?: AnyAISpan;
-=======
-    currentAISpan?: AnyAISpan;
->>>>>>> f33dd2e72 (implemented auto wrapping)
+    currentSpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1474,11 +1466,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
-<<<<<<< HEAD
-      parentSpan,
-=======
-      currentAISpan,
->>>>>>> f33dd2e72 (implemented auto wrapping)
+      currentSpan,
     });
 
     if (result.status !== 'suspended') {
@@ -1710,11 +1698,7 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
-<<<<<<< HEAD
-    parentSpan?: AnyAISpan;
-=======
-    currentAISpan?: AnyAISpan;
->>>>>>> f33dd2e72 (implemented auto wrapping)
+    currentSpan?: AnyAISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1832,11 +1816,7 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-<<<<<<< HEAD
-        parentSpan: params.parentSpan,
-=======
-        currentAISpan: params.currentAISpan,
->>>>>>> f33dd2e72 (implemented auto wrapping)
+        currentSpan: params.currentSpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {

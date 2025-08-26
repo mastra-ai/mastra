@@ -9,7 +9,7 @@
 import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
 import type { Workflow } from '../workflows';
-import type { AITracingContext, AnyAISpan } from './types';
+import type { TracingContext, AnyAISpan } from './types';
 
 const AGENT_GETTERS = ['getAgent', 'getAgentById'];
 const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateVNext', 'streamVNext'];
@@ -31,9 +31,9 @@ function isNoOpSpan(span: AnyAISpan): boolean {
  * Creates a tracing-aware Mastra proxy that automatically injects
  * AI tracing context into agent and workflow method calls
  */
-export function wrapMastra<T extends Mastra>(mastra: T, aiTracingContext: AITracingContext): T {
+export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
-  if (!aiTracingContext.currentAISpan || isNoOpSpan(aiTracingContext.currentAISpan)) {
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return mastra;
   }
 
@@ -44,7 +44,7 @@ export function wrapMastra<T extends Mastra>(mastra: T, aiTracingContext: AITrac
           if (prop in AGENT_GETTERS) {
             return (...args: any[]) => {
               const agent = (target as any)[prop](...args);
-              return wrapAgent(agent, aiTracingContext);
+              return wrapAgent(agent, tracingContext);
             };
           }
 
@@ -52,7 +52,7 @@ export function wrapMastra<T extends Mastra>(mastra: T, aiTracingContext: AITrac
           if (prop in WORKFLOW_GETTERS) {
             return (...args: any[]) => {
               const workflow = (target as any)[prop](...args);
-              return wrapWorkflow(workflow, aiTracingContext);
+              return wrapWorkflow(workflow, tracingContext);
             };
           }
 
@@ -74,9 +74,9 @@ export function wrapMastra<T extends Mastra>(mastra: T, aiTracingContext: AITrac
  * Creates a tracing-aware Agent proxy that automatically injects
  * AI tracing context into generation method calls
  */
-export function wrapAgent<T extends Agent>(agent: T, aiTracingContext: AITracingContext): T {
+export function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
-  if (!aiTracingContext.currentAISpan || isNoOpSpan(aiTracingContext.currentAISpan)) {
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return agent;
   }
 
@@ -88,7 +88,7 @@ export function wrapAgent<T extends Agent>(agent: T, aiTracingContext: AITracing
             return (input: any, options: any = {}) => {
               return (target as any)[prop](input, {
                 ...options,
-                aiTracingContext,
+                tracingContext,
               });
             };
           }
@@ -110,9 +110,9 @@ export function wrapAgent<T extends Agent>(agent: T, aiTracingContext: AITracing
  * Creates a tracing-aware Workflow proxy that automatically injects
  * AI tracing context into execution method calls
  */
-export function wrapWorkflow<T extends Workflow>(workflow: T, aiTracingContext: AITracingContext): T {
+export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
-  if (!aiTracingContext.currentAISpan || isNoOpSpan(aiTracingContext.currentAISpan)) {
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return workflow;
   }
 
@@ -125,7 +125,7 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, aiTracingContext: 
             return (input: any, options: any = {}) => {
               return (target as any)[prop](input, {
                 ...options,
-                aiTracingContext,
+                tracingContext,
               });
             };
           }

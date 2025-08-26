@@ -1664,7 +1664,7 @@ export class Agent<
           },
         };
 
-        // if parentSpan passed, use it to build agentSpan
+        // if currentSpan passed, use it to build agentSpan
         // otherwise, attempt to create new trace
         let agentAISpan: AISpan<AISpanType.AGENT_RUN> | undefined;
         if (currentSpan) {

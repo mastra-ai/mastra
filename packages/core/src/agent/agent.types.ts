@@ -11,7 +11,7 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
-import type { AITracingContext } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -89,7 +89,7 @@ export type AgentExecutionOptions<
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
   /** AI tracing context for span hierarchy and metadata */
-  aiTracingContext?: AITracingContext;
+  tracingContext?: TracingContext;
 };
 
 export type InnerAgentExecutionOptions<
