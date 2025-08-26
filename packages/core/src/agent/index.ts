@@ -1212,7 +1212,6 @@ export class Agent<
           writableStream,
           agentAISpan,
         };
-
         return [k, makeCoreTool(tool, options)];
       }),
     );
