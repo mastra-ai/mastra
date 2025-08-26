@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
 import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
@@ -766,7 +766,7 @@ export function createStep<
       execute: async ({ inputData, mastra, runtimeContext, tracingContext }) => {
         return params.execute({
           context: inputData,
-          mastra,
+          mastra: wrapMastra(mastra, tracingContext),
           runtimeContext,
           tracingContext,
         });

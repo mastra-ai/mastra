@@ -3,7 +3,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { AISpanType, getSelectedAITracing } from '../ai-tracing';
 import type { AISpan, AnyAISpan, TracingContext } from '../ai-tracing';
-import { wrapMastra } from '../ai-tracing/context';
+import { wrapMastra } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { ChunkType } from '../stream/types';
@@ -818,14 +818,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const result = await runStep({
           runId,
           workflowId,
-          mastra: this.mastra!,
+          mastra: wrapMastra(this.mastra!, { currentSpan: stepAISpan }),
           runtimeContext,
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: {
-            currentSpan: stepAISpan,
-          },
+          tracingContext: { currentSpan: stepAISpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
             if (!step?.id) {

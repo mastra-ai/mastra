@@ -155,7 +155,7 @@ export class Telemetry {
       spanName: string;
       attributes?: Record<string, string>;
       skipIfNoTelemetry?: boolean;
-      currentSpan?: Span;
+      parentSpan?: Span;
     },
   ): TMethod {
     let ctx = otlpContext.active();
