@@ -18,6 +18,8 @@ import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import { createScorer } from '../scores';
+import { runScorer } from '../scores/hooks';
 import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
@@ -42,6 +44,10 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   return userInfo;
 });
 
+vi.mock('../scores/hooks', () => ({
+  runScorer: vi.fn(),
+}));
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -60,6 +66,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           finishReason: 'stop',
           usage: { promptTokens: 10, completionTokens: 20 },
           text: `Dummy response`,
+        }),
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
         }),
       });
 
@@ -6073,6 +6085,161 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(result.toolCalls.length).toBeGreaterThan(0);
     }
   }, 10000);
+
+  describe('scorer override functionality', () => {
+    let agent: Agent;
+    let mastra: Mastra;
+    let scorerTest: any;
+    let scorer1: any;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      scorerTest = createScorer({
+        name: 'scorerTest',
+        description: 'Test Scorer',
+      }).generateScore(() => 0.95);
+
+      scorer1 = createScorer({
+        name: 'scorer1',
+        description: 'Test Scorer 1',
+      }).generateScore(() => 0.95);
+
+      agent = new Agent({
+        name: 'Test Agent',
+        instructions: 'You are a test agent.',
+        model: dummyModel,
+        scorers: {
+          scorerTest: {
+            scorer: scorerTest,
+          },
+        },
+      });
+
+      mastra = new Mastra({
+        agents: { agent },
+        logger: false,
+        scorers: { scorer1 },
+      });
+    });
+
+    it(`${version} - should call scorerTest when no override is provided`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world');
+      } else {
+        await agent.generateVNext('Hello world');
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorerTest',
+          scorerObject: expect.objectContaining({
+            scorer: scorerTest,
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - should use override scorers when provided in generate options`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: expect.any(Object),
+          }),
+        }),
+      );
+
+      expect(runScorer).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorerTest',
+          scorerObject: expect.objectContaining({
+            scorer: scorerTest,
+          }),
+        }),
+      );
+
+      expect(runScorer).toHaveBeenCalledTimes(1);
+    });
+
+    it(`${version} - should call scorers when provided in stream options`, async () => {
+      let result: any;
+      if (version === 'v1') {
+        result = await agent.stream('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+          onFinish: props => {
+            console.log('onFinish', props);
+          },
+        });
+      } else {
+        result = await agent.streamVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      }
+      await result.consumeStream();
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: expect.any(Object),
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - should call runScorer with correct parameters`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      }
+
+      // Verify the exact call parameters
+      expect(runScorer).toHaveBeenCalledWith({
+        scorerId: 'scorer1',
+        scorerObject: { scorer: scorer1 },
+        runId: expect.any(String),
+        input: expect.any(Object),
+        output: expect.any(Object),
+        runtimeContext: expect.any(Object),
+        entity: expect.objectContaining({
+          id: 'Test Agent',
+          name: 'Test Agent',
+        }),
+        source: 'LIVE',
+        entityType: 'AGENT',
+        structuredOutput: false,
+        threadId: undefined,
+        resourceId: undefined,
+      });
+    });
+  });
 }
 
 describe('Agent Tests', () => {
