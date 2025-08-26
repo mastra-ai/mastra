@@ -137,7 +137,7 @@ export function prepareWhereClause(
     }
 
     const parsedColumn = parseSqlIdentifier(columnName, 'column name');
-    const result = buildCondition(parsedColumn, filterValue, column);
+    const result = buildCondition(parsedColumn, filterValue);
 
     conditions.push(result.condition);
     args.push(...result.args);
@@ -149,11 +149,7 @@ export function prepareWhereClause(
   };
 }
 
-function buildCondition(
-  columnName: string,
-  filterValue: WhereValue,
-  columnSchema: StorageColumn,
-): { condition: string; args: InValue[] } {
+function buildCondition(columnName: string, filterValue: WhereValue): { condition: string; args: InValue[] } {
   // Handle null values - IS NULL
   if (filterValue === null) {
     return { condition: `${columnName} IS NULL`, args: [] };
@@ -161,7 +157,7 @@ function buildCondition(
 
   // Handle date range objects
   if (typeof filterValue === 'object' && filterValue !== null && ('startAt' in filterValue || 'endAt' in filterValue)) {
-    return buildDateRangeCondition(columnName, filterValue, columnSchema);
+    return buildDateRangeCondition(columnName, filterValue);
   }
 
   // Handle exact match
@@ -174,7 +170,6 @@ function buildCondition(
 function buildDateRangeCondition(
   columnName: string,
   range: { startAt?: InValue; endAt?: InValue },
-  columnSchema: StorageColumn,
 ): { condition: string; args: InValue[] } {
   const conditions: string[] = [];
   const args: InValue[] = [];
@@ -198,12 +193,6 @@ function buildDateRangeCondition(
     args,
   };
 }
-
-// Types for pagination date range
-type DateRangeInput = {
-  start?: string | Date;
-  end?: string | Date;
-};
 
 type DateRangeFilter = {
   startAt?: string;
