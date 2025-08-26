@@ -1,10 +1,10 @@
 import { get } from 'radash';
 import { z } from 'zod';
-import type { Mastra } from '../..';
 import type { ToolsInput } from '../../agent';
 import { Agent } from '../../agent';
 import type { Metric } from '../../eval';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { LegacyStep as Step } from './step';
 import type {
   StepAction,
