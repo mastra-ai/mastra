@@ -1,23 +1,16 @@
 import { randomUUID } from 'crypto';
 import type { ReadableStream } from 'stream/web';
 import z from 'zod';
-import type {
-  Agent,
-  ExecuteFunction,
-  ExecutionEngine,
-  ExecutionGraph,
-  Mastra,
-  SerializedStepFlowEntry,
-  Step,
-  StreamEvent,
-  ToolExecutionContext,
-  WatchEvent,
-  WorkflowConfig,
-  WorkflowResult,
-} from '../..';
+import type { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
+import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
+import type { ToolExecutionContext } from '../../tools/types';
 import { Workflow, Run } from '../../workflows';
+import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
+import type { ExecuteFunction, Step } from '../../workflows/step';
+import type { StreamEvent, WatchEvent } from '../../workflows/types';
+import type { SerializedStepFlowEntry, WorkflowConfig, WorkflowResult } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
