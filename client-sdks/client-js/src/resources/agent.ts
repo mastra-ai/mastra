@@ -15,7 +15,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodType } from 'zod';
 
 import type {
   GenerateParams,
@@ -194,15 +194,15 @@ export class Agent extends BaseResource {
   async generate(
     params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
-  async generate<Output extends JSONSchema7 | ZodSchema>(
+  async generate<Output extends JSONSchema7 | ZodType>(
     params: GenerateParams<Output> & { output: Output; experimental_output?: never },
   ): Promise<GenerateReturn<any, Output, undefined>>;
-  async generate<StructuredOutput extends JSONSchema7 | ZodSchema>(
+  async generate<StructuredOutput extends JSONSchema7 | ZodType>(
     params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
   ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generate<
-    Output extends JSONSchema7 | ZodSchema | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
+    Output extends JSONSchema7 | ZodType | undefined = undefined,
+    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
@@ -276,8 +276,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<OUTPUT extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async generateVNext<T extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<T>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     const processedParams = {
       ...params,
@@ -661,7 +661,7 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async stream<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
     params: StreamParams<T>,
   ): Promise<
     Response & {
@@ -1187,8 +1187,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async streamVNext<OUTPUT extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async streamVNext<T extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<T>,
   ): Promise<
     Response & {
       processDataStream: ({
