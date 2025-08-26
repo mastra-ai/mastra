@@ -272,7 +272,7 @@ export interface AISpan<TType extends AISpanType> {
   startTime: Date;
   /** When span ended */
   endTime?: Date;
-  /** Is an event span? (event occurs at startTime, has no endTime, or input) */
+  /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
   /** AI-specific attributes - strongly typed based on span type */
   attributes?: AISpanTypeMap[TType];

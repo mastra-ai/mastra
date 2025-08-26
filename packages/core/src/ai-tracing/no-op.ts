@@ -40,7 +40,7 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
     this.startTime = new Date();
     this.aiTracing = aiTracing;
     this.input = options.input;
-    this.output = options.output;
+    this.output = options.isEvent ? options.output : undefined;
     this.isEvent = options.isEvent;
   }
 
