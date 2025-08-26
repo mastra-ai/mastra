@@ -1611,6 +1611,7 @@ export class Agent<
 
         const spanArgs = {
           name: `agent run: '${this.id}'`,
+          input: messages,
           attributes: {
             agentId: this.id,
             instructions,
@@ -2561,6 +2562,39 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ runtimeContext }));
 
+    // Set AI Tracing context
+    const spanArgs = {
+      name: `agent run: '${this.id}'`,
+      input: options.messages,
+      attributes: {
+        agentId: this.id,
+        instructions,
+      },
+      metadata: {
+        runId,
+        resourceId,
+        threadId: threadFromArgs ? threadFromArgs.id : undefined,
+      },
+    };
+
+    // if currentSpan passed, use it to build agentSpan
+    // otherwise, attempt to create new trace
+    let agentAISpan: AISpan<AISpanType.AGENT_RUN> | undefined;
+    if (options.tracingContext?.currentSpan) {
+      agentAISpan = options.tracingContext.currentSpan.createChildSpan({ type: AISpanType.AGENT_RUN, ...spanArgs });
+    } else {
+      const aiTracing = getSelectedAITracing({ runtimeContext });
+      if (aiTracing) {
+        agentAISpan = aiTracing.startSpan({
+          type: AISpanType.AGENT_RUN,
+          ...spanArgs,
+          startOptions: {
+            runtimeContext,
+          },
+        });
+      }
+    }
+
     // Set Telemetry context
     // Set thread ID and resource ID context for telemetry
     const activeSpan = Telemetry.getActiveSpan();
@@ -2632,6 +2666,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runId,
           runtimeContext,
           writableStream: options.writableStream,
+          agentAISpan,
         });
 
         return {
@@ -2874,6 +2909,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const streamResult = llm.stream({
           ...inputData,
           outputProcessors,
+          agentAISpan,
         });
 
         if (options.format === 'aisdk') {
@@ -3067,8 +3103,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
+    const result = await run.start({ currentSpan: agentAISpan });
 
-    return await run.start({});
+    agentAISpan?.end({ output: result });
+
+    return result;
   }
 
   async #executeOnFinish({
