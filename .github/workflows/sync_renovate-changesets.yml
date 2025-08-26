@@ -52,6 +52,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.19.1
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Check for package.json changes in examples and e2e-tests
         id: check-examples

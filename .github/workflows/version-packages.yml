@@ -40,6 +40,7 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install

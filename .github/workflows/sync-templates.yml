@@ -45,9 +45,10 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '22'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
-        run: npm install @octokit/rest fs-extra dotenv
+        run: npm install @octokit/rest fs-extra dotenv --registry=https://registry.yarnpkg.com
 
       - name: Run Template Sync Script
         env:
