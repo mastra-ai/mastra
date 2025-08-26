@@ -1,13 +1,13 @@
 import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import { z } from 'zod';
-
-import type { LegacyWorkflowRuns, Mastra } from '../..';
 import type { MastraPrimitives } from '../../action';
 import type { Agent } from '../../agent';
 import { MastraBase } from '../../base';
+import type { Mastra } from '../../mastra';
 
 import { RuntimeContext } from '../../runtime-context';
+import type { LegacyWorkflowRuns } from '../../storage';
 import { LegacyStep as Step } from './step';
 import type {
   ActionContext,

@@ -14,7 +14,7 @@
     "@playwright/test": "^1.55.0",
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.11",
-    "@types/react-dom": "^19.1.7",
+    "@types/react-dom": "^19.1.8",
     "execa": "^9.6.0",
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
