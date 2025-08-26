@@ -217,9 +217,7 @@ describe('Context Relevance Scorer', () => {
       });
 
       // This should not throw during analysis step
-      expect(async () => {
-        await scorer.run(testRun);
-      }).not.toThrow();
+      await expect(scorer.run(testRun)).resolves.not.toThrow();
     });
 
     it('should handle dynamic context from extractor', async () => {
