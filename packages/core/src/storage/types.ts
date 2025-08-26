@@ -178,6 +178,7 @@ export interface AISpanRecord {
   input: any;
   output: any;
   error: any;
+  isEvent: boolean;
 }
 
 export interface AITraceRecord {
