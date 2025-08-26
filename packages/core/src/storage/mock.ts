@@ -2,7 +2,7 @@ import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
 import type { Trace } from '../telemetry';
-import type { StepResult, WorkflowRunState } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';

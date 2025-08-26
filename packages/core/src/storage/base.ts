@@ -4,7 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores';
 import type { Trace } from '../telemetry';
-import type { StepResult, WorkflowRunState } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
   TABLE_WORKFLOW_SNAPSHOT,
