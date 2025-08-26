@@ -19,6 +19,7 @@ export type ExecutionContext = {
   runId: string;
   executionPath: number[];
   suspendedPaths: Record<string, number[]>;
+  waitingPaths?: Record<string, number[]>;
   retryConfig: {
     attempts: number;
     delay: number;
@@ -1781,6 +1782,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         activePaths: [],
         serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
+        waitingPaths: {},
         result,
         error,
         runtimeContext: runtimeContextObj,

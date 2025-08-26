@@ -320,7 +320,7 @@ export class Workflow extends BaseResource {
                 const parsedChunk = JSON.parse(newChunk);
                 controller.enqueue(parsedChunk);
                 failedChunk = undefined;
-              } catch (error) {
+              } catch {
                 failedChunk = newChunk;
               }
             }
