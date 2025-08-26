@@ -9,6 +9,8 @@ on:
 
 jobs:
   changelog:
+    if: ${{ github.repository == 'mastra-ai/mastra' && (contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -23,9 +25,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
-    if: ${{ github.repository == 'mastra-ai/mastra' && (contains(github.head_ref || github.ref_name, 'changeset-release') || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
