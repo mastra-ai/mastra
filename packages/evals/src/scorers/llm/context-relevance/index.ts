@@ -89,6 +89,19 @@ export function createContextRelevanceScorerLLM({
         return missingContext.length > 0 ? 0.0 : 1.0;
       }
 
+      /**
+       * Context Relevance Scoring Algorithm
+       * 
+       * Formula: max(0, base_score - usage_penalty - missing_penalty) × scale
+       * 
+       * Where:
+       * - base_score = sum(relevance_weights) / (num_contexts × 1.0)
+       * - usage_penalty = unused_high_relevance_count × penalty_rate
+       * - missing_penalty = min(missing_count × penalty_rate, max_penalty)
+       * 
+       * Relevance weights: high=1.0, medium=0.7, low=0.3, none=0.0
+       */
+
       // Calculate weighted score based on relevance levels
       const relevanceWeights = {
         high: 1.0,
@@ -97,13 +110,15 @@ export function createContextRelevanceScorerLLM({
         none: 0.0,
       };
 
+      // Sum of actual relevance weights from LLM evaluation
       const totalWeight = evaluations.reduce((sum, evaluation) => {
         return sum + relevanceWeights[evaluation.relevanceLevel];
       }, 0);
 
+      // Maximum possible weight if all contexts were high relevance
       const maxPossibleWeight = evaluations.length * relevanceWeights.high;
 
-      // Base score from relevance
+      // Base relevance score: actual_weight / max_possible_weight
       const relevanceScore = maxPossibleWeight > 0 ? totalWeight / maxPossibleWeight : 0;
 
       // Penalty for unused highly relevant context
@@ -123,6 +138,8 @@ export function createContextRelevanceScorerLLM({
       const missingContext = results.analyzeStepResult?.missingContext || [];
       const missingContextPenalty = Math.min(missingContext.length * missingPenaltyRate, maxMissingPenalty);
 
+      // Final score calculation: base_score - penalties (clamped to [0,1])
+      // Formula: max(0, relevance_score - usage_penalty - missing_penalty) × scale
       const finalScore = Math.max(0, relevanceScore - usagePenalty - missingContextPenalty);
       const scaledScore = finalScore * (options.scale || 1);
 
