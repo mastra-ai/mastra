@@ -1,4 +1,5 @@
 import type { AbstractAgent } from '@ag-ui/client';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import { AGUIAdapter } from './adapters/agui';
 import {
@@ -12,6 +13,7 @@ import {
   A2A,
   MCPTool,
   LegacyWorkflow,
+  Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
 import { VNextNetwork } from './resources/vNextNetwork';
@@ -46,11 +48,14 @@ import type {
   GetScoresByEntityIdParams,
   SaveScoreParams,
   SaveScoreResponse,
+  GetAITracesResponse,
 } from './types';
 
 export class MastraClient extends BaseResource {
+  private observability: Observability;
   constructor(options: ClientOptions) {
     super(options);
+    this.observability = new Observability(options);
   }
 
   /**
@@ -627,5 +632,13 @@ export class MastraClient extends BaseResource {
    */
   getModelProviders(): Promise<string[]> {
     return this.request(`/api/model-providers`);
+  }
+
+  getAITrace(traceId: string): Promise<AITraceRecord> {
+    return this.observability.getTrace(traceId);
+  }
+
+  getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
+    return this.observability.getTraces(params);
   }
 }

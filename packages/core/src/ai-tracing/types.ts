@@ -358,7 +358,7 @@ export enum SamplingStrategyType {
 /**
  * Context for TraceSampling
  */
-export interface AITraceContext {
+export interface TraceContext {
   runtimeContext?: RuntimeContext;
   metadata?: Record<string, any>;
 }
@@ -370,7 +370,7 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.ALWAYS }
   | { type: SamplingStrategyType.NEVER }
   | { type: SamplingStrategyType.RATIO; probability: number }
-  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: AITraceContext) => boolean };
+  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
 
 /**
  * Configuration for a single AI tracing instance
@@ -469,7 +469,7 @@ export type TracingSelector = (
 /**
  * Context for AI tracing that flows through workflow and agent execution
  */
-export interface AITracingContext {
-  /** Parent AI span for creating child spans in nested operations */
-  parentAISpan?: AnyAISpan;
+export interface TracingContext {
+  /** Current AI span for creating child spans and adding metadata */
+  currentSpan?: AnyAISpan;
 }

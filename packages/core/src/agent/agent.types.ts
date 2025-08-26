@@ -2,6 +2,7 @@ import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { z, ZodSchema } from 'zod';
+import type { TracingContext } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { LoopConfig, LoopOptions } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
@@ -87,6 +88,8 @@ export type AgentExecutionOptions<
   scorers?: MastraScorers;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
+  /** AI tracing context for span hierarchy and metadata */
+  tracingContext?: TracingContext;
 };
 
 export type InnerAgentExecutionOptions<

@@ -81,7 +81,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       emitter,
       abortController,
       runtimeContext,
-      aiTracingContext: {},
+      tracingContext: {},
     });
   }
 
