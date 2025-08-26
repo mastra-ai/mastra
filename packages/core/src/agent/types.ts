@@ -221,6 +221,8 @@ export type AgentStreamOptions<
   inputProcessors?: InputProcessor[];
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
+  /** Scorers to use for this generation */
+  scorers?: MastraScorers;
 } & (
   | {
       /**

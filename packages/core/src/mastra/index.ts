@@ -14,6 +14,7 @@ import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
+import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -37,6 +38,7 @@ export interface Config<
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   agents?: TAgents;
   networks?: TNetworks;
@@ -55,6 +57,7 @@ export interface Config<
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
   pubsub?: PubSub;
+  scorers?: TScorers;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -91,6 +94,7 @@ export class Mastra<
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -108,6 +112,7 @@ export class Mastra<
   #memory?: MastraMemory;
   #networks?: TNetworks;
   #vnext_networks?: TVNextNetworks;
+  #scorers?: TScorers;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -182,7 +187,8 @@ export class Mastra<
       TLogger,
       TNetworks,
       TVNextNetworks,
-      TMCPServers
+      TMCPServers,
+      TScorers
     >,
   ) {
     // Store server middleware with default path
@@ -425,6 +431,18 @@ do:
       });
     }
 
+    /**
+     * Scorers
+     */
+
+    const scorers = {} as Record<string, MastraScorer<any, any, any, any>>;
+    if (config?.scorers) {
+      Object.entries(config.scorers).forEach(([key, scorer]) => {
+        scorers[key] = scorer;
+      });
+    }
+    this.#scorers = scorers as TScorers;
+
     /*
     Legacy Workflows
     */
@@ -660,6 +678,25 @@ do:
       }, {});
     }
     return this.#legacy_workflows;
+  }
+
+  public getScorers() {
+    return this.#scorers;
+  }
+
+  public getScorer<TScorerName extends keyof TScorers>(name: TScorerName): TScorers[TScorerName] {
+    const scorer = this.#scorers?.[name];
+    if (!scorer) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Scorer with name ${String(name)} not found`,
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return scorer;
   }
 
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {

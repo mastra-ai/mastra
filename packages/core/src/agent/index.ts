@@ -2196,7 +2196,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     if (Object.keys(scorers || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorers)) {
         runScorer({
-          scorerId: id,
+          scorerId: overrideScorers ? scorerObject.scorer.name : id,
           scorerObject: scorerObject,
           runId,
           input: scorerInput,
@@ -2490,18 +2490,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         structuredOutput = false,
         agentAISpan,
+        overrideScorers,
       }:
         | {
             result: GenerateReturn<any, Output, ExperimentalOutput>;
             outputText: string;
             structuredOutput?: boolean;
             agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+            overrideScorers?: MastraScorers;
           }
         | {
             result: StreamReturn<any, Output, ExperimentalOutput>;
             outputText: string;
             structuredOutput?: boolean;
             agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+            overrideScorers?: MastraScorers;
           }) => {
         const afterResult = await after({
           result,
@@ -2514,6 +2517,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput,
           threadExists,
           agentAISpan,
+          overrideScorers,
         });
         return afterResult;
       },
@@ -3020,6 +3024,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   threadExists: inputData['prepare-memory-step'].threadExists,
                   structuredOutput: !!options.output,
                   saveQueueManager,
+                  overrideScorers: options.scorers,
                 });
               } catch (e) {
                 this.logger.error('Error saving memory on finish', {
@@ -3063,6 +3068,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     threadExists,
     structuredOutput = false,
     saveQueueManager,
+    overrideScorers,
   }: {
     instructions: string;
     runId: string;
@@ -3077,6 +3083,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     threadExists: boolean;
     structuredOutput?: boolean;
     saveQueueManager: SaveQueueManager;
+    overrideScorers?: MastraScorers;
   }) {
     const resToLog = {
       text: result?.text,
@@ -3234,6 +3241,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       instructions,
       runtimeContext,
       structuredOutput,
+      overrideScorers,
     });
   }
 
@@ -3521,13 +3529,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
       }
 
+      const overrideScorers = mergedGenerateOptions.scorers;
       const afterResult = await after({
         result: result as unknown as OUTPUT extends undefined
           ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
           : GenerateObjectResult<OUTPUT>,
         outputText: newText,
         agentAISpan,
-        ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
+        ...(overrideScorers ? { overrideScorers } : {}),
       });
 
       if (generateOptions.returnScorerData) {
@@ -3758,6 +3767,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const { onFinish, runId, output, experimental_output, agentAISpan, ...llmOptions } = beforeResult;
 
+    const overrideScorers = mergedStreamOptions.scorers;
     if (!output || experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
@@ -3774,6 +3784,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               result,
               outputText,
               agentAISpan,
+              ...(overrideScorers ? { overrideScorers } : {}),
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -3806,6 +3817,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             outputText,
             structuredOutput: true,
             agentAISpan,
+            ...(overrideScorers ? { overrideScorers } : {}),
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
