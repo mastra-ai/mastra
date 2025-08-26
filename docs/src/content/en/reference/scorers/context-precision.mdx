@@ -29,7 +29,13 @@ The `createContextPrecisionScorer()` function creates a scorer that evaluates ho
           name: "context",
           type: "string[]",
           description: "Array of context pieces to evaluate for relevance",
-          required: true,
+          required: false,
+        },
+        {
+          name: "contextExtractor",
+          type: "(input, output) => string[]",
+          description: "Function to dynamically extract context from the run input and output",
+          required: false,
         },
         {
           name: "scale",
@@ -41,6 +47,10 @@ The `createContextPrecisionScorer()` function creates a scorer that evaluates ho
     },
   ]}
 />
+
+:::note
+Either `context` or `contextExtractor` must be provided. If both are provided, `contextExtractor` takes precedence.
+:::
 
 ## .run() Returns
 

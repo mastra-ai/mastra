@@ -177,6 +177,25 @@ const scorer = createContextPrecisionScorer({
 // Result will be scaled: score: 8.5 instead of 0.85
 ```
 
+### Dynamic context extraction
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    contextExtractor: (input, output) => {
+      // Extract context dynamically based on the query
+      const query = input?.inputMessages?.[0]?.content || '';
+      
+      // Example: Retrieve from a vector database
+      const searchResults = vectorDB.search(query, { limit: 10 });
+      return searchResults.map(result => result.content);
+    },
+    scale: 1,
+  },
+});
+```
+
 ### Large context evaluation
 
 ```typescript
