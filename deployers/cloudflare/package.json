@@ -45,7 +45,7 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.5.0",
-    "rollup": "~4.46.2"
+    "rollup": "~4.47.1"
   },
   "devDependencies": {
     "@babel/types": "^7.28.2",

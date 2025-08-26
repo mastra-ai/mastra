@@ -1,14 +1,8 @@
-import type {
-  MastraMessageV1,
-  MastraMessageV2,
-  PaginationInfo,
-  StorageGetMessagesArg,
-  StorageResourceType,
-  StorageThreadType,
-} from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
 import {
   ensureDate,
   MemoryStorage,
