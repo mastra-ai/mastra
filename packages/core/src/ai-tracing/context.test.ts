@@ -19,14 +19,14 @@ class MockMastra {
 
 class MockAgent {
   generate = vi.fn();
+  generateVNext = vi.fn();
   stream = vi.fn();
-  streamV2 = vi.fn();
+  streamVNext = vi.fn();
   otherMethod = vi.fn().mockReturnValue('agent-other-result');
 }
 
 class MockWorkflow {
   execute = vi.fn();
-  stream = vi.fn();
   otherMethod = vi.fn().mockReturnValue('workflow-other-result');
 }
 
@@ -139,7 +139,8 @@ describe('AI Tracing Context Integration', () => {
       expect(wrapped).not.toBe(mockAgent);
       expect(typeof wrapped.generate).toBe('function');
       expect(typeof wrapped.stream).toBe('function');
-      expect(typeof wrapped.streamV2).toBe('function');
+      expect(typeof wrapped.generateVNext).toBe('function');
+      expect(typeof wrapped.streamVNext).toBe('function');
     });
 
     it('should return original Agent when no current span', () => {
@@ -177,12 +178,12 @@ describe('AI Tracing Context Integration', () => {
       });
     });
 
-    it('should inject tracing context into streamV2 method', async () => {
+    it('should inject tracing context into streamVNext method', async () => {
       const wrapped = wrapAgent(mockAgent as any, tracingContext);
 
-      await wrapped.streamV2('test input');
+      await wrapped.streamVNext('test input');
 
-      expect(mockAgent.streamV2).toHaveBeenCalledWith('test input', {
+      expect(mockAgent.streamVNext).toHaveBeenCalledWith('test input', {
         tracingContext,
       });
     });
@@ -220,7 +221,6 @@ describe('AI Tracing Context Integration', () => {
 
       expect(wrapped).not.toBe(mockWorkflow);
       expect(typeof wrapped.execute).toBe('function');
-      expect(typeof wrapped.stream).toBe('function');
     });
 
     it('should return original Workflow when no current span', () => {
@@ -245,19 +245,6 @@ describe('AI Tracing Context Integration', () => {
         { input: 'test' },
         {
           runtimeContext: {},
-          tracingContext,
-        },
-      );
-    });
-
-    it('should inject tracing context into stream method', async () => {
-      const wrapped = wrapWorkflow(mockWorkflow as any, tracingContext);
-
-      await wrapped.stream({ input: 'test' });
-
-      expect(mockWorkflow.stream).toHaveBeenCalledWith(
-        { input: 'test' },
-        {
           tracingContext,
         },
       );

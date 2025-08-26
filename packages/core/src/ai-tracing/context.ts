@@ -41,7 +41,7 @@ export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingC
     return new Proxy(mastra, {
       get(target, prop) {
         try {
-          if (prop in AGENT_GETTERS) {
+          if (AGENT_GETTERS.includes(prop as string)) {
             return (...args: any[]) => {
               const agent = (target as any)[prop](...args);
               return wrapAgent(agent, tracingContext);
@@ -49,7 +49,7 @@ export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingC
           }
 
           // Wrap workflow getters
-          if (prop in WORKFLOW_GETTERS) {
+          if (WORKFLOW_GETTERS.includes(prop as string)) {
             return (...args: any[]) => {
               const workflow = (target as any)[prop](...args);
               return wrapWorkflow(workflow, tracingContext);
@@ -84,7 +84,7 @@ export function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingCont
     return new Proxy(agent, {
       get(target, prop) {
         try {
-          if (prop in AGENT_METHODS_TO_WRAP) {
+          if (AGENT_METHODS_TO_WRAP.includes(prop as string)) {
             return (input: any, options: any = {}) => {
               return (target as any)[prop](input, {
                 ...options,
@@ -121,7 +121,7 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: Tr
       get(target, prop) {
         try {
           // Wrap workflow execution methods with tracing context
-          if (prop in WORKFLOW_METHODS_TO_WRAP) {
+          if (WORKFLOW_METHODS_TO_WRAP.includes(prop as string)) {
             return (input: any, options: any = {}) => {
               return (target as any)[prop](input, {
                 ...options,
