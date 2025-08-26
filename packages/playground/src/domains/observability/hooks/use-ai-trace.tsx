@@ -1,5 +1,5 @@
 import { useQuery } from '@mastra/playground-ui';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { client } from '@/lib/client';
 
 export const useAITrace = (traceId: string | null | undefined) => {
   const query = useQuery({
@@ -9,7 +9,6 @@ export const useAITrace = (traceId: string | null | undefined) => {
         throw new Error('Trace ID is required');
       }
 
-      const client = useMastraClient();
       const res = await client.getAITrace(traceId);
       return res;
     },

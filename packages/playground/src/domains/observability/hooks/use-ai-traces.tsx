@@ -1,4 +1,4 @@
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { client } from '@/lib/client';
 import { AISpanType } from '@mastra/core/ai-tracing';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
@@ -20,7 +20,6 @@ const fetchAITracesFn = async ({
   };
 }) => {
   try {
-    const client = useMastraClient();
     const res = await client.getAITraces({
       pagination: {
         page,
