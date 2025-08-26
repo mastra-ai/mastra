@@ -11,7 +11,8 @@ import {
 
 export interface ContextPrecisionMetricOptions {
   scale?: number;
-  context: string[];
+  context?: string[];
+  contextExtractor?: (input: ScorerRunInputForAgent, output: ScorerRunOutputForAgent) => string[];
 }
 
 const contextRelevanceOutputSchema = z.object({
@@ -31,8 +32,11 @@ export function createContextPrecisionScorer({
   model: MastraLanguageModel;
   options: ContextPrecisionMetricOptions;
 }) {
-  if (!options.context || options.context.length === 0) {
-    throw new Error('Context is required for Context Precision scoring');
+  if (!options.context && !options.contextExtractor) {
+    throw new Error('Either context or contextExtractor is required for Context Precision scoring');
+  }
+  if (options.context && options.context.length === 0) {
+    throw new Error('Context array cannot be empty if provided');
   }
 
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
@@ -51,10 +55,17 @@ export function createContextPrecisionScorer({
         const input = getUserMessageFromRunInput(run.input) ?? '';
         const output = getAssistantMessageFromRunOutput(run.output) ?? '';
 
+        // Get context either from options or extractor
+        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+
+        if (context.length === 0) {
+          throw new Error('No context available for evaluation');
+        }
+
         return createContextRelevancePrompt({
           input,
           output,
-          context: options.context,
+          context,
         });
       },
     })
@@ -101,10 +112,13 @@ export function createContextPrecisionScorer({
         const input = getUserMessageFromRunInput(run.input) ?? '';
         const output = getAssistantMessageFromRunOutput(run.output) ?? '';
 
+        // Get context either from options or extractor (same as in analyze)
+        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+
         return createContextPrecisionReasonPrompt({
           input,
           output,
-          context: options.context,
+          context,
           score,
           scale: options.scale || 1,
           verdicts: (results.analyzeStepResult?.verdicts || []) as {

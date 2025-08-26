@@ -11,9 +11,18 @@ describe('createContextPrecisionScorer', () => {
     expect(() =>
       createContextPrecisionScorer({
         model: mockModel,
+        options: {},
+      }),
+    ).toThrow('Either context or contextExtractor is required for Context Precision scoring');
+  });
+
+  it('should throw error when context array is empty', () => {
+    expect(() =>
+      createContextPrecisionScorer({
+        model: mockModel,
         options: { context: [] },
       }),
-    ).toThrow('Context is required for Context Precision scoring');
+    ).toThrow('Context array cannot be empty if provided');
   });
 
   it('should create a scorer with proper configuration', () => {
@@ -30,6 +39,21 @@ describe('createContextPrecisionScorer', () => {
     expect(scorer.description).toBe(
       'A scorer that evaluates the relevance and precision of retrieved context nodes for generating expected outputs',
     );
+  });
+
+  it('should create scorer with context extractor', () => {
+    const contextExtractor = () => ['Dynamic context 1', 'Dynamic context 2'];
+
+    const scorer = createContextPrecisionScorer({
+      model: mockModel,
+      options: {
+        contextExtractor,
+        scale: 1,
+      },
+    });
+
+    expect(scorer).toBeDefined();
+    expect(scorer.name).toBe('Context Precision Scorer');
   });
 
   it('should handle perfect context precision', async () => {
