@@ -547,7 +547,7 @@ export class Workflow<
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
-  protected retryConfig: {
+  public retryConfig: {
     attempts?: number;
     delay?: number;
   };
@@ -827,7 +827,7 @@ export class Workflow<
             if (typeof value === 'object' && value !== null) {
               value = value[part];
             } else {
-              throw new Error(`Invalid path ${m.path} in step ${m.step.id}`);
+              throw new Error(`Invalid path ${m.path} in step ${m?.step?.id ?? 'initData'}`);
             }
           }
 
@@ -1134,6 +1134,7 @@ export class Workflow<
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
+          waitingPaths: {},
           result: undefined,
           error: undefined,
           // @ts-ignore
@@ -1373,6 +1374,10 @@ export class Run<
    */
   #mastra?: Mastra;
 
+  get mastra() {
+    return this.#mastra;
+  }
+
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
 
@@ -1527,6 +1532,16 @@ export class Run<
       stream: readable,
       getWorkflowState: () => this.executionResults!,
     };
+  }
+
+  async streamAsync({
+    inputData,
+    runtimeContext,
+  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): Promise<{
+    stream: ReadableStream<StreamEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+  }> {
+    return this.stream({ inputData, runtimeContext });
   }
 
   /**
@@ -1687,6 +1702,10 @@ export class Run<
         this.emitter.off('nested-watch', nestedWatchCb);
       }
     };
+  }
+
+  async watchAsync(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): Promise<() => void> {
+    return this.watch(cb, type);
   }
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {

@@ -3299,7 +3299,7 @@ describe('LegacyWorkflow', async () => {
         triggerData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
 
-      console.log(result);
+      result;
 
       expect(result.results['test-agent-1']).toEqual({
         status: 'success',
@@ -4237,7 +4237,7 @@ describe('LegacyWorkflow', async () => {
 
         const run = counterWorkflow.createRun();
         const unwatch = counterWorkflow.watch(state => {
-          console.log('state', JSON.stringify(state.results, null, 2));
+          ('state', JSON.stringify(state.results, null, 2));
         });
         const { results } = await run.start({ triggerData: { startValue: 1 } });
 

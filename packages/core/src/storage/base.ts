@@ -4,8 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores';
 import type { Trace } from '../telemetry';
-
-import type { WorkflowRunState } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows';
 
 import {
   TABLE_WORKFLOW_SNAPSHOT,
@@ -400,6 +399,35 @@ export abstract class MastraStorage extends MastraBase {
       record: data,
     });
   }
+
+  abstract updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>>;
+
+  abstract updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined>;
 
   async loadWorkflowSnapshot({
     workflowName,

@@ -1,4 +1,5 @@
 import type { AbstractAgent } from '@ag-ui/client';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import { AGUIAdapter } from './adapters/agui';
 import {
@@ -49,7 +50,6 @@ import type {
   SaveScoreResponse,
   GetAITracesResponse,
 } from './types';
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;

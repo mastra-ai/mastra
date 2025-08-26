@@ -1,6 +1,6 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import { isVercelTool } from '@mastra/core/tools/is-vercel-tool';
 import { zodToJsonSchema } from './zod-to-json-schema';
-import type { ToolsInput } from '@mastra/core/agent';
 
 export function processClientTools(clientTools: ToolsInput | undefined): ToolsInput | undefined {
   if (!clientTools) {

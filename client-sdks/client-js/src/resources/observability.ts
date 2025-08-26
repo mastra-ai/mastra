@@ -1,5 +1,4 @@
-import type { AISpanType } from '@mastra/core/ai-tracing';
-import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
 import type { ClientOptions, GetAITracesResponse } from '../types';
 import { BaseResource } from './base';
 
