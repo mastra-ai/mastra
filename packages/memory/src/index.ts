@@ -1,10 +1,16 @@
-import { generateEmptyFromSchema } from '@mastra/core';
-import type { MastraMessageV1, ToolAction } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
+import type {
+  MastraMessageV1,
+  MemoryConfig,
+  SharedMemoryConfig,
+  StorageThreadType,
+  WorkingMemoryTemplate,
+} from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
+import type { ToolAction } from '@mastra/core/tools';
+import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';

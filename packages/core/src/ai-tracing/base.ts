@@ -15,7 +15,7 @@ import type {
   AITracingExporter,
   AISpanProcessor,
   AITracingEvent,
-  AITraceContext,
+  TraceContext,
   AISpanTypeMap,
   AnyAISpan,
 } from './types';
@@ -208,7 +208,7 @@ export abstract class MastraAITracing extends MastraBase {
   /**
    * Check if an AI trace should be sampled
    */
-  protected shouldSample(traceContext: AITraceContext): boolean {
+  protected shouldSample(traceContext: TraceContext): boolean {
     // Check built-in sampling strategy
     const { sampling } = this.config;
 

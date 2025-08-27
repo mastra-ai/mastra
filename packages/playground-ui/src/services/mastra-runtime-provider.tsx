@@ -8,10 +8,8 @@ import {
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
-
 import { ChatProps, Message } from '@/types';
-
-import { CoreUserMessage } from '@mastra/core';
+import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';

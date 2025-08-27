@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { formatDate } from 'date-fns';
 import clsx from 'clsx';
-import { WorkflowRun } from '@mastra/core';
+import { WorkflowRun } from '@mastra/core/storage';
 
 export interface WorkflowRunsProps {
   workflowId: string;

@@ -162,8 +162,12 @@ export class CloudflareDeployer extends Deployer {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
+    { enableSourcemap = false }: { enableSourcemap?: boolean } = {},
   ) {
-    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths);
+    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
+      enableSourcemap,
+      enableEsmShim: false,
+    });
 
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [

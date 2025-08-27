@@ -50,7 +50,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
-    parentAISpan?: AnyAISpan;
+    currentSpan?: AnyAISpan;
     retryConfig?: {
       attempts?: number;
       delay?: number;
