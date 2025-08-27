@@ -409,19 +409,10 @@ Install the latest version to the `@ai-sdk/openai` package:
   </Tab>
 </Tabs>
 
-Update the `planActivities` step in `src/mastra/workflows/weather-workflow.ts` from:
-```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers{150} copy /stream/
-const response = await agent.stream([
-  {
-    role: 'user',
-    content: prompt,
-  },
-]);
-```
-
-To:
-```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers{150} copy /streamVNext/
-const response = await agent.streamVNext([
+Update the `planActivities` step in `src/mastra/workflows/weather-workflow.ts` as follow:
+```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers{150} copy
+const response = await agent.stream([ // [!code --]
+const response = await agent.streamVNext([ // [!code ++]
   {
     role: 'user',
     content: prompt,
