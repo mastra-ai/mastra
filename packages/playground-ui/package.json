@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.2.2-alpha.1",
+  "version": "5.2.4",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -30,7 +30,7 @@
   },
   "scripts": {
     "build": "tsc && vite build",
-    "dev:playground": "vite build --watch",
+    "dev": "vite build --watch",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
@@ -108,7 +108,7 @@
     "zustand": "^5.0.7"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.14.0-0 <0.15.0-0",
+    "@mastra/core": ">=0.14.0-0 <0.16.0-0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
