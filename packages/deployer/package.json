@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.14.1",
+  "version": "0.14.2-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -113,9 +113,9 @@
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "hono": "^4.8.12",
-    "package-directory": "^8.1.0",
+    "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
-    "rollup": "~4.46.2",
+    "rollup": "~4.46.4",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript-paths": "^1.5.1",

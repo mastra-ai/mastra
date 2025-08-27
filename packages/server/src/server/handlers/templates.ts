@@ -4,8 +4,9 @@ import { agentBuilderTemplateWorkflow } from '@mastra/agent-builder';
 import type { Context } from '../types';
 import { handleError } from './error';
 import { basename, dirname } from 'path';
-import { getWorkflowInfo } from '../utils';
+import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import type { WorkflowInfo } from '@mastra/core/workflows';
+import * as workflows from './workflows';
 
 interface TemplateContext extends Context {
   runtimeContext?: RuntimeContext;
@@ -15,6 +16,9 @@ interface TemplateContext extends Context {
   slug?: string;
   targetPath?: string;
   variables?: Record<string, string>;
+  body?: { step: string | string[]; resumeData?: unknown };
+  event?: string;
+  data?: unknown;
 }
 
 export interface TemplateInstallationRequest {
@@ -69,158 +73,183 @@ function prepareTemplateInstallation({
   return effectiveTargetPath;
 }
 
-export async function createTemplateInstallRunHandler({
-  mastra,
+/**
+ * Creates a modified Mastra instance that includes the agent-builder-template workflow
+ * and prepares template installation parameters
+ */
+function createTemplateWorkflowContext({
+  targetPath,
+  variables,
   runtimeContext,
-  runId: prevRunId,
   repo,
   ref,
   slug,
-  targetPath,
-  variables,
-}: TemplateContext): Promise<{ runId: string }> {
-  const logger = mastra.getLogger();
+}: {
+  targetPath?: string;
+  variables?: Record<string, string>;
+  runtimeContext?: RuntimeContext;
+  repo: string;
+  ref?: string;
+  slug?: string;
+}) {
+  const effectiveTargetPath = prepareTemplateInstallation({ targetPath, variables, runtimeContext });
 
-  try {
-    const effectiveTargetPath = prepareTemplateInstallation({ targetPath, variables, runtimeContext });
+  WorkflowRegistry.registerTemporaryWorkflow('agent-builder-template', agentBuilderTemplateWorkflow);
 
-    logger.info('Creating template installation run', {
-      repo,
-      ref,
-      slug,
-      targetPath: effectiveTargetPath,
-      variables,
-    });
+  const inputData = {
+    repo,
+    ref: ref || 'main',
+    slug: slug || basename(repo).replace(/\.git$/, '') || 'template',
+    targetPath: effectiveTargetPath,
+  };
 
-    // Create workflow run
-    const run = await agentBuilderTemplateWorkflow.createRunAsync({ runId: prevRunId });
-
-    logger.info('Created template installation run', {
-      runId: run.runId,
-      repo,
-      ref: ref || 'main',
-    });
-
-    return { runId: run.runId };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    logger.error('Failed to create template installation run', {
-      repo,
-      error: errorMessage,
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-
-    throw error;
-  }
+  return {
+    inputData,
+    effectiveTargetPath,
+  };
 }
 
-export async function startAsyncTemplateInstallHandler({
-  mastra,
-  runtimeContext,
-  runId,
-  repo,
-  ref,
-  slug,
-  targetPath,
-  variables,
-}: TemplateContext) {
-  const logger = mastra.getLogger();
+/**
+ * Generic wrapper that converts template handlers to use workflow handlers
+ * TWorkflowArgs - The argument type expected by the workflow handler
+ * TResult - The return type of the workflow handler
+ */
+function createTemplateHandler<TWorkflowArgs, TResult>(
+  workflowHandlerFn: (args: TWorkflowArgs) => Promise<TResult>,
+  logMessage: string,
+) {
+  return async (templateArgs: TemplateContext): Promise<TResult> => {
+    const { mastra, runtimeContext, repo, ref, slug, targetPath, variables, runId, body, event, data } = templateArgs;
+    const logger = mastra.getLogger();
 
-  try {
-    const effectiveTargetPath = prepareTemplateInstallation({ targetPath, variables, runtimeContext });
+    try {
+      const { inputData, effectiveTargetPath } = createTemplateWorkflowContext({
+        targetPath,
+        variables,
+        runtimeContext,
+        repo,
+        ref,
+        slug,
+      });
 
-    logger.info('Starting async template installation', {
-      runId,
-      repo,
-      ref,
-      slug,
-      targetPath: effectiveTargetPath,
-      variables,
-    });
-
-    // Get the workflow run and start it
-    const run = await agentBuilderTemplateWorkflow.createRunAsync({ runId });
-    const result = await run.start({
-      inputData: {
+      logger.info(logMessage, {
+        runId,
         repo,
         ref: ref || 'main',
         slug,
         targetPath: effectiveTargetPath,
-      },
-      runtimeContext,
-    });
+        variables,
+        ...(body && { step: body.step }),
+        ...(event && { event }),
+      });
 
-    logger.info('Template workflow completed', {
-      runId,
-      status: result.status,
-    });
+      try {
+        // Build the handler args based on what the workflow handler expects
+        // TypeScript will ensure we match the TWorkflowArgs type
+        const baseArgs = {
+          mastra,
+          workflowId: 'agent-builder-template' as const,
+          runId,
+          runtimeContext,
+        };
 
-    return result;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+        const handlerArgs = {
+          ...baseArgs,
+          // Add body for resume handlers
+          ...(body && { body }),
+          // Add event and data for event handlers
+          ...(event !== undefined && data !== undefined && { event, data }),
+          // Add inputData for regular handlers (when no body or event)
+          ...(!body && event === undefined && { inputData }),
+        } as TWorkflowArgs;
 
-    logger.error('Async template installation failed', {
-      runId,
-      repo,
-      error: errorMessage,
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+        const result = await workflowHandlerFn(handlerArgs);
+        return result;
+      } finally {
+        // Clean up the temporary workflow registration
+        WorkflowRegistry.cleanup('agent-builder-template');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
-    return handleError(error, 'Async template installation failed');
-  }
-}
-
-export async function streamTemplateInstallHandler({
-  mastra,
-  runtimeContext,
-  runId,
-  repo,
-  ref,
-  slug,
-  targetPath,
-  variables,
-}: TemplateContext) {
-  const logger = mastra.getLogger();
-
-  try {
-    const effectiveTargetPath = prepareTemplateInstallation({ targetPath, variables, runtimeContext });
-
-    logger.info('Starting template installation stream', {
-      runId,
-      repo,
-      ref,
-      slug,
-      targetPath: effectiveTargetPath,
-      variables,
-    });
-
-    // Get the workflow run and stream it
-    const run = await agentBuilderTemplateWorkflow.createRunAsync({ runId });
-    const result = run.stream({
-      inputData: {
+      logger.error(`${logMessage} failed`, {
+        runId,
         repo,
-        ref: ref || 'main',
-        slug,
-        targetPath: effectiveTargetPath,
-      },
-      runtimeContext,
-    });
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
-    return result;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    logger.error('Template installation stream failed', {
-      runId,
-      repo,
-      error: errorMessage,
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-
-    return handleError(error, 'Template installation stream failed');
-  }
+      throw error;
+    }
+  };
 }
+
+// Now create all template handlers using the utility
+export const createTemplateInstallRunHandler = createTemplateHandler(
+  workflows.createWorkflowRunHandler,
+  'Creating template installation run',
+);
+
+export const startAsyncTemplateInstallHandler = createTemplateHandler(
+  workflows.startAsyncWorkflowHandler,
+  'Starting async template installation',
+);
+
+export const streamTemplateInstallHandler = createTemplateHandler(
+  workflows.streamWorkflowHandler,
+  'Starting template installation stream',
+);
+
+export const streamVNextTemplateInstallHandler = createTemplateHandler(
+  workflows.streamVNextWorkflowHandler,
+  'Starting VNext template installation stream',
+);
+
+export const startTemplateInstallRunHandler = createTemplateHandler(
+  workflows.startWorkflowRunHandler,
+  'Starting template installation run',
+);
+
+export const watchTemplateInstallHandler = createTemplateHandler(
+  workflows.watchWorkflowHandler,
+  'Watching template installation',
+);
+
+export const getTemplateInstallRunByIdHandler = createTemplateHandler(
+  workflows.getWorkflowRunByIdHandler,
+  'Getting template installation run by ID',
+);
+
+export const getTemplateInstallRunExecutionResultHandler = createTemplateHandler(
+  workflows.getWorkflowRunExecutionResultHandler,
+  'Getting template installation run execution result',
+);
+
+export const getTemplateInstallRunsHandler = createTemplateHandler(
+  workflows.getWorkflowRunsHandler,
+  'Getting template installation runs',
+);
+
+export const cancelTemplateInstallRunHandler = createTemplateHandler(
+  workflows.cancelWorkflowRunHandler,
+  'Cancelling template installation run',
+);
+
+export const sendTemplateInstallRunEventHandler = createTemplateHandler(
+  workflows.sendWorkflowRunEventHandler,
+  'Sending template installation run event',
+);
+
+// Resume handlers now use the unified createTemplateHandler pattern
+export const resumeAsyncTemplateInstallHandler = createTemplateHandler(
+  workflows.resumeAsyncWorkflowHandler,
+  'Resuming async template installation',
+);
+
+export const resumeTemplateInstallHandler = createTemplateHandler(
+  workflows.resumeWorkflowHandler,
+  'Resuming template installation',
+);
 
 export async function getAgentBuilderWorkflow(): Promise<WorkflowInfo> {
   try {

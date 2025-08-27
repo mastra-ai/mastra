@@ -10,6 +10,7 @@ const meta = {
   "keyword-coverage": "KeywordCoverage",
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
+  "tool-call-accuracy": "ToolCallAccuracy",
   toxicity: "Toxicity",
 };
 

@@ -158,9 +158,10 @@ const discoverUnitsStep = createStep({
 
     const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
-    const agent = new Agent({
-      model: resolveModel(runtimeContext),
-      instructions: `You are an expert at analyzing Mastra projects.
+    try {
+      const agent = new Agent({
+        model: resolveModel(runtimeContext),
+        instructions: `You are an expert at analyzing Mastra projects.
 
 Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
 
@@ -191,15 +192,15 @@ IMPORTANT - Naming Consistency Rules:
 - use the relative path from the template root for the file (e.g., 'src/mastra/lib/util.ts' → file: 'src/mastra/lib/util.ts')
 
 Return the actual exported names of the units, as well as the file names.`,
-      name: 'Mastra Project Discoverer',
-      tools: {
-        readFile: tools.readFile,
-        listDirectory: tools.listDirectory,
-      },
-    });
+        name: 'Mastra Project Discoverer',
+        tools: {
+          readFile: tools.readFile,
+          listDirectory: tools.listDirectory,
+        },
+      });
 
-    const result = await agent.generate(
-      `Analyze the Mastra project directory structure at "${templateDir}".
+      const result = await agent.generate(
+        `Analyze the Mastra project directory structure at "${templateDir}".
 
             List directory contents using listDirectory tool, and then analyze each file with readFile tool.
       IMPORTANT:
@@ -209,59 +210,80 @@ Return the actual exported names of the units, as well as the file names.`,
       - If a directory doesn't exist or has no files, return an empty array
 
       Return the analysis in the exact format specified in the output schema.`,
-      {
-        experimental_output: z.object({
-          agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-        }),
-        maxSteps: 100,
-      },
-    );
+        {
+          experimental_output: z.object({
+            agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+            workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+            tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+            mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+            networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+            other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+          }),
+          maxSteps: 100,
+        },
+      );
 
-    const template = result.object ?? {};
+      const template = result.object ?? {};
 
-    const units: TemplateUnit[] = [];
+      const units: TemplateUnit[] = [];
 
-    // Add agents
-    template.agents?.forEach((agentId: { name: string; file: string }) => {
-      units.push({ kind: 'agent', id: agentId.name, file: agentId.file });
-    });
+      // Add agents
+      template.agents?.forEach((agentId: { name: string; file: string }) => {
+        units.push({ kind: 'agent', id: agentId.name, file: agentId.file });
+      });
 
-    // Add workflows
-    template.workflows?.forEach((workflowId: { name: string; file: string }) => {
-      units.push({ kind: 'workflow', id: workflowId.name, file: workflowId.file });
-    });
+      // Add workflows
+      template.workflows?.forEach((workflowId: { name: string; file: string }) => {
+        units.push({ kind: 'workflow', id: workflowId.name, file: workflowId.file });
+      });
 
-    // Add tools
-    template.tools?.forEach((toolId: { name: string; file: string }) => {
-      units.push({ kind: 'tool', id: toolId.name, file: toolId.file });
-    });
+      // Add tools
+      template.tools?.forEach((toolId: { name: string; file: string }) => {
+        units.push({ kind: 'tool', id: toolId.name, file: toolId.file });
+      });
 
-    // Add MCP servers
-    template.mcp?.forEach((mcpId: { name: string; file: string }) => {
-      units.push({ kind: 'mcp-server', id: mcpId.name, file: mcpId.file });
-    });
+      // Add MCP servers
+      template.mcp?.forEach((mcpId: { name: string; file: string }) => {
+        units.push({ kind: 'mcp-server', id: mcpId.name, file: mcpId.file });
+      });
 
-    // Add networks
-    template.networks?.forEach((networkId: { name: string; file: string }) => {
-      units.push({ kind: 'network', id: networkId.name, file: networkId.file });
-    });
+      // Add networks
+      template.networks?.forEach((networkId: { name: string; file: string }) => {
+        units.push({ kind: 'network', id: networkId.name, file: networkId.file });
+      });
 
-    // Add other files
-    template.other?.forEach((otherId: { name: string; file: string }) => {
-      units.push({ kind: 'other', id: otherId.name, file: otherId.file });
-    });
+      // Add other files
+      template.other?.forEach((otherId: { name: string; file: string }) => {
+        units.push({ kind: 'other', id: otherId.name, file: otherId.file });
+      });
 
-    console.log('Discovered units:', JSON.stringify(units, null, 2));
+      console.log('Discovered units:', JSON.stringify(units, null, 2));
 
-    return {
-      units,
-      success: true,
-    };
+      if (units.length === 0) {
+        throw new Error(`No Mastra units (agents, workflows, tools) found in template.
+          Possible causes:
+          - Template may not follow standard Mastra structure
+          - AI agent couldn't analyze template files (model/token limits)
+          - Template is empty or in wrong branch
+
+          Debug steps:
+          - Check template has files in src/mastra/ directories
+          - Try a different branch (main vs openai)
+          - Check template repository structure manually`);
+      }
+
+      return {
+        units,
+        success: true,
+      };
+    } catch (error) {
+      console.error('Failed to discover units:', error);
+      return {
+        units: [],
+        success: false,
+        error: `Failed to discover units: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
   },
 });
 

@@ -1,6 +1,8 @@
 import { Container } from './shared';
 import Spinner from '@/components/ui/spinner';
-import { useEffect, useRef, createRef } from 'react';
+import { cn } from '@/lib/utils';
+import { ProcessStepList, ProcessStepProgressBar, type ProcessStep } from '@/components/ui/elements/steps';
+import { OctagonXIcon } from 'lucide-react';
 
 type TemplateInstallationProps = {
   name: string;
@@ -9,76 +11,11 @@ type TemplateInstallationProps = {
   workflowInfo?: any;
 };
 
-function TemplateStepStatus({
-  stepId,
-  stepData,
-  isActive,
-  stepRef,
-}: {
-  stepId: string;
-  stepData: any;
-  isActive: boolean;
-  stepRef?: React.RefObject<HTMLDivElement | null>;
-}) {
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'running':
-        return <Spinner className="w-4 h-4 text-accent6" />;
-      case 'success':
-        return <span className="text-accent1 text-sm">✓</span>;
-      case 'failed':
-        return <span className="text-accent2 text-sm">✗</span>;
-      case 'pending':
-        return <span className="text-icon2 text-sm">○</span>;
-      default:
-        return <span className="text-icon2 text-sm">○</span>;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'running':
-        return 'bg-surface3 ring-2 ring-accent6 bg-accent6Darker';
-      case 'success':
-        return 'bg-surface3 ring-2 ring-accent1 bg-accent1Darker';
-      case 'failed':
-        return 'bg-surface3 ring-2 ring-accent2 bg-accent2Darker';
-      case 'pending':
-        return 'bg-surface3 border border-border1';
-      default:
-        return 'bg-surface3 border border-border1';
-    }
-  };
-
-  // Always format the step ID as the title
-  const formatStepTitle = (stepId: string) => {
-    return stepId.charAt(0).toUpperCase() + stepId.slice(1).replace(/-/g, ' ');
-  };
-
-  return (
-    <div ref={stepRef} className={`rounded-lg p-4 transition-all duration-200 ${getStatusColor(stepData.status)}`}>
-      <div className="flex items-center justify-between">
-        <div className="min-w-0 flex-1">
-          {/* Always show formatted step name as title */}
-          <div className="font-medium text-icon6 text-base">{formatStepTitle(stepId)}</div>
-          {/* Show description separately if available */}
-          {stepData.description && <div className="text-icon3 text-sm mt-1">{stepData.description}</div>}
-        </div>
-        <div className="flex-shrink-0 ml-4">{getStatusIcon(stepData.status)}</div>
-      </div>
-    </div>
-  );
-}
-
 export function TemplateInstallation({ name, streamResult, runId, workflowInfo }: TemplateInstallationProps) {
   const phase = streamResult?.phase || 'initializing';
   const workflowState = streamResult?.payload?.workflowState;
   const currentStep = streamResult?.payload?.currentStep;
   const error = streamResult?.error;
-
-  // Refs for auto-scrolling to current step
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const stepRefs = useRef<Record<string, React.RefObject<HTMLDivElement | null>>>({});
 
   // Get steps from the workflow state
   const workflowSteps = workflowState?.steps || {};
@@ -105,45 +42,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   };
 
   const visibleSteps = Object.entries(workflowSteps).filter(([stepId, _]) => isUserVisibleStep(stepId));
-
-  // Create refs for each visible step
-  visibleSteps.forEach(([stepId]) => {
-    if (!stepRefs.current[stepId]) {
-      stepRefs.current[stepId] = createRef<HTMLDivElement>();
-    }
-  });
-
-  // Auto-scroll to current step
-  useEffect(() => {
-    if (currentStep?.id && stepRefs.current[currentStep.id]?.current && scrollContainerRef.current) {
-      const stepElement = stepRefs.current[currentStep.id].current;
-      const containerElement = scrollContainerRef.current;
-
-      if (stepElement) {
-        // Calculate the position to scroll to (center the step in the container)
-        const stepTop = stepElement.offsetTop;
-        const stepHeight = stepElement.offsetHeight;
-        const containerHeight = containerElement.offsetHeight;
-        const scrollTop = stepTop - containerHeight / 2 + stepHeight / 2;
-
-        containerElement.scrollTo({
-          top: Math.max(0, scrollTop),
-          behavior: 'smooth',
-        });
-      }
-    }
-  }, [currentStep?.id]);
-
-  // Calculate progress based on visible step statuses
-  const completedSteps = visibleSteps.filter(
-    ([_, stepData]: [string, any]) => stepData.status === 'success' || stepData.status === 'failed',
-  ).length;
   const totalSteps = visibleSteps.length;
-  const progressPercentage = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
-
-  // Determine if workflow is complete
-  const isComplete = phase === 'completed';
-  const progressBarColor = isComplete ? 'bg-accent1' : 'bg-accent6';
 
   const getPhaseMessage = () => {
     switch (phase) {
@@ -160,78 +59,53 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
     }
   };
 
-  const getPhaseIcon = () => {
-    switch (phase) {
-      case 'processing':
-        return <Spinner className="w-6 h-6" />;
-      case 'completed':
-        return <span className="text-2xl">🎉</span>;
-      case 'error':
-        return <span className="text-2xl">❌</span>;
-      case 'initializing':
-      default:
-        return <Spinner className="w-6 h-6" />;
-    }
-  };
+  const steps: ProcessStep[] = visibleSteps.map(([stepId, stepData]: [string, any]) => ({
+    id: stepId,
+    status: stepData?.status,
+    description: stepData?.description,
+    title: stepId.charAt(0).toUpperCase() + stepId.slice(1).replace(/-/g, ' '),
+    isActive: currentStep?.id === stepId,
+  }));
 
   return (
-    <Container className="space-y-6 text-icon3">
+    <Container className="space-y-6 text-icon3 mb-[2rem] content-center">
       {/* Header */}
-      <div className="text-center space-y-3">
-        <div className="flex items-center justify-center">{getPhaseIcon()}</div>
+      <div className="text-center">
         <h3 className="text-lg font-semibold text-icon5">{getPhaseMessage()}</h3>
-        {runId && <div className="text-xs text-gray-500">Run ID: {runId}</div>}
+        {streamResult?.runId && (
+          <div className="mt-[0.5rem] text-[0.75rem] text-icon3">Run ID: {streamResult.runId}</div>
+        )}
       </div>
 
       {/* Progress Bar */}
-      {hasSteps && totalSteps > 0 && (
-        <div className="space-y-2">
-          <div className="w-full bg-surface3 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all duration-500 ease-out ${progressBarColor}`}
-              style={{ width: `${progressPercentage}%` }}
-            />
-          </div>
-          <div className="text-xs text-icon3 text-center">
-            {completedSteps} of {totalSteps} steps completed ({progressPercentage}%)
-          </div>
+      {hasSteps && totalSteps > 0 && !['error'].includes(phase) && (
+        <div className="max-w-[30rem] w-full mx-auto px-[1.5rem]">
+          <ProcessStepProgressBar steps={steps} />
         </div>
       )}
 
       {/* Error Display */}
       {error && phase === 'error' && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-red-500 text-lg">❌</span>
-            <div>
-              <div className="font-medium text-red-800">Installation Failed</div>
-              <div className="text-sm text-red-600 mt-1">{error}</div>
-            </div>
-          </div>
+        <div
+          className={cn(
+            'rounded-lg text-icon5 p-[1.5rem] flex items-center gap-[.75rem] text-[0.875rem] bg-red-500/10',
+            '[&>svg]:w-[1.5rem] [&>svg]:h-[1.5rem] [&>svg]:opacity-70 [&>svg]:text-red-500',
+          )}
+        >
+          <OctagonXIcon />
+          {error || 'Something went wrong'}
         </div>
       )}
 
       {/* Dynamic Steps Display */}
-      {hasSteps && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-icon4">Installation Progress</h4>
-          <div ref={scrollContainerRef} className="space-y-4 max-h-80 overflow-y-auto p-1">
-            {visibleSteps.map(([stepId, stepData]: [string, any]) => (
-              <TemplateStepStatus
-                key={stepId}
-                stepId={stepId}
-                stepData={stepData}
-                isActive={currentStep?.id === stepId}
-                stepRef={stepRefs.current[stepId]}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {hasSteps && <ProcessStepList steps={steps} currentStep={currentStep} className="pb-[1rem]" />}
 
       {/* Simple loading state for initialization */}
-      {phase === 'initializing' && !hasSteps && (
-        <div className="text-center text-sm text-icon3">This may take some time...</div>
+      {!hasSteps && phase === 'initializing' && (
+        <div className="text-center text-sm text-icon3 grid gap-[1rem] justify-items-center">
+          <Spinner />
+          <p>This may take some time...</p>
+        </div>
       )}
     </Container>
   );
