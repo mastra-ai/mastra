@@ -256,6 +256,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       activePaths: [],
       suspendedPaths: {},
       serializedStepGraph: [],
+      waitingPaths: {},
       timestamp: Date.now(),
       status: 'success' as WorkflowRunState['status'],
     };
@@ -285,6 +286,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       activePaths: [],
       suspendedPaths: {},
       serializedStepGraph: [],
+      waitingPaths: {},
       timestamp: Date.now(),
       status: 'success' as WorkflowRunState['status'],
     };
@@ -442,6 +444,158 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
 
       expect(loadedSnapshot).toEqual(complexSnapshot);
+    });
+
+    // implement on other stores
+    it.todo('should update workflow results in snapshot', async () => {
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const snapshot = {
+        status: 'running',
+        context: {},
+      } as any;
+
+      await storage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot,
+      });
+
+      const updatedSnapshot = await storage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: {
+          status: 'success',
+          output: { data: 'test' },
+          payload: { data: 'test' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        runtimeContext: {
+          test: 'test',
+        },
+      });
+
+      expect(updatedSnapshot).toEqual({
+        'step-1': {
+          status: 'success',
+          output: { data: 'test' },
+          payload: { data: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+
+      await Promise.all([
+        storage.updateWorkflowResults({
+          workflowName,
+          runId,
+          stepId: 'step-1',
+          result: {
+            status: 'success',
+            output: { data: 'test!' },
+            payload: { data: 'test' },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          runtimeContext: { test: 'test' },
+        }),
+        storage.updateWorkflowResults({
+          workflowName,
+          runId,
+          stepId: 'step-2',
+          result: {
+            status: 'success',
+            output: { data: 'test2' },
+            payload: { data: 'test' },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+          runtimeContext: { test2: 'test' },
+        }),
+      ]);
+
+      const finalSnapshot = await storage.loadWorkflowSnapshot({
+        workflowName,
+        runId,
+      });
+
+      expect(finalSnapshot?.context).toEqual({
+        'step-1': {
+          status: 'success',
+          output: { data: 'test!' },
+          payload: { data: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'step-2': {
+          status: 'success',
+          output: { data: 'test2' },
+          payload: { data: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    // implement on other stores
+    it.todo('should update workflow state in snapshot', async () => {
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const snapshot = {
+        status: 'running',
+        context: {},
+      } as any;
+
+      await storage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot,
+      });
+
+      await Promise.all([
+        storage.updateWorkflowState({
+          workflowName,
+          runId,
+          opts: {
+            status: 'success',
+            waitingPaths: {
+              test: [0],
+            },
+          },
+        }),
+        storage.updateWorkflowState({
+          workflowName,
+          runId,
+          opts: {
+            status: 'success',
+            result: {
+              status: 'success',
+              output: { data: 'test2' },
+              payload: { data: 'test' },
+              startedAt: Date.now(),
+              endedAt: Date.now(),
+            },
+          },
+        }),
+      ]);
+
+      const finalSnapshot = await storage.loadWorkflowSnapshot({
+        workflowName,
+        runId,
+      });
+
+      expect(finalSnapshot?.result).toEqual({
+        status: 'success',
+        output: { data: 'test2' },
+        payload: { data: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(finalSnapshot?.waitingPaths).toEqual({
+        test: [0],
+      });
     });
   });
 }

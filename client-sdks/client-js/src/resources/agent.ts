@@ -1,21 +1,21 @@
-import {
-  parsePartialJson,
-  processDataStream,
-  type JSONValue,
-  type ReasoningUIPart,
-  type TextUIPart,
-  type ToolInvocation,
-  type ToolInvocationUIPart,
-  type UIMessage,
-  type UseChatOptions,
+import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
+import type {
+  JSONValue,
+  ReasoningUIPart,
+  TextUIPart,
+  ToolInvocation,
+  ToolInvocationUIPart,
+  UIMessage,
+  UseChatOptions,
 } from '@ai-sdk/ui-utils';
-import { Tool, type CoreMessage, type OutputSchema } from '@mastra/core';
-import { type GenerateReturn } from '@mastra/core/llm';
-import type { JSONSchema7 } from 'json-schema';
-import { ZodSchema } from 'zod';
-import { zodToJsonSchema } from '../utils/zod-to-json-schema';
-import { processClientTools } from '../utils/process-client-tools';
 import { v4 as uuid } from '@lukeed/uuid';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
+import type { Tool } from '@mastra/core/tools';
+import type { JSONSchema7 } from 'json-schema';
+import type { ZodType } from 'zod';
 
 import type {
   GenerateParams,
@@ -28,12 +28,11 @@ import type {
   StreamVNextParams,
 } from '../types';
 
-import { BaseResource } from './base';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { parseClientRuntimeContext } from '../utils';
+import { processClientTools } from '../utils/process-client-tools';
 import { processMastraStream } from '../utils/process-mastra-stream';
-import type { MastraModelOutput } from '@mastra/core/stream';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
+import { zodToJsonSchema } from '../utils/zod-to-json-schema';
+import { BaseResource } from './base';
 
 async function executeToolCallAndRespond({
   response,
@@ -195,15 +194,15 @@ export class Agent extends BaseResource {
   async generate(
     params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
-  async generate<Output extends JSONSchema7 | ZodSchema>(
+  async generate<Output extends JSONSchema7 | ZodType>(
     params: GenerateParams<Output> & { output: Output; experimental_output?: never },
   ): Promise<GenerateReturn<any, Output, undefined>>;
-  async generate<StructuredOutput extends JSONSchema7 | ZodSchema>(
+  async generate<StructuredOutput extends JSONSchema7 | ZodType>(
     params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
   ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generate<
-    Output extends JSONSchema7 | ZodSchema | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
+    Output extends JSONSchema7 | ZodType | undefined = undefined,
+    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
@@ -277,8 +276,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<OUTPUT extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async generateVNext<T extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<T>,
   ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     const processedParams = {
       ...params,
@@ -662,7 +661,7 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async stream<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
     params: StreamParams<T>,
   ): Promise<
     Response & {
@@ -1188,8 +1187,8 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async streamVNext<OUTPUT extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<OUTPUT>,
+  async streamVNext<T extends OutputSchema | undefined = undefined>(
+    params: StreamVNextParams<T>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1258,9 +1257,7 @@ export class Agent extends BaseResource {
 
     try {
       let toolCalls: ToolInvocation[] = [];
-      let finishReasonToolCalls = false;
       let messages: UIMessage[] = [];
-      let hasProcessedToolCalls = false;
 
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
@@ -1373,6 +1370,8 @@ export class Agent extends BaseResource {
             }
           } else {
             setTimeout(() => {
+              // We can't close the stream in this function, we have to wait until it's done
+              // eslint-disable-next-line @typescript-eslint/no-floating-promises
               writable.close();
             }, 0);
           }

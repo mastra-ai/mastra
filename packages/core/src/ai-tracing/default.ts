@@ -67,6 +67,7 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
   public traceId: string;
   public startTime: Date;
   public endTime?: Date;
+  public isEvent: boolean;
   public aiTracing: MastraAITracing;
   public input?: any;
   public output?: any;
@@ -78,6 +79,7 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
+  private logger: IMastraLogger;
 
   constructor(options: AISpanOptions<TType>, aiTracing: MastraAITracing) {
     this.id = generateSpanId();
@@ -90,6 +92,11 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     this.startTime = new Date();
     this.aiTracing = aiTracing;
     this.input = options.input;
+    this.isEvent = options.isEvent;
+    this.logger = new ConsoleLogger({
+      name: 'default-ai-span',
+      level: LogLevel.INFO, // Set to INFO so that info() calls actually log
+    });
 
     // Set trace ID: generate new for root spans, inherit for child spans
     if (!options.parent) {
@@ -99,9 +106,19 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
       // Child span inherits trace ID from root span
       this.traceId = options.parent.trace.traceId;
     }
+
+    if (this.isEvent) {
+      // Event spans don't have endTime or input.
+      // Event spans are immediately emitted by the base class via the end() event.
+      this.output = options.output;
+    }
   }
 
   end(options?: { output?: any; attributes?: Partial<AISpanTypeMap[TType]>; metadata?: Record<string, any> }): void {
+    if (this.isEvent) {
+      this.logger.warn(`End event is not available on event spans`);
+      return;
+    }
     this.endTime = new Date();
     if (options?.output !== undefined) {
       this.output = options.output;
@@ -121,6 +138,11 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     attributes?: Partial<AISpanTypeMap[TType]>;
     metadata?: Record<string, any>;
   }): void {
+    if (this.isEvent) {
+      this.logger.warn(`Error event is not available on event spans`);
+      return;
+    }
+
     const { error, endSpan = true, attributes, metadata } = options;
 
     this.errorInfo =
@@ -163,6 +185,21 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     return this.aiTracing.startSpan({
       ...options,
       parent: this,
+      isEvent: false,
+    });
+  }
+
+  createEventSpan<TChildType extends AISpanType>(options: {
+    type: TChildType;
+    name: string;
+    output?: any;
+    attributes?: AISpanTypeMap[TChildType];
+    metadata?: Record<string, any>;
+  }): AISpan<TChildType> {
+    return this.aiTracing.startSpan({
+      ...options,
+      parent: this,
+      isEvent: true,
     });
   }
 
@@ -172,6 +209,11 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     attributes?: Partial<AISpanTypeMap[TType]>;
     metadata?: Record<string, any>;
   }): void {
+    if (this.isEvent) {
+      this.logger.warn(`Update() is not available on event spans`);
+      return;
+    }
+
     if (options?.input !== undefined) {
       this.input = options.input;
     }

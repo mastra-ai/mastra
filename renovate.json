@@ -71,7 +71,8 @@
     },
     {
       "groupName": "React",
-      "matchPackageNames": ["@types/react", "@types/react-dom", "react", "react-dom"]
+      "matchPackageNames": ["@types/react", "@types/react-dom", "react", "react-dom"],
+      "automerge": true
     },
     {
       "groupName": "CopilotKit",
@@ -128,7 +129,8 @@
         "vitest",
         "@vitest/*",
         "tsx"
-      ]
+      ],
+      "automerge": true
     },
     {
       "groupName": "Schema",
@@ -143,19 +145,21 @@
       "groupName": "Cloudflare",
       "commitMessageTopic": "Cloudflare",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["cloudflare", "miniflare"],
+      "matchPackageNames": ["cloudflare", "miniflare", "@cloudflare/workers-types"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "dependencyDashboardApproval": false
+      "dependencyDashboardApproval": false,
+      "automerge": true
     },
     {
       "groupName": "AWS SDK",
       "commitMessageTopic": "AWS SDK",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["@aws-sdk/lib-dynamodb", "@aws-sdk/client-dynamodb"],
+      "matchSourceUrls": ["https://github.com/aws/aws-sdk-js-v3"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "dependencyDashboardApproval": false
+      "dependencyDashboardApproval": false,
+      "automerge": true
     }
   ]
 }

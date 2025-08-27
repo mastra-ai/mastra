@@ -4,9 +4,9 @@ import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import type { Mastra } from '@mastra/core';
-import { Telemetry } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Telemetry } from '@mastra/core/telemetry';
 import { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -20,13 +20,13 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
-
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
 import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks/router';
+import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
 import { telemetryRouter } from './handlers/routes/telemetry/router';
 import { toolsRouter } from './handlers/routes/tools/router';
@@ -206,6 +206,8 @@ export async function createHonoServer(
         app.put(route.path, ...middlewares, handler);
       } else if (route.method === 'DELETE') {
         app.delete(route.path, ...middlewares, handler);
+      } else if (route.method === 'PATCH') {
+        app.patch(route.path, ...middlewares, handler);
       } else if (route.method === 'ALL') {
         app.all(route.path, ...middlewares, handler);
       }
@@ -406,6 +408,8 @@ export async function createHonoServer(
   app.route('/api/memory', memoryRoutes(bodyLimitOptions));
   // Telemetry routes
   app.route('/api/telemetry', telemetryRouter());
+  // Observability routes
+  app.route('/api/observability', observabilityRouter());
   // Legacy Workflow routes
   app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
   // Log routes
@@ -559,6 +563,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       }
     },
   );
+
+  await mastra.startEventEngine();
 
   return server;
 }

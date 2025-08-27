@@ -30,9 +30,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - name: Configure npm registry
+        run: mkdir -p ~/setup-pnpm && echo "registry=https://registry.yarnpkg.com" > ~/setup-pnpm/.npmrc
+
+      - uses: wardpeet/action-setup@pnpm-registry
         name: Install pnpm
         with:
+          registry: https://registry.yarnpkg.com
           run_install: false
 
       - name: Setup Node.js 20.x
@@ -40,6 +44,7 @@ jobs:
         with:
           node-version: 20.19.1
           cache: 'pnpm'
+          registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
         run: pnpm install

@@ -1,7 +1,8 @@
 import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
+import type { Mastra } from '../mastra';
+import type { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
-import type { SerializedStepFlowEntry } from './workflow';
 
 export type { ChunkType } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -197,17 +198,9 @@ export interface WorkflowRunState {
   serializedStepGraph: SerializedStepFlowEntry[];
   activePaths: Array<unknown>;
   suspendedPaths: Record<string, number[]>;
+  waitingPaths: Record<string, number[]>;
   timestamp: number;
 }
-
-type SerializedStep = {
-  id: string;
-  description: string;
-  inputSchema: string | undefined;
-  outputSchema: string | undefined;
-  resumeSchema: string | undefined;
-  suspendSchema: string | undefined;
-};
 
 export type WorkflowInfo = {
   steps: Record<string, SerializedStep>;
@@ -217,4 +210,159 @@ export type WorkflowInfo = {
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
+};
+
+export type DefaultEngineType = {};
+
+export type StepFlowEntry<TEngineType = DefaultEngineType> =
+  | { type: 'step'; step: Step }
+  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
+  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
+  | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
+  | {
+      type: 'parallel';
+      steps: StepFlowEntry[];
+    }
+  | {
+      type: 'conditional';
+      steps: StepFlowEntry[];
+      conditions: ExecuteFunction<any, any, any, any, TEngineType>[];
+      serializedConditions: { id: string; fn: string }[];
+    }
+  | {
+      type: 'loop';
+      step: Step;
+      condition: ExecuteFunction<any, any, any, any, TEngineType>;
+      serializedCondition: { id: string; fn: string };
+      loopType: 'dowhile' | 'dountil';
+    }
+  | {
+      type: 'foreach';
+      step: Step;
+      opts: {
+        concurrency: number;
+      };
+    };
+
+export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
+  Step<any, any, any, any, any, TEngineType>,
+  'id' | 'description'
+> & {
+  component?: string;
+  serializedStepFlow?: SerializedStepFlowEntry[];
+  mapConfig?: string;
+};
+
+export type SerializedStepFlowEntry =
+  | {
+      type: 'step';
+      step: SerializedStep;
+    }
+  | {
+      type: 'sleep';
+      id: string;
+      duration?: number;
+      fn?: string;
+    }
+  | {
+      type: 'sleepUntil';
+      id: string;
+      date?: Date;
+      fn?: string;
+    }
+  | {
+      type: 'waitForEvent';
+      event: string;
+      step: SerializedStep;
+      timeout?: number;
+    }
+  | {
+      type: 'parallel';
+      steps: SerializedStepFlowEntry[];
+    }
+  | {
+      type: 'conditional';
+      steps: SerializedStepFlowEntry[];
+      serializedConditions: { id: string; fn: string }[];
+    }
+  | {
+      type: 'loop';
+      step: SerializedStep;
+      serializedCondition: { id: string; fn: string };
+      loopType: 'dowhile' | 'dountil';
+    }
+  | {
+      type: 'foreach';
+      step: SerializedStep;
+      opts: {
+        concurrency: number;
+      };
+    };
+
+export type StepWithComponent = Step<string, any, any, any, any, any> & {
+  component?: string;
+  steps?: Record<string, StepWithComponent>;
+};
+
+export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
+  | {
+      status: 'success';
+      result: z.infer<TOutput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+    }
+  | {
+      status: 'failed';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+      error: Error;
+    }
+  | {
+      status: 'suspended';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+      suspended: [string[], ...string[][]];
+    };
+
+export type WorkflowConfig<
+  TWorkflowId extends string = string,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
+> = {
+  mastra?: Mastra;
+  id: TWorkflowId;
+  description?: string | undefined;
+  inputSchema: TInput;
+  outputSchema: TOutput;
+  executionEngine?: ExecutionEngine;
+  steps?: TSteps;
+  retryConfig?: {
+    attempts?: number;
+    delay?: number;
+  };
 };
