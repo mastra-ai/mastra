@@ -1,7 +1,9 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 import pc from 'picocolors';
+import type { PackageJson} from 'type-fest'
 
+import pkgJson from '../package.json' 
 import type { CLI_ORIGIN } from './analytics/index';
 import { PosthogAnalytics, setAnalytics } from './analytics/index';
 import { addScorer } from './commands/actions/add-scorer';
@@ -13,9 +15,9 @@ import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
-import { getVersion } from './utils/version';
 
-const version = await getVersion();
+const mastraPkg = pkgJson as PackageJson
+export const version = mastraPkg.version
 
 export const analytics = new PosthogAnalytics({
   apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',

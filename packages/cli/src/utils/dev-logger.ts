@@ -1,8 +1,5 @@
 import pc from 'picocolors';
-import { getVersion } from './version';
-
-const version = await getVersion();
-
+import { version } from '..';
 interface DevLoggerOptions {
   timestamp?: boolean;
   colors?: boolean;
