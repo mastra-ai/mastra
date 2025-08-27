@@ -4,11 +4,13 @@ const meta = {
   bias: "Bias",
   completeness: "Completeness",
   "content-similarity": "Content Similarity",
+  "context-precision": "Context Precision",
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
   "keyword-coverage": "Keyword Coverage",
   "textual-difference": "Textual Difference",
   "tone-consistency": "Tone Consistency",
+  "tool-call-accuracy": "Tool Call Accuracy",
   toxicity: "Toxicity",
 };
 export default meta;

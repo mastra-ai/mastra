@@ -4,6 +4,7 @@ import type { JSONSchema7Type } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
 
 import type { IAction, IExecutionContext, MastraUnion } from '../action';
+import type { TraceContext } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
 import type { ToolStream } from './stream';
@@ -54,6 +55,7 @@ export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined 
   mastra?: MastraUnion;
   runtimeContext: RuntimeContext;
   writer?: ToolStream<any>;
+  tracingContext?: TraceContext;
 }
 
 export interface ToolAction<

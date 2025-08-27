@@ -1,10 +1,10 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores';
 import type { Trace } from '../telemetry';
-
-import type { WorkflowRunState } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
   TABLE_WORKFLOW_SNAPSHOT,
@@ -15,6 +15,7 @@ import {
   TABLE_RESOURCES,
   TABLE_SCORERS,
   TABLE_SCHEMAS,
+  TABLE_AI_SPANS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -24,6 +25,7 @@ import type {
   TracesStorage,
   MemoryStorage,
   LegacyEvalsStorage,
+  ObservabilityStorage,
 } from './domains';
 import type {
   EvalRow,
@@ -38,6 +40,9 @@ import type {
   StorageGetTracesArg,
   PaginationArgs,
   StorageGetTracesPaginatedArg,
+  AISpanRecord,
+  AITraceRecord,
+  AITracesPaginatedArg,
 } from './types';
 
 export type StorageDomains = {
@@ -47,6 +52,7 @@ export type StorageDomains = {
   scores: ScoresStorage;
   traces: TracesStorage;
   memory: MemoryStorage;
+  observability?: ObservabilityStorage;
 };
 
 export function ensureDate(date: Date | string | undefined): Date | undefined {
@@ -102,6 +108,7 @@ export abstract class MastraStorage extends MastraBase {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
+    aiTracing?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -109,6 +116,7 @@ export abstract class MastraStorage extends MastraBase {
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
+      aiTracing: false,
     };
   }
 
@@ -265,6 +273,14 @@ export abstract class MastraStorage extends MastraBase {
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+  abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  abstract getMessagesById({
+    messageIds,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
 
   abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
@@ -339,6 +355,15 @@ export abstract class MastraStorage extends MastraBase {
       );
     }
 
+    if (this.supports.aiTracing) {
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_AI_SPANS,
+          schema: TABLE_SCHEMAS[TABLE_AI_SPANS],
+        }),
+      );
+    }
+
     this.hasInitialized = Promise.all(tableCreationTasks).then(() => true);
 
     await this.hasInitialized;
@@ -374,6 +399,35 @@ export abstract class MastraStorage extends MastraBase {
       record: data,
     });
   }
+
+  abstract updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>>;
+
+  abstract updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined>;
 
   async loadWorkflowSnapshot({
     workflowName,
@@ -465,4 +519,125 @@ export abstract class MastraStorage extends MastraBase {
   abstract getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
+
+  /**
+   * OBSERVABILITY
+   */
+
+  /**
+   * Creates a single AI span record in the storage provider.
+   */
+  async createAISpan(span: AISpanRecord): Promise<void> {
+    if (this.stores?.observability) {
+      return this.stores.observability.createAISpan(span);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_CREATE_AI_SPAN_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Updates a single AI span with partial data. Primarily used for realtime trace creation.
+   */
+  async updateAISpan(params: {
+    spanId: string;
+    traceId: string;
+    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+  }): Promise<void> {
+    if (this.stores?.observability) {
+      return this.stores.observability.updateAISpan(params);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_UPDATE_AI_SPAN_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves a single AI trace with all its associated spans.
+   */
+  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+    if (this.stores?.observability) {
+      return this.stores.observability.getAITrace(traceId);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_AI_TRACE_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Retrieves a paginated list of AI traces with optional filtering.
+   */
+  async getAITracesPaginated(
+    args: AITracesPaginatedArg,
+  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+    if (this.stores?.observability) {
+      return this.stores.observability.getAITracesPaginated(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_AI_TRACES_PAGINATED_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Creates multiple AI spans in a single batch.
+   */
+  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+    if (this.stores?.observability) {
+      return this.stores.observability.batchCreateAISpans(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_BATCH_CREATE_AI_SPANS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Updates multiple AI spans in a single batch.
+   */
+  async batchUpdateAISpans(args: {
+    records: {
+      traceId: string;
+      spanId: string;
+      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    }[];
+  }): Promise<void> {
+    if (this.stores?.observability) {
+      return this.stores.observability.batchUpdateAISpans(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_BATCH_UPDATE_AI_SPANS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Deletes multiple AI traces and all their associated spans in a single batch operation.
+   */
+  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+    if (this.stores?.observability) {
+      return this.stores.observability.batchDeleteAITraces(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_BATCH_DELETE_AI_TRACES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
 }

@@ -1,5 +1,290 @@
 # @mastra/deployer
 
+## 0.15.2
+
+### Patch Changes
+
+- [`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix peerdpes for @mastra/core
+
+- Updated dependencies [[`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430)]:
+  - @mastra/server@0.15.2
+  - @mastra/core@0.15.2
+
+## 0.15.1
+
+### Patch Changes
+
+- [`95b2aa9`](https://github.com/mastra-ai/mastra/commit/95b2aa908230919e67efcac0d69005a2d5745298) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix peerdeps @mastra/core
+
+- Updated dependencies [[`95b2aa9`](https://github.com/mastra-ai/mastra/commit/95b2aa908230919e67efcac0d69005a2d5745298)]:
+  - @mastra/server@0.15.1
+  - @mastra/core@0.15.1
+
+## 0.15.0
+
+### Minor Changes
+
+- [#7028](https://github.com/mastra-ai/mastra/pull/7028) [`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump core peerdependency
+
+- [#7032](https://github.com/mastra-ai/mastra/pull/7032) [`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump zod peerdep to 3.25.0 to support both v3/v4
+
+### Patch Changes
+
+- [#6798](https://github.com/mastra-ai/mastra/pull/6798) [`e9a36bd`](https://github.com/mastra-ai/mastra/commit/e9a36bd03ed032528b60186a318f563ebf59c01a) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.46.4` ↗︎](https://www.npmjs.com/package/rollup/v/4.46.4) (from `~4.46.2`, in `dependencies`)
+
+- [#6965](https://github.com/mastra-ai/mastra/pull/6965) [`2b38a60`](https://github.com/mastra-ai/mastra/commit/2b38a60da0c1153028d8241c7748b41c5fb81121) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.47.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.47.1) (from `~4.46.4`, in `dependencies`)
+
+- [#6995](https://github.com/mastra-ai/mastra/pull/6995) [`681252d`](https://github.com/mastra-ai/mastra/commit/681252d20e57fcee6821377dea96cacab3bc230f) Thanks [@wardpeet](https://github.com/wardpeet)! - Improve type resolving
+
+- [#6967](https://github.com/mastra-ai/mastra/pull/6967) [`01be5d3`](https://github.com/mastra-ai/mastra/commit/01be5d358fad8faa101e5c69dfa54562c02cc0af) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Implement AI traces for server apis and client sdk
+
+- [#7017](https://github.com/mastra-ai/mastra/pull/7017) [`2a96802`](https://github.com/mastra-ai/mastra/commit/2a96802f76790ebb86a1bcb254398dccf27e5479) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Fix cloudflare deployer - disable esmShim for cloudflare
+
+- [#6924](https://github.com/mastra-ai/mastra/pull/6924) [`de24804`](https://github.com/mastra-ai/mastra/commit/de248044e79b407d211b339ce3ed4dc6e1630704) Thanks [@LekoArts](https://github.com/LekoArts)! - Improve internal mechanism to detect and handle workspace packages
+
+- [#6942](https://github.com/mastra-ai/mastra/pull/6942) [`ca8ec2f`](https://github.com/mastra-ai/mastra/commit/ca8ec2f61884b9dfec5fc0d5f4f29d281ad13c01) Thanks [@wardpeet](https://github.com/wardpeet)! - Add zod as peerdeps for all packages
+
+- Updated dependencies [[`0778757`](https://github.com/mastra-ai/mastra/commit/07787570e4addbd501522037bd2542c3d9e26822), [`943a7f3`](https://github.com/mastra-ai/mastra/commit/943a7f3dbc6a8ab3f9b7bc7c8a1c5b319c3d7f56), [`681252d`](https://github.com/mastra-ai/mastra/commit/681252d20e57fcee6821377dea96cacab3bc230f), [`01be5d3`](https://github.com/mastra-ai/mastra/commit/01be5d358fad8faa101e5c69dfa54562c02cc0af), [`bf504a8`](https://github.com/mastra-ai/mastra/commit/bf504a833051f6f321d832cc7d631f3cb86d657b), [`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec), [`be49354`](https://github.com/mastra-ai/mastra/commit/be493546dca540101923ec700feb31f9a13939f2), [`d591ab3`](https://github.com/mastra-ai/mastra/commit/d591ab3ecc985c1870c0db347f8d7a20f7360536), [`ba82abe`](https://github.com/mastra-ai/mastra/commit/ba82abe76e869316bb5a9c95e8ea3946f3436fae), [`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246), [`e6f5046`](https://github.com/mastra-ai/mastra/commit/e6f50467aff317e67e8bd74c485c3fbe2a5a6db1), [`82d9f64`](https://github.com/mastra-ai/mastra/commit/82d9f647fbe4f0177320e7c05073fce88599aa95), [`2e58325`](https://github.com/mastra-ai/mastra/commit/2e58325beb170f5b92f856e27d915cd26917e5e6), [`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c), [`4189486`](https://github.com/mastra-ai/mastra/commit/4189486c6718fda78347bdf4ce4d3fc33b2236e1), [`ca8ec2f`](https://github.com/mastra-ai/mastra/commit/ca8ec2f61884b9dfec5fc0d5f4f29d281ad13c01), [`9613558`](https://github.com/mastra-ai/mastra/commit/9613558e6475f4710e05d1be7553a32ee7bddc20)]:
+  - @mastra/core@0.15.0
+  - @mastra/server@0.15.0
+
+## 0.15.0-alpha.4
+
+### Minor Changes
+
+- [#7032](https://github.com/mastra-ai/mastra/pull/7032) [`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump zod peerdep to 3.25.0 to support both v3/v4
+
+### Patch Changes
+
+- Updated dependencies [[`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c)]:
+  - @mastra/server@0.15.0-alpha.4
+  - @mastra/core@0.15.0-alpha.4
+
+## 0.15.0-alpha.3
+
+### Minor Changes
+
+- [#7028](https://github.com/mastra-ai/mastra/pull/7028) [`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump core peerdependency
+
+### Patch Changes
+
+- Updated dependencies [[`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec)]:
+  - @mastra/server@0.15.0-alpha.3
+  - @mastra/core@0.15.0-alpha.3
+
+## 0.14.2-alpha.2
+
+### Patch Changes
+
+- [#7017](https://github.com/mastra-ai/mastra/pull/7017) [`2a96802`](https://github.com/mastra-ai/mastra/commit/2a96802f76790ebb86a1bcb254398dccf27e5479) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Fix cloudflare deployer - disable esmShim for cloudflare
+
+- Updated dependencies [[`2e58325`](https://github.com/mastra-ai/mastra/commit/2e58325beb170f5b92f856e27d915cd26917e5e6)]:
+  - @mastra/core@0.14.2-alpha.2
+  - @mastra/server@0.14.2-alpha.2
+
+## 0.14.2-alpha.1
+
+### Patch Changes
+
+- [#6965](https://github.com/mastra-ai/mastra/pull/6965) [`2b38a60`](https://github.com/mastra-ai/mastra/commit/2b38a60da0c1153028d8241c7748b41c5fb81121) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.47.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.47.1) (from `~4.46.4`, in `dependencies`)
+
+- [#6995](https://github.com/mastra-ai/mastra/pull/6995) [`681252d`](https://github.com/mastra-ai/mastra/commit/681252d20e57fcee6821377dea96cacab3bc230f) Thanks [@wardpeet](https://github.com/wardpeet)! - Improve type resolving
+
+- [#6967](https://github.com/mastra-ai/mastra/pull/6967) [`01be5d3`](https://github.com/mastra-ai/mastra/commit/01be5d358fad8faa101e5c69dfa54562c02cc0af) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Implement AI traces for server apis and client sdk
+
+- [#6942](https://github.com/mastra-ai/mastra/pull/6942) [`ca8ec2f`](https://github.com/mastra-ai/mastra/commit/ca8ec2f61884b9dfec5fc0d5f4f29d281ad13c01) Thanks [@wardpeet](https://github.com/wardpeet)! - Add zod as peerdeps for all packages
+
+- Updated dependencies [[`943a7f3`](https://github.com/mastra-ai/mastra/commit/943a7f3dbc6a8ab3f9b7bc7c8a1c5b319c3d7f56), [`681252d`](https://github.com/mastra-ai/mastra/commit/681252d20e57fcee6821377dea96cacab3bc230f), [`01be5d3`](https://github.com/mastra-ai/mastra/commit/01be5d358fad8faa101e5c69dfa54562c02cc0af), [`be49354`](https://github.com/mastra-ai/mastra/commit/be493546dca540101923ec700feb31f9a13939f2), [`d591ab3`](https://github.com/mastra-ai/mastra/commit/d591ab3ecc985c1870c0db347f8d7a20f7360536), [`ba82abe`](https://github.com/mastra-ai/mastra/commit/ba82abe76e869316bb5a9c95e8ea3946f3436fae), [`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246), [`82d9f64`](https://github.com/mastra-ai/mastra/commit/82d9f647fbe4f0177320e7c05073fce88599aa95), [`4189486`](https://github.com/mastra-ai/mastra/commit/4189486c6718fda78347bdf4ce4d3fc33b2236e1), [`ca8ec2f`](https://github.com/mastra-ai/mastra/commit/ca8ec2f61884b9dfec5fc0d5f4f29d281ad13c01)]:
+  - @mastra/core@0.14.2-alpha.1
+  - @mastra/server@0.14.2-alpha.1
+
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- [#6798](https://github.com/mastra-ai/mastra/pull/6798) [`e9a36bd`](https://github.com/mastra-ai/mastra/commit/e9a36bd03ed032528b60186a318f563ebf59c01a) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.46.4` ↗︎](https://www.npmjs.com/package/rollup/v/4.46.4) (from `~4.46.2`, in `dependencies`)
+
+- [#6924](https://github.com/mastra-ai/mastra/pull/6924) [`de24804`](https://github.com/mastra-ai/mastra/commit/de248044e79b407d211b339ce3ed4dc6e1630704) Thanks [@LekoArts](https://github.com/LekoArts)! - Improve internal mechanism to detect and handle workspace packages
+
+- Updated dependencies [[`0778757`](https://github.com/mastra-ai/mastra/commit/07787570e4addbd501522037bd2542c3d9e26822), [`bf504a8`](https://github.com/mastra-ai/mastra/commit/bf504a833051f6f321d832cc7d631f3cb86d657b), [`e6f5046`](https://github.com/mastra-ai/mastra/commit/e6f50467aff317e67e8bd74c485c3fbe2a5a6db1), [`9613558`](https://github.com/mastra-ai/mastra/commit/9613558e6475f4710e05d1be7553a32ee7bddc20)]:
+  - @mastra/core@0.14.2-alpha.0
+  - @mastra/server@0.14.2-alpha.0
+
+## 0.14.1
+
+### Patch Changes
+
+- [#6914](https://github.com/mastra-ai/mastra/pull/6914) [`4c8956f`](https://github.com/mastra-ai/mastra/commit/4c8956f3110ccf39595e022f127a44a0a5c09c86) Thanks [@LekoArts](https://github.com/LekoArts)! - Add the `@rollup/plugin-esm-shim` plugin to the bundler. If your code (or dependencies) uses things like `__dirname` you might see an error during `mastra dev` which is fixed now.
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1
+  - @mastra/server@0.14.1
+
+## 0.14.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869), [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236)]:
+  - @mastra/core@0.14.1-alpha.1
+  - @mastra/server@0.14.1-alpha.1
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- [#6914](https://github.com/mastra-ai/mastra/pull/6914) [`4c8956f`](https://github.com/mastra-ai/mastra/commit/4c8956f3110ccf39595e022f127a44a0a5c09c86) Thanks [@LekoArts](https://github.com/LekoArts)! - Add the `@rollup/plugin-esm-shim` plugin to the bundler. If your code (or dependencies) uses things like `__dirname` you might see an error during `mastra dev` which is fixed now.
+
+- Updated dependencies [[`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27), [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02)]:
+  - @mastra/core@0.14.1-alpha.0
+  - @mastra/server@0.14.1-alpha.0
+
+## 0.14.0
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- bca2ba3: Fix issue where `.json` files couldn't be imported and used with deployers
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+- 6313063: Implement model switcher in playground
+- 96518cc: Bundling cleanup code improvements
+- c712849: Add handlers for VNext
+- 04dcd66: Fix babel-preset-typescript import
+- 2454423: Agentic loop and streaming workflow: generateVNext and streamVNext
+- a9916bd: Model switcher v5 support
+- 95e1330: Move to default rollup resolve from resolveFrom pkg
+- 33eb340: Optimize workspace dependency detection in bundler. Check workspace map directly before resolving package.json path
+- 6dfc4a6: In a previous release analysis of the Mastra configuration was added. A bug was fixed to properly support TypeScript.
+- Updated dependencies [227c7e6]
+- Updated dependencies [12cae67]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [cf4f357]
+- Updated dependencies [03997ae]
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [2454423]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+- Updated dependencies [a722c0b]
+- Updated dependencies [c30bca8]
+- Updated dependencies [3b5fec7]
+- Updated dependencies [57f7019]
+- Updated dependencies [a8f129d]
+- Updated dependencies [4908422]
+  - @mastra/core@0.14.0
+  - @mastra/server@0.14.0
+
+## 0.14.0-alpha.7
+
+### Minor Changes
+
+- 03997ae: Update peer deps of core
+
+### Patch Changes
+
+- Updated dependencies [03997ae]
+  - @mastra/server@0.14.0-alpha.7
+  - @mastra/core@0.14.0-alpha.7
+
+## 0.14.0-alpha.6
+
+### Patch Changes
+
+- a9916bd: Model switcher v5 support
+- Updated dependencies [ad888a2]
+- Updated dependencies [481751d]
+- Updated dependencies [194e395]
+- Updated dependencies [a9916bd]
+  - @mastra/core@0.14.0-alpha.6
+  - @mastra/server@0.14.0-alpha.6
+
+## 0.14.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [4908422]
+  - @mastra/server@0.14.0-alpha.5
+  - @mastra/core@0.14.0-alpha.5
+
+## 0.14.0-alpha.4
+
+### Patch Changes
+
+- 96518cc: Bundling cleanup code improvements
+- c712849: Deployer handlers
+- 2454423: generateVNext and streamVNext
+- 95e1330: Move to default rollup resolve from resolveFrom pkg
+- 33eb340: Optimize workspace dependency detection in bundler
+  - Check workspace map directly before resolving package.json path
+
+- Updated dependencies [0a7f675]
+- Updated dependencies [12cae67]
+- Updated dependencies [5a37d0c]
+- Updated dependencies [4bde0cb]
+- Updated dependencies [1a80071]
+- Updated dependencies [36a3be8]
+- Updated dependencies [361757b]
+- Updated dependencies [bc1684a]
+- Updated dependencies [2bb9955]
+- Updated dependencies [2454423]
+- Updated dependencies [a44d91e]
+- Updated dependencies [dfb91e9]
+- Updated dependencies [a741dde]
+- Updated dependencies [7cb3fc0]
+- Updated dependencies [195eabb]
+- Updated dependencies [b78b95b]
+- Updated dependencies [57f7019]
+  - @mastra/core@0.14.0-alpha.4
+  - @mastra/server@0.14.0-alpha.4
+
+## 0.14.0-alpha.3
+
+### Patch Changes
+
+- 04dcd66: Fix babel-preset-typescript import
+- Updated dependencies [227c7e6]
+- Updated dependencies [fd3a3eb]
+- Updated dependencies [a8f129d]
+  - @mastra/core@0.14.0-alpha.3
+  - @mastra/server@0.14.0-alpha.3
+
+## 0.14.0-alpha.2
+
+### Patch Changes
+
+- 022f3a2: Fix a bug for transpilePackages usage where sibling files inside transpiled packages didn't resolve correctly
+  - @mastra/core@0.14.0-alpha.2
+  - @mastra/server@0.14.0-alpha.2
+
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- bca2ba3: Fix issue where `.json` files couldn't be imported and used with deployers
+- 6313063: Implement model switcher in playground
+- 6dfc4a6: In a previous release analysis of the Mastra configuration was added. A bug was fixed to properly support TypeScript.
+- Updated dependencies [6faaee5]
+- Updated dependencies [4232b14]
+- Updated dependencies [6313063]
+- Updated dependencies [a89de7e]
+- Updated dependencies [cf4f357]
+- Updated dependencies [a722c0b]
+- Updated dependencies [3b5fec7]
+  - @mastra/core@0.14.0-alpha.1
+  - @mastra/server@0.14.0-alpha.1
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes

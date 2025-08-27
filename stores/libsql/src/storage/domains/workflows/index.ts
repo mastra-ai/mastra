@@ -1,7 +1,8 @@
 import type { Client, InValue } from '@libsql/client';
-import type { WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import type { StoreOperationsLibSQL } from '../operations';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -27,10 +28,232 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
 export class WorkflowsLibSQL extends WorkflowsStorage {
   operations: StoreOperationsLibSQL;
   client: Client;
-  constructor({ operations, client }: { operations: StoreOperationsLibSQL; client: Client }) {
+  private readonly maxRetries: number;
+  private readonly initialBackoffMs: number;
+
+  constructor({
+    operations,
+    client,
+    maxRetries = 5,
+    initialBackoffMs = 500,
+  }: {
+    operations: StoreOperationsLibSQL;
+    client: Client;
+    maxRetries?: number;
+    initialBackoffMs?: number;
+  }) {
     super();
     this.operations = operations;
     this.client = client;
+    this.maxRetries = maxRetries;
+    this.initialBackoffMs = initialBackoffMs;
+
+    // Set PRAGMA settings to help with database locks
+    // Note: This is async but we can't await in constructor, so we'll handle it as a fire-and-forget
+    this.setupPragmaSettings().catch(err =>
+      this.logger.warn('LibSQL Workflows: Failed to setup PRAGMA settings.', err),
+    );
+  }
+
+  private async setupPragmaSettings() {
+    try {
+      // Set busy timeout to wait longer before returning busy errors
+      await this.client.execute('PRAGMA busy_timeout = 10000;');
+      this.logger.debug('LibSQL Workflows: PRAGMA busy_timeout=10000 set.');
+
+      // Enable WAL mode for better concurrency (if supported)
+      try {
+        await this.client.execute('PRAGMA journal_mode = WAL;');
+        this.logger.debug('LibSQL Workflows: PRAGMA journal_mode=WAL set.');
+      } catch {
+        this.logger.debug('LibSQL Workflows: WAL mode not supported, using default journal mode.');
+      }
+
+      // Set synchronous mode for better durability vs performance trade-off
+      try {
+        await this.client.execute('PRAGMA synchronous = NORMAL;');
+        this.logger.debug('LibSQL Workflows: PRAGMA synchronous=NORMAL set.');
+      } catch {
+        this.logger.debug('LibSQL Workflows: Failed to set synchronous mode.');
+      }
+    } catch (err) {
+      this.logger.warn('LibSQL Workflows: Failed to set PRAGMA settings.', err);
+    }
+  }
+
+  private async executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+    let attempts = 0;
+    let backoff = this.initialBackoffMs;
+
+    while (attempts < this.maxRetries) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        // Log the error details for debugging
+        this.logger.debug('LibSQL Workflows: Error caught in retry loop', {
+          errorType: error.constructor.name,
+          errorCode: error.code,
+          errorMessage: error.message,
+          attempts,
+          maxRetries: this.maxRetries,
+        });
+
+        // Check for various database lock/busy conditions
+        const isLockError =
+          error.code === 'SQLITE_BUSY' ||
+          error.code === 'SQLITE_LOCKED' ||
+          error.message?.toLowerCase().includes('database is locked') ||
+          error.message?.toLowerCase().includes('database table is locked') ||
+          error.message?.toLowerCase().includes('table is locked') ||
+          (error.constructor.name === 'SqliteError' && error.message?.toLowerCase().includes('locked'));
+
+        if (isLockError) {
+          attempts++;
+          if (attempts >= this.maxRetries) {
+            this.logger.error(
+              `LibSQL Workflows: Operation failed after ${this.maxRetries} attempts due to database lock: ${error.message}`,
+              { error, attempts, maxRetries: this.maxRetries },
+            );
+            throw error;
+          }
+          this.logger.warn(
+            `LibSQL Workflows: Attempt ${attempts} failed due to database lock. Retrying in ${backoff}ms...`,
+            { errorMessage: error.message, attempts, backoff, maxRetries: this.maxRetries },
+          );
+          await new Promise(resolve => setTimeout(resolve, backoff));
+          backoff *= 2;
+        } else {
+          // Not a lock error, re-throw immediately
+          this.logger.error('LibSQL Workflows: Non-lock error occurred, not retrying', { error });
+          throw error;
+        }
+      }
+    }
+    throw new Error('LibSQL Workflows: Max retries reached, but no error was re-thrown from the loop.');
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    return this.executeWithRetry(async () => {
+      // Use a transaction to ensure atomicity
+      const tx = await this.client.transaction('write');
+      try {
+        // Load existing snapshot within transaction
+        const existingSnapshotResult = await tx.execute({
+          sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+          args: [workflowName, runId],
+        });
+
+        let snapshot: WorkflowRunState;
+        if (!existingSnapshotResult.rows?.[0]) {
+          // Create new snapshot if none exists
+          snapshot = {
+            context: {},
+            activePaths: [],
+            timestamp: Date.now(),
+            suspendedPaths: {},
+            serializedStepGraph: [],
+            value: {},
+            waitingPaths: {},
+            status: 'pending',
+            runId: runId,
+            runtimeContext: {},
+          } as WorkflowRunState;
+        } else {
+          // Parse existing snapshot
+          const existingSnapshot = existingSnapshotResult.rows[0].snapshot;
+          snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        }
+
+        // Merge the new step result and runtime context
+        snapshot.context[stepId] = result;
+        snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+
+        // Update the snapshot within the same transaction
+        await tx.execute({
+          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
+          args: [JSON.stringify(snapshot), workflowName, runId],
+        });
+
+        await tx.commit();
+        return snapshot.context;
+      } catch (error) {
+        if (!tx.closed) {
+          await tx.rollback();
+        }
+        throw error;
+      }
+    });
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined> {
+    return this.executeWithRetry(async () => {
+      // Use a transaction to ensure atomicity
+      const tx = await this.client.transaction('write');
+      try {
+        // Load existing snapshot within transaction
+        const existingSnapshotResult = await tx.execute({
+          sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+          args: [workflowName, runId],
+        });
+
+        if (!existingSnapshotResult.rows?.[0]) {
+          await tx.rollback();
+          return undefined;
+        }
+
+        // Parse existing snapshot
+        const existingSnapshot = existingSnapshotResult.rows[0].snapshot;
+        const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+        if (!snapshot || !snapshot?.context) {
+          await tx.rollback();
+          throw new Error(`Snapshot not found for runId ${runId}`);
+        }
+
+        // Merge the new options with the existing snapshot
+        const updatedSnapshot = { ...snapshot, ...opts };
+
+        // Update the snapshot within the same transaction
+        await tx.execute({
+          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
+          args: [JSON.stringify(updatedSnapshot), workflowName, runId],
+        });
+
+        await tx.commit();
+        return updatedSnapshot;
+      } catch (error) {
+        if (!tx.closed) {
+          await tx.rollback();
+        }
+        throw error;
+      }
+    });
   }
 
   async persistWorkflowSnapshot({
@@ -97,7 +320,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
     try {
       const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC LIMIT 1`,
         args,
       });
 

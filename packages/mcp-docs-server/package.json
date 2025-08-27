@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "0.13.12-alpha.0",
+  "version": "0.13.16",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.17.3",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "jsdom": "^26.1.0",

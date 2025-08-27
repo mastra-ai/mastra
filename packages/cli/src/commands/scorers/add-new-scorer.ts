@@ -80,7 +80,8 @@ export async function addNewScorer(scorerId?: string, customDir?: string) {
 
 async function initializeScorer(scorerId: string, filename: string, customPath?: string) {
   try {
-    const templateModule = await import(`../../templates/scorers/${filename}`);
+    const templatePath = `../../templates/scorers/${filename}`;
+    const templateModule = await import(templatePath);
     const key = `${toCamelCase(scorerId)}Scorer`;
     const templateContent = templateModule[key];
     const res = writeScorer(filename, templateContent, customPath);

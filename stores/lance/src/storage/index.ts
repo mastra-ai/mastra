@@ -18,7 +18,7 @@ import type {
   StorageResourceType,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { StoreLegacyEvalsLance } from './domains/legacy-evals';
 import { StoreMemoryLance } from './domains/memory';
 import { StoreOperationsLance } from './domains/operations';
@@ -291,6 +291,18 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format, threadConfig });
   }
 
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessagesById({ messageIds, format });
+  }
+
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
   async saveMessages(
@@ -376,6 +388,40 @@ export class LanceStorage extends MastraStorage {
     updatedAt: Date;
   } | null> {
     return this.stores.workflows.getWorkflowRunById(args);
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined> {
+    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
 
   async persistWorkflowSnapshot({

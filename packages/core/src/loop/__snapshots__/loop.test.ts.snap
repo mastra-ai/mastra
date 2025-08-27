@@ -678,20 +678,18 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
 
 exports[`Loop Tests > AISDK v5 > generateText > result.files > should contain files 1`] = `
 [
-  DefaultGeneratedFileWithType {
-    "base64Data": undefined,
-    "mimeType": "image/png",
-    "type": "file",
+  DefaultGeneratedFile {
+    "base64Data": "AQID",
+    "mediaType": "image/png",
     "uint8ArrayData": Uint8Array [
       1,
       2,
       3,
     ],
   },
-  DefaultGeneratedFileWithType {
+  DefaultGeneratedFile {
     "base64Data": "QkFVRw==",
-    "mimeType": "image/jpeg",
-    "type": "file",
+    "mediaType": "image/jpeg",
     "uint8ArrayData": undefined,
   },
 ]
@@ -708,7 +706,6 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     {
       "content": [
         {
-          "providerOptions": undefined,
           "text": "Hello, world!",
           "type": "text",
         },
@@ -732,7 +729,6 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     {
       "content": [
         {
-          "providerOptions": undefined,
           "text": "Hello, world!",
           "type": "text",
         },
@@ -858,25 +854,33 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
 
 exports[`Loop Tests > AISDK v5 > generateText > result.steps > should add the reasoning from the model response to the step result 1`] = `
 [
-  {
-    "experimental_providerMetadata": undefined,
-    "files": [],
-    "finishReason": "stop",
-    "isContinued": false,
-    "logprobs": undefined,
-    "providerMetadata": undefined,
-    "reasoning": "I will open the conversation with witty banter.",
-    "reasoningDetails": [
+  DefaultStepResult {
+    "content": [
       {
-        "signature": "signature",
+        "providerMetadata": {
+          "testProvider": {
+            "signature": "signature",
+          },
+        },
         "text": "I will open the conversation with witty banter.",
+        "type": "reasoning",
+      },
+      {
+        "providerMetadata": {
+          "testProvider": {
+            "redactedData": "redacted-reasoning-data",
+          },
+        },
+        "text": "",
+        "type": "reasoning",
+      },
+      {
+        "text": "Hello, world!",
         "type": "text",
       },
-      {
-        "data": "redacted-reasoning-data",
-        "type": "redacted",
-      },
     ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
     "request": {},
     "response": {
       "headers": undefined,
@@ -885,37 +889,43 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should add the re
         {
           "content": [
             {
-              "signature": "signature",
+              "providerOptions": {
+                "testProvider": {
+                  "signature": "signature",
+                },
+              },
               "text": "I will open the conversation with witty banter.",
               "type": "reasoning",
             },
             {
-              "data": "redacted-reasoning-data",
-              "type": "redacted-reasoning",
+              "providerOptions": {
+                "testProvider": {
+                  "redactedData": "redacted-reasoning-data",
+                },
+              },
+              "text": "",
+              "type": "reasoning",
             },
             {
+              "providerOptions": undefined,
               "text": "Hello, world!",
               "type": "text",
             },
           ],
-          "id": "msg-0",
           "role": "assistant",
         },
       ],
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
-    "sources": [],
-    "stepType": "initial",
-    "text": "Hello, world!",
-    "toolCalls": [],
-    "toolResults": [],
     "usage": {
-      "completionTokens": 20,
-      "promptTokens": 10,
-      "totalTokens": 30,
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
     },
-    "warnings": undefined,
+    "warnings": [],
   },
 ]
 `;
@@ -994,35 +1004,12 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain fi
 
 exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain sources 1`] = `
 [
-  {
-    "experimental_providerMetadata": undefined,
-    "files": [],
-    "finishReason": "stop",
-    "isContinued": false,
-    "logprobs": undefined,
-    "providerMetadata": undefined,
-    "reasoning": undefined,
-    "reasoningDetails": [],
-    "request": {},
-    "response": {
-      "headers": undefined,
-      "id": "id-0",
-      "messages": [
-        {
-          "content": [
-            {
-              "text": "Hello, world!",
-              "type": "text",
-            },
-          ],
-          "id": "msg-0",
-          "role": "assistant",
-        },
-      ],
-      "modelId": "mock-model-id",
-      "timestamp": 1970-01-01T00:00:00.000Z,
-    },
-    "sources": [
+  DefaultStepResult {
+    "content": [
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
       {
         "id": "123",
         "providerMetadata": {
@@ -1032,6 +1019,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain so
         },
         "sourceType": "url",
         "title": "Example",
+        "type": "source",
         "url": "https://example.com",
       },
       {
@@ -1043,19 +1031,40 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain so
         },
         "sourceType": "url",
         "title": "Example 2",
+        "type": "source",
         "url": "https://example.com/2",
       },
     ],
-    "stepType": "initial",
-    "text": "Hello, world!",
-    "toolCalls": [],
-    "toolResults": [],
-    "usage": {
-      "completionTokens": 20,
-      "promptTokens": 10,
-      "totalTokens": 30,
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": undefined,
+      "id": "id-0",
+      "messages": [
+        {
+          "content": [
+            {
+              "providerOptions": undefined,
+              "text": "Hello, world!",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "mock-model-id",
+      "timestamp": 1970-01-01T00:00:00.000Z,
     },
-    "warnings": undefined,
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
+    },
+    "warnings": [],
   },
 ]
 `;
@@ -1210,47 +1219,48 @@ exports[`Loop Tests > AISDK v5 > options.stopWhen > 2 steps: initial, tool-resul
 [
   {
     "attributes": {
-      "ai.model.id": "mock-model-id",
-      "ai.model.provider": "mock-provider",
-      "ai.operationId": "ai.streamText",
-      "ai.prompt": "{"prompt":"test-input"}",
-      "ai.response.finishReason": "stop",
-      "ai.response.text": "Hello, world!",
-      "ai.settings.maxRetries": 2,
-      "ai.usage.cachedInputTokens": 3,
-      "ai.usage.inputTokens": 6,
-      "ai.usage.outputTokens": 20,
-      "ai.usage.reasoningTokens": 10,
-      "ai.usage.totalTokens": 36,
-      "operation.name": "ai.streamText",
+      "aisdk.model.id": "mock-model-id",
+      "aisdk.model.provider": "mock-provider",
+      "mastra.operationId": "mastra.stream",
+      "operation.name": "mastra.stream",
+      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
+      "stream.response.finishReason": "stop",
+      "stream.response.text": "Hello, world!",
+      "stream.response.toolCalls": "[]",
+      "stream.settings.maxRetries": 2,
+      "stream.usage.cachedInputTokens": 3,
+      "stream.usage.inputTokens": 3,
+      "stream.usage.outputTokens": 10,
+      "stream.usage.reasoningTokens": 10,
+      "stream.usage.totalTokens": 23,
     },
     "events": [],
-    "name": "ai.streamText",
+    "name": "mastra.stream",
   },
   {
     "attributes": {
-      "ai.model.id": "mock-model-id",
-      "ai.model.provider": "mock-provider",
-      "ai.operationId": "ai.streamText.doStream",
-      "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-      "ai.prompt.toolChoice": "{"type":"auto"}",
-      "ai.prompt.tools": [
-        "{"type":"function","name":"tool1","inputSchema":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}",
+      "aisdk.model.id": "mock-model-id",
+      "aisdk.model.provider": "mock-provider",
+      "mastra.operationId": "mastra.stream.aisdk.doStream",
+      "operation.name": "mastra.stream.aisdk.doStream",
+      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
+      "stream.prompt.toolChoice": "auto",
+      "stream.prompt.tools": [
+        "{"type":"function","name":"tool1","inputSchema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
       ],
-      "ai.response.avgOutputTokensPerSecond": 20,
-      "ai.response.finishReason": "tool-calls",
-      "ai.response.id": "id-0",
-      "ai.response.model": "mock-model-id",
-      "ai.response.msToFinish": 500,
-      "ai.response.msToFirstChunk": 100,
-      "ai.response.text": "",
-      "ai.response.timestamp": "1970-01-01T00:00:00.000Z",
-      "ai.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"value"}}]",
-      "ai.settings.maxRetries": 2,
-      "ai.usage.inputTokens": 3,
-      "ai.usage.outputTokens": 10,
-      "ai.usage.totalTokens": 13,
-      "operation.name": "ai.streamText.doStream",
+      "stream.response.avgOutputTokensPerSecond": 40,
+      "stream.response.finishReason": "stop",
+      "stream.response.id": "id-1",
+      "stream.response.model": "mock-model-id",
+      "stream.response.msToFinish": 500,
+      "stream.response.msToFirstChunk": 100,
+      "stream.response.text": "Hello, world!",
+      "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
+      "stream.response.toolCalls": "[{"toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
+      "stream.settings.maxRetries": 2,
+      "stream.usage.inputTokens": 3,
+      "stream.usage.outputTokens": 10,
+      "stream.usage.totalTokens": 23,
     },
     "events": [
       {
@@ -1264,59 +1274,19 @@ exports[`Loop Tests > AISDK v5 > options.stopWhen > 2 steps: initial, tool-resul
         "name": "ai.stream.finish",
       },
     ],
-    "name": "ai.streamText.doStream",
+    "name": "mastra.stream.aisdk.doStream",
   },
   {
     "attributes": {
-      "ai.operationId": "ai.toolCall",
-      "ai.toolCall.args": "{"value":"value"}",
-      "ai.toolCall.id": "call-1",
-      "ai.toolCall.name": "tool1",
-      "ai.toolCall.result": ""result1"",
-      "operation.name": "ai.toolCall",
+      "mastra.operationId": "mastra.stream.toolCall",
+      "operation.name": "mastra.stream.toolCall",
+      "stream.toolCall.args": "{"value":"value"}",
+      "stream.toolCall.result": ""result1"",
+      "stream.toolCall.toolCallId": "call-1",
+      "stream.toolCall.toolName": "tool1",
     },
     "events": [],
-    "name": "ai.toolCall",
-  },
-  {
-    "attributes": {
-      "ai.model.id": "mock-model-id",
-      "ai.model.provider": "mock-provider",
-      "ai.operationId": "ai.streamText.doStream",
-      "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]},{"role":"assistant","content":[{"type":"reasoning","text":"thinking"},{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"value"}}]},{"role":"tool","content":[{"type":"tool-result","toolCallId":"call-1","toolName":"tool1","output":{"type":"text","value":"result1"}}]}]",
-      "ai.prompt.toolChoice": "{"type":"auto"}",
-      "ai.prompt.tools": [
-        "{"type":"function","name":"tool1","inputSchema":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}",
-      ],
-      "ai.response.avgOutputTokensPerSecond": 25,
-      "ai.response.finishReason": "stop",
-      "ai.response.id": "id-0",
-      "ai.response.model": "mock-model-id",
-      "ai.response.msToFinish": 400,
-      "ai.response.msToFirstChunk": 400,
-      "ai.response.text": "Hello, world!",
-      "ai.response.timestamp": "1970-01-01T00:00:01.000Z",
-      "ai.settings.maxRetries": 2,
-      "ai.usage.cachedInputTokens": 3,
-      "ai.usage.inputTokens": 3,
-      "ai.usage.outputTokens": 10,
-      "ai.usage.reasoningTokens": 10,
-      "ai.usage.totalTokens": 23,
-      "operation.name": "ai.streamText.doStream",
-    },
-    "events": [
-      {
-        "attributes": {
-          "ai.response.msToFirstChunk": 400,
-        },
-        "name": "ai.stream.firstChunk",
-      },
-      {
-        "attributes": undefined,
-        "name": "ai.stream.finish",
-      },
-    ],
-    "name": "ai.streamText.doStream",
+    "name": "mastra.stream.toolCall",
   },
 ]
 `;

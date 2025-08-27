@@ -469,7 +469,9 @@ export class AgentNetwork extends MastraBase {
       ops as AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
     );
 
-    return result;
+    return result as unknown as
+      | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+      | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
   }
 
   __registerMastra(p: Mastra) {

@@ -1,18 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-
-interface FeedbackData {
-  feedback: string;
-  rating?: number;
-  email?: string;
-  page: string;
-  userAgent?: string;
-  timestamp: string;
-}
-
-type ErrorWithMessage = {
-  message: string;
-};
+import { sendToNotion } from "./lib/send-to-notion";
+import { sendToLinear } from "./lib/send-to-linear";
+import { sendToSlack } from "./lib/send-to-slack";
+import { FeedbackData, ErrorWithMessage } from "./lib/types";
 
 function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
   return (
@@ -29,8 +19,6 @@ function toErrorWithMessage(maybeError: unknown): ErrorWithMessage {
   try {
     return new Error(JSON.stringify(maybeError));
   } catch {
-    // fallback in case there's an error stringifying the maybeError
-    // like with circular references for example.
     return new Error(String(maybeError));
   }
 }
@@ -57,25 +45,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const clientIP =
-      request.headers.get("x-forwarded-for") ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const timeStr = now.toTimeString().split(" ")[0].replace(/:/g, ""); // HHMMSS
+    const randomId = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4 char random
 
     const feedbackEntry = {
-      id: `feedback_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      id: `FEEDBACK-${dateStr}-${timeStr}-${randomId}`,
       feedback: body.feedback.trim(),
-      rating: body.rating || null,
-      email: body.email?.trim() || null,
+      rating: body.rating || 3,
       page: body.page,
       userAgent:
         body.userAgent || request.headers.get("user-agent") || "unknown",
-      clientIP,
       timestamp: body.timestamp || new Date().toISOString(),
-      source: "docs",
     };
 
-    await sendToAirtable(feedbackEntry);
+    const [notionResult, linearResult] = await Promise.allSettled([
+      sendToNotion(feedbackEntry),
+      sendToLinear(feedbackEntry),
+    ]);
+
+    let linearTicketUrl = null;
+
+    if (linearResult.status === "fulfilled" && linearResult.value?.url) {
+      linearTicketUrl = linearResult.value.url;
+    }
+
+    await sendToSlack(feedbackEntry, linearTicketUrl);
+
+    if (notionResult.status === "rejected") {
+      console.error("Failed to send to Notion:", notionResult.reason);
+    }
+
+    if (linearResult.status === "rejected") {
+      console.error("Failed to send to Linear:", linearResult.reason);
+    }
 
     return NextResponse.json(
       {
@@ -91,57 +95,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-async function sendToAirtable(feedback: any) {
-  const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
-  const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
-  const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME || "Feedback";
-
-  if (!AIRTABLE_API_KEY || !AIRTABLE_BASE_ID) {
-    throw new Error(
-      "Airtable configuration missing: AIRTABLE_API_KEY and AIRTABLE_BASE_ID are required",
-    );
-  }
-
-  const airtableUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}`;
-
-  const payload = {
-    records: [
-      {
-        fields: {
-          "Feedback ID": feedback.id,
-          "Feedback Text": feedback.feedback,
-          Rating: feedback.rating,
-          Email: feedback.email || "",
-          "Page URL": feedback.page,
-          "User Agent": feedback.userAgent,
-          "Client IP": feedback.clientIP,
-          Timestamp: feedback.timestamp.split("T")[0], // Convert to YYYY-MM-DD format
-          Source: feedback.source,
-          Status: "New",
-          "Created Date": new Date().toISOString().split("T")[0], // YYYY-MM-DD format
-        },
-      },
-    ],
-  };
-
-  const response = await fetch(airtableUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Airtable API error: ${response.status} ${response.statusText} - ${errorText}`,
-    );
-  }
-
-  const result = await response.json();
-  return result;
 }

@@ -5,11 +5,13 @@ const meta = {
   bias: "Bias",
   completeness: "Completeness",
   "content-similarity": "ContentSimilarity",
+  "context-precision": "ContextPrecision",
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
   "keyword-coverage": "KeywordCoverage",
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
+  "tool-call-accuracy": "ToolCallAccuracy",
   toxicity: "Toxicity",
 };
 

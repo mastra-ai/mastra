@@ -4,14 +4,14 @@
 
 import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
-import { ConsoleLogger } from '../logger';
+import { ConsoleLogger, LogLevel } from '../logger';
 import { MastraAITracing } from './base';
 import type {
   AISpanType,
   AISpan,
   AISpanOptions,
   AITracingExporter,
-  AITracingConfig,
+  AITracingInstanceConfig,
   AITracingEvent,
   AISpanTypeMap,
   AISpanProcessor,
@@ -61,21 +61,42 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
   public id: string;
   public name: string;
   public type: TType;
-  public metadata: AISpanTypeMap[TType];
-  public trace: AISpan<any>;
+  public attributes: AISpanTypeMap[TType];
+  public parent?: AnyAISpan;
+  public trace: AnyAISpan;
   public traceId: string;
   public startTime: Date;
   public endTime?: Date;
+  public isEvent: boolean;
   public aiTracing: MastraAITracing;
+  public input?: any;
+  public output?: any;
+  public errorInfo?: {
+    message: string;
+    id?: string;
+    domain?: string;
+    category?: string;
+    details?: Record<string, any>;
+  };
+  public metadata?: Record<string, any>;
+  private logger: IMastraLogger;
 
   constructor(options: AISpanOptions<TType>, aiTracing: MastraAITracing) {
     this.id = generateSpanId();
     this.name = options.name;
     this.type = options.type;
+    this.attributes = options.attributes || ({} as AISpanTypeMap[TType]);
     this.metadata = options.metadata;
+    this.parent = options.parent;
     this.trace = options.parent ? options.parent.trace : (this as any);
     this.startTime = new Date();
     this.aiTracing = aiTracing;
+    this.input = options.input;
+    this.isEvent = options.isEvent;
+    this.logger = new ConsoleLogger({
+      name: 'default-ai-span',
+      level: LogLevel.INFO, // Set to INFO so that info() calls actually log
+    });
 
     // Set trace ID: generate new for root spans, inherit for child spans
     if (!options.parent) {
@@ -85,57 +106,137 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
       // Child span inherits trace ID from root span
       this.traceId = options.parent.trace.traceId;
     }
+
+    if (this.isEvent) {
+      // Event spans don't have endTime or input.
+      // Event spans are immediately emitted by the base class via the end() event.
+      this.output = options.output;
+    }
   }
 
-  end(metadata?: Partial<AISpanTypeMap[TType]>): void {
+  end(options?: { output?: any; attributes?: Partial<AISpanTypeMap[TType]>; metadata?: Record<string, any> }): void {
+    if (this.isEvent) {
+      this.logger.warn(`End event is not available on event spans`);
+      return;
+    }
     this.endTime = new Date();
+    if (options?.output !== undefined) {
+      this.output = options.output;
+    }
+    if (options?.attributes) {
+      this.attributes = { ...this.attributes, ...options.attributes };
+    }
+    if (options?.metadata) {
+      this.metadata = { ...this.metadata, ...options.metadata };
+    }
+    // Tracing events automatically handled by base class
+  }
+
+  error(options: {
+    error: MastraError | Error;
+    endSpan?: boolean;
+    attributes?: Partial<AISpanTypeMap[TType]>;
+    metadata?: Record<string, any>;
+  }): void {
+    if (this.isEvent) {
+      this.logger.warn(`Error event is not available on event spans`);
+      return;
+    }
+
+    const { error, endSpan = true, attributes, metadata } = options;
+
+    this.errorInfo =
+      error instanceof MastraError
+        ? {
+            id: error.id,
+            details: error.details,
+            category: error.category,
+            domain: error.domain,
+            message: error.message,
+          }
+        : {
+            message: error.message,
+          };
+
+    // Update attributes if provided
+    if (attributes) {
+      this.attributes = { ...this.attributes, ...attributes };
+    }
     if (metadata) {
       this.metadata = { ...this.metadata, ...metadata };
     }
-    // Tracing events automatically handled by base class
-  }
-
-  error(error: MastraError | Error, endSpan: boolean = true): void {
-    const errorMetadata =
-      error instanceof MastraError
-        ? {
-            error: {
-              id: error.id,
-              details: error.details,
-              category: error.category,
-              domain: error.domain,
-              message: error.message,
-            },
-          }
-        : {
-            error: {
-              message: error.message,
-            },
-          };
 
     if (endSpan) {
-      this.end(errorMetadata as Partial<AISpanTypeMap[TType]>);
+      this.end();
     } else {
-      this.update(errorMetadata as Partial<AISpanTypeMap[TType]>);
+      // Trigger span update event when not ending the span
+      this.update({});
     }
+    // Note: errorInfo is now a span property, attributes handled above
   }
 
-  createChildSpan<TChildType extends AISpanType>(
-    type: TChildType,
-    name: string,
-    metadata: AISpanTypeMap[TChildType],
-  ): AISpan<TChildType> {
-    return this.aiTracing.startSpan(type, name, metadata, this);
+  createChildSpan<TChildType extends AISpanType>(options: {
+    type: TChildType;
+    name: string;
+    input?: any;
+    attributes?: AISpanTypeMap[TChildType];
+    metadata?: Record<string, any>;
+  }): AISpan<TChildType> {
+    return this.aiTracing.startSpan({
+      ...options,
+      parent: this,
+      isEvent: false,
+    });
   }
 
-  update(metadata: Partial<AISpanTypeMap[TType]>): void {
-    this.metadata = { ...this.metadata, ...metadata };
+  createEventSpan<TChildType extends AISpanType>(options: {
+    type: TChildType;
+    name: string;
+    output?: any;
+    attributes?: AISpanTypeMap[TChildType];
+    metadata?: Record<string, any>;
+  }): AISpan<TChildType> {
+    return this.aiTracing.startSpan({
+      ...options,
+      parent: this,
+      isEvent: true,
+    });
+  }
+
+  update(options?: {
+    input?: any;
+    output?: any;
+    attributes?: Partial<AISpanTypeMap[TType]>;
+    metadata?: Record<string, any>;
+  }): void {
+    if (this.isEvent) {
+      this.logger.warn(`Update() is not available on event spans`);
+      return;
+    }
+
+    if (options?.input !== undefined) {
+      this.input = options.input;
+    }
+    if (options?.output !== undefined) {
+      this.output = options.output;
+    }
+    if (options?.attributes) {
+      this.attributes = { ...this.attributes, ...options.attributes };
+    }
+    if (options?.metadata) {
+      this.metadata = { ...this.metadata, ...options.metadata };
+    }
     // Tracing events automatically handled by base class
+  }
+
+  get isRootSpan(): boolean {
+    return !this.parent;
   }
 
   async export(): Promise<string> {
     return JSON.stringify({
       id: this.id,
+      attributes: this.attributes,
       metadata: this.metadata,
       startTime: this.startTime,
       endTime: this.endTime,
@@ -206,15 +307,19 @@ export class SensitiveDataFilter implements AISpanProcessor {
     };
 
     try {
-      // Create a copy of the span with filtered metadata
+      // Create a copy of the span with filtered attributes
       const filteredSpan = { ...span };
+      filteredSpan.attributes = deepFilter(span.attributes);
       filteredSpan.metadata = deepFilter(span.metadata);
+      filteredSpan.input = deepFilter(span.input);
+      filteredSpan.output = deepFilter(span.output);
+      filteredSpan.errorInfo = deepFilter(span.errorInfo);
       return filteredSpan;
     } catch (error) {
       // If filtering fails, return heavily redacted span for security
       const safeSpan = { ...span };
-      safeSpan.metadata = {
-        '[FILTERING_ERROR]': 'Metadata was completely redacted due to filtering error',
+      safeSpan.attributes = {
+        '[FILTERING_ERROR]': 'Attributes were completely redacted due to filtering error',
         '[ERROR_MESSAGE]': error instanceof Error ? error.message : 'Unknown filtering error',
       } as any;
       return safeSpan;
@@ -241,6 +346,7 @@ export class DefaultConsoleExporter implements AITracingExporter {
       // Fallback: create a direct ConsoleLogger instance if none provided
       this.logger = new ConsoleLogger({
         name: 'default-console-exporter',
+        level: LogLevel.INFO, // Set to INFO so that info() calls actually log
       });
     }
   }
@@ -248,13 +354,13 @@ export class DefaultConsoleExporter implements AITracingExporter {
   async exportEvent(event: AITracingEvent): Promise<void> {
     const span = event.span;
 
-    // Helper to safely stringify metadata (filtering already done by processor)
-    const formatMetadata = (metadata: any) => {
+    // Helper to safely stringify attributes (filtering already done by processor)
+    const formatAttributes = (attributes: any) => {
       try {
-        return JSON.stringify(metadata, null, 2);
+        return JSON.stringify(attributes, null, 2);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown formatting error';
-        return `[Unable to serialize metadata: ${errMsg}]`;
+        return `[Unable to serialize attributes: ${errMsg}]`;
       }
     };
 
@@ -272,7 +378,10 @@ export class DefaultConsoleExporter implements AITracingExporter {
         this.logger.info(`   Name: ${span.name}`);
         this.logger.info(`   ID: ${span.id}`);
         this.logger.info(`   Trace ID: ${span.traceId}`);
-        this.logger.info(`   Metadata: ${formatMetadata(span.metadata)}`);
+        if (span.input !== undefined) {
+          this.logger.info(`   Input: ${formatAttributes(span.input)}`);
+        }
+        this.logger.info(`   Attributes: ${formatAttributes(span.attributes)}`);
         this.logger.info('─'.repeat(80));
         break;
 
@@ -284,7 +393,16 @@ export class DefaultConsoleExporter implements AITracingExporter {
         this.logger.info(`   ID: ${span.id}`);
         this.logger.info(`   Duration: ${duration}`);
         this.logger.info(`   Trace ID: ${span.traceId}`);
-        this.logger.info(`   Final Metadata: ${formatMetadata(span.metadata)}`);
+        if (span.input !== undefined) {
+          this.logger.info(`   Input: ${formatAttributes(span.input)}`);
+        }
+        if (span.output !== undefined) {
+          this.logger.info(`   Output: ${formatAttributes(span.output)}`);
+        }
+        if (span.errorInfo) {
+          this.logger.info(`   Error: ${formatAttributes(span.errorInfo)}`);
+        }
+        this.logger.info(`   Attributes: ${formatAttributes(span.attributes)}`);
         this.logger.info('─'.repeat(80));
         break;
 
@@ -294,7 +412,16 @@ export class DefaultConsoleExporter implements AITracingExporter {
         this.logger.info(`   Name: ${span.name}`);
         this.logger.info(`   ID: ${span.id}`);
         this.logger.info(`   Trace ID: ${span.traceId}`);
-        this.logger.info(`   Updated Metadata: ${formatMetadata(span.metadata)}`);
+        if (span.input !== undefined) {
+          this.logger.info(`   Input: ${formatAttributes(span.input)}`);
+        }
+        if (span.output !== undefined) {
+          this.logger.info(`   Output: ${formatAttributes(span.output)}`);
+        }
+        if (span.errorInfo) {
+          this.logger.info(`   Error: ${formatAttributes(span.errorInfo)}`);
+        }
+        this.logger.info(`   Updated Attributes: ${formatAttributes(span.attributes)}`);
         this.logger.info('─'.repeat(80));
         break;
 
@@ -312,8 +439,9 @@ export class DefaultConsoleExporter implements AITracingExporter {
 // Default Configuration (defined after classes to avoid circular dependencies)
 // ============================================================================
 
-export const aiTracingDefaultConfig: AITracingConfig = {
+export const aiTracingDefaultConfig: AITracingInstanceConfig = {
   serviceName: 'mastra-ai-service',
+  instanceName: 'default',
   sampling: { type: SamplingStrategyType.ALWAYS },
   exporters: [new DefaultConsoleExporter()], // Uses its own fallback logger
   processors: [new SensitiveDataFilter()],
@@ -324,7 +452,7 @@ export const aiTracingDefaultConfig: AITracingConfig = {
 // ============================================================================
 
 export class DefaultAITracing extends MastraAITracing {
-  constructor(config: AITracingConfig = aiTracingDefaultConfig) {
+  constructor(config: AITracingInstanceConfig = aiTracingDefaultConfig) {
     super(config);
   }
 
