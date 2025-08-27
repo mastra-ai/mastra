@@ -70,7 +70,13 @@ export function createContextRelevanceScorerLLM({
         const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
 
         if (context.length === 0) {
-          throw new Error('No context available for evaluation');
+          // Create a minimal prompt that will trigger empty context handling
+          // The LLM will return empty evaluations which will be handled in generateScore
+          return createAnalyzePrompt({
+            userQuery,
+            agentResponse,
+            providedContext: ['[No context was provided for evaluation]'],
+          });
         }
 
         return createAnalyzePrompt({
@@ -80,8 +86,16 @@ export function createContextRelevanceScorerLLM({
         });
       },
     })
-    .generateScore(({ results }) => {
+    .generateScore(({ results, run }) => {
       const evaluations = results.analyzeStepResult?.evaluations || [];
+      
+      // Check if this is the "no context" case
+      const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+      if (context.length === 0) {
+        // Default score when no context is available
+        // Return 1.0 since the agent had to work without any context
+        return 1.0 * (options.scale || 1);
+      }
 
       if (evaluations.length === 0) {
         // If no evaluations but missing context was identified, score should be low
@@ -149,6 +163,14 @@ export function createContextRelevanceScorerLLM({
       description: 'Generate human-readable explanation of context relevance evaluation',
       createPrompt: ({ run, results, score }) => {
         const userQuery = getUserMessageFromRunInput(run.input) ?? '';
+        
+        // Check if this is the "no context" case
+        const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
+        if (context.length === 0) {
+          // Return a special reason for no context
+          return `No context was available for evaluation. The agent response was generated without any supporting context. Score: ${score}`;
+        }
+        
         const evaluations = results.analyzeStepResult?.evaluations || [];
         const missingContext = results.analyzeStepResult?.missingContext || [];
 
