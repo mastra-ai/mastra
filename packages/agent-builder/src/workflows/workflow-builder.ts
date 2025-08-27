@@ -171,7 +171,7 @@ const workflowResearchStep = createStep({
     console.log('Starting workflow research...');
 
     try {
-      const filteredMcpTools = await initializeMcpTools();
+      //   const filteredMcpTools = await initializeMcpTools();
 
       const researchAgent = new Agent({
         model: resolveModel(runtimeContext),
@@ -185,7 +185,7 @@ RESEARCH OBJECTIVES:
 
 Use the available documentation and examples tools to gather comprehensive information about Mastra workflows.`,
         name: 'Workflow Research Agent',
-        tools: filteredMcpTools,
+        // tools: filteredMcpTools,
       });
 
       const researchPrompt = `Research everything about Mastra workflows to help create or edit them effectively.
@@ -368,12 +368,12 @@ ${resumeData ? `USER PROVIDED ANSWERS: ${JSON.stringify(resumeData.answers, null
 
 Start by exploring the project structure, then use the taskManager tool to create your initial task list, and work through each task systematically.
 
-CRITICAL VALIDATION INSTRUCTIONS:
-- When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
-- The validation will automatically filter results to only show errors from your files
-- This prevents confusion from validation errors in unrelated project files
-- Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
-- ALWAYS validate after creating or modifying files to ensure they compile correctly`,
+            CRITICAL VALIDATION INSTRUCTIONS:
+            - When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
+            - The tool uses a hybrid validation approach: fast syntax checking → semantic type checking → ESLint
+            - This is much faster than full project compilation and only shows errors from your specific files
+            - Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
+            - ALWAYS validate after creating or modifying files to ensure they compile correctly`,
       });
 
       // Create the execution prompt
@@ -394,12 +394,12 @@ CRITICAL REQUIREMENTS:
 - Ensure you place files in the correct locations
 - DO NOT return status='completed' until ALL ${tasks.length} tasks are finished
 
-CRITICAL VALIDATION INSTRUCTIONS:
-- When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
-- The validation will automatically filter results to only show errors from your files
-- This prevents confusion from validation errors in unrelated project files
-- Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
-- ALWAYS validate after creating or modifying files to ensure they compile correctly
+            CRITICAL VALIDATION INSTRUCTIONS:
+            - When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
+            - The tool uses a hybrid validation approach: fast syntax checking → semantic type checking → ESLint
+            - This is much faster than full project compilation and only shows errors from your specific files
+            - Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
+            - ALWAYS validate after creating or modifying files to ensure they compile correctly
 
 TASK LIST TO COMPLETE (${tasks.length} total tasks):
 ${tasks.map((task, index) => `${index + 1}. [${task.id}] ${task.content}`).join('\n')}
@@ -451,12 +451,12 @@ ${remainingTasks.map((task, index) => `${index + 1}. [${task.id}] ${task.content
 
 CRITICAL: You must complete ALL of these remaining ${remainingTasks.length} tasks. Do not stop until every single one is finished.
 
-CRITICAL VALIDATION INSTRUCTIONS:
-- When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
-- The validation will automatically filter results to only show errors from your files
-- This prevents confusion from validation errors in unrelated project files
-- Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
-- ALWAYS validate after creating or modifying files to ensure they compile correctly
+            CRITICAL VALIDATION INSTRUCTIONS:
+            - When using the validateCode tool, ALWAYS pass the specific files you created or modified using the 'files' parameter
+            - The tool uses a hybrid validation approach: fast syntax checking → semantic type checking → ESLint
+            - This is much faster than full project compilation and only shows errors from your specific files
+            - Example: validateCode({ validationType: ['types', 'lint'], files: ['src/workflows/my-workflow.ts', 'src/agents/my-agent.ts'] })
+            - ALWAYS validate after creating or modifying files to ensure they compile correctly
 
 ${resumeData ? `USER PROVIDED ANSWERS: ${JSON.stringify(resumeData.answers, null, 2)}` : ''}`;
 
@@ -511,7 +511,7 @@ ${resumeData ? `USER PROVIDED ANSWERS: ${JSON.stringify(resumeData.answers, null
           }
 
           if (chunk.type === 'tool-result') {
-            console.log(chunk);
+            console.log(JSON.stringify(chunk, null, 2));
           }
 
           if (chunk.type === 'finish') {
@@ -566,6 +566,7 @@ ${resumeData ? `USER PROVIDED ANSWERS: ${JSON.stringify(resumeData.answers, null
       if (finalResult.status === 'needs_clarification' && finalResult.questions && finalResult.questions.length > 0) {
         console.log(`Agent needs clarification: ${finalResult.questions.length} questions`);
 
+        console.log('finalResult', JSON.stringify(finalResult, null, 2));
         await suspend({
           questions: finalResult.questions,
           currentProgress: finalResult.progress,
@@ -680,8 +681,6 @@ export const workflowBuilderWorkflow = createWorkflow({
       research: researchResult,
       previousPlan: undefined,
       userAnswers: undefined,
-      allPreviousQuestions: [],
-      allPreviousAnswers: {},
     };
   })
   // Step 4: Planning and Approval Sub-workflow (loops until approved)

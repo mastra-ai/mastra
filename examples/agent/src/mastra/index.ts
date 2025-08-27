@@ -12,7 +12,7 @@ import {
   workflowBuilderAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
-import { myWorkflow, workflowBuilderWorkflow, sendEmailWorkflow } from './workflows';
+import { myWorkflow, workflowBuilderWorkflow } from './workflows';
 import { chefModelV2Agent } from './agents/model-v2-agent';
 
 const storage = new LibSQLStore({
@@ -36,7 +36,7 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow, workflowBuilderWorkflow, sendEmailWorkflow },
+  workflows: { myWorkflow, workflowBuilderWorkflow },
   bundler: {
     sourcemap: true,
   },

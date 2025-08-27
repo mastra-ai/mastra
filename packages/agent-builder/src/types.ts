@@ -418,18 +418,7 @@ export const PlanningIterationInputSchema = z.object({
     })
     .optional(),
   userAnswers: z.record(z.string()).optional(),
-  allPreviousQuestions: z
-    .array(
-      z.object({
-        id: z.string(),
-        question: z.string(),
-        type: z.enum(['choice', 'text', 'boolean']),
-        options: z.array(z.string()).optional(),
-        context: z.string().optional(),
-      }),
-    )
-    .optional(),
-  allPreviousAnswers: z.record(z.string()).optional(),
+  // Note: Q&A tracking now handled via runtime context for better persistence
 });
 
 export const PlanningIterationResultSchema = z.object({
@@ -457,17 +446,8 @@ export const PlanningIterationResultSchema = z.object({
   planComplete: z.boolean(),
   message: z.string(),
   error: z.string().optional(),
-  allPreviousQuestions: z
-    .array(
-      z.object({
-        id: z.string(),
-        question: z.string(),
-        type: z.enum(['choice', 'text', 'boolean']),
-        options: z.array(z.string()).optional(),
-        context: z.string().optional(),
-      }),
-    )
-    .optional(),
+  // Note: Q&A tracking now handled via runtime context for better persistence
+  allPreviousQuestions: z.array(z.any()).optional(),
   allPreviousAnswers: z.record(z.string()).optional(),
 });
 

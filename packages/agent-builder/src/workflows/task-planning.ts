@@ -48,14 +48,49 @@ const planningIterationStep = createStep({
       research,
       previousPlan,
       userAnswers,
-      allPreviousQuestions,
-      allPreviousAnswers,
     } = inputData;
 
     console.log('Starting planning iteration...');
 
+    // Get or initialize Q&A tracking in runtime context
+    const qaKey = 'workflow-builder-qa';
+    let storedQAPairs: Array<{
+      question: any;
+      answer: string | null;
+      askedAt: string;
+      answeredAt: string | null;
+    }> = runtimeContext.get(qaKey) || [];
+
+    // Process new answers from user input or resume data
+    const newAnswers = { ...(userAnswers || {}), ...(resumeData?.answers || {}) };
+
+    console.log('before', storedQAPairs);
+    console.log('newAnswers', newAnswers);
+    // Update existing Q&A pairs with new answers
+    if (Object.keys(newAnswers).length > 0) {
+      storedQAPairs = storedQAPairs.map(pair => {
+        if (newAnswers[pair.question.id]) {
+          return {
+            ...pair,
+            answer: newAnswers[pair.question.id] || null,
+            answeredAt: new Date().toISOString(),
+          };
+        }
+        return pair;
+      });
+
+      // Store updated pairs back to runtime context
+      runtimeContext.set(qaKey, storedQAPairs);
+    }
+
+    console.log('after', storedQAPairs);
+
+    console.log(
+      `Current Q&A state: ${storedQAPairs.length} question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
+    );
+
     try {
-      const filteredMcpTools = await initializeMcpTools();
+      //   const filteredMcpTools = await initializeMcpTools();
 
       const planningAgent = new Agent({
         model: resolveModel(runtimeContext),
@@ -74,28 +109,37 @@ PLANNING RESPONSIBILITIES:
 
 ${previousPlan ? `PREVIOUS PLAN CONTEXT:\nTasks: ${JSON.stringify(previousPlan.tasks, null, 2)}\nQuestions: ${JSON.stringify(previousPlan.questions, null, 2)}\nReasoning: ${previousPlan.reasoning}` : ''}
 
-${allPreviousQuestions && allPreviousQuestions.length > 0 ? `ALL PREVIOUS QUESTIONS ASKED:\n${JSON.stringify(allPreviousQuestions, null, 2)}\n\nDO NOT ASK ANY OF THESE QUESTIONS AGAIN!` : ''}
-
-${allPreviousAnswers && Object.keys(allPreviousAnswers).length > 0 ? `ALL PREVIOUS USER ANSWERS:\n${JSON.stringify(allPreviousAnswers, null, 2)}` : ''}
-
-${userAnswers ? `CURRENT USER ANSWERS: ${JSON.stringify(userAnswers, null, 2)}` : ''}
+${
+  storedQAPairs.length > 0
+    ? `PREVIOUS QUESTION-ANSWER PAIRS (${storedQAPairs.length} total):\n${storedQAPairs
+        .map(
+          (pair, index) =>
+            `${index + 1}. Q: ${pair.question.question}\n   A: ${pair.answer || 'NOT ANSWERED YET'}\n   Type: ${pair.question.type}\n   Asked: ${pair.askedAt}\n   ${pair.answer ? `Answered: ${pair.answeredAt}` : ''}`,
+        )
+        .join('\n\n')}\n\nIMPORTANT: DO NOT ASK ANY QUESTIONS THAT HAVE ALREADY BEEN ASKED!`
+    : ''
+}
 
 Based on the context and any user answers, create or refine the task plan.`,
         name: 'Workflow Planning Agent',
-        tools: filteredMcpTools,
+        // tools: filteredMcpTools,
       });
-
-      // Use answers from resume data if available, otherwise use provided user answers
-      const currentUserAnswers = resumeData?.answers || userAnswers;
 
       // Check if we have user feedback from rejected task list in input data
       const hasTaskFeedback = userAnswers && userAnswers.taskFeedback;
 
       const planningPrompt =
-        previousPlan || currentUserAnswers
-          ? `Refine the existing task plan based on the user's answers. 
+        previousPlan || storedQAPairs.some(pair => pair.answer)
+          ? `Refine the existing task plan based on all user answers collected so far. 
 
-USER'S ANSWERS: ${JSON.stringify(currentUserAnswers, null, 2)}
+ANSWERED QUESTIONS AND RESPONSES:
+${storedQAPairs
+  .filter(pair => pair.answer)
+  .map(
+    (pair, index) =>
+      `${index + 1}. Q: ${pair.question.question}\n   A: ${pair.answer}\n   Context: ${pair.question.context || 'None'}`,
+  )
+  .join('\n\n')}
 
 REQUIREMENTS:
 - Action: ${action}
@@ -182,12 +226,20 @@ Create specific tasks and identify any questions that need user clarification.`;
           },
         });
 
-        // Accumulate all questions and answers for next iteration
-        const accumulatedQuestions = [...(allPreviousQuestions || []), ...planResult.questions];
-        const accumulatedAnswers = {
-          ...(allPreviousAnswers || {}),
-          ...(currentUserAnswers || {}),
-        };
+        // Store new questions as Q&A pairs in runtime context
+        const newQAPairs = planResult.questions.map((question: any) => ({
+          question,
+          answer: null,
+          askedAt: new Date().toISOString(),
+          answeredAt: null,
+        }));
+
+        storedQAPairs = [...storedQAPairs, ...newQAPairs];
+        runtimeContext.set(qaKey, storedQAPairs);
+
+        console.log(
+          `Updated Q&A state: ${storedQAPairs.length} total question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
+        );
 
         return {
           tasks: planResult.tasks,
@@ -196,19 +248,21 @@ Create specific tasks and identify any questions that need user clarification.`;
           reasoning: planResult.reasoning,
           planComplete: false,
           message: `Planning suspended for user clarification on ${planResult.questions.length} questions`,
-          allPreviousQuestions: accumulatedQuestions,
-          allPreviousAnswers: accumulatedAnswers,
+          allPreviousQuestions: storedQAPairs.map(pair => pair.question),
+          allPreviousAnswers: Object.fromEntries(
+            storedQAPairs.filter(pair => pair.answer).map(pair => [pair.question.id, pair.answer]),
+          ),
         };
       }
 
       // Plan is complete
       console.log(`Planning complete with ${planResult.tasks.length} tasks`);
 
-      // Include final accumulated answers
-      const finalAccumulatedAnswers = {
-        ...(allPreviousAnswers || {}),
-        ...(currentUserAnswers || {}),
-      };
+      // Update runtime context with final state
+      runtimeContext.set(qaKey, storedQAPairs);
+      console.log(
+        `Final Q&A state: ${storedQAPairs.length} total question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
+      );
 
       return {
         tasks: planResult.tasks,
@@ -217,8 +271,10 @@ Create specific tasks and identify any questions that need user clarification.`;
         reasoning: planResult.reasoning,
         planComplete: true,
         message: `Successfully created ${planResult.tasks.length} tasks`,
-        allPreviousQuestions: allPreviousQuestions || [],
-        allPreviousAnswers: finalAccumulatedAnswers,
+        allPreviousQuestions: storedQAPairs.map(pair => pair.question),
+        allPreviousAnswers: Object.fromEntries(
+          storedQAPairs.filter(pair => pair.answer).map(pair => [pair.question.id, pair.answer]),
+        ),
       };
     } catch (error) {
       console.error('Planning iteration failed:', error);
@@ -229,6 +285,11 @@ Create specific tasks and identify any questions that need user clarification.`;
         reasoning: `Planning failed: ${error instanceof Error ? error.message : String(error)}`,
         planComplete: false,
         message: 'Planning iteration failed',
+        error: error instanceof Error ? error.message : String(error),
+        allPreviousQuestions: storedQAPairs.map(pair => pair.question),
+        allPreviousAnswers: Object.fromEntries(
+          storedQAPairs.filter(pair => pair.answer).map(pair => [pair.question.id, pair.answer]),
+        ),
       };
     }
   },
