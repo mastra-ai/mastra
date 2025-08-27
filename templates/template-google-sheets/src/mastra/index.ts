@@ -61,7 +61,7 @@ export const mastra = new Mastra({
         );
         if (activeAccount) {
           runtimeContext.set("activeAccount", activeAccount);
-          return await next();
+          return next();
         }
 
         // initiated connection
