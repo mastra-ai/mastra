@@ -107,7 +107,7 @@ describe('Context Relevance Scorer', () => {
 
     it('should accept custom unused high-relevance context penalty', () => {
       const customPenalty = 0.25; // Higher than default 0.1
-      
+
       const scorer = createContextRelevanceScorerLLM({
         model: mockModel,
         options: {
@@ -173,7 +173,7 @@ describe('Context Relevance Scorer', () => {
 
     it('should work with contextExtractor and custom penalties', () => {
       const contextExtractor = () => ['Dynamic context'];
-      
+
       const scorer = createContextRelevanceScorerLLM({
         model: mockModel,
         options: {
@@ -287,11 +287,12 @@ describe('Context Relevance Scorer', () => {
       // Mock the run method to simulate the expected behavior for empty context
       scorer.run = vi.fn().mockResolvedValue({
         score: 1.0,
-        reason: 'No context was available for evaluation. The agent response was generated without any supporting context. Score: 1',
+        reason:
+          'No context was available for evaluation. The agent response was generated without any supporting context. Score: 1',
       });
 
       const result = await scorer.run(testRun);
-      
+
       expect(result.score).toBe(1.0);
       expect(result.reason).toContain('No context was available for evaluation');
     });
@@ -325,11 +326,12 @@ describe('Context Relevance Scorer', () => {
       // Mock the run method to simulate scaled score for empty context
       scorer.run = vi.fn().mockResolvedValue({
         score: 2.0, // 1.0 * scale
-        reason: 'No context was available for evaluation. The agent response was generated without any supporting context. Score: 2',
+        reason:
+          'No context was available for evaluation. The agent response was generated without any supporting context. Score: 2',
       });
 
       const result = await scorer.run(testRun);
-      
+
       expect(result.score).toBe(2.0);
       expect(result.reason).toContain('No context was available for evaluation');
     });
@@ -394,10 +396,10 @@ describe('Context Relevance Scorer', () => {
       });
 
       // Mock the run method to return predictable results and verify contextExtractor was called
-      scorer.run = vi.fn().mockImplementation(async (run) => {
+      scorer.run = vi.fn().mockImplementation(async run => {
         // Simulate the actual implementation behavior by calling contextExtractor
         contextExtractor(run.input, run.output);
-        
+
         return {
           score: 1.0,
           reason: 'Used extracted context from contextExtractor, not static context',
@@ -409,7 +411,7 @@ describe('Context Relevance Scorer', () => {
       // Verify that contextExtractor was called (proving precedence over static context)
       expect(contextExtractor).toHaveBeenCalledWith(testRun.input, testRun.output);
       expect(contextExtractor).toHaveBeenCalledTimes(1);
-      
+
       // Verify the mocked result
       expect(result.score).toBe(1.0);
       expect(result.reason).toContain('extracted context from contextExtractor');

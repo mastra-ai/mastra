@@ -88,7 +88,7 @@ export function createContextRelevanceScorerLLM({
     })
     .generateScore(({ results, run }) => {
       const evaluations = results.analyzeStepResult?.evaluations || [];
-      
+
       // Check if this is the "no context" case
       const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
       if (context.length === 0) {
@@ -105,14 +105,14 @@ export function createContextRelevanceScorerLLM({
 
       /**
        * Context Relevance Scoring Algorithm
-       * 
+       *
        * Formula: max(0, base_score - usage_penalty - missing_penalty) × scale
-       * 
+       *
        * Where:
        * - base_score = sum(relevance_weights) / (num_contexts × 1.0)
        * - usage_penalty = unused_high_relevance_count × penalty_rate
        * - missing_penalty = min(missing_count × penalty_rate, max_penalty)
-       * 
+       *
        * Relevance weights: high=1.0, medium=0.7, low=0.3, none=0.0
        */
 
@@ -163,14 +163,14 @@ export function createContextRelevanceScorerLLM({
       description: 'Generate human-readable explanation of context relevance evaluation',
       createPrompt: ({ run, results, score }) => {
         const userQuery = getUserMessageFromRunInput(run.input) ?? '';
-        
+
         // Check if this is the "no context" case
         const context = options.contextExtractor ? options.contextExtractor(run.input!, run.output) : options.context!;
         if (context.length === 0) {
           // Return a special reason for no context
           return `No context was available for evaluation. The agent response was generated without any supporting context. Score: ${score}`;
         }
-        
+
         const evaluations = results.analyzeStepResult?.evaluations || [];
         const missingContext = results.analyzeStepResult?.missingContext || [];
 
