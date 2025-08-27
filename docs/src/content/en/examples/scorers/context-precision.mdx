@@ -1,0 +1,247 @@
+---
+title: "Example: Context Precision Scorer | Scorers | Mastra Docs"
+description: Example of using the Context Precision scorer to evaluate the relevance and positioning of retrieved context for RAG systems using Mean Average Precision.
+---
+
+# Context Precision Scorer
+
+Use `createContextPrecisionScorer` to evaluate how well your retrieved context supports generating expected outputs. This scorer uses Mean Average Precision (MAP) to reward systems that place relevant context earlier in the sequence.
+
+## Installation
+
+```bash
+npm install @mastra/evals
+```
+
+## High precision example
+
+This example shows perfect context precision where all relevant context appears early:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextPrecisionScorer } from '@mastra/evals';
+
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.',
+      'The process occurs in the chloroplasts of plant cells, specifically in the thylakoids.',
+      'Light-dependent reactions happen in the thylakoid membranes, while the Calvin cycle occurs in the stroma.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'How does photosynthesis work in plants?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2', 
+      role: 'assistant',
+      content: 'Photosynthesis is the process where plants convert sunlight, CO2, and water into glucose and oxygen using chloroplasts.',
+    },
+  ],
+});
+
+console.log(result);
+// Output:
+// {
+//   score: 1.0,
+//   reason: "The score is 1.0 because all context pieces are highly relevant to explaining photosynthesis and are optimally ordered to support the expected output."
+// }
+```
+
+## Mixed precision example
+
+This example shows moderate precision with both relevant and irrelevant context:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextPrecisionScorer } from '@mastra/evals';
+
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Regular exercise improves cardiovascular health by strengthening the heart muscle.',
+      'A balanced diet should include fruits, vegetables, and whole grains.',
+      'Physical activity releases endorphins which improve mood and reduce stress.',
+      'The average person should drink 8 glasses of water per day.',
+      'Exercise also helps maintain healthy body weight and muscle mass.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user', 
+        content: 'What are the mental and physical benefits of exercise?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant', 
+      content: 'Exercise provides cardiovascular benefits, improves mood through endorphin release, and helps maintain healthy body composition.',
+    },
+  ],
+});
+
+console.log(result);
+// Output:
+// {
+//   score: 0.72,
+//   reason: "The score is 0.72 because contexts 1, 3, and 5 are relevant to exercise benefits, but irrelevant contexts about diet and hydration reduce the precision score."
+// }
+```
+
+## Low precision example  
+
+This example shows poor context precision with mostly irrelevant context:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { createContextPrecisionScorer } from '@mastra/evals';
+
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'The weather forecast shows sunny skies this weekend.',
+      'Coffee is one of the world\'s most popular beverages.',
+      'Machine learning requires large amounts of training data.',
+      'Cats typically sleep 12-16 hours per day.',
+      'The capital of France is Paris.',
+    ],
+    scale: 1,
+  },
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        id: '1',
+        role: 'user',
+        content: 'How does photosynthesis work?',
+      },
+    ],
+  },
+  output: [
+    {
+      id: '2',
+      role: 'assistant',
+      content: 'Photosynthesis is the process by which plants convert sunlight into energy using chlorophyll.',
+    },
+  ],
+});
+
+console.log(result);
+// Output:
+// {
+//   score: 0.0,
+//   reason: "The score is 0.0 because none of the retrieved context pieces are relevant to explaining photosynthesis."
+// }
+```
+
+## Scorer configuration
+
+### Custom scale factor
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    context: [
+      'Machine learning models require training data.',
+      'Deep learning uses neural networks with multiple layers.',
+    ],
+    scale: 10, // Scale scores from 0-10 instead of 0-1
+  },
+});
+
+// Result will be scaled: score: 8.5 instead of 0.85
+```
+
+### Dynamic context extraction
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'),
+  options: {
+    contextExtractor: (input, output) => {
+      // Extract context dynamically based on the query
+      const query = input?.inputMessages?.[0]?.content || '';
+      
+      // Example: Retrieve from a vector database
+      const searchResults = vectorDB.search(query, { limit: 10 });
+      return searchResults.map(result => result.content);
+    },
+    scale: 1,
+  },
+});
+```
+
+### Large context evaluation
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: openai('gpt-4o-mini'), 
+  options: {
+    context: [
+      // Simulate retrieved documents from vector database
+      'Document 1: Highly relevant content...',
+      'Document 2: Somewhat related content...',
+      'Document 3: Tangentially related...',
+      'Document 4: Not relevant...',
+      'Document 5: Highly relevant content...',
+      // ... up to dozens of context pieces
+    ],
+  },
+});
+```
+
+## Understanding the results
+
+### Score interpretation
+
+- **0.9-1.0**: Excellent precision - all relevant context early in sequence
+- **0.7-0.8**: Good precision - most relevant context well-positioned  
+- **0.4-0.6**: Moderate precision - relevant context mixed with irrelevant
+- **0.1-0.3**: Poor precision - little relevant context or poorly positioned
+- **0.0**: No relevant context found
+
+### Reason analysis
+
+The reason field explains:
+- Which context pieces were deemed relevant/irrelevant
+- How positioning affected the MAP calculation
+- Specific relevance criteria used in evaluation
+
+### Optimization insights
+
+Use results to:
+- **Improve retrieval**: Filter out irrelevant context before ranking
+- **Optimize ranking**: Ensure relevant context appears early
+- **Tune chunk size**: Balance context detail vs. relevance precision
+- **Evaluate embeddings**: Test different embedding models for better retrieval
+
+## Related examples
+
+- [Answer Relevancy Example](/examples/scorers/answer-relevancy) - Evaluating answer quality
+- [Faithfulness Example](/examples/scorers/faithfulness) - Measuring groundedness in context
+- [Hallucination Example](/examples/scorers/hallucination) - Detecting fabricated information
