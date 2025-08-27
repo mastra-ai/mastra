@@ -91,8 +91,6 @@ export class DepsService {
     }
   }
 
- 
-
   public async addScriptsToPackageJson(scripts: Record<string, string>) {
     const packageJson = JSON.parse(await fsPromises.readFile('package.json', 'utf-8'));
     packageJson.scripts = {
