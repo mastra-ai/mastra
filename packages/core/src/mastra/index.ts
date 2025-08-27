@@ -485,7 +485,7 @@ do:
     if (config?.observability) {
       this.registerAITracingExporters();
       // Fire-and-forget initialization - individual errors are already logged
-      this.initAITracingExporters();
+      void this.initAITracingExporters();
     }
 
     this.setLogger({ logger });
@@ -522,7 +522,7 @@ do:
           const initPromise = exporter.init().catch(error => {
             this.#logger?.warn('Failed to initialize AI tracing exporter', {
               exporterName: exporter.name,
-              error: error instanceof Error ? error.message : String(error)
+              error: error instanceof Error ? error.message : String(error),
             });
           });
           initPromises.push(initPromise);
