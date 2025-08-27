@@ -1,14 +1,8 @@
-import type {
-  MastraMessageV1,
-  MastraMessageV2,
-  PaginationInfo,
-  StorageGetMessagesArg,
-  StorageResourceType,
-  StorageThreadType,
-} from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
 import {
   ensureDate,
   MemoryStorage,
@@ -808,6 +802,64 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           text: `Error retrieving messages for thread ${threadId}`,
           details: {
             threadId,
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      return [];
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+
+    try {
+      // Fetch and parse all messages from their respective threads
+      const messages = (await Promise.all(messageIds.map(id => this.findMessageInAnyThread(id)))).filter(
+        result => !!result,
+      ) as (MastraMessageV1 & { _index: string })[];
+
+      // Remove _index and ensure dates before returning, just like Upstash
+      const prepared: MastraMessageV1[] = messages.map(({ _index, ...message }) => ({
+        ...message,
+        ...(message.type !== (`v2` as string) && { type: message.type }),
+        createdAt: ensureDate(message.createdAt)!,
+      }));
+      // For v2 format, use MessageList for proper conversion
+      const list = new MessageList().add(prepared, 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error retrieving messages by ID`,
+          details: {
+            messageIds: JSON.stringify(messageIds),
           },
         },
         error,

@@ -15,6 +15,7 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
   public traceId: string;
   public startTime: Date;
   public endTime?: Date;
+  public isEvent: boolean;
   public aiTracing: MastraAITracing;
   public input?: any;
   public output?: any;
@@ -39,6 +40,8 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
     this.startTime = new Date();
     this.aiTracing = aiTracing;
     this.input = options.input;
+    this.output = options.isEvent ? options.output : undefined;
+    this.isEvent = options.isEvent;
   }
 
   end(_options?: { output?: any; attributes?: Partial<AISpanTypeMap[TType]>; metadata?: Record<string, any> }): void {}
@@ -57,7 +60,17 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
     attributes?: AISpanTypeMap[TChildType];
     metadata?: Record<string, any>;
   }): AISpan<TChildType> {
-    return new NoOpAISpan<TChildType>({ ...options, parent: this }, this.aiTracing);
+    return new NoOpAISpan<TChildType>({ ...options, parent: this, isEvent: false }, this.aiTracing);
+  }
+
+  createEventSpan<TChildType extends AISpanType>(options: {
+    type: TChildType;
+    name: string;
+    output?: any;
+    attributes?: AISpanTypeMap[TChildType];
+    metadata?: Record<string, any>;
+  }): AISpan<TChildType> {
+    return new NoOpAISpan<TChildType>({ ...options, parent: this, isEvent: true }, this.aiTracing);
   }
 
   update(_options?: {

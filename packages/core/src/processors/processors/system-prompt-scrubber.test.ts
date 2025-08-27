@@ -1,7 +1,9 @@
-import type { TextStreamPart, ObjectStreamPart, TextPart } from 'ai';
+import type { TextPart } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MastraMessageV2 } from '../../agent/message-list';
+import type { ChunkType } from '../../stream';
+import { ChunkFrom } from '../../stream/types';
 import { SystemPromptScrubber } from './system-prompt-scrubber';
 
 // Helper function to create test messages
@@ -228,9 +230,11 @@ describe('SystemPromptScrubber', () => {
     it('should return non-text chunks unchanged', async () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
-      const part: ObjectStreamPart<any> = {
+      const part: ChunkType = {
         type: 'object',
         object: { key: 'value' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const result = await processor.processOutputStream({
@@ -246,9 +250,11 @@ describe('SystemPromptScrubber', () => {
     it('should return empty text chunks unchanged', async () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta',
-        textDelta: '',
+        payload: { text: '', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const result = await processor.processOutputStream({
@@ -283,9 +289,11 @@ describe('SystemPromptScrubber', () => {
         usage: { completionTokens: 10, promptTokens: 5 },
       });
 
-      const part: TextStreamPart<any> = {
+      const part: ChunkType = {
         type: 'text-delta',
-        textDelta: 'You are an AI. Hello there!',
+        payload: { text: 'You are an AI. Hello there!', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       };
 
       const result = await processor.processOutputStream({
@@ -297,7 +305,9 @@ describe('SystemPromptScrubber', () => {
 
       expect(result).toEqual({
         type: 'text-delta',
-        textDelta: '*** [SYSTEM] ***. Hello there!',
+        payload: { text: '*** [SYSTEM] ***. Hello there!', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
       });
     });
   });

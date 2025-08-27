@@ -33,7 +33,7 @@ export abstract class MemoryProcessor extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] {
+  process(messages: CoreMessage[], _opts: MemoryProcessorOpts): CoreMessage[] | Promise<CoreMessage[]> {
     return messages;
   }
 }
@@ -198,12 +198,12 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  protected applyProcessors(
+  protected async applyProcessors(
     messages: CoreMessage[],
     opts: {
       processors?: MemoryProcessor[];
     } & MemoryProcessorOpts,
-  ): CoreMessage[] {
+  ): Promise<CoreMessage[]> {
     const processors = opts.processors || this.processors;
     if (!processors || processors.length === 0) {
       return messages;
@@ -212,7 +212,7 @@ export abstract class MastraMemory extends MastraBase {
     let processedMessages = [...messages];
 
     for (const processor of processors) {
-      processedMessages = processor.process(processedMessages, {
+      processedMessages = await processor.process(processedMessages, {
         systemMessage: opts.systemMessage,
         newMessages: opts.newMessages,
         memorySystemMessage: opts.memorySystemMessage,

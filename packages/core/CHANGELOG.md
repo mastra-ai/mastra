@@ -1,5 +1,146 @@
 # @mastra/core
 
+## 0.15.2
+
+### Patch Changes
+
+- Updated dependencies [[`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430)]:
+  - @mastra/schema-compat@0.11.1
+
+## 0.15.1
+
+## 0.15.0
+
+### Minor Changes
+
+- [#7032](https://github.com/mastra-ai/mastra/pull/7032) [`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump zod peerdep to 3.25.0 to support both v3/v4
+
+### Patch Changes
+
+- [#6938](https://github.com/mastra-ai/mastra/pull/6938) [`0778757`](https://github.com/mastra-ai/mastra/commit/07787570e4addbd501522037bd2542c3d9e26822) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@opentelemetry/auto-instrumentations-node@^0.62.1` ↗︎](https://www.npmjs.com/package/@opentelemetry/auto-instrumentations-node/v/0.62.1) (from `^0.62.0`, in `dependencies`)
+
+- [#6997](https://github.com/mastra-ai/mastra/pull/6997) [`943a7f3`](https://github.com/mastra-ai/mastra/commit/943a7f3dbc6a8ab3f9b7bc7c8a1c5b319c3d7f56) Thanks [@wardpeet](https://github.com/wardpeet)! - Bundle/mastra speed improvements
+
+- [#6933](https://github.com/mastra-ai/mastra/pull/6933) [`bf504a8`](https://github.com/mastra-ai/mastra/commit/bf504a833051f6f321d832cc7d631f3cb86d657b) Thanks [@NikAiyer](https://github.com/NikAiyer)! - Add util functions for workflow server handlers and made processor process function async
+
+- [#6954](https://github.com/mastra-ai/mastra/pull/6954) [`be49354`](https://github.com/mastra-ai/mastra/commit/be493546dca540101923ec700feb31f9a13939f2) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Add db schema and base storage apis for AI Tracing
+
+- [#6957](https://github.com/mastra-ai/mastra/pull/6957) [`d591ab3`](https://github.com/mastra-ai/mastra/commit/d591ab3ecc985c1870c0db347f8d7a20f7360536) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Implement Tracing API for inmemory(mock) storage
+
+- [#6923](https://github.com/mastra-ai/mastra/pull/6923) [`ba82abe`](https://github.com/mastra-ai/mastra/commit/ba82abe76e869316bb5a9c95e8ea3946f3436fae) Thanks [@rase-](https://github.com/rase-)! - Event based execution engine
+
+- [#6971](https://github.com/mastra-ai/mastra/pull/6971) [`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246) Thanks [@epinzur](https://github.com/epinzur)! - "updated ai tracing in workflows"
+
+- [#6949](https://github.com/mastra-ai/mastra/pull/6949) [`e6f5046`](https://github.com/mastra-ai/mastra/commit/e6f50467aff317e67e8bd74c485c3fbe2a5a6db1) Thanks [@CalebBarnes](https://github.com/CalebBarnes)! - stream/generate vnext: simplify internal output schema handling, improve types and typescript generics, and add jsdoc comments
+
+- [#6993](https://github.com/mastra-ai/mastra/pull/6993) [`82d9f64`](https://github.com/mastra-ai/mastra/commit/82d9f647fbe4f0177320e7c05073fce88599aa95) Thanks [@wardpeet](https://github.com/wardpeet)! - Improve types and fix linting issues
+
+- [#7020](https://github.com/mastra-ai/mastra/pull/7020) [`2e58325`](https://github.com/mastra-ai/mastra/commit/2e58325beb170f5b92f856e27d915cd26917e5e6) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Add column to ai spans table to tell if it's an event
+
+- [#7011](https://github.com/mastra-ai/mastra/pull/7011) [`4189486`](https://github.com/mastra-ai/mastra/commit/4189486c6718fda78347bdf4ce4d3fc33b2236e1) Thanks [@epinzur](https://github.com/epinzur)! - Wrapped mastra objects in workflow steps to automatically pass on tracing context
+
+- [#6942](https://github.com/mastra-ai/mastra/pull/6942) [`ca8ec2f`](https://github.com/mastra-ai/mastra/commit/ca8ec2f61884b9dfec5fc0d5f4f29d281ad13c01) Thanks [@wardpeet](https://github.com/wardpeet)! - Add zod as peerdeps for all packages
+
+- [#6943](https://github.com/mastra-ai/mastra/pull/6943) [`9613558`](https://github.com/mastra-ai/mastra/commit/9613558e6475f4710e05d1be7553a32ee7bddc20) Thanks [@taofeeq-deru](https://github.com/taofeeq-deru)! - Persist to snapshot when step starts
+
+- Updated dependencies [[`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec), [`94e9f54`](https://github.com/mastra-ai/mastra/commit/94e9f547d66ef7cd01d9075ab53b5ca9a1cae100), [`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c), [`a93f3ba`](https://github.com/mastra-ai/mastra/commit/a93f3ba05eef4cf17f876d61d29cf0841a9e70b7)]:
+  - @mastra/schema-compat@0.11.0
+
+## 0.15.0-alpha.4
+
+### Minor Changes
+
+- [#7032](https://github.com/mastra-ai/mastra/pull/7032) [`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c) Thanks [@wardpeet](https://github.com/wardpeet)! - Bump zod peerdep to 3.25.0 to support both v3/v4
+
+### Patch Changes
+
+- Updated dependencies [[`1191ce9`](https://github.com/mastra-ai/mastra/commit/1191ce946b40ed291e7877a349f8388e3cff7e5c)]:
+  - @mastra/schema-compat@0.11.0-alpha.2
+
+## 0.15.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`da58ccc`](https://github.com/mastra-ai/mastra/commit/da58ccc1f2ac33da0cb97b00443fc6208b45bdec)]:
+  - @mastra/schema-compat@0.10.6-alpha.1
+
+## 0.14.2-alpha.2
+
+### Patch Changes
+
+- [#7020](https://github.com/mastra-ai/mastra/pull/7020) [`2e58325`](https://github.com/mastra-ai/mastra/commit/2e58325beb170f5b92f856e27d915cd26917e5e6) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Add column to ai spans table to tell if it's an event
+
+## 0.14.2-alpha.1
+
+### Patch Changes
+
+- [#6997](https://github.com/mastra-ai/mastra/pull/6997) [`943a7f3`](https://github.com/mastra-ai/mastra/commit/943a7f3dbc6a8ab3f9b7bc7c8a1c5b319c3d7f56) Thanks [@wardpeet](https://github.com/wardpeet)! - Bundle/mastra speed improvements
+
+- [#6954](https://github.com/mastra-ai/mastra/pull/6954) [`be49354`](https://github.com/mastra-ai/mastra/commit/be493546dca540101923ec700feb31f9a13939f2) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Add db schema and base storage apis for AI Tracing
+
+- [#6957](https://github.com/mastra-ai/mastra/pull/6957) [`d591ab3`](https://github.com/mastra-ai/mastra/commit/d591ab3ecc985c1870c0db347f8d7a20f7360536) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Implement Tracing API for inmemory(mock) storage
+
+- [#6923](https://github.com/mastra-ai/mastra/pull/6923) [`ba82abe`](https://github.com/mastra-ai/mastra/commit/ba82abe76e869316bb5a9c95e8ea3946f3436fae) Thanks [@rase-](https://github.com/rase-)! - Event based execution engine
+
+- [#6971](https://github.com/mastra-ai/mastra/pull/6971) [`727f7e5`](https://github.com/mastra-ai/mastra/commit/727f7e5086e62e0dfe3356fb6dcd8bcb420af246) Thanks [@epinzur](https://github.com/epinzur)! - "updated ai tracing in workflows"
+
+- [#6993](https://github.com/mastra-ai/mastra/pull/6993) [`82d9f64`](https://github.com/mastra-ai/mastra/commit/82d9f647fbe4f0177320e7c05073fce88599aa95) Thanks [@wardpeet](https://github.com/wardpeet)! - Improve types and fix linting issues
+
+- [#7011](https://github.com/mastra-ai/mastra/pull/7011) [`4189486`](https://github.com/mastra-ai/mastra/commit/4189486c6718fda78347bdf4ce4d3fc33b2236e1) Thanks [@epinzur](https://github.com/epinzur)! - Wrapped mastra objects in workflow steps to automatically pass on tracing context
+
+- [#6942](https://github.com/mastra-ai/mastra/pull/6942) [`ca8ec2f`](https://github.com/mastra-ai/mastra/commit/ca8ec2f61884b9dfec5fc0d5f4f29d281ad13c01) Thanks [@wardpeet](https://github.com/wardpeet)! - Add zod as peerdeps for all packages
+
+- Updated dependencies [[`94e9f54`](https://github.com/mastra-ai/mastra/commit/94e9f547d66ef7cd01d9075ab53b5ca9a1cae100), [`a93f3ba`](https://github.com/mastra-ai/mastra/commit/a93f3ba05eef4cf17f876d61d29cf0841a9e70b7)]:
+  - @mastra/schema-compat@0.10.6-alpha.0
+
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- [#6938](https://github.com/mastra-ai/mastra/pull/6938) [`0778757`](https://github.com/mastra-ai/mastra/commit/07787570e4addbd501522037bd2542c3d9e26822) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@opentelemetry/auto-instrumentations-node@^0.62.1` ↗︎](https://www.npmjs.com/package/@opentelemetry/auto-instrumentations-node/v/0.62.1) (from `^0.62.0`, in `dependencies`)
+
+- [#6933](https://github.com/mastra-ai/mastra/pull/6933) [`bf504a8`](https://github.com/mastra-ai/mastra/commit/bf504a833051f6f321d832cc7d631f3cb86d657b) Thanks [@NikAiyer](https://github.com/NikAiyer)! - Add util functions for workflow server handlers and made processor process function async
+
+- [#6949](https://github.com/mastra-ai/mastra/pull/6949) [`e6f5046`](https://github.com/mastra-ai/mastra/commit/e6f50467aff317e67e8bd74c485c3fbe2a5a6db1) Thanks [@CalebBarnes](https://github.com/CalebBarnes)! - stream/generate vnext: simplify internal output schema handling, improve types and typescript generics, and add jsdoc comments
+
+- [#6943](https://github.com/mastra-ai/mastra/pull/6943) [`9613558`](https://github.com/mastra-ai/mastra/commit/9613558e6475f4710e05d1be7553a32ee7bddc20) Thanks [@taofeeq-deru](https://github.com/taofeeq-deru)! - Persist to snapshot when step starts
+
+## 0.14.1
+
+### Patch Changes
+
+- [#6919](https://github.com/mastra-ai/mastra/pull/6919) [`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.3) (from `npm:@ai-sdk/provider-utils@3.0.0`, in `dependencies`)
+  - Updated dependency [`ai@^4.3.19` ↗︎](https://www.npmjs.com/package/ai/v/4.3.19) (from `^4.3.16`, in `dependencies`)
+  - Updated dependency [`ai-v5@npm:ai@5.0.15` ↗︎](https://www.npmjs.com/package/ai-v5/v/5.0.15) (from `npm:ai@5.0.0`, in `dependencies`)
+
+- [#6864](https://github.com/mastra-ai/mastra/pull/6864) [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869) Thanks [@TylerBarnes](https://github.com/TylerBarnes)! - Added a convertMessages(from).to("Mastra.V2" | "AIV\*") util for operating on DB messages directly
+
+- [#6927](https://github.com/mastra-ai/mastra/pull/6927) [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Fix output processors to match new stream types.
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
+## 0.14.1-alpha.1
+
+### Patch Changes
+
+- [#6864](https://github.com/mastra-ai/mastra/pull/6864) [`0f00e17`](https://github.com/mastra-ai/mastra/commit/0f00e172953ccdccadb35ed3d70f5e4d89115869) Thanks [@TylerBarnes](https://github.com/TylerBarnes)! - Added a convertMessages(from).to("Mastra.V2" | "AIV\*") util for operating on DB messages directly
+
+- [#6927](https://github.com/mastra-ai/mastra/pull/6927) [`217cd7a`](https://github.com/mastra-ai/mastra/commit/217cd7a4ce171e9a575c41bb8c83300f4db03236) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Fix output processors to match new stream types.
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- [#6919](https://github.com/mastra-ai/mastra/pull/6919) [`6e7e120`](https://github.com/mastra-ai/mastra/commit/6e7e1207d6e8d8b838f9024f90bd10df1181ba27) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.3) (from `npm:@ai-sdk/provider-utils@3.0.0`, in `dependencies`)
+  - Updated dependency [`ai@^4.3.19` ↗︎](https://www.npmjs.com/package/ai/v/4.3.19) (from `^4.3.16`, in `dependencies`)
+  - Updated dependency [`ai-v5@npm:ai@5.0.15` ↗︎](https://www.npmjs.com/package/ai-v5/v/5.0.15) (from `npm:ai@5.0.0`, in `dependencies`)
+
+- [#6700](https://github.com/mastra-ai/mastra/pull/6700) [`a5a23d9`](https://github.com/mastra-ai/mastra/commit/a5a23d981920d458dc6078919992a5338931ef02) Thanks [@gpanakkal](https://github.com/gpanakkal)! - Add `getMessagesById` method to `MastraStorage` adapters
+
 ## 0.14.0
 
 ### Minor Changes

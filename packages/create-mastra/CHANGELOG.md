@@ -1,5 +1,35 @@
 # create-mastra
 
+## 0.11.2
+
+### Patch Changes
+
+- [`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix peerdpes for @mastra/core
+
+## 0.11.1
+
+## 0.11.0
+
+### Patch Changes
+
+- [#6948](https://github.com/mastra-ai/mastra/pull/6948) [`a8070e6`](https://github.com/mastra-ai/mastra/commit/a8070e63ab384ae14a214faaf8634c53b7064bc3) Thanks [@taofeeq-deru](https://github.com/taofeeq-deru)! - Preserve run state in workflows after viewing traces
+
+## 0.11.0-alpha.3
+
+## 0.10.24-alpha.2
+
+## 0.10.24-alpha.1
+
+## 0.10.24-alpha.0
+
+### Patch Changes
+
+- [#6948](https://github.com/mastra-ai/mastra/pull/6948) [`a8070e6`](https://github.com/mastra-ai/mastra/commit/a8070e63ab384ae14a214faaf8634c53b7064bc3) Thanks [@taofeeq-deru](https://github.com/taofeeq-deru)! - Preserve run state in workflows after viewing traces
+
+## 0.10.23
+
+## 0.10.23-alpha.0
+
 ## 0.10.22
 
 ### Patch Changes

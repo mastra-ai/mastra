@@ -1,4 +1,4 @@
-import type { Tool } from '@mastra/core';
+import type { Tool } from '@mastra/core/tools';
 import type { Context } from 'hono';
 
 export interface ApiError extends Error {

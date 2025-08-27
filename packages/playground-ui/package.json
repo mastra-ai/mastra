@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.2.0",
+  "version": "5.2.4",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -23,14 +23,14 @@
         "default": "./dist/tokens.es.js"
       },
       "require": {
-        "default": "./dist/tokens.cjs.js",
-        "types": "./dist/tokens.d.ts"
+        "types": "./dist/tokens.d.ts",
+        "default": "./dist/tokens.cjs.js"
       }
     }
   },
   "scripts": {
     "build": "tsc && vite build",
-    "dev:playground": "vite build --watch",
+    "dev": "vite build --watch",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
@@ -48,9 +48,9 @@
     "@assistant-ui/react": "^0.7.91",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-syntax-highlighter": "^0.7.10",
-    "@autoform/core": "^2.2.0",
-    "@autoform/react": "^3.1.0",
-    "@autoform/zod": "^2.2.0",
+    "@autoform/core": "^3.0.0",
+    "@autoform/react": "^4.0.0",
+    "@autoform/zod": "^4.0.0",
     "@codemirror/lang-json": "^6.0.2",
     "@dagrejs/dagre": "^1.1.5",
     "@hookform/resolvers": "^3.10.0",
@@ -89,7 +89,7 @@
     "prism-react-renderer": "^2.4.1",
     "react-code-block": "1.1.3",
     "react-day-picker": "^8.10.1",
-    "react-hook-form": "^7.57.0",
+    "react-hook-form": "^7.59.0",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^2.1.9",
     "react-syntax-highlighter": "^15.6.1",
@@ -104,11 +104,11 @@
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "use-debounce": "^10.0.5",
-    "zod": "^3.25.67",
+    "zod": "^4.0.15",
     "zustand": "^5.0.7"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.14.0-0 <0.15.0-0",
+    "@mastra/core": ">=0.14.0-0 <0.16.0-0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",

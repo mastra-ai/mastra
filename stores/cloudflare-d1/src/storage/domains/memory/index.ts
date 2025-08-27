@@ -174,8 +174,6 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     if (!thread) return null;
 
-    console.log('thread', thread);
-
     try {
       return {
         ...thread,
@@ -669,6 +667,77 @@ export class MemoryStorageD1 extends MemoryStorage {
             error instanceof Error ? error.message : String(error)
           }`,
           details: { threadId },
+        },
+        error,
+      );
+      this.logger?.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      throw mastraError;
+    }
+  }
+
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  public async getMessagesById({
+    messageIds,
+    format,
+  }: {
+    messageIds: string[];
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    if (messageIds.length === 0) return [];
+    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
+    const messages: any[] = [];
+
+    try {
+      const query = createSqlBuilder()
+        .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId', 'resourceId'])
+        .from(fullTableName)
+        .where(`id in (${messageIds.map(() => '?').join(',')})`, ...messageIds);
+
+      query.orderBy('createdAt', 'DESC');
+
+      const { sql, params } = query.build();
+
+      const result = await this.operations.executeQuery({ sql, params });
+
+      if (Array.isArray(result)) messages.push(...result);
+
+      // Parse message content
+      const processedMessages = messages.map(message => {
+        const processedMsg: Record<string, any> = {};
+
+        for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
+          processedMsg[key] = deserializeValue(value);
+        }
+
+        return processedMsg;
+      });
+      this.logger.debug(`Retrieved ${messages.length} messages`);
+      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_BY_ID_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to retrieve messages by ID: ${error instanceof Error ? error.message : String(error)}`,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );

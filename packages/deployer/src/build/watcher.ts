@@ -6,6 +6,7 @@ import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-r
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { bundleExternals } from './analyze';
 import { noopLogger } from '@mastra/core/logger';
+import { createWorkspacePackageMap } from '../bundler/workspaceDependencies';
 
 export async function getInputOptions(
   entryFile: string,
@@ -14,10 +15,13 @@ export async function getInputOptions(
   { sourcemap = false, transpilePackages = [] }: { sourcemap?: boolean; transpilePackages?: string[] } = {},
 ) {
   const dependencies = new Map<string, string>();
+  const workspaceMap = await createWorkspacePackageMap();
 
   if (transpilePackages.length) {
     const { output, reverseVirtualReferenceMap } = await bundleExternals(
-      new Map(transpilePackages.map(pkg => [pkg, ['*']])),
+      new Map(
+        transpilePackages.map(pkg => [pkg, { exports: ['*'], rootPath: null, isWorkspace: workspaceMap.has(pkg) }]),
+      ),
       '.mastra/.build',
       noopLogger,
       {
@@ -43,6 +47,7 @@ export async function getInputOptions(
       dependencies,
       externalDependencies: new Set(),
       invalidChunks: new Set(),
+      workspaceMap,
     },
     platform,
     env,

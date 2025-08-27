@@ -5,9 +5,9 @@ import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
-import type { Mastra } from '../..';
 import type { MastraUnion } from '../../action';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { RuntimeContext } from '../../runtime-context';
 import { createMastraProxy } from '../../utils';
 import type { LegacyStep as Step } from './step';
@@ -390,7 +390,7 @@ export class Machine<
               }) satisfies WorkflowContext<TTriggerSchema>['getStepResult'],
             } as WorkflowContext,
             emit: (event: string, ...args: any[]) => {
-              // console.log(this.#workflowInstance.name, 'emitting', event, ...args);
+              // (this.#workflowInstance.name, 'emitting', event, ...args);
               this.emit(event, ...args);
             },
             suspend: async (payload?: any, softSuspend?: any) => {

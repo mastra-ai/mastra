@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
-import type { CoreMessage } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type { UIMessageWithMetadata } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/llm';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
@@ -230,11 +230,11 @@ describe('Agent Memory Tests', () => {
       }
 
       expect(flattenAssistantMessages(assistantMessages)).toEqual(
-        expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
+        expect.arrayContaining([expect.stringMatching(/2\s*\+\s*2/), expect.stringContaining('"result"')]),
       );
 
       expect(flattenAssistantMessages(assistantUiMessages)).toEqual(
-        expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
+        expect.arrayContaining([expect.stringMatching(/2\s*\+\s*2/), expect.stringContaining('"result"')]),
       );
     });
 

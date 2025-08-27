@@ -21,6 +21,8 @@ export enum AISpanType {
   GENERIC = 'generic',
   /** LLM generation with model calls, token usage, prompts, completions */
   LLM_GENERATION = 'llm_generation',
+  /** Individual LLM streaming chunk/event */
+  LLM_CHUNK = 'llm_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
   /** Function/tool execution with inputs, outputs, errors */
@@ -29,6 +31,18 @@ export enum AISpanType {
   WORKFLOW_RUN = 'workflow_run',
   /** Workflow step execution with step status, data flow */
   WORKFLOW_STEP = 'workflow_step',
+  /** Workflow conditional execution with condition evaluation */
+  WORKFLOW_CONDITIONAL = 'workflow_conditional',
+  /** Individual condition evaluation within conditional */
+  WORKFLOW_CONDITIONAL_EVAL = 'workflow_conditional_eval',
+  /** Workflow parallel execution */
+  WORKFLOW_PARALLEL = 'workflow_parallel',
+  /** Workflow loop execution */
+  WORKFLOW_LOOP = 'workflow_loop',
+  /** Workflow sleep operation */
+  WORKFLOW_SLEEP = 'workflow_sleep',
+  /** Workflow wait for event operation */
+  WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
 // ============================================================================
@@ -85,6 +99,18 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   };
   /** Whether this was a streaming response */
   streaming?: boolean;
+  /** Reason the generation finished */
+  finishReason?: string;
+}
+
+/**
+ * LLM Chunk attributes - for individual streaming chunks/events
+ */
+export interface LLMChunkAttributes extends AIBaseAttributes {
+  /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
+  chunkType?: string;
+  /** Sequence number of this chunk in the stream */
+  sequenceNumber?: number;
 }
 
 /**
@@ -132,15 +158,94 @@ export interface WorkflowStepAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Workflow Conditional attributes
+ */
+export interface WorkflowConditionalAttributes extends AIBaseAttributes {
+  /** Number of conditions evaluated */
+  conditionCount: number;
+  /** Which condition indexes evaluated to true */
+  truthyIndexes?: number[];
+  /** Which steps will be executed */
+  selectedSteps?: string[];
+}
+
+/**
+ * Workflow Conditional Evaluation attributes
+ */
+export interface WorkflowConditionalEvalAttributes extends AIBaseAttributes {
+  /** Index of this condition in the conditional */
+  conditionIndex: number;
+  /** Result of condition evaluation */
+  result?: boolean;
+}
+
+/**
+ * Workflow Parallel attributes
+ */
+export interface WorkflowParallelAttributes extends AIBaseAttributes {
+  /** Number of parallel branches */
+  branchCount: number;
+  /** Step IDs being executed in parallel */
+  parallelSteps?: string[];
+}
+
+/**
+ * Workflow Loop attributes
+ */
+export interface WorkflowLoopAttributes extends AIBaseAttributes {
+  /** Type of loop (foreach, dowhile, dountil) */
+  loopType?: 'foreach' | 'dowhile' | 'dountil';
+  /** Current iteration number (for individual iterations) */
+  iteration?: number;
+  /** Total iterations (if known) */
+  totalIterations?: number;
+  /** Number of steps to run concurrently in foreach loop */
+  concurrency?: number;
+}
+
+/**
+ * Workflow Sleep attributes
+ */
+export interface WorkflowSleepAttributes extends AIBaseAttributes {
+  /** Sleep duration in milliseconds */
+  durationMs?: number;
+  /** Sleep until date */
+  untilDate?: Date;
+  /** Sleep type */
+  sleepType?: 'fixed' | 'dynamic';
+}
+
+/**
+ * Workflow Wait Event attributes
+ */
+export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
+  /** Event name being waited for */
+  eventName?: string;
+  /** Timeout in milliseconds */
+  timeoutMs?: number;
+  /** Whether event was received or timed out */
+  eventReceived?: boolean;
+  /** Wait duration in milliseconds */
+  waitDurationMs?: number;
+}
+
+/**
  * AI-specific span types mapped to their attributes
  */
 export interface AISpanTypeMap {
   [AISpanType.AGENT_RUN]: AgentRunAttributes;
   [AISpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [AISpanType.LLM_GENERATION]: LLMGenerationAttributes;
+  [AISpanType.LLM_CHUNK]: LLMChunkAttributes;
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [AISpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
+  [AISpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
+  [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: WorkflowConditionalEvalAttributes;
+  [AISpanType.WORKFLOW_PARALLEL]: WorkflowParallelAttributes;
+  [AISpanType.WORKFLOW_LOOP]: WorkflowLoopAttributes;
+  [AISpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
+  [AISpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
   [AISpanType.GENERIC]: AIBaseAttributes;
 }
 
@@ -167,6 +272,8 @@ export interface AISpan<TType extends AISpanType> {
   startTime: Date;
   /** When span ended */
   endTime?: Date;
+  /** Is an event span? (event occurs at startTime, has no endTime) */
+  isEvent: boolean;
   /** AI-specific attributes - strongly typed based on span type */
   attributes?: AISpanTypeMap[TType];
   /** Parent span reference (undefined for root spans) */
@@ -224,6 +331,17 @@ export interface AISpan<TType extends AISpanType> {
     metadata?: Record<string, any>;
   }): AISpan<TChildType>;
 
+  /** Create event span - can be any span type independent of parent 
+      Event spans have no input, and no endTime.
+  */
+  createEventSpan<TChildType extends AISpanType>(options: {
+    type: TChildType;
+    name: string;
+    output?: any;
+    attributes?: AISpanTypeMap[TChildType];
+    metadata?: Record<string, any>;
+  }): AISpan<TChildType>;
+
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean;
 }
@@ -243,12 +361,16 @@ export interface AISpanOptions<TType extends AISpanType> {
   type: TType;
   /** Input data */
   input?: any;
+  /** Output data (for event spans) */
+  output?: any;
   /** Span attributes */
   attributes?: AISpanTypeMap[TType];
   /** Span metadata */
   metadata?: Record<string, any>;
   /** Parent span */
   parent?: AnyAISpan;
+  /** Is an event span? */
+  isEvent: boolean;
 }
 
 // ============================================================================
@@ -268,7 +390,7 @@ export enum SamplingStrategyType {
 /**
  * Context for TraceSampling
  */
-export interface AITraceContext {
+export interface TraceContext {
   runtimeContext?: RuntimeContext;
   metadata?: Record<string, any>;
 }
@@ -280,7 +402,7 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.ALWAYS }
   | { type: SamplingStrategyType.NEVER }
   | { type: SamplingStrategyType.RATIO; probability: number }
-  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: AITraceContext) => boolean };
+  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
 
 /**
  * Configuration for a single AI tracing instance
@@ -379,9 +501,7 @@ export type TracingSelector = (
 /**
  * Context for AI tracing that flows through workflow and agent execution
  */
-export interface AITracingContext {
-  /** Parent AI span for creating child spans in nested operations */
-  parentAISpan?: AnyAISpan;
-  /** User-defined metadata */
-  metadata?: Record<string, any>;
+export interface TracingContext {
+  /** Current AI span for creating child spans and adding metadata */
+  currentSpan?: AnyAISpan;
 }

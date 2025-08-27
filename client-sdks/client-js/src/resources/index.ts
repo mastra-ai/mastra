@@ -8,3 +8,4 @@ export * from './base';
 export * from './workflow';
 export * from './a2a';
 export * from './mcp-tool';
+export * from './observability';

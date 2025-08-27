@@ -43,6 +43,7 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } f
 import { runScorer } from '../scores/hooks';
 import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
+import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
@@ -72,6 +73,8 @@ import type {
 export * from './input-processor';
 export { TripWire };
 export { MessageList };
+export { convertMessages } from './message-list';
+export type { OutputFormat } from './message-list';
 export * from './types';
 
 export type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';
@@ -925,7 +928,7 @@ export class Agent<
 
       const newMessages = messageList.get.input.v1() as CoreMessage[];
 
-      const processedMemoryMessages = memory.processMessages({
+      const processedMemoryMessages = await memory.processMessages({
         // these will be processed
         messages: messageList.get.remembered.v1() as CoreMessage[],
         // these are here for inspecting but shouldn't be returned by the processor
@@ -1209,7 +1212,6 @@ export class Agent<
           writableStream,
           agentAISpan,
         };
-
         return [k, makeCoreTool(tool, options)];
       }),
     );
@@ -1373,7 +1375,7 @@ export class Agent<
                 const result = await run.start({
                   inputData: args,
                   runtimeContext,
-                  parentAISpan: toolAISpan,
+                  currentSpan: toolAISpan,
                 });
                 toolAISpan?.end({ output: result });
                 return result;
@@ -1622,7 +1624,7 @@ export class Agent<
     runtimeContext,
     saveQueueManager,
     writableStream,
-    parentAISpan,
+    currentSpan,
   }: {
     instructions: string;
     toolsets?: ToolsetsInput;
@@ -1636,7 +1638,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
-    parentAISpan?: AnyAISpan;
+    currentSpan?: AnyAISpan;
   }) {
     return {
       before: async () => {
@@ -1661,11 +1663,11 @@ export class Agent<
           },
         };
 
-        // if parentSpan passed, use it to build agentSpan
+        // if currentSpan passed, use it to build agentSpan
         // otherwise, attempt to create new trace
         let agentAISpan: AISpan<AISpanType.AGENT_RUN> | undefined;
-        if (parentAISpan) {
-          agentAISpan = parentAISpan.createChildSpan({ type: AISpanType.AGENT_RUN, ...spanArgs });
+        if (currentSpan) {
+          agentAISpan = currentSpan.createChildSpan({ type: AISpanType.AGENT_RUN, ...spanArgs });
         } else {
           const aiTracing = getSelectedAITracing({
             runtimeContext: runtimeContext,
@@ -1878,7 +1880,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             ?.map(m => m.content)
             ?.join(`\n`) ?? undefined;
 
-        const processedMemoryMessages = memory.processMessages({
+        const processedMemoryMessages = await memory.processMessages({
           // these will be processed
           messages: messageList.get.remembered.v1() as CoreMessage[],
           // these are here for inspecting but shouldn't be returned by the processor
@@ -2419,7 +2421,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runtimeContext,
       saveQueueManager,
       writableStream,
-      parentAISpan: args.aiTracingContext?.parentAISpan,
+      currentSpan: args.tracingContext?.currentSpan,
     });
 
     let messageList: MessageList;
@@ -2518,7 +2520,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
   }
 
-  async #execute(options: InnerAgentExecutionOptions) {
+  async #execute<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
+  >(options: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -2789,7 +2794,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             ?.map(m => m.content)
             ?.join(`\n`) ?? undefined;
 
-        const processedMemoryMessages = memory.processMessages({
+        const processedMemoryMessages = await memory.processMessages({
           // these will be processed
           messages: messageList.get.remembered.v1() as CoreMessage[],
           // these are here for inspecting but shouldn't be returned by the processor
@@ -2849,13 +2854,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const streamResult = llm.stream({
           ...inputData,
           outputProcessors,
-          ...(inputData.output
-            ? {
-                objectOptions: {
-                  schema: inputData.output,
-                },
-              }
-            : {}),
         });
 
         if (options.format === 'aisdk') {
@@ -2978,7 +2976,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             : [structuredProcessor];
         }
 
-        const loopOptions: ModelLoopStreamArgs<any, any> = {
+        const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
           messages: result.messages as ModelMessage[],
           runtimeContext: result.runtimeContext!,
           runId,
@@ -2986,7 +2984,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           tools: result.tools,
           resourceId: result.resourceId,
           threadId: result.threadId,
-          output: result.output,
           structuredOutput: result.structuredOutput,
           stopWhen: result.stopWhen,
           options: {
@@ -3034,9 +3031,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             },
             onStepFinish: result.onStepFinish,
           },
-          objectOptions: {
-            schema: options.output,
-          },
+          output: options.output,
           outputProcessors: effectiveOutputProcessors,
           modelSettings: {
             temperature: 0,
@@ -3243,7 +3238,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   }
 
   async generateVNext<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    OUTPUT extends OutputSchema | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' = 'mastra',
   >(
@@ -3276,7 +3271,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   }
 
   async streamVNext<
-    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    OUTPUT extends OutputSchema | undefined = undefined,
     STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
@@ -3306,7 +3301,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const result = await this.#execute({
       ...mergedStreamOptions,
       messages,
-    } as InnerAgentExecutionOptions);
+    });
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
