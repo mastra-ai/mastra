@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-azure",
-  "version": "0.10.7",
+  "version": "0.10.9",
   "description": "Mastra Azure speech integration",
   "type": "module",
   "main": "dist/index.js",
@@ -40,6 +40,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
   }
 }
