@@ -4,6 +4,7 @@ const meta = {
   bias: "Bias",
   completeness: "Completeness",
   "content-similarity": "Content Similarity",
+  "context-relevance": "Context Relevance",
   "context-precision": "Context Precision",
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
