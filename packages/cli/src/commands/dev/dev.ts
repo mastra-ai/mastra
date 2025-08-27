@@ -62,10 +62,11 @@ const startServer = async (
         NODE_ENV: 'production',
         ...Object.fromEntries(env),
         MASTRA_DEV: 'true',
+        MASTRA_DEV_QUIET: 'true',
         PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
-      stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       reject: false,
     }) as any as ChildProcess;
 
@@ -78,32 +79,6 @@ const startServer = async (
       );
     }
 
-    // Filter server output to remove playground message
-    if (currentServerProcess.stdout) {
-      currentServerProcess.stdout.on('data', (data: Buffer) => {
-        const output = data.toString();
-        if (
-          !output.includes('Playground available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on port')
-        ) {
-          process.stdout.write(output);
-        }
-      });
-    }
-
-    if (currentServerProcess.stderr) {
-      currentServerProcess.stderr.on('data', (data: Buffer) => {
-        const output = data.toString();
-        if (
-          !output.includes('Playground available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on port')
-        ) {
-          process.stderr.write(output);
-        }
-      });
-    }
 
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
