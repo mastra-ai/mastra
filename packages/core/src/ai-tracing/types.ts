@@ -331,7 +331,7 @@ export interface AISpan<TType extends AISpanType> {
     metadata?: Record<string, any>;
   }): AISpan<TChildType>;
 
-  /** Create event span - can be any span type independent of parent 
+  /** Create event span - can be any span type independent of parent
       Event spans have no input, and no endTime.
   */
   createEventSpan<TChildType extends AISpanType>(options: {
@@ -404,6 +404,8 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.RATIO; probability: number }
   | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
 
+export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+
 /**
  * Configuration for a single AI tracing instance
  */
@@ -457,6 +459,9 @@ export type AITracingEvent =
 export interface AITracingExporter {
   /** Exporter name */
   name: string;
+
+  /** Initialize exporter (called after all dependencies are ready) */
+  init?(): Promise<void>;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;

@@ -4,6 +4,8 @@
 
 This document outlines the plan to enhance the `DefaultExporter` with intelligent batch processing capabilities for AI tracing spans. The goal is to provide production-ready performance while maintaining simplicity and database-specific optimizations.
 
+Note: This plan was created on 27-Aug-25, but may now be out of date.
+
 ## Architecture
 
 ### Single Exporter Strategy
