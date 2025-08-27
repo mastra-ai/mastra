@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ragie",
-  "version": "1.2.8",
+  "version": "1.2.10",
   "description": "",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -54,6 +54,6 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
   }
 }

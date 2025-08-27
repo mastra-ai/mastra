@@ -149,6 +149,7 @@ export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
   endedAt: { type: 'timestamp', nullable: true }, // When the span ended
   createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
   updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
+  isEvent: { type: 'boolean', nullable: false },
 };
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {

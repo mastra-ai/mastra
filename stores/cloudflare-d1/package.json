@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare-d1",
-  "version": "0.12.7",
+  "version": "0.12.10",
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -46,6 +46,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.15.0-0"
+    "@mastra/core": ">=0.13.0-0 <0.16.0-0"
   }
 }
