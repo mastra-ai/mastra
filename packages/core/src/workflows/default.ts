@@ -825,7 +825,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const result = await runStep({
           runId,
           workflowId,
-          mastra: wrapMastra(this.mastra!, { currentSpan: stepAISpan }),
+          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "0.10.6-alpha.0",
+  "version": "0.11.1",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
   },
   "peerDependencies": {
     "ai": "^4.0.0 || ^5.0.0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
