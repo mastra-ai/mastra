@@ -128,6 +128,36 @@ const startServer = async (
   }
 };
 
+async function checkAndRestart(
+  dotMastraPath: string,
+  port: number,
+  bundler: DevBundler,
+  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
+) {
+  if (isRestarting) {
+    return;
+  }
+
+  try {
+    // Check if hot reload is disabled due to template installation
+    const response = await fetch(`http://localhost:${port}/__hot-reload-status`);
+    if (response.ok) {
+      const status = (await response.json()) as { disabled: boolean; timestamp: string };
+      if (status.disabled) {
+        logger.info('[Mastra Dev] - ⏸️  Server restart skipped: template installation in progress');
+        return;
+      }
+    }
+  } catch (error) {
+    // If we can't check status (server down), proceed with restart
+    logger.debug(`[Mastra Dev] - Could not check hot reload status: ${error}`);
+  }
+
+  // Proceed with restart
+  logger.info('[Mastra Dev] - ✅ Restarting server...');
+  await rebundleAndRestart(dotMastraPath, port, bundler, startOptions);
+}
+
 async function rebundleAndRestart(
   dotMastraPath: string,
   port: number,
@@ -220,9 +250,9 @@ export async function dev({
   await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
-      logger.info('[Mastra Dev] - Bundling finished, restarting server...');
+      logger.info('[Mastra Dev] - Bundling finished, checking if restart is allowed...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
+      checkAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
     }
   });
 
