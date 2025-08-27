@@ -2,28 +2,19 @@
 
 ![Mastra Cli](https://github.com/mastra-ai/mastra/blob/main/packages/cli/mastra-cli.png)
 
-The Mastra CLI lets you initialize a new project, spin up a local dev server, and deploy it to serverless platforms like Vercel and Cloudflare Workers.
+Mastra is the Typescript framework for building AI agents and assistants. It’s used by some of the largest companies in the world to build internal AI automation tooling and customer-facing agents.
+
+This is the CLI package, which allows you to:
+
+- Create a new project
+- Spin up the Mastra dev server
+- Deploy to a Hono server, or a serverless environment like Cloudflare Workers or Vercel
 
 ## Installing the Mastra CLI
 
 ```bash copy
 npm i -g mastra
 ```
-
-## Commands
-
-### Project Setup
-
-```bash
-# Initialize a new project
-mastra init
-```
-
-## Deployment
-
-Mastra's data syncing infrastructure is designed for Next.js sites running on serverless hosting providers like Vercel or Netlify.
-
-Logs are stored in [Upstash](https://upstash.com/).
 
 ## Commands
 

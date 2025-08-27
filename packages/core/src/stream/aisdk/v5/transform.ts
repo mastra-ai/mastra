@@ -4,8 +4,10 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { TextStreamPart, ToolSet } from 'ai-v5';
+import type { CoreMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
 import type { ChunkType } from '../../types';
+import { ChunkFrom } from '../../types';
+import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
 type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
@@ -15,26 +17,26 @@ type StreamPart =
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
-        all: any[];
-        user: any[];
-        nonUser: any[];
+        all: CoreMessage[];
+        user: CoreMessage[];
+        nonUser: CoreMessage[];
       };
     };
 
-export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }) {
+export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }): ChunkType | undefined {
   switch (value.type) {
     case 'response-metadata':
       return {
         type: 'response-metadata',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: value,
       };
     case 'text-start':
       return {
         type: 'text-start',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           id: value.id,
           providerMetadata: value.providerMetadata,
@@ -45,7 +47,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         return {
           type: 'text-delta',
           runId: ctx.runId,
-          from: 'AGENT',
+          from: ChunkFrom.AGENT,
           payload: {
             id: value.id,
             providerMetadata: value.providerMetadata,
@@ -59,7 +61,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'text-end',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: value,
       };
 
@@ -67,7 +69,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'reasoning-start',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           id: value.id,
           providerMetadata: value.providerMetadata,
@@ -75,25 +77,22 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       };
 
     case 'reasoning-delta':
-      if (value.delta) {
-        return {
-          type: 'reasoning-delta',
-          runId: ctx.runId,
-          from: 'AGENT',
-          payload: {
-            id: value.id,
-            providerMetadata: value.providerMetadata,
-            text: value.delta,
-          },
-        };
-      }
-      return;
+      return {
+        type: 'reasoning-delta',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: value.id,
+          providerMetadata: value.providerMetadata,
+          text: value.delta,
+        },
+      };
 
     case 'reasoning-end':
       return {
         type: 'reasoning-end',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           id: value.id,
           providerMetadata: value.providerMetadata,
@@ -104,11 +103,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'source',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           id: value.id,
           sourceType: value.sourceType,
-          title: value.title,
+          title: value.title || '',
           mimeType: value.sourceType === 'document' ? value.mediaType : undefined,
           filename: value.sourceType === 'document' ? value.filename : undefined,
           url: value.sourceType === 'url' ? value.url : undefined,
@@ -120,7 +119,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'file',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           data: value.data,
           base64: typeof value.data === 'string' ? value.data : undefined,
@@ -132,7 +131,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'tool-call',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           toolCallId: value.toolCallId,
           toolName: value.toolName,
@@ -146,7 +145,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'tool-result',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           toolCallId: value.toolCallId,
           toolName: value.toolName,
@@ -161,7 +160,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'tool-call-input-streaming-start',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           toolCallId: value.id,
           toolName: value.toolName,
@@ -175,7 +174,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         return {
           type: 'tool-call-delta',
           runId: ctx.runId,
-          from: 'AGENT',
+          from: ChunkFrom.AGENT,
           payload: {
             argsTextDelta: value.delta,
             toolCallId: value.id,
@@ -189,7 +188,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'tool-call-input-streaming-end',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           toolCallId: value.id,
           providerMetadata: value.providerMetadata,
@@ -201,7 +200,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       return {
         type: 'finish',
         runId: ctx.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {
           stepResult: {
             reason: value.finishReason,
@@ -219,6 +218,21 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           messages,
           ...rest,
         },
+      };
+    case 'error':
+      return {
+        type: 'error',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: value,
+      };
+
+    case 'raw':
+      return {
+        type: 'raw',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: value.rawValue as Record<string, unknown>,
       };
   }
   return;
@@ -297,14 +311,14 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
   // }
 }
 
-type OutputChunkType = TextStreamPart<ToolSet> | undefined;
+export type OutputChunkType = TextStreamPart<ToolSet> | ObjectStreamPart<unknown> | undefined;
 
 export function convertMastraChunkToAISDKv5({
   chunk,
-  includeRawChunks,
+  mode = 'stream',
 }: {
   chunk: ChunkType;
-  includeRawChunks?: boolean;
+  mode?: 'generate' | 'stream';
 }): OutputChunkType {
   switch (chunk.type) {
     case 'start':
@@ -316,23 +330,20 @@ export function convertMastraChunkToAISDKv5({
       return {
         type: 'start-step',
         request: rest.request,
-        warnings: rest.warnings,
+        warnings: rest.warnings || [],
       };
     case 'raw':
-      if (includeRawChunks) {
-        return {
-          type: 'raw',
-          rawValue: chunk.payload,
-        };
-      }
-      return;
+      return {
+        type: 'raw',
+        rawValue: chunk.payload,
+      };
 
     case 'finish': {
       return {
         type: 'finish',
         finishReason: chunk.payload.stepResult.reason,
         totalUsage: chunk.payload.output.usage,
-      };
+      } as any;
     }
     case 'reasoning-start':
       return {
@@ -371,21 +382,30 @@ export function convertMastraChunkToAISDKv5({
       return {
         type: 'source',
         id: chunk.payload.id,
-        mediaType: chunk.payload.mediaType,
         sourceType: chunk.payload.sourceType,
+        filename: chunk.payload.filename,
+        mediaType: chunk.payload.mimeType,
         title: chunk.payload.title,
         url: chunk.payload.url,
-        filename: chunk.payload.filename,
         providerMetadata: chunk.payload.providerMetadata,
-      };
+      } as any;
     case 'file':
+      if (mode === 'generate') {
+        return {
+          type: 'file',
+          file: new DefaultGeneratedFile({
+            data: chunk.payload.data,
+            mediaType: chunk.payload.mimeType,
+          }),
+        };
+      }
+
       return {
         type: 'file',
-        file: {
-          base64: chunk.payload.base64,
-          uint8Array: chunk.payload.uint8Array,
-          mediaType: chunk.payload.mediaType,
-        },
+        file: new DefaultGeneratedFileWithType({
+          data: chunk.payload.data,
+          mediaType: chunk.payload.mimeType,
+        }),
       };
     case 'tool-call':
       return {
@@ -401,7 +421,7 @@ export function convertMastraChunkToAISDKv5({
         type: 'tool-input-start',
         id: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
-        dynamic: chunk.payload.dynamic,
+        dynamic: !!chunk.payload.dynamic,
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
       };
@@ -418,14 +438,16 @@ export function convertMastraChunkToAISDKv5({
         delta: chunk.payload.argsTextDelta,
         providerMetadata: chunk.payload.providerMetadata,
       };
-    case 'step-finish':
+    case 'step-finish': {
+      const { request: _request, providerMetadata, ...rest } = chunk.payload.metadata;
       return {
         type: 'finish-step',
-        response: chunk.payload.response,
+        response: rest as any,
         usage: chunk.payload.output.usage, // ?
         finishReason: chunk.payload.stepResult.reason,
-        providerMetadata: chunk.payload.providerMetadata,
+        providerMetadata,
       };
+    }
     case 'text-delta':
       return {
         type: 'text-delta',
@@ -476,7 +498,20 @@ export function convertMastraChunkToAISDKv5({
         type: 'error',
         error: chunk.payload.error,
       };
-  }
 
-  return;
+    case 'object':
+      return {
+        type: 'object',
+        object: chunk.object,
+      };
+
+    default:
+      if (chunk.type && chunk.payload) {
+        return {
+          type: chunk.type,
+          ...(chunk.payload || {}),
+        } as any;
+      }
+      return;
+  }
 }

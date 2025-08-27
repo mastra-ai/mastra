@@ -5,7 +5,7 @@ import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
 import { DepsService } from '../services';
 
-type WorkspacePackageInfo = {
+export type WorkspacePackageInfo = {
   location: string;
   dependencies: Record<string, string> | undefined;
   version: string | undefined;

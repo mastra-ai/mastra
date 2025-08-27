@@ -1,0 +1,43 @@
+{
+  "name": "@mastra/memory-integration-tests-v5",
+  "private": true,
+  "version": "0.1.5",
+  "scripts": {
+    "test": "pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:processors",
+    "test:agent-memory": "vitest run ./src/agent-memory.test.ts",
+    "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
+    "test:streaming": "vitest run ./src/streaming-memory.test.ts",
+    "test:working-memory": "vitest run ./src/working-memory.test.ts",
+    "test:processors": "vitest run ./src/processors.test.ts",
+    "dev": "mastra dev"
+  },
+  "dependencies": {
+    "@mastra/fastembed": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "dotenv": "^16.4.7",
+    "json-schema": "^0.4.0",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "@ai-sdk/google": "^2.0.6",
+    "@ai-sdk/openai": "^2.0.15",
+    "@ai-sdk/react": "^2.0.15",
+    "@faker-js/faker": "^9.6.0",
+    "@mastra/core": "workspace:*",
+    "@testing-library/react": "^16.2.0",
+    "@types/json-schema": "^7.0.15",
+    "@types/node": "^20.17.27",
+    "ai": "^5.0.15",
+    "jsdom": "^26.0.0",
+    "mastra": "workspace:*",
+    "next": "^15.2.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+  }
+}

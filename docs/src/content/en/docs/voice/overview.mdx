@@ -548,7 +548,7 @@ For detailed configuration options and advanced features, check out [Speech to S
   The tab shows how to set up real-time voice communication with event handling for audio responses.
   This enables conversational AI experiences with continuous audio streaming.
 */}
-<Tabs items={["OpenAI"]}>
+<Tabs items={["OpenAI", "Google Gemini Live"]}>
   <Tabs.Tab>
 ```typescript
 import { Agent } from '@mastra/core/agent';
@@ -579,6 +579,55 @@ await voiceAgent.voice.send(micStream);
 Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
 
   </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+
+const voiceAgent = new Agent({
+  name: "Voice Agent",
+  instructions: "You are a voice assistant that can help users with their tasks.",
+  model: openai("gpt-4o"),
+  voice: new GeminiLiveVoice({
+    // Live API mode
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: 'gemini-2.0-flash-exp',
+    speaker: 'Puck',
+    debug: true,
+    // Vertex AI alternative:
+    // vertexAI: true,
+    // project: 'your-gcp-project',
+    // location: 'us-central1',
+    // serviceAccountKeyFile: '/path/to/service-account.json',
+  }),
+});
+
+// Connect before using speak/send
+await voiceAgent.voice.connect();
+
+// Listen for agent audio responses
+voiceAgent.voice.on('speaker', ({ audio }) => {
+  playAudio(audio);
+});
+
+// Listen for text responses and transcriptions
+voiceAgent.voice.on('writing', ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+// Initiate the conversation
+await voiceAgent.voice.speak('How can I help you today?');
+
+// Send continuous audio from the microphone
+const micStream = getMicrophoneStream();
+await voiceAgent.voice.send(micStream);
+```
+
+Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+
+  </Tabs.Tab>
 </Tabs>
 
 ## Voice Configuration
@@ -592,7 +641,7 @@ The tabs help users understand the full configuration capabilities of each provi
 Each tab shows both speech and listening model configurations where applicable.
 */}
 
-<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf", "OpenAI Realtime"]}>
+<Tabs items={["OpenAI", "Azure", "ElevenLabs", "PlayAI", "Google", "Cloudflare", "Deepgram", "Speechify", "Sarvam", "Murf", "OpenAI Realtime", "Google Gemini Live"]}>
   <Tabs.Tab>
 ```typescript
 // OpenAI Voice Configuration
@@ -695,7 +744,7 @@ const voice = new GoogleVoice({
 });
 ```
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
 
   </Tabs.Tab>
   <Tabs.Tab>
@@ -810,6 +859,22 @@ const voice = new OpenAIRealtimeVoice({
 For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
 
   </Tabs.Tab>
+  <Tabs.Tab>
+```typescript
+// Google Gemini Live Voice Configuration
+const voice = new GeminiLiveVoice({
+  speechModel: {
+    name: "gemini-2.0-flash-exp", // Example model name
+    apiKey: process.env.GOOGLE_API_KEY,
+  },
+  speaker: "Puck", // Example speaker name
+  // Google Gemini Live is a realtime bidirectional API without separate speech and listening models
+});
+```
+
+Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+
+  </Tabs.Tab>
 </Tabs>
 
 ### Using Multiple Voice Providers
@@ -870,8 +935,10 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [CompositeVoice](../../reference/voice/composite-voice.mdx)
 - [MastraVoice](../../reference/voice/mastra-voice.mdx)
 - [OpenAI Voice](../../reference/voice/openai.mdx)
+- [OpenAI Realtime Voice](../../reference/voice/openai-realtime.mdx)
 - [Azure Voice](../../reference/voice/azure.mdx)
 - [Google Voice](../../reference/voice/google.mdx)
+- [Google Gemini Live Voice](../../reference/voice/google-gemini-live.mdx)
 - [Deepgram Voice](../../reference/voice/deepgram.mdx)
 - [PlayAI Voice](../../reference/voice/playai.mdx)
 - [Voice Examples](../../examples/voice/text-to-speech.mdx)

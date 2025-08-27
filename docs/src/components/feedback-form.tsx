@@ -33,11 +33,9 @@ interface FeedbackFormProps {
 }
 
 const ratings = [
-  { rating: 5, emoji: "😊", label: "Very helpful" },
-  { rating: 4, emoji: "🙂", label: "Helpful" },
-  { rating: 3, emoji: "😐", label: "Okay" },
-  { rating: 2, emoji: "😕", label: "Not very helpful" },
-  { rating: 1, emoji: "😒", label: "Not helpful" },
+  { rating: 3, emoji: "😊", label: "Helpful" },
+  { rating: 2, emoji: "😐", label: "Somewhat helpful" },
+  { rating: 1, emoji: "😕", label: "Not helpful" },
 ];
 
 export const FeedbackForm = ({
@@ -69,7 +67,12 @@ export const FeedbackForm = ({
     setErrorMessage("");
 
     try {
-      const response = await fetch("/api/feedback", {
+      const url =
+        process.env.NODE_ENV === "production"
+          ? "/docs/api/feedback"
+          : "/api/feedback";
+
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -144,7 +147,7 @@ export const FeedbackForm = ({
                     type="button"
                     onClick={() => form.setValue("rating", rating)}
                     className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center text-lg transition-all hover:scale-110",
+                      "w-8 h-8 focus-visible:outline-2 focus-visible:outline-accent-green rounded-full flex items-center justify-center text-lg transition-all hover:scale-110",
                       currentRating === rating
                         ? " ring-2 ring-accent-green"
                         : "",
@@ -176,7 +179,7 @@ export const FeedbackForm = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="dark:bg-[#121212] bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
+                className="dark:bg-[#121212] focus-visible:outline-2 focus-visible:outline-accent-green bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
               >
                 {isSubmitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />

@@ -1,6 +1,8 @@
 # @mastra/core
 
-The core foundation of the Mastra framework, providing essential components and interfaces for building AI-powered applications.
+Mastra is the Typescript framework for building AI agents and assistants. It’s used by some of the largest companies in the world to build internal AI automation tooling and customer-facing agents.
+
+This is the `core` package, which includes the main functionality of Mastra, including agents, workflows, tools, and telemetry.
 
 ## Installation
 
@@ -8,25 +10,11 @@ The core foundation of the Mastra framework, providing essential components and 
 npm install @mastra/core
 ```
 
-## Overview
-
-`@mastra/core` is the foundational package of the Mastra framework, providing:
-
-- Core abstractions and interfaces
-- AI agent management and execution
-- Integration with multiple AI providers
-- Workflow orchestration
-- Memory and vector store management
-- Telemetry and logging infrastructure
-- Text-to-speech capabilities
-
-For comprehensive documentation, visit our [official documentation](https://mastra.ai/docs).
-
 ## Core Components
 
 ### Agents (`/agent`)
 
-Agents are autonomous AI entities that can understand instructions, use tools, and complete tasks. They encapsulate LLM interactions and can maintain conversation history, use provided tools, and follow specific behavioral guidelines through instructions.
+Mastra agents are autonomous AI entities that can understand instructions, use tools, and complete tasks. They encapsulate LLM interactions and can maintain conversation history, use provided tools, and follow specific behavioral guidelines through instructions.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
@@ -44,7 +32,7 @@ const agent = new Agent({
 
 ### Workflows (`/workflows`)
 
-Workflows orchestrate complex AI tasks by combining multiple actions into a coherent sequence. They handle state management, error recovery, and can include conditional logic and parallel execution.
+Mastra workflows are a graph-based execution engine allowing you to chain, branch, and parallelize LLM calls. You can orchestrate complex AI tasks by combining multiple actions. Workflows handle state management, error recovery, and can include conditional logic.
 
 ```typescript
 import { createWorkflow } from '@mastra/core/workflows';
@@ -61,33 +49,6 @@ const workflow = createWorkflow({
 ```
 
 [Workflow documentation →](https://mastra.ai/docs/workflows/overview)
-
-### Memory (`/memory`)
-
-Memory management provides persistent storage and retrieval of AI interactions. It supports different storage backends and enables context-aware conversations and long-term learning.
-
-```typescript
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-
-const agent = new Agent({
-  name: 'Project Manager',
-  instructions: 'You are a project manager assistant.',
-  model: openai('gpt-4o-mini'),
-  memory: new Memory({
-    options: {
-      lastMessages: 20,
-      semanticRecall: {
-        topK: 3,
-        messageRange: { before: 2, after: 1 },
-      },
-    },
-  }),
-});
-```
-
-[Memory documentation →](https://mastra.ai/reference/memory/Memory)
 
 ### Tools (`/tools`)
 
@@ -142,7 +103,7 @@ const agent = new Agent({
 The logging system provides structured, leveled logging with multiple transport options. It supports debug information, performance monitoring, and error tracking across your AI applications.
 
 ```typescript
-import { LogLevel } from '@mastra/core';
+import { LogLevel } from '@mastra/core/loggers';
 import { PinoLogger } from '@mastra/loggers';
 
 const logger = new PinoLogger({

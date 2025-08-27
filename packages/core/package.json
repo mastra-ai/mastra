@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.13.3-alpha.0",
+  "version": "0.15.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -70,6 +70,16 @@
         "default": "./dist/network/vNext/index.cjs"
       }
     },
+    "./workflows/evented": {
+      "import": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.cjs"
+      }
+    },
     "./vector/filter": {
       "import": {
         "types": "./dist/vector/filter/index.d.ts",
@@ -130,6 +140,26 @@
         "default": "./dist/agent/index.cjs"
       }
     },
+    "./processors": {
+      "import": {
+        "types": "./dist/processors/index.d.ts",
+        "default": "./dist/processors/index.js"
+      },
+      "require": {
+        "types": "./dist/processors/index.d.ts",
+        "default": "./dist/processors/index.cjs"
+      }
+    },
+    "./utils/zod-to-json": {
+      "import": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.js"
+      },
+      "require": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -145,13 +175,13 @@
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
     "@ai-sdk/provider": "^1.1.3",
-    "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/provider-utils": "^2.2.8",
-    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.0",
+    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.3",
+    "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@mastra/schema-compat": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.62.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.62.1",
     "@opentelemetry/core": "^2.0.1",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.203.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
@@ -164,28 +194,32 @@
     "@opentelemetry/sdk-trace-node": "^2.0.1",
     "@opentelemetry/semantic-conventions": "^1.36.0",
     "@sindresorhus/slugify": "^2.2.1",
-    "ai": "^4.3.16",
-    "ai-v5": "npm:ai@5.0.0",
+    "ai": "^4.3.19",
+    "ai-v5": "npm:ai@5.0.15",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
     "hono": "^4.8.12",
     "hono-openapi": "^0.4.8",
     "json-schema": "^0.4.0",
     "json-schema-to-zod": "^2.6.1",
+    "p-map": "^7.0.3",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "radash": "^12.1.1",
     "sift": "^17.1.3",
+    "js-tiktoken": "^1.0.20",
     "xstate": "^5.20.1",
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
-    "zod": "^3.0.0"
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.24",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
     "@babel/core": "^7.28.0",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@openrouter/ai-sdk-provider": "^0.4.6",
     "@types/babel__core": "^7.20.5",
@@ -201,8 +235,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67",
-    "@internal/types-builder": "workspace:*"
+    "zod": "^3.25.67"
   },
   "engines": {
     "node": ">=20"

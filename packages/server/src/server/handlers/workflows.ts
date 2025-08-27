@@ -1,11 +1,10 @@
 import { ReadableStream } from 'node:stream/web';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { Workflow, SerializedStepFlowEntry, WatchEvent, StepWithComponent } from '@mastra/core/workflows';
-import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
+import type { Workflow, WatchEvent, WorkflowInfo } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
+import { getWorkflowInfo } from '../utils';
 import { handleError } from './error';
 
 interface WorkflowContext extends Context {
@@ -13,51 +12,11 @@ interface WorkflowContext extends Context {
   runId?: string;
 }
 
-function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
-  return Object.entries(steps).reduce<any>((acc, [key, step]) => {
-    const fullKey = path ? `${path}.${key}` : key;
-    acc[fullKey] = {
-      id: step.id,
-      description: step.description,
-      inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
-      outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
-      resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
-      suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
-      isWorkflow: step.component === 'WORKFLOW',
-    };
-
-    if (step.component === 'WORKFLOW' && step.steps) {
-      const nestedSteps = getSteps(step.steps, fullKey) || {};
-      acc = { ...acc, ...nestedSteps };
-    }
-
-    return acc;
-  }, {});
-}
-
 export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
   try {
     const workflows = mastra.getWorkflows({ serialized: false });
-    const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
-      acc[key] = {
-        name: workflow.name,
-        description: workflow.description,
-        steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
-          acc[key] = {
-            id: step.id,
-            description: step.description,
-            inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
-            outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
-            resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
-            suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
-          };
-          return acc;
-        }, {}),
-        allSteps: getSteps(workflow.steps) || {},
-        stepGraph: workflow.serializedStepGraph,
-        inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
-        outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
-      };
+    const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
+      acc[key] = getWorkflowInfo(workflow);
       return acc;
     }, {});
     return _workflows;
@@ -65,15 +24,6 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
     return handleError(error, 'Error getting workflows');
   }
 }
-
-type SerializedStep = {
-  id: string;
-  description: string;
-  inputSchema: string | undefined;
-  outputSchema: string | undefined;
-  resumeSchema: string | undefined;
-  suspendSchema: string | undefined;
-};
 
 async function getWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   const logger = mastra.getLogger();
@@ -118,15 +68,7 @@ async function getWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   return { workflow };
 }
 
-export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowContext): Promise<{
-  steps: Record<string, SerializedStep>;
-  allSteps: Record<string, SerializedStep>;
-  name: string | undefined;
-  description: string | undefined;
-  stepGraph: SerializedStepFlowEntry[];
-  inputSchema: string | undefined;
-  outputSchema: string | undefined;
-}> {
+export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowContext): Promise<WorkflowInfo> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -138,25 +80,7 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    return {
-      steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
-        acc[key] = {
-          id: step.id,
-          description: step.description,
-          inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
-          outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
-          resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
-          suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
-        };
-        return acc;
-      }, {}),
-      allSteps: getSteps(workflow.steps) || {},
-      name: workflow.name,
-      description: workflow.description,
-      stepGraph: workflow.serializedStepGraph,
-      inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
-      outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
-    };
+    return getWorkflowInfo(workflow);
   } catch (error) {
     return handleError(error, 'Error getting workflow');
   }

@@ -1,22 +1,24 @@
+import type { ToolSet } from 'ai-v5';
 import z from 'zod';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
+import type { OutputSchema } from '../../stream/base/schema';
+import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { OuterLLMRun } from '../types';
 import { createLLMExecutionStep } from './llm-execution';
 import { llmIterationOutputSchema, toolCallOutputSchema } from './schema';
 import { createToolCallStep } from './tool-call-step';
 
-export function createOuterLLMWorkflow({
-  model,
-  telemetry_settings,
-  _internal,
-  modelStreamSpan,
-  ...rest
-}: OuterLLMRun) {
+export function createOuterLLMWorkflow<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({ model, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
     model,
     _internal,
     modelStreamSpan,
+    telemetry_settings,
     ...rest,
   });
 
@@ -44,16 +46,15 @@ export function createOuterLLMWorkflow({
 
         if (errorResults?.length) {
           errorResults.forEach(toolCall => {
-            const chunk = {
+            const chunk: ChunkType = {
               type: 'tool-error',
               runId: rest.runId,
-              from: 'AGENT',
+              from: ChunkFrom.AGENT,
               payload: {
                 error: toolCall.error,
                 args: toolCall.args,
                 toolCallId: toolCall.toolCallId,
                 toolName: toolCall.toolName,
-                result: toolCall.result,
                 providerMetadata: toolCall.providerMetadata,
               },
             };
@@ -86,10 +87,10 @@ export function createOuterLLMWorkflow({
 
       if (inputData?.length) {
         for (const toolCall of inputData) {
-          const chunk = {
+          const chunk: ChunkType = {
             type: 'tool-result',
             runId: rest.runId,
-            from: 'AGENT',
+            from: ChunkFrom.AGENT,
             payload: {
               args: toolCall.args,
               toolCallId: toolCall.toolCallId,
@@ -132,9 +133,9 @@ export function createOuterLLMWorkflow({
         return {
           ...initialResult,
           messages: {
-            all: messageList.get.all.v3(),
-            user: messageList.get.input.v3(),
-            nonUser: messageList.get.response.v3(),
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
           },
         };
       }
@@ -149,7 +150,18 @@ export function createOuterLLMWorkflow({
     .then(llmExecutionStep)
     .map(({ inputData }) => {
       if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && inputData.output.toolCalls?.length) {
-        modelStreamSpan.setAttribute('stream.response.toolCalls', JSON.stringify(inputData.output.toolCalls));
+        modelStreamSpan.setAttribute(
+          'stream.response.toolCalls',
+          JSON.stringify(
+            inputData.output.toolCalls?.map((toolCall: any) => {
+              return {
+                toolCallId: toolCall.toolCallId,
+                args: toolCall.args,
+                toolName: toolCall.toolName,
+              };
+            }),
+          ),
+        );
       }
       return inputData.output.toolCalls || [];
     })

@@ -1,7 +1,6 @@
 import type { ReasoningUIPart, StepResult, ToolSet } from 'ai-v5';
-import { MessageList } from '../../../agent/message-list';
 import type { MastraMessageV2 } from '../../../memory';
-import { convertMastraChunkToAISDKv5 } from './transform';
+import type { StepBufferItem } from '../../types';
 
 export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
   readonly content: StepResult<TOOLS>['content'];
@@ -93,7 +92,6 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
 export function reasoningDetailsFromMessages(messages: MastraMessageV2[]): ReasoningUIPart[] {
   return messages
     .flatMap(msg => {
-      // v3 messages have content.parts array
       if (msg.content?.parts && Array.isArray(msg.content.parts)) {
         return msg.content.parts;
       }
@@ -109,91 +107,18 @@ export function reasoningDetailsFromMessages(messages: MastraMessageV2[]): Reaso
     });
 }
 
-export function transformResponse({
-  response,
-  isMessages = false,
-  runId,
-}: {
-  response: any;
-  isMessages?: boolean;
-  runId: string;
-}) {
-  const newResponse = { ...response };
-  const messageList = new MessageList();
-  messageList.add(response.messages, 'response');
-
-  const formattedMessages = messageList.get.response.v2().filter((message: any) => message.role !== 'user');
-
-  const hasTools = formattedMessages.some(
-    (message: any) =>
-      Array.isArray(message.content) && message.content.some((part: any) => part.type === 'tool-result'),
-  );
-  newResponse.messages = formattedMessages.map((message: any) => {
-    // Handle string content
-    if (typeof message.content === 'string') {
-      return message;
-    }
-
-    let newContent = message.content.map((part: any) => {
-      if (part.type === 'file') {
-        if (isMessages) {
-          return {
-            type: 'file',
-            mediaType: part.mediaType,
-            data: part.data,
-            providerOptions: part.providerOptions,
-          };
-        }
-        const transformedFile = convertMastraChunkToAISDKv5({
-          chunk: {
-            runId,
-            type: 'file',
-            from: 'AGENT',
-            payload: {
-              data: part.data,
-              mimeType: part.mediaType,
-            },
-          },
-        });
-
-        return transformedFile;
-      }
-
-      if (!isMessages) {
-        const { providerOptions, providerMetadata, ...rest } = part;
-        const providerMetadataValue = providerMetadata ?? providerOptions;
-        return {
-          ...rest,
-          ...(providerMetadataValue ? { providerMetadata: providerMetadataValue } : {}),
-        };
-      }
-
-      return part;
-    });
-
-    if (isMessages && !hasTools) {
-      newContent = newContent.filter((part: any) => part.type !== 'source');
-    }
-
-    return {
-      ...message,
-      content: newContent,
-    };
-  });
-
-  return newResponse;
-}
-
-export function transformSteps({ steps, runId }: { steps: any[]; runId: string }) {
+export function transformSteps({ steps }: { steps: StepBufferItem[] }): DefaultStepResult<any>[] {
   return steps.map(step => {
+    if (!step.response) throw new Error(`No step response found while transforming steps but one was expected.`);
+    if (!step.request) throw new Error(`No step request found while transforming steps but one was expected.`);
     return new DefaultStepResult({
-      content: transformResponse(step.response).messages?.flatMap((message: any) => message.content) ?? [],
+      content: step.content,
       warnings: step.warnings ?? [],
       providerMetadata: step.providerMetadata,
-      finishReason: step.finishReason as StepResult<ToolSet>['finishReason'],
-      response: transformResponse({ response: step.response, isMessages: true, runId }),
+      finishReason: step.finishReason || 'unknown',
+      response: step.response,
       request: step.request,
-      usage: step.usage,
+      usage: step.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     });
   });
 }

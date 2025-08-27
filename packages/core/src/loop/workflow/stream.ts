@@ -1,12 +1,18 @@
+import { ReadableStream } from 'stream/web';
+import type { ToolSet } from 'ai-v5';
 import z from 'zod';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { createWorkflow } from '../../workflows';
-import { getRootSpan } from '../telemetry';
 import type { LoopRun } from '../types';
 import { createOuterLLMWorkflow } from './outer-llm-step';
 import { llmIterationOutputSchema } from './schema';
 
-export function workflowLoopStream({
+export function workflowLoopStream<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
   telemetry_settings,
   model,
   toolChoice,
@@ -14,18 +20,18 @@ export function workflowLoopStream({
   _internal,
   modelStreamSpan,
   ...rest
-}: LoopRun) {
+}: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
-      const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
-
-      const { rootSpan } = getRootSpan({
-        operationId: `mastra.stream.model.aisdk`,
-        model,
-        telemetry_settings,
+      const writer = new WritableStream<ChunkType>({
+        write: chunk => {
+          controller.enqueue(chunk);
+        },
       });
 
-      rootSpan.setAttributes({
+      const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+
+      modelStreamSpan.setAttributes({
         ...(telemetry_settings?.recordInputs !== false
           ? {
               'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
@@ -33,7 +39,7 @@ export function workflowLoopStream({
           : {}),
       });
 
-      const outerLLMWorkflow = createOuterLLMWorkflow({
+      const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
         messageId: messageId!,
         model,
         telemetry_settings,
@@ -42,6 +48,7 @@ export function workflowLoopStream({
         toolChoice,
         modelStreamSpan,
         controller,
+        writer,
         ...rest,
       });
 
@@ -54,7 +61,7 @@ export function workflowLoopStream({
           let hasFinishedSteps = false;
 
           if (rest.stopWhen) {
-            console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
+            // console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
             const conditions = await Promise.all(
               (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
                 return condition({
@@ -73,12 +80,12 @@ export function workflowLoopStream({
             controller.enqueue({
               type: 'step-finish',
               runId: rest.runId,
-              from: 'AGENT',
+              from: ChunkFrom.AGENT,
               payload: inputData,
             });
           }
 
-          rootSpan.setAttributes({
+          modelStreamSpan.setAttributes({
             'stream.response.id': inputData.metadata.id,
             'stream.response.model': model.modelId,
             ...(inputData.metadata.providerMetadata
@@ -96,7 +103,7 @@ export function workflowLoopStream({
               : {}),
           });
 
-          rootSpan.end();
+          modelStreamSpan.end();
 
           const reason = inputData.stepResult.reason;
 
@@ -107,7 +114,9 @@ export function workflowLoopStream({
           return inputData.stepResult.isContinued;
         })
         .map(({ inputData }) => {
-          const toolCalls = rest.messageList.get.response.v3().filter((message: any) => message.role === 'tool');
+          const toolCalls = rest.messageList.get.response.aiV5
+            .model()
+            .filter((message: any) => message.role === 'tool');
           inputData.output.toolCalls = toolCalls;
 
           return inputData;
@@ -116,11 +125,11 @@ export function workflowLoopStream({
 
       const msToFirstChunk = _internal?.now?.()! - rest.startTimestamp!;
 
-      rootSpan.addEvent('ai.stream.firstChunk', {
+      modelStreamSpan.addEvent('ai.stream.firstChunk', {
         'ai.response.msToFirstChunk': msToFirstChunk,
       });
 
-      rootSpan.setAttributes({
+      modelStreamSpan.setAttributes({
         'stream.response.timestamp': new Date(rest.startTimestamp).toISOString(),
         'stream.response.msToFirstChunk': msToFirstChunk,
       });
@@ -128,7 +137,7 @@ export function workflowLoopStream({
       controller.enqueue({
         type: 'start',
         runId: rest.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: {},
       });
 
@@ -140,7 +149,7 @@ export function workflowLoopStream({
         inputData: {
           messageId: messageId!,
           messages: {
-            all: rest.messageList.get.input.aiV5.model(),
+            all: rest.messageList.get.all.aiV5.model(),
             user: rest.messageList.get.input.aiV5.model(),
             nonUser: [],
           },
@@ -161,13 +170,13 @@ export function workflowLoopStream({
       controller.enqueue({
         type: 'finish',
         runId: rest.runId,
-        from: 'AGENT',
+        from: ChunkFrom.AGENT,
         payload: executionResult.result,
       });
 
       const msToFinish = (_internal?.now?.() ?? Date.now()) - rest.startTimestamp;
-      rootSpan.addEvent('ai.stream.finish');
-      rootSpan.setAttributes({
+      modelStreamSpan.addEvent('ai.stream.finish');
+      modelStreamSpan.setAttributes({
         'stream.response.msToFinish': msToFinish,
         'stream.response.avgOutputTokensPerSecond':
           (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,

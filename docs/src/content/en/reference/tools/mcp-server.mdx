@@ -872,7 +872,7 @@ A common use case is during tool execution. When a tool needs user input, it can
 1. The tool calls `options.elicitation.sendRequest()` with a message and schema
 2. The request is sent to the connected MCP client
 3. The client presents the request to the user (via UI, command line, etc.)
-4. The user provides input, rejects, or cancels the request
+4. The user provides input, declines, or cancels the request
 5. The client sends the response back to the server
 6. The tool receives the response and continues execution
 
@@ -934,7 +934,7 @@ const server = new MCPServer({
           // Handle the user's response
           if (result.action === 'accept') {
             return `Contact information collected: ${JSON.stringify(result.content, null, 2)}`;
-          } else if (result.action === 'reject') {
+          } else if (result.action === 'decline') {
             return 'Contact information collection was declined by the user.';
           } else {
             return 'Contact information collection was cancelled by the user.';
@@ -990,7 +990,7 @@ Users can respond to elicitation requests in three ways:
 
 1. **Accept** (`action: 'accept'`): User provided data and confirmed submission
    - Contains `content` field with the submitted data
-2. **Reject** (`action: 'reject'`): User explicitly declined to provide information
+2. **Decline** (`action: 'decline'`): User explicitly declined to provide information
    - No content field
 3. **Cancel** (`action: 'cancel'`): User dismissed the request without deciding
    - No content field
@@ -1001,7 +1001,7 @@ Tools should handle all three response types appropriately.
 
 - **Never request sensitive information** like passwords, SSNs, or credit card numbers
 - Validate all user input against the provided schema
-- Handle rejection and cancellation gracefully
+- Handle declining and cancellation gracefully
 - Provide clear reasons for data collection
 - Respect user privacy and preferences
 
@@ -1031,7 +1031,7 @@ The `ElicitResult` type:
 
 ```typescript
 type ElicitResult = {
-  action: 'accept' | 'reject' | 'cancel';
+  action: 'accept' | 'decline' | 'cancel';
   content?: any; // Only present when action is 'accept'
 }
 ```

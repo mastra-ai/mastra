@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
-import type { InternalCoreTool } from '@mastra/core';
-import { createTool, makeCoreTool } from '@mastra/core';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
@@ -15,6 +13,9 @@ import type {
   MCPToolType,
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createTool } from '@mastra/core/tools';
+import type { InternalCoreTool } from '@mastra/core/tools';
+import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -1197,10 +1198,10 @@ export class MCPServer extends MCPServerBase {
       while (true) {
         // This will keep the connection alive
         // You can also await for a promise that never resolves
+        await stream.sleep(60_000);
         const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
         this.logger.debug('Active Hono SSE sessions:', { sessionIds });
         await stream.write(':keep-alive\n\n');
-        await stream.sleep(60_000);
       }
     } catch (e) {
       const mastraError = new MastraError(

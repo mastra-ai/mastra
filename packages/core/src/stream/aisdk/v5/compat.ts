@@ -3,8 +3,9 @@ import type {
   LanguageModelV2ProviderDefinedTool,
   LanguageModelV2ToolChoice,
 } from '@ai-sdk/provider-v5';
+import { TypeValidationError } from '@ai-sdk/provider-v5';
 import { asSchema, tool as toolFn } from 'ai-v5';
-import type { TextStreamPart, Tool, ToolChoice, ToolSet, UIMessage } from 'ai-v5';
+import type { Schema, TextStreamPart, Tool, ToolChoice, ToolSet, UIMessage } from 'ai-v5';
 
 export function convertFullStreamChunkToUIMessageStream({
   part,
@@ -246,6 +247,61 @@ export type ConsumeStreamOptions = {
   onError?: (error: unknown) => void;
 };
 
+export type ValidationResult<T> =
+  | {
+      success: true;
+      value: T;
+    }
+  | {
+      success: false;
+      error: Error;
+    };
+
+/**
+ * Safely validates the types of an unknown object using a schema.
+ * Based on @ai-sdk/provider-utils safeValidateTypes
+ */
+export async function safeValidateTypes<OBJECT>({
+  value,
+  schema,
+}: {
+  value: unknown;
+  schema: Schema<OBJECT>;
+}): Promise<ValidationResult<OBJECT>> {
+  try {
+    // Check if validate method exists (it's optional on Schema)
+    if (!schema.validate) {
+      // If no validate method, we can't validate - just pass through
+      return {
+        success: true,
+        value: value as OBJECT,
+      };
+    }
+
+    const result = await schema.validate(value);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: new TypeValidationError({
+          value,
+          cause: 'Validation failed',
+        }),
+      };
+    }
+
+    return {
+      success: true,
+      value: result.value,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
 export async function consumeStream({
   stream,
   onError,
@@ -300,6 +356,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           if ('inputSchema' in tool) {
             inputSchema = tool.inputSchema;
           } else if ('parameters' in tool) {
+            // @ts-ignore tool is not part
             inputSchema = tool.parameters;
           }
 
@@ -348,4 +405,53 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           ? { type: toolChoice }
           : { type: 'tool' as const, toolName: toolChoice.toolName as string },
   };
+}
+
+/**
+ * Delayed promise. It is only constructed once the value is accessed.
+ * This is useful to avoid unhandled promise rejections when the promise is created
+ * but not accessed.
+ */
+export class DelayedPromise<T> {
+  public status: { type: 'pending' } | { type: 'resolved'; value: T } | { type: 'rejected'; error: unknown } = {
+    type: 'pending',
+  };
+  private _promise: Promise<T> | undefined;
+  private _resolve: undefined | ((value: T) => void) = undefined;
+  private _reject: undefined | ((error: unknown) => void) = undefined;
+
+  get promise(): Promise<T> {
+    if (this._promise) {
+      return this._promise;
+    }
+
+    this._promise = new Promise<T>((resolve, reject) => {
+      if (this.status.type === 'resolved') {
+        resolve(this.status.value);
+      } else if (this.status.type === 'rejected') {
+        reject(this.status.error);
+      }
+
+      this._resolve = resolve;
+      this._reject = reject;
+    });
+
+    return this._promise;
+  }
+
+  resolve(value: T): void {
+    this.status = { type: 'resolved', value };
+
+    if (this._promise) {
+      this._resolve?.(value);
+    }
+  }
+
+  reject(error: unknown): void {
+    this.status = { type: 'rejected', error };
+
+    if (this._promise) {
+      this._reject?.(error);
+    }
+  }
 }

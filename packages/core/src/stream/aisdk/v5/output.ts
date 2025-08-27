@@ -1,28 +1,47 @@
+import type { ReadableStream } from 'stream/web';
 import { TransformStream } from 'stream/web';
 import { getErrorMessage } from '@ai-sdk/provider-v5';
-import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
-import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
-
+import { consumeStream, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
+import type { ObjectStreamPart, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai-v5';
+import type z from 'zod';
 import type { MessageList } from '../../../agent/message-list';
 import type { MastraModelOutput } from '../../base/output';
+import { getResponseFormat } from '../../base/schema';
+import type { OutputSchema } from '../../base/schema';
 import type { ChunkType } from '../../types';
 import type { ConsumeStreamOptions } from './compat';
-import { getResponseUIMessageId, consumeStream, convertFullStreamChunkToUIMessageStream } from './compat';
-import { transformResponse, transformSteps } from './output-helpers';
+import { getResponseUIMessageId, convertFullStreamChunkToUIMessageStream } from './compat';
+import { transformSteps } from './output-helpers';
 import { convertMastraChunkToAISDKv5 } from './transform';
+import type { OutputChunkType } from './transform';
 
-export class AISDKV5OutputStream {
-  #modelOutput: MastraModelOutput;
-  #options: { toolCallStreaming?: boolean; includeRawChunks?: boolean };
+type AISDKV5OutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
+  toolCallStreaming?: boolean;
+  includeRawChunks?: boolean;
+  output?: OUTPUT;
+};
+
+export type AIV5FullStreamPart<T = undefined> = T extends undefined
+  ? TextStreamPart<ToolSet>
+  :
+      | TextStreamPart<ToolSet>
+      | {
+          type: 'object';
+          object: T extends z.ZodSchema ? Partial<z.infer<T>> : unknown;
+        };
+export type AIV5FullStreamType<T> = ReadableStream<AIV5FullStreamPart<T>>;
+
+export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
+  #modelOutput: MastraModelOutput<OUTPUT>;
+  #options: AISDKV5OutputStreamOptions<OUTPUT>;
   #messageList: MessageList;
-
   constructor({
     modelOutput,
     options,
     messageList,
   }: {
-    modelOutput: MastraModelOutput;
-    options: { toolCallStreaming?: boolean; includeRawChunks?: boolean };
+    modelOutput: MastraModelOutput<OUTPUT>;
+    options: AISDKV5OutputStreamOptions<OUTPUT>;
     messageList: MessageList;
   }) {
     this.#modelOutput = modelOutput;
@@ -93,12 +112,12 @@ export class AISDKV5OutputStream {
       generateId: () => responseMessageId ?? generateMessageId?.(),
       execute: async ({ writer }) => {
         for await (const part of this.fullStream) {
-          const messageMetadataValue = messageMetadata?.({ part });
+          const messageMetadataValue = messageMetadata?.({ part: part as TextStreamPart<ToolSet> });
 
           const partType = part.type;
 
           const transformedChunk = convertFullStreamChunkToUIMessageStream({
-            part,
+            part: part as TextStreamPart<ToolSet>,
             sendReasoning,
             messageMetadataValue,
             sendSources,
@@ -128,7 +147,7 @@ export class AISDKV5OutputStream {
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
     try {
       await consumeStream({
-        stream: this.fullStream.pipeThrough(
+        stream: (this.fullStream as any).pipeThrough(
           new TransformStream({
             transform(chunk, controller) {
               controller.enqueue(chunk);
@@ -144,40 +163,79 @@ export class AISDKV5OutputStream {
   }
 
   get sources() {
-    return this.#modelOutput.sources.map(source => {
-      return convertMastraChunkToAISDKv5({
-        chunk: source,
-      });
-    });
+    return this.#modelOutput.sources.then(sources =>
+      sources.map(source => {
+        return convertMastraChunkToAISDKv5({
+          chunk: source,
+        });
+      }),
+    );
   }
 
   get files() {
-    return this.#modelOutput.files
-      .map(file => {
-        if (file.type === 'file') {
-          return convertMastraChunkToAISDKv5({
-            chunk: file,
-          });
-        }
-        return;
-      })
-      .filter(Boolean);
+    return this.#modelOutput.files.then(files =>
+      files
+        .map(file => {
+          if (file.type === 'file') {
+            return (
+              convertMastraChunkToAISDKv5({
+                chunk: file,
+              }) as any
+            )?.file;
+          }
+          return;
+        })
+        .filter(Boolean),
+    );
+  }
+
+  get text() {
+    return this.#modelOutput.text;
+  }
+
+  /**
+   * Stream of valid JSON chunks. The final JSON result is validated against the output schema when the stream ends.
+   */
+  get objectStream() {
+    return this.#modelOutput.objectStream;
+  }
+
+  get generateTextFiles() {
+    return this.#modelOutput.files.then(files =>
+      files
+        .map(file => {
+          if (file.type === 'file') {
+            return (
+              convertMastraChunkToAISDKv5({
+                chunk: file,
+                mode: 'generate',
+              }) as any
+            )?.file;
+          }
+          return;
+        })
+        .filter(Boolean),
+    );
   }
 
   get toolCalls() {
-    return this.#modelOutput.toolCalls.map(toolCall => {
-      return convertMastraChunkToAISDKv5({
-        chunk: toolCall,
-      });
-    });
+    return this.#modelOutput.toolCalls.then(toolCalls =>
+      toolCalls.map(toolCall => {
+        return convertMastraChunkToAISDKv5({
+          chunk: toolCall,
+        });
+      }),
+    );
   }
 
   get toolResults() {
-    return this.#modelOutput.toolResults.map(toolResult => {
-      return convertMastraChunkToAISDKv5({
-        chunk: toolResult,
-      });
-    });
+    return this.#modelOutput.toolResults.then(toolResults =>
+      toolResults.map(toolResult => {
+        return convertMastraChunkToAISDKv5({
+          chunk: toolResult,
+        });
+      }),
+    );
   }
 
   get reasoningText() {
@@ -189,86 +247,144 @@ export class AISDKV5OutputStream {
   }
 
   get response() {
-    return transformResponse({
-      response: this.#modelOutput.response,
-      isMessages: true,
-      runId: this.#modelOutput.runId,
-    });
+    return this.#modelOutput.response.then(response => ({
+      ...response,
+    }));
   }
 
   get steps() {
-    return transformSteps({ steps: this.#modelOutput.steps, runId: this.#modelOutput.runId });
+    return this.#modelOutput.steps.then(steps => transformSteps({ steps }));
+  }
+
+  get generateTextSteps() {
+    return this.#modelOutput.steps.then(steps => transformSteps({ steps }));
   }
 
   get content() {
-    return (
-      transformResponse({
-        response: this.response,
-        isMessages: true,
-        runId: this.#modelOutput.runId,
-      }).messages?.flatMap((message: any) => message.content) ?? []
-    );
+    return this.#messageList.get.response.aiV5.modelContent();
   }
 
-  get fullStream() {
-    let startEvent: TextStreamPart<ToolSet> | undefined;
+  /**
+   * Stream of only text content, compatible with streaming text responses.
+   */
+  get textStream() {
+    return this.#modelOutput.textStream;
+  }
+
+  /**
+   * Stream of individual array elements when output schema is an array type.
+   */
+  get elementStream() {
+    return this.#modelOutput.elementStream;
+  }
+
+  /**
+   * Stream of all chunks in AI SDK v5 format.
+   */
+  get fullStream(): AIV5FullStreamType<OUTPUT> {
+    let startEvent: OutputChunkType;
     let hasStarted: boolean = false;
+
     // let stepCounter = 1;
-    return this.#modelOutput.fullStream.pipeThrough(
-      new TransformStream<ChunkType, TextStreamPart<ToolSet>>({
-        transform(chunk, controller) {
-          if (chunk.type === 'step-start' && !startEvent) {
-            startEvent = convertMastraChunkToAISDKv5({
-              chunk,
-            });
-            // stepCounter++;
-            return;
-          } else if (chunk.type !== 'error') {
-            hasStarted = true;
-          }
+    const responseFormat = getResponseFormat(this.#options.output);
+    const fullStream = this.#modelOutput.fullStream;
 
-          if (startEvent && hasStarted) {
-            controller.enqueue(startEvent as any);
-            startEvent = undefined;
-          }
+    const transformedStream = fullStream.pipeThrough(
+      new TransformStream<ChunkType | NonNullable<OutputChunkType>, TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>>(
+        {
+          transform(chunk, controller) {
+            if (responseFormat?.type === 'json' && chunk.type === 'object') {
+              /**
+               * Pass through 'object' chunks that were created by
+               * createObjectStreamTransformer in base/output.ts.
+               */
+              controller.enqueue(chunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
+              return;
+            }
 
-          const transformedChunk = convertMastraChunkToAISDKv5({
-            chunk,
-          });
+            if (chunk.type === 'step-start' && !startEvent) {
+              startEvent = convertMastraChunkToAISDKv5({
+                chunk,
+              });
+              // stepCounter++;
+              return;
+            } else if (chunk.type !== 'error') {
+              hasStarted = true;
+            }
 
-          if (transformedChunk) {
-            // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
-            //   console.log('step counter', stepCounter);
-            //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
-            // }
+            if (startEvent && hasStarted) {
+              controller.enqueue(startEvent as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
+              startEvent = undefined;
+            }
 
-            controller.enqueue(transformedChunk);
-          }
+            if ('payload' in chunk) {
+              const transformedChunk = convertMastraChunkToAISDKv5({
+                chunk,
+              });
+
+              if (transformedChunk) {
+                // if (!['start', 'finish', 'finish-step'].includes(transformedChunk.type)) {
+                //   console.log('step counter', stepCounter);
+                //   transformedChunk.id = transformedChunk.id ?? stepCounter.toString();
+                // }
+
+                controller.enqueue(transformedChunk as TextStreamPart<ToolSet> | ObjectStreamPart<OUTPUT>);
+              }
+            }
+          },
         },
-      }),
+      ),
     );
+
+    return transformedStream as any as AIV5FullStreamType<OUTPUT>;
   }
 
   async getFullOutput() {
     await this.consumeStream();
-    return {
-      text: this.#modelOutput.text,
-      usage: this.#modelOutput.usage,
-      steps: this.steps,
-      finishReason: this.#modelOutput.finishReason,
-      warnings: this.#modelOutput.warnings,
-      providerMetadata: this.#modelOutput.providerMetadata,
-      request: this.#modelOutput.request,
-      reasoning: this.reasoning,
-      reasoningText: this.reasoningText,
-      toolCalls: this.toolCalls,
-      toolResults: this.toolResults,
-      sources: this.sources,
-      files: this.files,
-      response: this.response,
+
+    const object = await this.object;
+
+    const fullOutput = {
+      text: await this.#modelOutput.text,
+      usage: await this.#modelOutput.usage,
+      steps: await this.generateTextSteps,
+      finishReason: await this.#modelOutput.finishReason,
+      warnings: await this.#modelOutput.warnings,
+      providerMetadata: await this.#modelOutput.providerMetadata,
+      request: await this.#modelOutput.request,
+      reasoning: await this.reasoning,
+      reasoningText: await this.reasoningText,
+      toolCalls: await this.toolCalls,
+      toolResults: await this.toolResults,
+      sources: await this.sources,
+      files: await this.generateTextFiles,
+      response: await this.response,
       content: this.content,
-      totalUsage: this.#modelOutput.totalUsage,
-      // experimental_output: // TODO
+      totalUsage: await this.#modelOutput.totalUsage,
+      error: this.error,
+      tripwire: this.#modelOutput.tripwire,
+      tripwireReason: this.#modelOutput.tripwireReason,
+      ...(object ? { object } : {}),
     };
+
+    fullOutput.response.messages = this.#modelOutput.messageList.get.response.aiV5.model();
+
+    return fullOutput;
+  }
+
+  get tripwire() {
+    return this.#modelOutput.tripwire;
+  }
+
+  get tripwireReason() {
+    return this.#modelOutput.tripwireReason;
+  }
+
+  get error() {
+    return this.#modelOutput.error;
+  }
+
+  get object() {
+    return this.#modelOutput.object;
   }
 }

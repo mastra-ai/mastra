@@ -1,6 +1,5 @@
 import type { z } from 'zod';
-
-import type { Mastra } from '../..';
+import type { Mastra } from '../../mastra';
 import type { RetryConfig, StepAction, StepExecutionContext } from './types';
 
 export class LegacyStep<
