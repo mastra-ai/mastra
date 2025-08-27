@@ -30,7 +30,7 @@
   },
   "scripts": {
     "build": "tsc && vite build",
-    "dev:playground": "vite build --watch",
+    "dev": "vite build --watch",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
