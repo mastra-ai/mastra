@@ -34,6 +34,10 @@ import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
+type DataStreamOptions = Omit<Parameters<typeof processDataStream>[0], 'stream'> & {
+  onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: unknown }) => void;
+};
+
 async function executeToolCallAndRespond({
   response,
   params,
@@ -665,11 +669,7 @@ export class Agent extends BaseResource {
     params: StreamParams<T>,
   ): Promise<
     Response & {
-      processDataStream: (
-        options?: Omit<Parameters<typeof processDataStream>[0], 'stream'> & {
-          onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: unknown }) => void;
-        },
-      ) => Promise<void>;
+      processDataStream: (options?: DataStreamOptions) => Promise<void>;
     }
   > {
     const processedParams = {
@@ -697,9 +697,7 @@ export class Agent extends BaseResource {
 
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
-      const typedOptions = options as Omit<Parameters<typeof processDataStream>[0], 'stream'> & {
-        onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: unknown }) => void;
-      };
+      const typedOptions = options as DataStreamOptions;
 
       // If onFinish is provided, we need to process the stream through our internal method
       if (typedOptions.onFinish) {
