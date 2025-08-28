@@ -1,5 +1,18 @@
 # @mastra/core
 
+## 0.15.3-alpha.1
+
+### Patch Changes
+
+- [#7121](https://github.com/mastra-ai/mastra/pull/7121) [`637f323`](https://github.com/mastra-ai/mastra/commit/637f32371d79a8f78c52c0d53411af0915fcec67) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Fix issue with some compilers and calling zod v4's toJSONSchema function
+
+- [#7124](https://github.com/mastra-ai/mastra/pull/7124) [`29de0e1`](https://github.com/mastra-ai/mastra/commit/29de0e1b0a7173317ae7d1ab0c0993167c659f2b) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - MastraEmbeddingModel and ts hack
+
+- [#7125](https://github.com/mastra-ai/mastra/pull/7125) [`6ac697e`](https://github.com/mastra-ai/mastra/commit/6ac697edcc2435482c247cba615277ec4765dcc4) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - improveEmbeddingModelStuff
+
+- Updated dependencies [[`637f323`](https://github.com/mastra-ai/mastra/commit/637f32371d79a8f78c52c0d53411af0915fcec67)]:
+  - @mastra/schema-compat@0.11.2-alpha.0
+
 ## 0.15.3-alpha.0
 
 ### Patch Changes
