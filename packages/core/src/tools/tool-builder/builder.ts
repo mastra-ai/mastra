@@ -159,7 +159,6 @@ export class CoreToolBuilder extends MastraBase {
                 },
                 options.writableStream || (execOptions as any).writableStream,
               ),
-              // Inject tracing context with the tool span as currentSpan
               tracingContext: { currentSpan: toolSpan },
             },
             execOptions as ToolExecutionOptions & ToolCallOptions,

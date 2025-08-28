@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, StreamObjectResult, TextPart, Tool, ToolExecutionOptions, UIMessage } from 'ai';
+import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import type { ModelMessage } from 'ai-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -47,7 +47,7 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
-import type { CoreTool, ToolExecutionContext } from '../tools/types';
+import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { ToolOptions } from '../utils';
