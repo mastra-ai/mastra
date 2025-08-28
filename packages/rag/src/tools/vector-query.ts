@@ -30,7 +30,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
       const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
       const databaseConfig = runtimeContext.get('databaseConfig') ?? options.databaseConfig;
-      const model: MastraEmbeddingModel = runtimeContext.get('model') ?? options.model;
+      const model: MastraEmbeddingModel<string> = runtimeContext.get('model') ?? options.model;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
