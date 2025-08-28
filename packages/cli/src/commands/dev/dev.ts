@@ -8,14 +8,12 @@ import { execa } from 'execa';
 import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
-import { HotkeyHandler, openInBrowser } from '../../utils/hotkeys.js';
 import { logger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
-let hotkeyHandler: HotkeyHandler | undefined;
 let serverStartTime: number | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
@@ -257,19 +255,6 @@ export async function dev({
 
   await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
 
-  hotkeyHandler = new HotkeyHandler({
-    restart: async () => {
-      await rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
-    },
-    openBrowser: async (url?: string) => {
-      await openInBrowser(url || `http://localhost:${portToUse}`);
-    },
-    quit: () => {
-      process.emit('SIGINT');
-    },
-  });
-  hotkeyHandler.start();
-
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_START') {
       devLogger.bundling();
@@ -282,17 +267,16 @@ export async function dev({
     }
   });
 
-  process.on('SIGINT', async () => {
-    hotkeyHandler?.stop();
-
+  process.on('SIGINT', () => {
     devLogger.shutdown();
 
     if (currentServerProcess) {
-      currentServerProcess.kill('SIGINT');
-      await new Promise(resolve => currentServerProcess?.once('exit', resolve));
+      currentServerProcess.kill();
     }
 
-    await watcher.close().catch(() => {});
-    process.exit(0);
+    watcher
+      .close()
+      .catch(() => {})
+      .finally(() => process.exit(0));
   });
 }

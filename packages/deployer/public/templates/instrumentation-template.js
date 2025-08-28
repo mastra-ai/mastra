@@ -15,6 +15,19 @@ import { telemetry } from './telemetry-config.mjs';
 
 globalThis.___MASTRA_TELEMETRY___ = true;
 
+function parseHeaders(headerString) {
+  const headers = {}
+  if (!headerString) return headers;
+
+  const headersStringPairs = headerString.split(',');
+  for (const pair of headersStringPairs) {
+    const [key, value] = pair.split('=').map(s => s.trim());
+    if (key && value) headers[key] = value;
+  }
+
+  return headers;
+}
+
 class CompositeExporter {
   constructor(exporters) {
     this.exporters = exporters;
@@ -27,7 +40,7 @@ class CompositeExporter {
         return httpTarget === "/api/telemetry";
       }).map((span) => span.spanContext().traceId)
     );
-    const filteredSpans = spans.filter((span) => !telemetryTraceIds.has(span.spanContext().traceId));
+    const filteredSpans = spans.filter((span) => !telemetryTraceIds.has(span.spanContext().traceId) && !span.instrumentationScope?.name?.startsWith('@opentelemetry'));
     if (filteredSpans.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS });
       return;
@@ -104,9 +117,15 @@ async function getExporters(config) {
         headers: config.export.headers,
       }));
     } else {
+      const exporterEndpoint = config.export.endpoint ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+      let exporterHeaders = config.export.headers
+      if (!exporterHeaders) {
+        exporterHeaders = parseHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS)
+      }
+
       exporters.push(new OTLPHttpExporter({
-        url: config.export.endpoint,
-        headers: config.export.headers,
+        url: exporterEndpoint,
+        headers: exporterHeaders,
       }));
     }
   } else if (config.export?.type === 'custom') {

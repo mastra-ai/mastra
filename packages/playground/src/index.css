@@ -149,7 +149,7 @@
   }
 
   *:focus-visible {
-    @apply outline outline-dashed outline-offset-2 outline-yellow-500;
+    @apply outline outline-accent1;
   }
 }
 
