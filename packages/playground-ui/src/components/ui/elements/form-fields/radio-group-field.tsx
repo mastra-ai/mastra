@@ -72,7 +72,7 @@ export function RadioGroupField({
             return (
               <label className="flex items-center gap-[0.5rem] text-[0.875rem] text-icon4 " key={option.value}>
                 <RadixRadioGroup.Item
-                  className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 "
+                  className="aspect-square h-4 w-4 rounded-full border border-primary text-primary disabled:cursor-not-allowed disabled:opacity-50 "
                   value={option.value}
                 >
                   <RadixRadioGroup.Indicator className="flex items-center justify-center">

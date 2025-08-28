@@ -243,6 +243,8 @@ export function createStep<
           context: inputData,
           mastra,
           runtimeContext,
+          // TODO: Pass proper tracing context when evented workflows support tracing
+          tracingContext: { currentSpan: undefined },
         });
       },
     };

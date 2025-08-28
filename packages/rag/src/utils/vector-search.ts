@@ -1,4 +1,4 @@
-import type { MastraVector, QueryResult, QueryVectorParams } from '@mastra/core/vector';
+import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { embed } from 'ai';
 import type { EmbeddingModel } from 'ai';
@@ -8,7 +8,7 @@ interface VectorQuerySearchParams {
   indexName: string;
   vectorStore: MastraVector;
   queryText: string;
-  model: EmbeddingModel<string>;
+  model: MastraEmbeddingModel<string>;
   queryFilter?: VectorFilter;
   topK: number;
   includeVectors?: boolean;
@@ -44,7 +44,7 @@ export const vectorQuerySearch = async ({
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   const { embedding } = await embed({
     value: queryText,
-    model,
+    model: model as unknown as EmbeddingModel<string>,
     maxRetries,
   });
 

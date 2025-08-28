@@ -1641,7 +1641,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (disableScorers !== false) {
       await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}.score`, async () => {
         if (step.scorers) {
-          this.runScorers({
+          await this.runScorers({
             scorers: step.scorers,
             runId: executionContext.runId,
             input: prevOutput,
