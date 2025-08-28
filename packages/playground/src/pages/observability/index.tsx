@@ -32,8 +32,8 @@ export default function Observability() {
   const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntity, setSelectedEntity] = useState<string | undefined>(undefined);
-  const [selectedDateFrom, setSelectedDateFrom] = useState<Date | null | undefined>(undefined);
-  const [selectedDateTo, setSelectedDateTo] = useState<Date | null | undefined>(undefined);
+  const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
+  const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents } = useAgents();
 
@@ -46,13 +46,13 @@ export default function Observability() {
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSelectedEntity('');
+    setSelectedEntity(undefined);
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
   };
 
-  const handleDataChange = (value: Date | null | undefined, type: 'from' | 'to') => {
+  const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
     if (type === 'from') {
       return setSelectedDateFrom(value);
     }
@@ -77,16 +77,16 @@ export default function Observability() {
   };
 
   const toPreviousItem = (id: string) => {
-    const currentIndex = aiTraces?.findIndex(event => event?.traceId === id);
+    const currentIndex = aiTraces.findIndex(event => event?.traceId === id);
 
-    if (currentIndex === -1 || currentIndex === (events?.length || 0) - 1) {
+    if (currentIndex === -1 || currentIndex === (events.length || 0) - 1) {
       return null; // No next event
     }
     setSelectedTraceId(aiTraces[(currentIndex || 0) + 1].traceId);
   };
 
   const toNextItem = (id: string) => {
-    const currentIndex = aiTraces?.findIndex(event => event?.traceId === id);
+    const currentIndex = aiTraces.findIndex(event => event?.traceId === id);
 
     if ((currentIndex || 0) <= 0) {
       return null; // No previous event
