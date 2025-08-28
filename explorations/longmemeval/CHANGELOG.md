@@ -1,5 +1,14 @@
 # @mastra/longmemeval
 
+## 0.1.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`637f323`](https://github.com/mastra-ai/mastra/commit/637f32371d79a8f78c52c0d53411af0915fcec67), [`29de0e1`](https://github.com/mastra-ai/mastra/commit/29de0e1b0a7173317ae7d1ab0c0993167c659f2b), [`b415a4e`](https://github.com/mastra-ai/mastra/commit/b415a4e05b2546ccb9b5ba31a2bdf23deb1c7fa8), [`6ac697e`](https://github.com/mastra-ai/mastra/commit/6ac697edcc2435482c247cba615277ec4765dcc4)]:
+  - @mastra/core@0.15.3-alpha.1
+  - @mastra/rag@1.2.3-alpha.0
+  - @mastra/memory@0.14.3-alpha.0
+
 ## 0.1.14-alpha.0
 
 ### Patch Changes
