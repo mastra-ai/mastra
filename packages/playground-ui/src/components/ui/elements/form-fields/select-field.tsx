@@ -11,7 +11,7 @@ type SelectFieldProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   value?: string;
   helpMsg?: string;
   errorMsg?: string;
-  options: { value: string; label: string }[] | string[];
+  options: { value: string; label: string }[];
   placeholder?: string;
   onValueChange: (value: string) => void;
 };

@@ -14,7 +14,7 @@ import { EyeIcon } from 'lucide-react';
 import { useTrace } from './useTrace';
 import { TraceDialog } from './TraceDialog';
 
-export default function observability() {
+export default function Observability() {
   const { trace, nestedSpans, spans, spanIds } = useTrace();
   const [selectedTrace, setSelectedTrace] = useState<any>(null);
   const [selectedEntity, setSelectedEntity] = useState<string | undefined>(undefined);
@@ -22,14 +22,13 @@ export default function observability() {
   const [selectedDateTo, setSelectedDateTo] = useState<Date | null | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  // const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
 
+  // const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const entities = [
     ...(Object.entries(agents) || []).map(([key, value]) => ({ id: key, name: value.name, type: 'agent' })),
     // ...(workflows || []).map(workflow => ({ id: workflow.id, name: workflow.name, type: 'workflow' })),
   ];
   const entityOptions = entities.map(entity => ({ value: entity.id, label: entity.name }));
-
   const handleReset = () => {
     setSelectedTrace(null);
     setSelectedEntity('');
@@ -37,11 +36,9 @@ export default function observability() {
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
   };
-
   const handleEntityChange = (value: string) => {
     setSelectedEntity(value || '');
   };
-
   const handleDataChange = (value: Date | null | undefined, type: 'from' | 'to') => {
     if (type === 'from') {
       setSelectedDateFrom(value);
@@ -49,7 +46,6 @@ export default function observability() {
       setSelectedDateTo(value);
     }
   };
-
   const events = [
     {
       id: 'a392r13f',
@@ -85,18 +81,15 @@ export default function observability() {
       entityName: entities.find(entity => entity.id === 'evalAgent')?.name || 'n/a',
     },
   ];
-
   const filteredEvents = events.filter(event => {
     if (selectedEntity) {
       const entity = entities.find(entity => entity.id === selectedEntity);
-
       if (entity && event.entityId !== entity.id) {
         return false;
       }
     }
     return true;
   });
-
   const listColumns = [
     { name: 'id', label: 'ID', size: '5rem' },
     { name: 'date', label: 'Date', size: '5rem' },
@@ -104,25 +97,20 @@ export default function observability() {
     { name: 'entityName', label: 'Entity', size: '8rem' },
     { name: 'input', label: 'Input', size: '1fr' },
   ];
-
   const handleOnListItem = (id: string) => {
     console.log('handleOnListItem', id, selectedTrace?.id);
-
     if (id === selectedTrace?.id) {
       setSelectedTrace(null);
     } else {
       const item = events.find(item => item.id === id);
-
       if (!item) {
         console.warn('Item not found for id:', id);
         return;
       }
-
       setSelectedTrace(item);
       setDialogIsOpen(true);
     }
   };
-
   const toPreviousItem = (currentEvent: any) => {
     const currentIndex = events?.findIndex(event => event?.id === currentEvent?.id);
     if (currentIndex === -1 || currentIndex === (events?.length || 0) - 1) {
@@ -130,7 +118,6 @@ export default function observability() {
     }
     return () => setSelectedTrace(events[(currentIndex || 0) + 1]);
   };
-
   const toNextItem = (currentEvent: any) => {
     const currentIndex = events?.findIndex(event => event?.id === currentEvent?.id);
     if ((currentIndex || 0) <= 0) {
@@ -138,14 +125,12 @@ export default function observability() {
     }
     return () => setSelectedTrace(events[(currentIndex || 0) - 1]);
   };
-
   return (
     <>
       <MainContentLayout>
         <Header>
           <HeaderTitle>Observability</HeaderTitle>
         </Header>
-
         <div className={cn(`h-full overflow-y-scroll `)}>
           <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid gap-[2rem]')}>
             <PageHeader title="Observability" description="View and manage observability events." icon={<EyeIcon />} />
