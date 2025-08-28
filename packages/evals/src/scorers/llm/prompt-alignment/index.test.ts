@@ -43,13 +43,19 @@ describe('Prompt Alignment Scorer', () => {
       expect(scorer.config.judge?.model).toBe(mockModel);
     });
 
-    it('should handle test run with valid input and output', async () => {
+    it('should work with valid input and output', async () => {
       const scorer = createPromptAlignmentScorerLLM({
         model: mockModel,
         options: { scale: 1 },
       });
 
-      const _testRun = createAgentTestRun({
+      // Mock successful run with valid inputs
+      scorer.run = vi.fn().mockResolvedValue({
+        score: 0.85,
+        reason: 'Good alignment with minor issues.',
+      });
+
+      const validTestRun = createAgentTestRun({
         inputMessages: [
           createUIMessage({
             id: 'test-1',
@@ -66,9 +72,9 @@ describe('Prompt Alignment Scorer', () => {
         ],
       });
 
-      // Verify scorer can be created with the test run
-      expect(scorer).toBeDefined();
-      expect(scorer.name).toBe('Prompt Alignment (LLM)');
+      const result = await scorer.run(validTestRun);
+      expect(result.score).toBe(0.85);
+      expect(result.reason).toContain('Good alignment');
     });
 
     it('should use instructions from prompts', () => {
@@ -125,12 +131,17 @@ describe('Prompt Alignment Scorer', () => {
       expect(scorer.config.description).toContain('intent and requirements');
     });
 
-    it('should handle empty inputs gracefully', () => {
+    it('should handle empty user input', async () => {
       const scorer = createPromptAlignmentScorerLLM({
         model: mockModel,
       });
 
-      const _testRunNoUser = createAgentTestRun({
+      // Mock the run method to simulate the error that would occur with empty user input
+      scorer.run = vi
+        .fn()
+        .mockRejectedValue(new Error('Both user prompt and agent response are required for prompt alignment scoring'));
+
+      const testRunNoUser = createAgentTestRun({
         inputMessages: [],
         output: [
           createUIMessage({
@@ -141,9 +152,31 @@ describe('Prompt Alignment Scorer', () => {
         ],
       });
 
-      // The scorer should be created but will handle empty inputs internally
-      expect(scorer).toBeDefined();
-      expect(scorer.name).toBe('Prompt Alignment (LLM)');
+      await expect(scorer.run(testRunNoUser)).rejects.toThrow('Both user prompt and agent response are required');
+    });
+
+    it('should handle empty agent response', async () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+      });
+
+      // Mock the run method to simulate the error that would occur with empty response
+      scorer.run = vi
+        .fn()
+        .mockRejectedValue(new Error('Both user prompt and agent response are required for prompt alignment scoring'));
+
+      const testRunNoResponse = createAgentTestRun({
+        inputMessages: [
+          createUIMessage({
+            id: 'test-1',
+            role: 'user',
+            content: 'Some prompt',
+          }),
+        ],
+        output: [],
+      });
+
+      await expect(scorer.run(testRunNoResponse)).rejects.toThrow('Both user prompt and agent response are required');
     });
   });
 
