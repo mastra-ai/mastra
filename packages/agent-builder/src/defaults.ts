@@ -1977,18 +1977,15 @@ export const mastra = new Mastra({
 
           for (const pattern of definitionPatterns) {
             try {
-              const { stdout } = await execFile(
-                'rg',
-                [
-                  '-n',
-                  pattern,
-                  path,
-                  '--type',
-                  languagePattern,
-                  '--max-depth',
-                  String(depth),
-                ]
-              );
+              const { stdout } = await execFile('rg', [
+                '-n',
+                pattern,
+                path,
+                '--type',
+                languagePattern,
+                '--max-depth',
+                String(depth),
+              ]);
               const matches = stdout.split('\n').filter(line => line.trim());
 
               matches.forEach(match => {
@@ -2045,7 +2042,7 @@ export const mastra = new Mastra({
 
           for (const pattern of depPatterns) {
             try {
-              const { stdout } = await exec(`rg -n "${pattern}" "${path}" --type ${languagePattern}`);
+              const { stdout } = await execFile('rg', ['-n', pattern, path, '--type', languagePattern]);
               const matches = stdout.split('\n').filter(line => line.trim());
 
               matches.forEach(match => {
@@ -2077,11 +2074,13 @@ export const mastra = new Mastra({
           };
 
         case 'structure':
-          const { stdout: lsOutput } = await exec(`find "${path}" -type f -name "${languagePattern}" | head -1000`);
-          const files = lsOutput.split('\n').filter(line => line.trim());
+          // Use execFile for find commands to avoid shell injection
+          const { stdout: lsOutput } = await execFile('find', [path, '-type', 'f', '-name', languagePattern]);
+          const allFiles = lsOutput.split('\n').filter(line => line.trim());
+          const files = allFiles.slice(0, 1000); // Limit to 1000 files like head -1000
 
-          const { stdout: dirOutput } = await exec(`find "${path}" -type d | wc -l`);
-          const directories = parseInt(dirOutput.trim());
+          const { stdout: dirOutput } = await execFile('find', [path, '-type', 'd']);
+          const directories = dirOutput.split('\n').filter(line => line.trim()).length;
 
           // Count languages by file extension
           const languages: Record<string, number> = {};
