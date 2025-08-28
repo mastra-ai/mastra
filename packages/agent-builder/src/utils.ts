@@ -37,7 +37,6 @@ function isInWorkspaceSubfolder(cwd: string): boolean {
 
       // Check for pnpm workspace
       if (existsSync(resolve(currentDir, 'pnpm-workspace.yaml'))) {
-        console.log(`Found pnpm-workspace.yaml in: ${currentDir}`);
         return true;
       }
 
@@ -47,7 +46,6 @@ function isInWorkspaceSubfolder(cwd: string): boolean {
         try {
           const parentPkg = JSON.parse(readFileSync(parentPackageJson, 'utf-8'));
           if (parentPkg.workspaces) {
-            console.log(`Found workspaces config in: ${parentPackageJson}`);
             return true; // Found workspace config
           }
         } catch {
@@ -57,12 +55,10 @@ function isInWorkspaceSubfolder(cwd: string): boolean {
 
       // Check for lerna
       if (existsSync(resolve(currentDir, 'lerna.json'))) {
-        console.log(`Found lerna.json in: ${currentDir}`);
         return true;
       }
     }
 
-    console.log(`No workspace indicators found for: ${cwd}`);
     return false;
   } catch (error) {
     console.log(`Error in workspace detection: ${error}`);
@@ -146,7 +142,6 @@ export function spawnWithOutput(
 }
 
 export async function spawnSWPM(cwd: string, command: string, packageNames: string[]) {
-  console.log(`Running install in directory: ${cwd}`);
   // 1) Try local swpm module resolution/execution
   try {
     console.log('Running install command with swpm');

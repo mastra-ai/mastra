@@ -291,7 +291,7 @@ Return the actual exported names of the units, as well as the file names.`,
 
           Debug steps:
           - Check template has files in src/mastra/ directories
-          - Try a different branch (main vs openai)
+          - Try a different branch
           - Check template repository structure manually`);
       }
 

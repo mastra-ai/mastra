@@ -116,18 +116,27 @@ export class ToolSummaryProcessor extends MemoryProcessor {
 
     // Execute all non-cached summaries in parallel
     if (summaryTasks.length > 0) {
-      const summaryResults = await Promise.all(summaryTasks.map(task => task.promise));
+      const summaryResults = await Promise.allSettled(summaryTasks.map(task => task.promise));
 
       // Apply the results back to the content and cache them
       summaryTasks.forEach((task, index) => {
-        const summaryResult = summaryResults[index];
-        const summaryText = summaryResult.text;
+        const result = summaryResults[index];
+        if (!result) return;
 
-        // Cache the summary for future use
-        this.summaryCache.set(task.cacheKey, summaryText);
+        if (result.status === 'fulfilled') {
+          const summaryResult = result.value;
+          const summaryText = summaryResult.text;
 
-        // Apply to content
-        task.content.result = `Tool call summary: ${summaryText}`;
+          // Cache the summary for future use
+          this.summaryCache.set(task.cacheKey, summaryText);
+
+          // Apply to content
+          task.content.result = `Tool call summary: ${summaryText}`;
+        } else if (result.status === 'rejected') {
+          // Handle failed summary - use fallback or log error
+          console.warn(`Failed to generate summary for tool call:`, result.reason);
+          task.content.result = `Tool call summary: [Summary generation failed]`;
+        }
       });
     }
 
