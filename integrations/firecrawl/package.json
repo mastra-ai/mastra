@@ -1,6 +1,6 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.2.15",
+  "version": "1.2.16",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -56,6 +56,6 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
   }
 }

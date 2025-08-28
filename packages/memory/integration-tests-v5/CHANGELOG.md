@@ -1,5 +1,17 @@
 # @mastra/memory-integration-tests-v5
 
+## 0.1.5
+
+### Patch Changes
+
+- [`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix peerdpes for @mastra/core
+
+- Updated dependencies [[`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430)]:
+  - @mastra/fastembed@0.10.4
+  - @mastra/memory@0.14.2
+  - @mastra/libsql@0.13.7
+  - @mastra/core@0.15.2
+
 ## 0.1.4
 
 ### Patch Changes

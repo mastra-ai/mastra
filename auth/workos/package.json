@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-workos",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "description": "Mastra WorkOS Auth integration",
   "type": "module",
   "main": "dist/index.js",
