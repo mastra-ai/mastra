@@ -1,5 +1,5 @@
-import type { MastraVector } from '@mastra/core/vector';
-import type { EmbeddingModel } from 'ai';
+import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
+
 import type { RerankConfig } from '../rerank';
 
 export interface PineconeConfig {
@@ -57,7 +57,7 @@ export type VectorQueryToolOptions = {
   id?: string;
   description?: string;
   indexName: string;
-  model: EmbeddingModel<string>;
+  model: MastraEmbeddingModel<string>;
   enableFilter?: boolean;
   includeVectors?: boolean;
   includeSources?: boolean;
@@ -81,7 +81,7 @@ export type GraphRagToolOptions = {
   description?: string;
   indexName: string;
   vectorStoreName: string;
-  model: EmbeddingModel<string>;
+  model: MastraEmbeddingModel<string>;
   enableFilter?: boolean;
   includeSources?: boolean;
   graphOptions?: {
