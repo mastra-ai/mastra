@@ -13,7 +13,6 @@ import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
 import { TraceDialog } from './TraceDialog';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
-import { AISpanRecord } from '@mastra/core';
 
 const listColumns = [
   { name: 'id', label: 'ID', size: '5rem' },
@@ -31,7 +30,7 @@ type EventType = {
 
 export default function Observability() {
   const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces();
-  const [selectedTrace, setSelectedTrace] = useState<AISpanRecord | undefined>();
+  const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntity, setSelectedEntity] = useState<string | undefined>(undefined);
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | null | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | null | undefined>(undefined);
@@ -44,22 +43,21 @@ export default function Observability() {
   ];
 
   const entityOptions = entities.map(entity => ({ value: entity.id, label: entity.name }));
+
   const handleReset = () => {
-    setSelectedTrace(undefined);
+    setSelectedTraceId(undefined);
     setSelectedEntity('');
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
   };
-  const handleEntityChange = (value: string) => {
-    setSelectedEntity(value || '');
-  };
+
   const handleDataChange = (value: Date | null | undefined, type: 'from' | 'to') => {
     if (type === 'from') {
-      setSelectedDateFrom(value);
-    } else {
-      setSelectedDateTo(value);
+      return setSelectedDateFrom(value);
     }
+
+    setSelectedDateTo(value);
   };
 
   const events: EventType[] = aiTraces.map(trace => ({
@@ -70,32 +68,30 @@ export default function Observability() {
   }));
 
   const handleOnListItem = (id: string) => {
-    if (id === selectedTrace?.traceId) {
-      return setSelectedTrace(undefined);
+    if (id === selectedTraceId) {
+      return setSelectedTraceId(undefined);
     }
 
-    const item = aiTraces.find(item => item.traceId === id);
-
-    if (!item) {
-      return console.warn('Item not found for id:', id);
-    }
-
-    setSelectedTrace(item);
+    setSelectedTraceId(id);
     setDialogIsOpen(true);
   };
-  const toPreviousItem = (currentEvent: any) => {
-    const currentIndex = aiTraces?.findIndex(event => event?.traceId === currentEvent?.traceId);
+
+  const toPreviousItem = (id: string) => {
+    const currentIndex = aiTraces?.findIndex(event => event?.traceId === id);
+
     if (currentIndex === -1 || currentIndex === (events?.length || 0) - 1) {
       return null; // No next event
     }
-    return () => setSelectedTrace(aiTraces[(currentIndex || 0) + 1]);
+    setSelectedTraceId(aiTraces[(currentIndex || 0) + 1].traceId);
   };
-  const toNextItem = (currentEvent: any) => {
-    const currentIndex = aiTraces?.findIndex(event => event?.traceId === currentEvent?.traceId);
+
+  const toNextItem = (id: string) => {
+    const currentIndex = aiTraces?.findIndex(event => event?.traceId === id);
+
     if ((currentIndex || 0) <= 0) {
       return null; // No previous event
     }
-    return () => setSelectedTrace(aiTraces[(currentIndex || 0) - 1]);
+    setSelectedTraceId(aiTraces[(currentIndex || 0) - 1].traceId);
   };
 
   return (
@@ -104,11 +100,12 @@ export default function Observability() {
         <Header>
           <HeaderTitle>Observability</HeaderTitle>
         </Header>
-        <div className={cn(`h-full overflow-y-scroll `)}>
+
+        <div className={cn(`h-full overflow-y-scroll`)}>
           <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid gap-[2rem]')}>
             <PageHeader title="Observability" description="View and manage observability events." icon={<EyeIcon />} />
             <ObservabilityTracesTools
-              onEntityChange={handleEntityChange}
+              onEntityChange={setSelectedEntity}
               onReset={handleReset}
               selectedEntity={selectedEntity}
               entityOptions={entityOptions}
@@ -121,7 +118,7 @@ export default function Observability() {
             ) : (
               <EntryList
                 items={events}
-                selectedItem={selectedTrace}
+                selectedItemId={selectedTraceId}
                 onItemClick={handleOnListItem}
                 columns={listColumns}
                 isLoading={false}
@@ -131,11 +128,11 @@ export default function Observability() {
         </div>
       </MainContentLayout>
       <TraceDialog
-        parentTraceId={selectedTrace?.traceId}
+        parentTraceId={selectedTraceId}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={toNextItem(selectedTrace)}
-        onPrevious={toPreviousItem(selectedTrace)}
+        onNext={selectedTraceId ? () => toNextItem(selectedTraceId) : undefined}
+        onPrevious={selectedTraceId ? () => toPreviousItem(selectedTraceId) : undefined}
       />
     </>
   );

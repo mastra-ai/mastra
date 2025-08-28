@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 export function EntryList({
   items,
-  selectedItem,
+  selectedItemId,
   onItemClick,
   isLoading,
   total,
@@ -20,7 +20,7 @@ export function EntryList({
   searchTerm,
 }: {
   items: any[];
-  selectedItem?: Record<string, any>;
+  selectedItemId?: string;
   onItemClick?: (item: string) => void;
   isLoading?: boolean;
   total?: number;
@@ -69,7 +69,7 @@ export function EntryList({
                 <EntryListItem
                   key={item.id}
                   item={item}
-                  selectedItem={selectedItem}
+                  selectedItemId={selectedItemId}
                   onClick={onItemClick}
                   columns={columns}
                 >
