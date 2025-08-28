@@ -42,7 +42,7 @@ describe('DefaultConsoleExporter', () => {
     expect(attributesCall![0]).toContain('visible-data');
   });
 
-  it('should throw error for unknown events', async () => {
+  it('should log error for unknown events', async () => {
     const logger = {
       info: vi.fn(),
       warn: vi.fn(),
@@ -52,11 +52,11 @@ describe('DefaultConsoleExporter', () => {
 
     const exporter = new ConsoleExporter(logger as any);
 
-    await expect(
-      exporter.exportEvent({
-        type: 'unknown_event' as any,
-        span: {} as any,
-      }),
-    ).rejects.toThrow('Tracing event type not implemented: unknown_event');
+    await exporter.exportEvent({
+      type: 'unknown_event' as any,
+      span: {} as any,
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith('Tracing event type not implemented: unknown_event');
   });
 });
