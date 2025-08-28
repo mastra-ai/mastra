@@ -1,4 +1,4 @@
-import { exec as execNodejs, spawn as nodeSpawn } from 'child_process';
+import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'child_process';
 import type { SpawnOptions } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { copyFile } from 'fs/promises';
@@ -9,6 +9,7 @@ import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
 
 export const exec = promisify(execNodejs);
+export const execFile = promisify(execFileNodejs);
 
 // Helper function to detect if we're in a workspace subfolder
 function isInWorkspaceSubfolder(cwd: string): boolean {

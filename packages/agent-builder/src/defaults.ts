@@ -4,7 +4,7 @@ import { join, dirname, relative, isAbsolute, resolve } from 'path';
 import { createTool } from '@mastra/core/tools';
 import ignore from 'ignore';
 import { z } from 'zod';
-import { exec, spawnSWPM, spawnWithOutput } from './utils';
+import { exec, execFile, spawnSWPM, spawnWithOutput } from './utils';
 
 export class AgentBuilderDefaults {
   static DEFAULT_INSTRUCTIONS = (
@@ -1342,9 +1342,12 @@ export const mastra = new Mastra({
    */
   static async stopMastraServer({ port = 4200, projectPath: _projectPath }: { port?: number; projectPath?: string }) {
     try {
-      const { stdout } = await exec(`lsof -ti:${port} || echo "No process found"`);
+      // Run lsof safely without shell interpretation
+      const { stdout } = await execFile('lsof', ['-ti', String(port)]);
+      // If no output, treat as "No process found"
+      const effectiveStdout = stdout.trim() ? stdout : 'No process found';
 
-      if (!stdout.trim() || stdout.trim() === 'No process found') {
+      if (!effectiveStdout || effectiveStdout === 'No process found') {
         return {
           success: true,
           status: 'stopped' as const,
@@ -1395,8 +1398,9 @@ export const mastra = new Mastra({
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       try {
-        const { stdout: checkStdout } = await exec(`lsof -ti:${port} || echo "No process found"`);
-        if (checkStdout.trim() && checkStdout.trim() !== 'No process found') {
+        const { stdout: checkStdoutRaw } = await execFile('lsof', ['-ti', String(port)]);
+        const checkStdout = checkStdoutRaw.trim() ? checkStdoutRaw : 'No process found';
+        if (checkStdout && checkStdout !== 'No process found') {
           // Force kill remaining processes
           const remainingPids = checkStdout
             .trim()
@@ -1415,8 +1419,9 @@ export const mastra = new Mastra({
 
           // Final check
           await new Promise(resolve => setTimeout(resolve, 1000));
-          const { stdout: finalCheck } = await exec(`lsof -ti:${port} || echo "No process found"`);
-          if (finalCheck.trim() && finalCheck.trim() !== 'No process found') {
+          const { stdout: finalCheckRaw } = await execFile('lsof', ['-ti', String(port)]);
+          const finalCheck = finalCheckRaw.trim() ? finalCheckRaw : 'No process found';
+          if (finalCheck && finalCheck !== 'No process found') {
             return {
               success: false,
               status: 'unknown' as const,
@@ -1483,8 +1488,9 @@ export const mastra = new Mastra({
     } catch {
       // Check if process exists on port
       try {
-        const { stdout } = await exec(`lsof -ti:${port} || echo "No process found"`);
-        const hasProcess = stdout.trim() && stdout.trim() !== 'No process found';
+        const { stdout } = await execFile('lsof', ['-ti', String(port)]);
+        const effectiveStdout = stdout.trim() ? stdout : 'No process found';
+        const hasProcess = effectiveStdout && effectiveStdout !== 'No process found';
 
         return {
           success: Boolean(hasProcess),
