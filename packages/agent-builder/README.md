@@ -60,33 +60,20 @@ The AgentBuilder requires a configuration object with:
 
 ```typescript
 // Install packages
-await builder.tools.manageProject({
-  action: 'install',
-  packages: [{ name: '@mastra/workflows', version: 'latest' }],
-});
+const result = await builder.generate('Install @mastra/workflows package with latest version');
 
 // Validate generated code
-await builder.tools.validateCode({
-  validationType: ['types', 'lint'],
-  files: ['src/agents/my-agent.ts'],
-});
+const validation = await builder.generate('Validate the TypeScript types and linting for src/agents/my-agent.ts');
 ```
 
 ### Server Management
 
 ```typescript
 // Start development server
-await builder.tools.manageServer({
-  action: 'start',
-  port: 4200,
-});
+const serverResult = await builder.generate('Start the development server on port 4200');
 
 // Test API endpoints
-await builder.tools.httpRequest({
-  method: 'GET',
-  url: '/health',
-  baseUrl: 'http://localhost:4200',
-});
+const testResult = await builder.generate('Test the /health endpoint at http://localhost:4200');
 ```
 
 ## Memory and Processing
