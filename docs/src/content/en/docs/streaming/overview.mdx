@@ -24,7 +24,7 @@ You can pass a single string for simple prompts, an array of strings when provid
 
 ### Using `Agent.streamVNext()`
 
-A `textStream` breaks the response into chunks as it’s generated, allowing output to stream progressively instead of arriving all at once Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
+A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once.  Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
 
 ```typescript {3,7} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
@@ -64,7 +64,7 @@ An agent stream provides access to various response properties:
 ### AI SDK v5 Compatibility
 
 For integration with AI SDK v5, use `format` 'aisdk' to get an `AISDKV5OutputStream`:
-`
+
 ```typescript {5} showLineNumbers copy
 const testAgent = mastra.getAgent("testAgent");
 

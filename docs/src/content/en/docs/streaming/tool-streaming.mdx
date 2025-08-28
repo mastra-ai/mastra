@@ -94,7 +94,7 @@ export const testTool = createTool({
     const { city } = context;
 
     const testAgent = mastra?.getAgent("testAgent");
-    const stream = await testAgent?.streamVNext(`What is the weather in ${city}$?`);
+    const stream = await testAgent?.streamVNext(`What is the weather in ${city}?`);
 
     await stream!.textStream.pipeTo(writer!);
 
