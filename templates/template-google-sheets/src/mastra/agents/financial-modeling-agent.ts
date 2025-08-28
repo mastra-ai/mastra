@@ -1,22 +1,20 @@
-import { Agent } from "@mastra/core/agent";
-import { anthropic } from "@ai-sdk/anthropic";
-import { fastembed } from "@mastra/fastembed";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
-import { Composio } from "@composio/core";
-import { MastraProvider } from "@composio/mastra";
+import { Agent } from '@mastra/core/agent';
+import { anthropic } from '@ai-sdk/anthropic';
+import { fastembed } from '@mastra/fastembed';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Composio } from '@composio/core';
+import { MastraProvider } from '@composio/mastra';
 
 // High max steps value
 const MAX_STEPS = 1000;
 
 export const financialModelingAgent = new Agent({
-  name: "Financial Modeling Agent",
+  name: 'Financial Modeling Agent',
   instructions: ({ runtimeContext }) => {
-    const redirectUrl = runtimeContext.get<"redirectUrl", string | undefined>(
-      "redirectUrl",
-    );
+    const redirectUrl = runtimeContext.get<'redirectUrl', string | undefined>('redirectUrl');
 
-    if (redirectUrl && redirectUrl !== "<redirectUrl>") {
+    if (redirectUrl && redirectUrl !== '<redirectUrl>') {
       return `
 ## IMPORTANT USER INFORMATION
 
@@ -28,13 +26,13 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: anthropic("claude-3-7-sonnet-20250219"),
+  model: anthropic('claude-3-7-sonnet-20250219'),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:../../mastra.db",
+      url: 'file:../../mastra.db',
     }),
     vector: new LibSQLVector({
-      connectionUrl: "file:../../mastra.db",
+      connectionUrl: 'file:../../mastra.db',
     }),
     embedder: fastembed,
     options: {
@@ -42,7 +40,7 @@ ${getFinancialModelingAgentPrompt(true)}
       semanticRecall: {
         topK: 3,
         messageRange: 2,
-        scope: "thread",
+        scope: 'thread',
       },
       workingMemory: {
         enabled: true,
@@ -58,13 +56,11 @@ ${getFinancialModelingAgentPrompt(true)}
     });
 
     // retrieve userId and activeAccount from the runtimeContext
-    const userId = runtimeContext.get<"userId", string>("userId");
+    const userId = runtimeContext.get<'userId', string>('userId');
     const activeAccount = runtimeContext.get<
-      "activeAccount",
-      Awaited<
-        ReturnType<typeof composio.connectedAccounts.list>
-      >["items"][number]
-    >("activeAccount");
+      'activeAccount',
+      Awaited<ReturnType<typeof composio.connectedAccounts.list>>['items'][number]
+    >('activeAccount');
 
     // return empty set of tools if activeAccount isn't present
     if (!activeAccount) return {};
@@ -85,14 +81,15 @@ You are an expert financial modeling agent specializing in creating comprehensiv
 
 ## SETUP REQUIREMENTS
 
-${needsAuth
+${
+  needsAuth
     ? `CRITICAL: Always begin every session by following this sequence:
 
 1. **FIRST**: Ensure the user completes authentication using the provided redirect URL before proceeding with any financial modeling tasks.
 
 2. **ONLY AFTER AUTHENTICATION**: Instruct the user to create a new, empty Google Sheet if they haven't already done so.`
     : `CRITICAL: Always begin every session by INSTRUCTING the user to create a new, empty Google Sheet if they haven't already`
-  }
+}
 
 ## CORE EXPERTISE & RESPONSIBILITIES
 
