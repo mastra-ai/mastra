@@ -183,10 +183,10 @@ describe('DefaultExporter', () => {
       it('should auto-select storage preferred strategy', async () => {
         const exporter = new DefaultExporter({}, mockLogger);
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // Strategy should be initialized when init() is called
-        await exporter.init();
+        exporter.init();
 
         expect(mockLogger.info).toHaveBeenCalledWith(
           'AI tracing exporter initialized',
@@ -201,10 +201,10 @@ describe('DefaultExporter', () => {
       it('should use user-specified strategy when supported', async () => {
         const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // Strategy should be initialized when init() is called
-        await exporter.init();
+        exporter.init();
 
         expect(mockLogger.info).toHaveBeenCalledWith(
           'AI tracing exporter initialized',
@@ -220,10 +220,10 @@ describe('DefaultExporter', () => {
 
         const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // Strategy should be initialized when init() is called, with warning
-        await exporter.init();
+        exporter.init();
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
           'User-specified AI tracing strategy not supported by storage adapter, falling back to auto-selection',
@@ -234,13 +234,13 @@ describe('DefaultExporter', () => {
         );
       });
 
-      it('should throw error if init() called before __registerMastra()', async () => {
+      it('should throw error if init() called before __registerMastra()', () => {
         const exporter = new DefaultExporter({}, mockLogger);
 
-        await expect(exporter.init()).rejects.toThrow('DefaultExporter: init() called before __registerMastra()');
+        expect(() => exporter.init()).toThrow('DefaultExporter: init() called before __registerMastra()');
       });
 
-      it('should throw error if storage not available during init()', async () => {
+      it('should throw error if storage not available during init()', () => {
         const mockMastraWithoutStorage = {
           getStorage: vi.fn().mockReturnValue(null),
         } as any;
@@ -248,7 +248,7 @@ describe('DefaultExporter', () => {
         const exporter = new DefaultExporter({}, mockLogger);
         exporter.__registerMastra(mockMastraWithoutStorage);
 
-        await expect(exporter.init()).rejects.toThrow('DefaultExporter: Storage not available during initialization');
+        expect(() => exporter.init()).toThrow('DefaultExporter: Storage not available during initialization');
       });
     });
 
@@ -256,7 +256,7 @@ describe('DefaultExporter', () => {
       it('should process events immediately', async () => {
         const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
         const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
 
         await exporter.exportEvent(mockEvent);
@@ -280,7 +280,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         const event1 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
         const event2 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
@@ -312,7 +312,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // Add span create first
         const createEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -350,7 +350,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // Send update without create first
         const updateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
@@ -377,7 +377,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         const startEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
         const updateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
@@ -408,7 +408,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
         await exporter.exportEvent(mockEvent);
@@ -428,7 +428,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // First event should schedule timer
         const mockEvent1 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -463,7 +463,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // Mock storage failure then success
         mockStorage.batchCreateAISpans
@@ -503,7 +503,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         // Mock persistent storage failure
         mockStorage.batchCreateAISpans.mockRejectedValue(new Error('Persistent error'));
@@ -540,7 +540,7 @@ describe('DefaultExporter', () => {
           mockLogger,
         );
         exporter.__registerMastra(mockMastra);
-        await exporter.init();
+        exporter.init();
 
         const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
         await exporter.exportEvent(mockEvent);

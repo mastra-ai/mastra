@@ -484,8 +484,7 @@ do:
     */
     if (config?.observability) {
       this.registerAITracingExporters();
-      // Fire-and-forget initialization - individual errors are already logged
-      void this.initAITracingExporters();
+      this.initAITracingExporters();
     }
 
     this.setLogger({ logger });
@@ -510,28 +509,25 @@ do:
   /**
    * Initialize all AI tracing exporters after registration is complete
    */
-  private async initAITracingExporters(): Promise<void> {
+  private initAITracingExporters(): void {
     const allTracingInstances = getAllAITracing();
-    const initPromises: Promise<void>[] = [];
 
     allTracingInstances.forEach(tracing => {
       const exporters = tracing.getExporters();
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
-          const initPromise = exporter.init().catch(error => {
+          try {
+            exporter.init();
+          } catch (error) {
             this.#logger?.warn('Failed to initialize AI tracing exporter', {
               exporterName: exporter.name,
               error: error instanceof Error ? error.message : String(error),
             });
-          });
-          initPromises.push(initPromise);
+          }
         }
       });
     });
-
-    // Wait for all exporters to initialize (with individual error handling)
-    await Promise.all(initPromises);
   }
 
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {

@@ -120,7 +120,7 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Initialize the exporter (called after all dependencies are ready)
    */
-  async init(): Promise<void> {
+  init(): void {
     if (!this.mastra) {
       throw new Error('DefaultExporter: init() called before __registerMastra()');
     }

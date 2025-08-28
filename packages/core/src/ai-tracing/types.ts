@@ -461,7 +461,7 @@ export interface AITracingExporter {
   name: string;
 
   /** Initialize exporter (called after all dependencies are ready) */
-  init?(): Promise<void>;
+  init?(): void;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;
