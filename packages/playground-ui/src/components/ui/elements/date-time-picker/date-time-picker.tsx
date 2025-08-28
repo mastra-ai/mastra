@@ -146,7 +146,7 @@ export const DateTimePickerContent = ({
     setTimeValue(val);
 
     if (dateInputValueIsValid) {
-      const newDate = getCompoundDate({ date: dateInputValueDate, timeStr: timeValue });
+      const newDate = getCompoundDate({ date: dateInputValueDate, timeStr: val });
       setDateInputValue(format(newDate, 'PP p'));
     }
   };
