@@ -523,7 +523,13 @@ export class InternalMastraMCPClient extends MastraBase {
 
     try {
       await $RefParser.dereference(outputSchema);
-      return convertJsonSchemaToZod(outputSchema as JSONSchema);
+      const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
+      if ('toJSONSchema' in z) {
+        // @ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
