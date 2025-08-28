@@ -1977,8 +1977,17 @@ export const mastra = new Mastra({
 
           for (const pattern of definitionPatterns) {
             try {
-              const { stdout } = await exec(
-                `rg -n "${pattern}" "${path}" --type ${languagePattern} --max-depth ${depth}`,
+              const { stdout } = await execFile(
+                'rg',
+                [
+                  '-n',
+                  pattern,
+                  path,
+                  '--type',
+                  languagePattern,
+                  '--max-depth',
+                  String(depth),
+                ]
               );
               const matches = stdout.split('\n').filter(line => line.trim());
 
