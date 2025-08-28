@@ -47,7 +47,7 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
-import type { CoreTool } from '../tools/types';
+import type { CoreTool, ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -1416,7 +1416,7 @@ export class Agent<
       return tool;
     }
 
-    const wrappedExecute = async (params: any, options: ToolExecutionOptions) => {
+    const wrappedExecute = async (params: ToolExecutionContext, options: ToolExecutionOptions) => {
       const toolSpan = aiSpan.createChildSpan({
         type: AISpanType.TOOL_CALL,
         name: `tool: ${tool.id}`,
@@ -1429,7 +1429,15 @@ export class Agent<
       });
 
       try {
-        const result = await tool.execute?.(params, options);
+        // Inject tracing context with the tool span as currentSpan
+        const paramsWithTracing: ToolExecutionContext = {
+          ...params,
+          tracingContext: {
+            currentSpan: toolSpan,
+          },
+        };
+
+        const result = await tool.execute?.(paramsWithTracing, options);
         toolSpan.end({ output: result });
         return result;
       } catch (error) {

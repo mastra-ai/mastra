@@ -11,6 +11,7 @@ import {
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
+import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
@@ -124,10 +125,20 @@ export class CoreToolBuilder extends MastraBase {
         return tool?.execute?.(args, execOptions as ToolExecutionOptions) ?? undefined;
       }
 
+      // Extract tracingContext if it was injected by _wrapToolWithAITracing
+      let actualArgs = args;
+      let tracingContext: TracingContext | undefined = undefined;
+
+      if (args && typeof args === 'object' && 'tracingContext' in args) {
+        const { tracingContext: extractedTracingContext, ...restArgs } = args as any;
+        tracingContext = extractedTracingContext;
+        actualArgs = restArgs;
+      }
+
       return (
         tool?.execute?.(
           {
-            context: args,
+            context: actualArgs,
             threadId: options.threadId,
             resourceId: options.resourceId,
             mastra: options.mastra,
@@ -143,6 +154,8 @@ export class CoreToolBuilder extends MastraBase {
               },
               options.writableStream || (execOptions as any).writableStream,
             ),
+            // Pass through the tracingContext if it was injected
+            tracingContext,
           },
           execOptions as ToolExecutionOptions & ToolCallOptions,
         ) ?? undefined
