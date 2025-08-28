@@ -266,7 +266,7 @@ export class CoreToolBuilder extends MastraBase {
 
     if (model) {
       const supportsStructuredOutputs =
-        model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : true;
+        model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : false;
 
       const modelInfo = {
         modelId: model.modelId,
