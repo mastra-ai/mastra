@@ -41,6 +41,10 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
     return formatHierarchicalSpans(detailedTrace);
   }, [detailedTrace]);
 
+  const selectedSpan = rawSpans.find(span => span.spanId === selectedSpanId) ?? rawSpans[0];
+
+  if (!selectedSpan) return null;
+
   // Handler to toggle combined view proportion
   const toggleCombinedViewProportion = () => {
     setCombinedViewProportion(prev => {
@@ -105,7 +109,7 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
     {
       key: 'id',
       label: 'Span ID',
-      value: selectedSpan?.id,
+      value: selectedSpan?.spanId,
     },
     {
       key: 'id',
@@ -115,12 +119,12 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
     {
       key: 'createdAt',
       label: 'Created At',
-      value: formatDate(selectedSpan?.createdAt),
+      value: formatDate(new Date(selectedSpan.createdAt).toISOString()),
     },
     {
       key: 'startedAt',
       label: 'Started At',
-      value: formatDate(selectedSpan?.startTime),
+      value: formatDate(new Date(selectedSpan.startedAt).toISOString()),
     },
   ];
 
@@ -214,7 +218,7 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
 
       <SideDialog
         dialogTitle="Observability Span"
-        isOpen={dialogIsOpen && selectedSpanId && !combinedView}
+        isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
         onClose={() => setDialogIsOpen(false)}
         hasCloseButton={true}
         className={cn('w-[calc(100vw-20rem)] max-w-[60%]', '3xl:max-w-[50rem]', '4xl:max-w-[40%]')}
