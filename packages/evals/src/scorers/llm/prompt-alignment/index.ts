@@ -2,7 +2,7 @@ import type { MastraLanguageModel } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { createScorer } from '@mastra/core/scores';
 import { z } from 'zod';
-import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import { PROMPT_ALIGNMENT_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface PromptAlignmentOptions {
@@ -126,13 +126,7 @@ export function createPromptAlignmentScorerLLM({
           userPrompt,
           score,
           scale,
-          analysis: {
-            intentAlignment: analysis.intentAlignment,
-            requirementsFulfillment: analysis.requirementsFulfillment,
-            completeness: analysis.completeness,
-            responseAppropriateness: analysis.responseAppropriateness,
-            overallAssessment: analysis.overallAssessment,
-          },
+          analysis,
         });
       },
     });

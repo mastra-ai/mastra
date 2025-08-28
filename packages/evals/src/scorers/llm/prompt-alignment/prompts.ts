@@ -135,6 +135,35 @@ Agent Response: "def factorial(n):
 }`;
 }
 
+export type AnalysisResult = {
+  intentAlignment: {
+    score: number;
+    primaryIntent: string;
+    isAddressed: boolean;
+    reasoning: string;
+  };
+  requirementsFulfillment: {
+    requirements: Array<{
+      requirement: string;
+      isFulfilled: boolean;
+      reasoning: string;
+    }>;
+    overallScore: number;
+  };
+  completeness: {
+    score: number;
+    missingElements: string[];
+    reasoning: string;
+  };
+  responseAppropriateness: {
+    score: number;
+    formatAlignment: boolean;
+    toneAlignment: boolean;
+    reasoning: string;
+  };
+  overallAssessment: string;
+};
+
 export function createReasonPrompt({
   userPrompt,
   score,
@@ -144,34 +173,7 @@ export function createReasonPrompt({
   userPrompt: string;
   score: number;
   scale: number;
-  analysis: {
-    intentAlignment: {
-      score: number;
-      primaryIntent: string;
-      isAddressed: boolean;
-      reasoning: string;
-    };
-    requirementsFulfillment: {
-      requirements: Array<{
-        requirement: string;
-        isFulfilled: boolean;
-        reasoning: string;
-      }>;
-      overallScore: number;
-    };
-    completeness: {
-      score: number;
-      missingElements: string[];
-      reasoning: string;
-    };
-    responseAppropriateness: {
-      score: number;
-      formatAlignment: boolean;
-      toneAlignment: boolean;
-      reasoning: string;
-    };
-    overallAssessment: string;
-  };
+  analysis: AnalysisResult;
 }) {
   const fulfilledCount = analysis.requirementsFulfillment.requirements.filter(r => r.isFulfilled).length;
   const totalRequirements = analysis.requirementsFulfillment.requirements.length;
