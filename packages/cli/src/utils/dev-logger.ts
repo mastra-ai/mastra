@@ -1,3 +1,4 @@
+import path from 'node:path';
 import pc from 'picocolors';
 import { version } from '..';
 interface DevLoggerOptions {
@@ -92,7 +93,7 @@ export class DevLogger {
 
   fileChange(file: string): void {
     const prefix = this.formatPrefix('⚡', pc.cyan);
-    const fileName = file.split('/').pop() || file;
+    const fileName = path.basename(file) 
     console.log(`${prefix} ${pc.cyan('File changed:')} ${pc.dim(fileName)}`);
   }
 
