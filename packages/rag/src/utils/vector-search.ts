@@ -15,6 +15,8 @@ interface VectorQuerySearchParams {
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
+  /** Provider-specific options for the embedding model (e.g., Google's outputDimensionality) */
+  providerOptions?: Record<string, Record<string, any>>;
 }
 
 interface VectorQuerySearchResult {
@@ -41,11 +43,13 @@ export const vectorQuerySearch = async ({
   includeVectors = false,
   maxRetries = 2,
   databaseConfig = {},
+  providerOptions,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   const { embedding } = await embed({
     value: queryText,
     model,
     maxRetries,
+    ...(providerOptions && { providerOptions }),
   });
 
   // Build query parameters with database-specific configurations

@@ -64,6 +64,8 @@ export type VectorQueryToolOptions = {
   reranker?: RerankConfig;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
+  /** Provider-specific options for the embedding model (e.g., Google's outputDimensionality) */
+  providerOptions?: Record<string, Record<string, any>>;
 } & (
   | {
       vectorStoreName: string;
@@ -88,6 +90,8 @@ export type GraphRagToolOptions = {
     restartProb?: number;
     threshold?: number;
   };
+  /** Provider-specific options for the embedding model (e.g., Google's outputDimensionality) */
+  providerOptions?: Record<string, Record<string, any>>;
 };
 
 /**

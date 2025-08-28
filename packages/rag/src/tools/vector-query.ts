@@ -32,6 +32,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
       const databaseConfig = runtimeContext.get('databaseConfig') ?? options.databaseConfig;
       const model: EmbeddingModel<string> = runtimeContext.get('model') ?? options.model;
+      const providerOptions: Record<string, Record<string, any>> | undefined =
+        runtimeContext.get('providerOptions') ?? options.providerOptions;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
@@ -98,6 +100,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           topK: topKValue,
           includeVectors,
           databaseConfig,
+          providerOptions,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
