@@ -334,7 +334,7 @@ export abstract class MastraAITracing extends MastraBase {
   /**
    * Initialize AI tracing (called by Mastra during component registration)
    */
-  async init(): Promise<void> {
+  init(): void {
     this.logger.debug(`[AI Tracing] Initialization started [name=${this.name}]`);
 
     // Any initialization logic for the AI tracing system
