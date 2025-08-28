@@ -60,11 +60,10 @@ export function InputField({
         value={value}
         className={cn(
           'flex grow items-center cursor-pointer text-[0.875rem] text-[rgba(255,255,255,0.8)] border border-[rgba(255,255,255,0.15)] leading-none rounded-lg bg-transparent min-h-[2.5rem] px-[0.75rem] py-[0.5rem] w-full',
-          'focus:outline-none focus:shadow-[inset_0_0_0_1px_#18fb6f]',
           'placeholder:text-icon3 placeholder:text-[.8125rem]',
           {
             'cursor-not-allowed opacity-50': disabled,
-            'border-red-800 focus:border-[rgba(255,255,255,0.15)]': error || errorMsg,
+            'border-red-800': error || errorMsg,
           },
         )}
         data-testid={testId}
