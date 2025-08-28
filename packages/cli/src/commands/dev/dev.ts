@@ -257,7 +257,6 @@ export async function dev({
 
   await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
 
-  // Setup hotkey handler
   hotkeyHandler = new HotkeyHandler({
     restart: async () => {
       await rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
@@ -266,7 +265,7 @@ export async function dev({
       await openInBrowser(url || `http://localhost:${portToUse}`);
     },
     quit: () => {
-      process.emit('SIGINT' as any);
+      process.emit('SIGINT');
     },
   });
   hotkeyHandler.start();
@@ -283,21 +282,17 @@ export async function dev({
     }
   });
 
-  process.on('SIGINT', () => {
-    devLogger.shutdown();
-
-    // Stop hotkey handler
+  process.on('SIGINT', async () => {
     hotkeyHandler?.stop();
 
-    if (currentServerProcess) {
-      currentServerProcess.kill();
-    }
+    devLogger.shutdown();
 
-    watcher
-      .close()
-      .catch(() => {})
-      .finally(() => {
-        process.exit(0);
-      });
+    if (currentServerProcess) {
+      currentServerProcess.kill('SIGINT');
+      await new Promise(resolve => currentServerProcess?.once('exit', resolve))
+    } 
+
+    await watcher.close().catch(() => {})
+    process.exit(0)
   });
 }
