@@ -1,4 +1,7 @@
 ---
+'@mastra/client-js': patch
+'@mastra/inngest': patch
+'@mastra/server': patch
 '@mastra/core': patch
 ---
 
