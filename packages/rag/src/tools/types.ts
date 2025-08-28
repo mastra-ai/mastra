@@ -64,17 +64,16 @@ export type VectorQueryToolOptions = {
   reranker?: RerankConfig;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
-  /** Provider-specific options for the embedding model (e.g., Google's outputDimensionality) */
-  providerOptions?: Record<string, Record<string, any>>;
-} & (
-  | {
-      vectorStoreName: string;
-    }
-  | {
-      vectorStoreName?: string;
-      vectorStore: MastraVector;
-    }
-);
+} & ProviderOptions &
+  (
+    | {
+        vectorStoreName: string;
+      }
+    | {
+        vectorStoreName?: string;
+        vectorStore: MastraVector;
+      }
+  );
 
 export type GraphRagToolOptions = {
   id?: string;
@@ -90,7 +89,20 @@ export type GraphRagToolOptions = {
     restartProb?: number;
     threshold?: number;
   };
-  /** Provider-specific options for the embedding model (e.g., Google's outputDimensionality) */
+} & ProviderOptions;
+
+export type ProviderOptions = {
+  /**
+   * Provider-specific options for the embedding model (e.g., outputDimensionality).
+   *
+   * ⚠️  **IMPORTANT**: `providerOptions` only work with AI SDK v2 models.
+   *
+   * **For v1 models**: Configure options when creating the model:
+   * ✅ const model = openai.embedding('text-embedding-3-small', { dimensions: 512 });
+   *
+   * **For v2 models**: Use providerOptions:
+   * ✅ providerOptions: { openai: { dimensions: 512 } }
+   */
   providerOptions?: Record<string, Record<string, any>>;
 };
 

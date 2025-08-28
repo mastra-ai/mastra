@@ -1,9 +1,9 @@
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import { embedV1, embedV2 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
-import type { DatabaseConfig } from '../tools/types';
+import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
-interface VectorQuerySearchParams {
+type VectorQuerySearchParams = {
   indexName: string;
   vectorStore: MastraVector;
   queryText: string;
@@ -14,9 +14,7 @@ interface VectorQuerySearchParams {
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
-  /** Provider-specific options for the embedding model (e.g., Google's outputDimensionality) */
-  providerOptions?: Record<string, Record<string, any>>;
-}
+} & ProviderOptions;
 
 interface VectorQuerySearchResult {
   results: QueryResult[];
