@@ -20,7 +20,7 @@ export function EntryList({
   searchTerm,
 }: {
   items: any[];
-  selectedItem: Record<string, any> | null;
+  selectedItem?: Record<string, any>;
   onItemClick?: (item: string) => void;
   isLoading?: boolean;
   total?: number;
