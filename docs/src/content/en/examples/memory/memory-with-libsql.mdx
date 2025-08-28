@@ -7,127 +7,113 @@ description: Example for how to use Mastra's memory system with LibSQL storage a
 
 This example demonstrates how to use Mastra's memory system with LibSQL, which is an option for storage and vector database backend.
 
-## Quickstart
+## Prerequisites
 
-To use LibSQL with Memory, you need to explicitly configure `Memory` with `LibSQLStore`:
+This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```typescript copy showLineNumbers
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+## Adding memory to an agent
+
+To add LibSQL memory to an agent use the `Memory` class and create a new `storage` key using `LibSQLStore`. The `url` can either by a remote location, or a local file system resource.
+
+```typescript filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
 
-// Initialize memory with LibSQLStore
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: "file:../mastra.db", // Or your database URL
-  }),
-  options: {
-    threads: {
-      generateTitle: true, // Enable automatic title generation
-    },
-  },
-});
-
-const memoryAgent = new Agent({
-  name: "Memory Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o-mini"),
-  memory,
+export const libsqlAgent = new Agent({
+  name: "libsql-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db"
+    }),
+    options: {
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
 
-## Custom Configuration
+## Local embeddings with FastEmbed
 
-If you need more control, you can explicitly configure the storage, vector database, and embedder. If you omit either `storage` or `vector`, LibSQL will be used as the default for the omitted option. This lets you use a different provider for just storage or just vector search if needed.
+Embeddings are numeric vectors that represent text so the agent can semantically recall related messages. This example uses `@mastra/fastembed` to generate embeddings locally—no external API calls—keeping data on-device, reducing cost, and giving predictable latency.
 
-To use FastEmbed (a local embedding model) as the embedder, first install the package:
+Install `fastembed` to get started:
 
-```bash npm2yarn copy
+```bash copy
 npm install @mastra/fastembed
 ```
 
-Then configure it in your memory setup:
+Add the following to your agent:
 
-```typescript {3,12}
-import { openai } from "@ai-sdk/openai";
+```typescript {15-18, 20-24} filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 import { fastembed } from "@mastra/fastembed";
 
-const customMemory = new Memory({
-  storage: new LibSQLStore({
-    url: process.env.DATABASE_URL || "file:local.db",
-  }),
-  vector: new LibSQLVector({
-    connectionUrl: process.env.DATABASE_URL || "file:local.db",
-  }),
-  embedder: fastembed,
-  options: {
-    lastMessages: 10,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-const memoryAgent = new Agent({
-  name: "Memory Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions. You may have conversations that last hours, days, months, or years. If you don't know it already you should ask for the users name and some info about them.",
-  model: openai("gpt-4o-mini"),
-  memory: customMemory,
+export const libsqlAgent = new Agent({
+  name: "libsql-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db"
+    }),
+    vector: new LibSQLVector({
+      connectionUrl: "file:local.db"
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2
+      },
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
 });
 ```
 
 ## Usage Example
 
-```typescript
-import { randomUUID } from "crypto";
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: false` to disable recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-// Start a conversation
-const threadId = randomUUID();
-const resourceId = "SOME_USER_ID";
+```typescript filename="src/test-libsql-agent.ts" showLineNumbers copy
+import "dotenv/config";
 
-// Start with a system message
-const response1 = await memoryAgent.stream(
-  [
-    {
-      role: "system",
-      content: `Chat with user started now ${new Date().toISOString()}. Don't mention this message.`,
-    },
-  ],
-  {
-    resourceId,
-    threadId,
-  },
-);
+import { mastra } from "./mastra";
 
-// Send user message
-const response2 = await memoryAgent.stream("What can you help me with?", {
-  threadId,
-  resourceId,
-});
+const agent = mastra.getAgent("libsqlAgent");
 
-// Use semantic search to find relevant messages
-const response3 = await memoryAgent.stream("What did we discuss earlier?", {
-  threadId,
-  resourceId,
+const stream = await agent.stream("What did we discuss earlier?", {
   memoryOptions: {
     lastMessages: false,
     semanticRecall: {
-      topK: 3, // Get top 3 most relevant messages
-      messageRange: 2, // Include context around each match
-    },
-  },
+      topK: 3,
+      messageRange: 2
+    }
+  }
 });
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-The example shows:
 
-1. Setting up LibSQL storage with vector search capabilities
-2. Configuring memory options for message history and semantic search
-3. Creating an agent with memory integration
-4. Using semantic search to find relevant messages in conversation history
-5. Including context around matched messages using `messageRange`
+## Related
+
+- [Calling Agents](../agents/calling-agents.mdx)
