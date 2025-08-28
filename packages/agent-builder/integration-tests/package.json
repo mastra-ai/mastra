@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "vitest run ./src/**/*.test.ts",
+    "test": "vitest run",
     "test:agent": "vitest run ./src/agent-template-behavior.test.ts",
     "test:template": "vitest run ./src/template-integration.test.ts",
     "dev": "mastra dev"

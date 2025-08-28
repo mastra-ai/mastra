@@ -21,20 +21,20 @@ const mockConfig = {
 describe('AgentBuilder', () => {
   describe('AgentBuilderDefaults', () => {
     it('should have default instructions', () => {
-      expect(AgentBuilderDefaults.DEFAULT_INSTRUCTIONS).toContain('expert Mastra Agent Builder');
+      expect(AgentBuilderDefaults.DEFAULT_INSTRUCTIONS()).toContain('Mastra Expert Agent');
     });
 
     it('should have default memory config', () => {
       expect(AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG).toEqual({
-        maxMessages: 20,
-        tokenLimit: 10000,
+        lastMessages: 20,
       });
     });
 
-    it('should have default tools', () => {
-      expect(AgentBuilderDefaults.DEFAULT_TOOLS).toHaveProperty('manageProject');
-      expect(AgentBuilderDefaults.DEFAULT_TOOLS).toHaveProperty('searchReplace');
-      expect(AgentBuilderDefaults.DEFAULT_TOOLS).toHaveProperty('validateCode');
+    it('should have default tools', async () => {
+      const tools = await AgentBuilderDefaults.DEFAULT_TOOLS('test');
+      expect(tools).toHaveProperty('manageProject');
+      expect(tools).toHaveProperty('multiEdit');
+      expect(tools).toHaveProperty('validateCode');
     });
   });
 
@@ -279,13 +279,9 @@ Found 2 errors in 2 files.`;
     it('should include validation workflow in instructions', () => {
       const instructions = AgentBuilderDefaults.DEFAULT_INSTRUCTIONS('/test/path');
 
-      expect(instructions).toContain('VALIDATE CODE AFTER CHANGES');
       expect(instructions).toContain('validateCode');
-      expect(instructions).toContain("['types', 'lint']");
+      expect(instructions).toContain('Run \`validateCode\` with types and lint checks');
       expect(instructions).toContain('Re-validate until clean');
-      expect(instructions).toContain(
-        'Documentation → Web Research → Clarification → Project Exploration → Implementation → Validation',
-      );
     });
   });
 });
