@@ -378,7 +378,7 @@ const packageMergeStep = createStep({
       let targetPkgRaw = '{}';
       try {
         targetPkgRaw = await readFile(targetPkgPath, 'utf-8');
-      } catch (e) {
+      } catch {
         console.warn(`No existing package.json at ${targetPkgPath}, creating a new one`);
       }
 

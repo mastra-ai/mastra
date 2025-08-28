@@ -1,4 +1,5 @@
-import { exec as execNodejs, spawn as nodeSpawn, type SpawnOptions } from 'child_process';
+import { exec as execNodejs, spawn as nodeSpawn } from 'child_process';
+import type { SpawnOptions } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { copyFile } from 'fs/promises';
 import { createRequire } from 'module';
