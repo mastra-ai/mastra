@@ -6,7 +6,7 @@ export interface KbdProps {
 }
 
 const themeClasses: Record<NonNullable<KbdProps['theme']>, string> = {
-  light: 'bg-gray-100 border-gray-300 text-gray-700 border-gray-300',
+  light: 'bg-gray-100 border-gray-300 text-gray-700',
   dark: 'bg-surface4 border-border1 text-icon6',
 };
 
