@@ -1342,16 +1342,11 @@ export const mastra = new Mastra({
    */
   static async stopMastraServer({ port = 4200, projectPath: _projectPath }: { port?: number; projectPath?: string }) {
     // Validate port to ensure it is a safe integer
-    if (
-      typeof port !== "number" ||
-      !Number.isInteger(port) ||
-      port < 1 ||
-      port > 65535
-    ) {
+    if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
       return {
         success: false,
         status: 'error' as const,
-        error: `Invalid port value: ${String(port)}`
+        error: `Invalid port value: ${String(port)}`,
       };
     }
     try {
@@ -1553,9 +1548,10 @@ export const mastra = new Mastra({
     // TypeScript validation
     if (validationType.includes('types')) {
       try {
-        const filePattern = files?.length ? files.join(' ') : '';
-        const tscCommand = files?.length ? `npx tsc --noEmit ${filePattern}` : 'npx tsc --noEmit';
-        await exec(tscCommand, execOptions);
+        const fileArgs = files?.length ? files : [];
+        // Use execFile for safe argument passing to avoid shell interpretation
+        const args = ['tsc', '--noEmit', ...fileArgs];
+        await execFile('npx', args, execOptions);
         validationsPassed.push('types');
       } catch (error: any) {
         let tsOutput = '';
@@ -1579,9 +1575,9 @@ export const mastra = new Mastra({
     // ESLint validation
     if (validationType.includes('lint')) {
       try {
-        const filePattern = files?.length ? files.join(' ') : '.';
-        const eslintCommand = `npx eslint ${filePattern} --format json`;
-        const { stdout } = await exec(eslintCommand, execOptions);
+        const fileArgs = files?.length ? files : ['.'];
+        const eslintArgs = ['eslint', ...fileArgs, '--format', 'json'];
+        const { stdout } = await execFile('npx', eslintArgs, execOptions);
 
         if (stdout) {
           const eslintResults = JSON.parse(stdout);
@@ -1934,7 +1930,37 @@ export const mastra = new Mastra({
 
       // Use ripgrep for fast searching
       // const excludePatterns = includeTests ? [] : ['*test*', '*spec*', '__tests__'];
-      const languagePattern = language ? `*.${language}` : '*';
+
+      // Only allow a list of known extensions/language types to prevent shell injection
+      const ALLOWED_LANGUAGES = [
+        'js',
+        'ts',
+        'jsx',
+        'tsx',
+        'py',
+        'java',
+        'go',
+        'cpp',
+        'c',
+        'cs',
+        'rb',
+        'php',
+        'rs',
+        'kt',
+        'swift',
+        'm',
+        'scala',
+        'sh',
+        'json',
+        'yaml',
+        'yml',
+        'toml',
+        'ini',
+      ];
+      let languagePattern = '*';
+      if (language && ALLOWED_LANGUAGES.includes(language)) {
+        languagePattern = `*.${language}`;
+      }
 
       switch (action) {
         case 'definitions':
