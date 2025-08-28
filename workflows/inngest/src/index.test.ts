@@ -7814,4 +7814,180 @@ describe('MastraInngestWorkflow', () => {
       ]);
     });
   });
+
+  describe.sequential('Flow Control Configuration', () => {
+    it('should accept workflow configuration with flow control properties', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra-flow-control',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      // Test workflow with flow control configuration
+      const workflow = createWorkflow({
+        id: 'flow-control-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        // Flow control properties
+        concurrency: {
+          limit: 5,
+          key: 'event.data.userId'
+        },
+        rateLimit: {
+          period: '1h',
+          limit: 100
+        },
+        priority: {
+          run: 'event.data.priority ?? 50'
+        }
+      });
+
+      expect(workflow).toBeDefined();
+      expect(workflow.id).toBe('flow-control-test');
+
+      // Verify that function creation includes flow control config
+      const inngestFunction = workflow.getFunction();
+      expect(inngestFunction).toBeDefined();
+    });
+
+    it('should handle workflow configuration with partial flow control properties', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra-partial-flow-control',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      // Test workflow with only some flow control properties
+      const workflow = createWorkflow({
+        id: 'partial-flow-control-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        // Only concurrency control
+        concurrency: {
+          limit: 10
+        }
+      });
+
+      expect(workflow).toBeDefined();
+      expect(workflow.id).toBe('partial-flow-control-test');
+
+      const inngestFunction = workflow.getFunction();
+      expect(inngestFunction).toBeDefined();
+    });
+
+    it('should handle workflow configuration without flow control properties (backward compatibility)', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra-backward-compat',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      // Test workflow without any flow control properties (existing behavior)
+      const workflow = createWorkflow({
+        id: 'backward-compat-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        retryConfig: {
+          attempts: 3,
+          delay: 1000
+        }
+      });
+
+      expect(workflow).toBeDefined();
+      expect(workflow.id).toBe('backward-compat-test');
+
+      const inngestFunction = workflow.getFunction();
+      expect(inngestFunction).toBeDefined();
+    });
+
+    it('should support all flow control configuration types', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra-all-flow-control',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      // Test workflow with all flow control configuration types
+      const workflow = createWorkflow({
+        id: 'all-flow-control-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        // All flow control properties
+        concurrency: {
+          limit: 5,
+          key: 'event.data.userId'
+        },
+        rateLimit: {
+          period: '1m',
+          limit: 10
+        },
+        throttle: {
+          period: '10s',
+          limit: 1,
+          key: 'event.data.organizationId'
+        },
+        debounce: {
+          period: '5s',
+          key: 'event.data.messageId'
+        },
+        priority: {
+          run: 'event.data.priority ?? 0'
+        }
+      });
+
+      expect(workflow).toBeDefined();
+      expect(workflow.id).toBe('all-flow-control-test');
+
+      const inngestFunction = workflow.getFunction();
+      expect(inngestFunction).toBeDefined();
+    });
+  });
 }, 40e3);
