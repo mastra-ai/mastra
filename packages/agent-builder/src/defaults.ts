@@ -1341,6 +1341,19 @@ export const mastra = new Mastra({
    * Stop the Mastra server
    */
   static async stopMastraServer({ port = 4200, projectPath: _projectPath }: { port?: number; projectPath?: string }) {
+    // Validate port to ensure it is a safe integer
+    if (
+      typeof port !== "number" ||
+      !Number.isInteger(port) ||
+      port < 1 ||
+      port > 65535
+    ) {
+      return {
+        success: false,
+        status: 'error' as const,
+        error: `Invalid port value: ${String(port)}`
+      };
+    }
     try {
       const { stdout } = await exec(`lsof -ti:${port} || echo "No process found"`);
 
