@@ -1,5 +1,15 @@
 # @mastra/firecrawl
 
+## 1.2.16
+
+### Patch Changes
+
+- [`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix peerdpes for @mastra/core
+
+- Updated dependencies [[`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430)]:
+  - @mastra/rag@1.2.2
+  - @mastra/core@0.15.2
+
 ## 1.2.15
 
 ### Patch Changes

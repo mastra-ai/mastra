@@ -1,5 +1,18 @@
 # @mastra/dane
 
+## 0.0.48
+
+### Patch Changes
+
+- Updated dependencies [[`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430)]:
+  - @mastra/github@1.2.10
+  - @mastra/mcp@0.11.2
+  - @mastra/memory@0.14.2
+  - @mastra/rag@1.2.2
+  - @mastra/libsql@0.13.7
+  - @mastra/upstash@0.14.5
+  - @mastra/core@0.15.2
+
 ## 0.0.47
 
 ### Patch Changes

@@ -281,7 +281,7 @@ importers:
   deployers/cloud:
     dependencies:
       '@mastra/core':
-        specifier: '>=0.10.1-0 <0.15.0-0'
+        specifier: '>=0.10.1-0 <0.16.0-0'
         version: 0.14.1(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.0.17)
       '@mastra/deployer':
         specifier: workspace:^
