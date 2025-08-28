@@ -43,8 +43,6 @@ export default function observability() {
   };
 
   const handleDataChange = (value: Date | null | undefined, type: 'from' | 'to') => {
-    console.log({ value, type });
-
     if (type === 'from') {
       setSelectedDateFrom(value);
     } else {

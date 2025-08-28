@@ -1,6 +1,7 @@
 import { DatePicker } from '@/components/ui/date-picker';
-import { SelectField } from '@/components/ui/elements';
+import { SelectField, DateTimePicker } from '@/components/ui/elements';
 import { Button } from '@/components/ui/elements/buttons';
+import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 
 type ObservabilityTracesToolsProps = {
@@ -22,10 +23,8 @@ export function ObservabilityTracesTools({
   selectedDateFrom,
   selectedDateTo,
 }: ObservabilityTracesToolsProps) {
-  console.log({ selectedEntity });
-
   return (
-    <div className="flex gap-[1rem] items-center">
+    <div className={cn('flex flex-wrap gap-x-[2rem] gap-y-[1rem]')}>
       <SelectField
         label="Filter by Entity"
         name={'select-entity'}
@@ -33,28 +32,29 @@ export function ObservabilityTracesTools({
         options={entityOptions || []}
         onValueChange={onEntityChange}
         value={selectedEntity}
+        className="min-w-[20rem]"
       />
 
-      <div className="flex gap-[.5rem] items-center">
-        <label className="shrink-0 text-[0.875rem] text-icon3">Filter by Date range</label>
-        <div className="flex gap-[1rem]">
-          <DatePicker
-            placeholder="From"
-            value={selectedDateFrom}
-            setValue={date => onDateChange?.(date, 'from')}
-            clearable={true}
-            className="min-w-[10rem]"
-          />
-          <DatePicker
-            placeholder="To"
-            value={selectedDateTo}
-            setValue={date => onDateChange?.(date, 'to')}
-            clearable={true}
-            className="min-w-[10rem]"
-          />
-        </div>
+      <div className={cn('flex gap-[1rem] items-center flex-wrap')}>
+        <span className={cn('shrink-0 text-[0.875rem] text-icon3')}>Filter by Date & time range</span>
+        <DateTimePicker
+          placeholder="From"
+          value={selectedDateFrom}
+          onValueChange={date => onDateChange?.(date, 'from')}
+          clearable={true}
+          className="min-w-[15rem]"
+          defaultTimeStrValue="12:00 AM"
+        />
+        <DateTimePicker
+          placeholder="To"
+          value={selectedDateTo}
+          onValueChange={date => onDateChange?.(date, 'to')}
+          clearable={true}
+          className="min-w-[15rem]"
+          defaultTimeStrValue="11:59 PM"
+        />
       </div>
-      <Button variant="primary" onClick={onReset}>
+      <Button variant="primary" onClick={onReset} className="ml-auto">
         Reset <XIcon />
       </Button>
     </div>

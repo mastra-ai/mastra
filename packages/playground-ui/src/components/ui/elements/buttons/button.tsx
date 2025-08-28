@@ -12,8 +12,9 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   target?: string;
 }
 
-export const Button = ({ className, as, variant = 'outline', ...props }: ButtonProps) => {
-  const Component = as || 'button';
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, as, variant = 'outline', ...props }: ButtonProps, ref) => {
+    const Component = as || 'button';
 
   return (
     <Component

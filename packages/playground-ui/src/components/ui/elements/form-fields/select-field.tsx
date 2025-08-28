@@ -11,7 +11,7 @@ type SelectFieldProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   value?: string;
   helpMsg?: string;
   errorMsg?: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string }[] | string[];
   placeholder?: string;
   onValueChange: (value: string) => void;
 };
@@ -31,7 +31,7 @@ export function SelectField({
   return (
     <div
       className={cn(
-        'flex gap-[.5rem]',
+        'flex gap-[.5rem] items-center',
         {
           'grid-rows-[auto_1fr]': label,
           'grid-rows-[auto_1fr_auto]': helpMsg,
@@ -57,7 +57,7 @@ export function SelectField({
         <SelectContent>
           {options.map(option => (
             <SelectItem key={option.label} value={option.value}>
-              {option.label}
+              <span className="white-space-nowrap truncate block">{option.label}</span>
             </SelectItem>
           ))}
         </SelectContent>
