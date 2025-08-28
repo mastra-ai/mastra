@@ -5,42 +5,40 @@ import {
   SideDialogTop,
   SideDialogCodeSection,
   KeyValueList,
+  formatHierarchicalSpans,
+  UISpan,
 } from '@mastra/playground-ui';
 import { isThisYear, isToday } from 'date-fns';
 import { format } from 'date-fns/format';
 import { CalendarIcon, ClockIcon, PanelLeftIcon, PanelTopIcon, SquareSplitVerticalIcon } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 
 // import { TraceSpanTree } from './trace-tree-span';
 import { TraceTree } from './trace-tree';
+import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 
 type TraceDialogProps = {
-  trace?: any;
-  spans?: any[];
-  nestedSpans: any;
-  spanIds?: string[];
+  parentTraceId?: string;
   isOpen: boolean;
   onClose?: () => void;
   onNext?: (() => void) | null;
   onPrevious?: (() => void) | null;
 };
 
-export function TraceDialog({
-  trace,
-  spans,
-  nestedSpans,
-  spanIds,
-  isOpen,
-  onClose,
-  onNext,
-  onPrevious,
-}: TraceDialogProps) {
+export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious }: TraceDialogProps) {
+  const { data: detailedTrace } = useAITrace(parentTraceId, { enabled: !!parentTraceId });
+
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const [selectedSpanId, setSelectedSpanId] = useState<any>(null);
   const [selectedSpan, setSelectedSpan] = useState<any>(null);
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const [combinedViewProportion, setCombinedViewProportion] = useState<'1/1' | '1/2' | '1/3'>('1/1');
+
+  const hierarchicalSpans = useMemo(() => {
+    if (!detailedTrace) return [];
+    return formatHierarchicalSpans(detailedTrace);
+  }, [detailedTrace]);
 
   // Handler to toggle combined view proportion
   const toggleCombinedViewProportion = () => {
@@ -58,58 +56,48 @@ export function TraceDialog({
     });
   };
 
-  const handleSpanClick = (id: string) => {
-    // console.log('Selected span:', id);
-
-    setSelectedSpanId(id);
+  const handleSpanClick = (span: UISpan) => {
+    setSelectedSpanId(span.id);
     setDialogIsOpen(true);
   };
 
-  useEffect(() => {
-    if (selectedSpanId && spans) {
-      const span = spans.find((span: any) => span.id === selectedSpanId);
-      if (span) {
-        setSelectedSpan(span);
-      } else {
-        console.warn('Span not found for id:', selectedSpanId);
-      }
-    }
-  }, [selectedSpanId, spans]);
+  // useEffect(() => {
+  //   if (selectedSpanId && spans) {
+  //     const span = spans.find((span: any) => span.id === selectedSpanId);
+  //     if (span) {
+  //       setSelectedSpan(span);
+  //     } else {
+  //       console.warn('Span not found for id:', selectedSpanId);
+  //     }
+  //   }
+  // }, [selectedSpanId, spans]);
 
   const toNextSpan = () => {
-    const currentIndex = spanIds?.findIndex(id => id === selectedSpanId);
-
-    if (currentIndex === -1 || currentIndex === (spanIds?.length || 0) - 1) {
-      return null; // No next event
-    }
-
-    const prevSpanId = spanIds?.[(currentIndex || 0) + 1];
-    const prevSpan = spans?.find((span: any) => span.id === prevSpanId);
-
-    if (!prevSpan) {
-      console.warn('Span not found for id:', prevSpanId);
-      return;
-    }
-
-    setSelectedSpanId(prevSpanId);
+    // const currentIndex = spanIds?.findIndex(id => id === selectedSpanId);
+    // if (currentIndex === -1 || currentIndex === (spanIds?.length || 0) - 1) {
+    //   return null; // No next event
+    // }
+    // const prevSpanId = spanIds?.[(currentIndex || 0) + 1];
+    // const prevSpan = spans?.find((span: any) => span.id === prevSpanId);
+    // if (!prevSpan) {
+    //   console.warn('Span not found for id:', prevSpanId);
+    //   return;
+    // }
+    // setSelectedSpanId(prevSpanId);
   };
 
   const toPreviousSpan = () => {
-    const currentIndex = spanIds?.findIndex(id => id === selectedSpanId);
-
-    if (currentIndex === -1 || currentIndex === (spanIds?.length || 0) - 1) {
-      return null; // No next event
-    }
-
-    const nextSpanId = spanIds?.[(currentIndex || 0) - 1];
-    const nextSpan = spans?.find((span: any) => span.id === nextSpanId);
-
-    if (!nextSpan) {
-      console.warn('Span not found for id:', nextSpanId);
-      return;
-    }
-
-    setSelectedSpanId(nextSpanId);
+    // const currentIndex = spanIds?.findIndex(id => id === selectedSpanId);
+    // if (currentIndex === -1 || currentIndex === (spanIds?.length || 0) - 1) {
+    //   return null; // No next event
+    // }
+    // const nextSpanId = spanIds?.[(currentIndex || 0) - 1];
+    // const nextSpan = spans?.find((span: any) => span.id === nextSpanId);
+    // if (!nextSpan) {
+    //   console.warn('Span not found for id:', nextSpanId);
+    //   return;
+    // }
+    // setSelectedSpanId(nextSpanId);
   };
 
   const selectedSpanInfo = [
@@ -171,7 +159,7 @@ export function TraceDialog({
         className={cn('w-[calc(100vw-20rem)] max-w-[75%]', '3xl:max-w-[60rem]', '4xl:max-w-[60%]')}
       >
         <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
-          <div className="flex items-center gap-[0.5rem] text-icon4 text-[0.875rem]">{trace?.id}</div>
+          <div className="flex items-center gap-[0.5rem] text-icon4 text-[0.875rem]">{detailedTrace?.traceId}</div>
         </SideDialogTop>
 
         <div
@@ -187,11 +175,11 @@ export function TraceDialog({
           </SideDialogHeader>
 
           <TraceTree
-            spans={nestedSpans}
+            spans={hierarchicalSpans}
             onSpanClick={handleSpanClick}
             selectedSpanId={selectedSpanId}
-            overallLatency={nestedSpans?.[0].latency}
-            overallStartTime={nestedSpans?.[0].startTime}
+            overallLatency={hierarchicalSpans?.[0]?.latency || 0}
+            overallStartTime={hierarchicalSpans?.[0]?.startTime || ''}
           />
 
           {combinedView && (

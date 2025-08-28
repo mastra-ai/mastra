@@ -11,13 +11,11 @@ import { useState } from 'react';
 // import { useWorkflows } from '@/hooks/use-workflows';
 import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
-import { useTrace } from './useTrace';
 import { TraceDialog } from './TraceDialog';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 
 export default function Observability() {
   const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces();
-  const { trace, nestedSpans, spans, spanIds } = useTrace();
   const [selectedTrace, setSelectedTrace] = useState<any>(null);
   const [selectedEntity, setSelectedEntity] = useState<string | undefined>(undefined);
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | null | undefined>(undefined);
@@ -136,14 +134,11 @@ export default function Observability() {
         </div>
       </MainContentLayout>
       <TraceDialog
+        parentTraceId={selectedTrace?.id}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
         onNext={toNextItem(selectedTrace)}
         onPrevious={toPreviousItem(selectedTrace)}
-        trace={trace}
-        spans={spans || []}
-        nestedSpans={nestedSpans}
-        spanIds={spanIds}
       />
     </>
   );
