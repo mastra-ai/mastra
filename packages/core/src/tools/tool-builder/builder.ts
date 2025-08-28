@@ -265,18 +265,15 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
-      let supportsStructuredOutputs = false;
-      if (model.specificationVersion === 'v2') {
-        supportsStructuredOutputs = true;
-      } else {
-        supportsStructuredOutputs = model.supportsStructuredOutputs ?? false;
-      }
+      const supportsStructuredOutputs =
+        model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : true;
 
       const modelInfo = {
         modelId: model.modelId,
         supportsStructuredOutputs,
         provider: model.provider,
       };
+
       schemaCompatLayers.push(
         new OpenAIReasoningSchemaCompatLayer(modelInfo),
         new OpenAISchemaCompatLayer(modelInfo),
