@@ -104,9 +104,12 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     const filtersWithDateRange: Record<string, any> = {
       ...filters,
       ...buildDateRangeFilter(pagination?.dateRange, 'startedAt'),
+      parentSpanId: null,
     };
     const whereClause = prepareWhereClause(filtersWithDateRange, AI_SPAN_SCHEMA);
     const orderBy = 'startedAt DESC';
+
+    console.log('LOOO:', whereClause);
 
     let count = 0;
     try {

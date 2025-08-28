@@ -68,6 +68,9 @@ export const useAITraces = (filters?: {
     },
     staleTime: 0,
     gcTime: 0,
+    select: data => {
+      return data.pages.flatMap(page => page);
+    },
   });
 
   useEffect(() => {
