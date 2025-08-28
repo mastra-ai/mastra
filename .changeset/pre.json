@@ -77,5 +77,19 @@
     "@mastra/voice-speechify": "0.11.2",
     "@mastra/inngest": "0.12.2"
   },
-  "changesets": []
+  "changesets": [
+    "brave-months-lay",
+    "empty-women-cry",
+    "gentle-baboons-end",
+    "plain-worms-melt",
+    "seven-taxes-lay",
+    "slimy-tables-check",
+    "slow-lands-hope",
+    "small-trains-heal",
+    "sour-melons-raise",
+    "spotty-houses-eat",
+    "stupid-wolves-grab",
+    "true-tools-pull",
+    "two-laws-juggle"
+  ]
 }

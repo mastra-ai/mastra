@@ -1800,8 +1800,11 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod-from-json-schema:
-        specifier: ^0.0.5
-        version: 0.0.5
+        specifier: ^0.5.0
+        version: 0.5.0
+      zod-from-json-schema-v3:
+        specifier: npm:zod-from-json-schema@^0.0.5
+        version: zod-from-json-schema@0.0.5
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.2.12
