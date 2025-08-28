@@ -24,19 +24,10 @@ export function validateToolInput<T = any>(
 
   // Extract the actual input data from various context formats
   let actualInput = input;
-  let tracingContext = undefined;
-
-  // Check if input contains tracingContext that we need to preserve
-  if (input && typeof input === 'object' && 'tracingContext' in input) {
-    tracingContext = (input as any).tracingContext;
-    // Remove tracingContext from validation input
-    const { tracingContext: _, ...inputWithoutTracing } = input as any;
-    actualInput = inputWithoutTracing;
-  }
 
   // Handle ToolExecutionContext format { context: data, ... }
-  if (actualInput && typeof actualInput === 'object' && 'context' in actualInput) {
-    actualInput = (actualInput as any).context;
+  if (input && typeof input === 'object' && 'context' in input) {
+    actualInput = (input as any).context;
   }
 
   // Handle StepExecutionContext format { context: { inputData: data, ... }, ... }
@@ -62,22 +53,9 @@ export function validateToolInput<T = any>(
   // Return the original input structure with validated data in the right place
   if (input && typeof input === 'object' && 'context' in input) {
     if ((input as any).context && typeof (input as any).context === 'object' && 'inputData' in (input as any).context) {
-      const result = { ...input, context: { ...(input as any).context, inputData: validation.data } };
-      if (tracingContext) {
-        (result as any).tracingContext = tracingContext;
-      }
-      return { data: result };
+      return { data: { ...input, context: { ...(input as any).context, inputData: validation.data } } };
     }
-    const result = { ...input, context: validation.data };
-    if (tracingContext) {
-      (result as any).tracingContext = tracingContext;
-    }
-    return { data: result };
-  }
-
-  // Add tracingContext back to the validated data if it was present
-  if (tracingContext) {
-    return { data: { ...validation.data, tracingContext } };
+    return { data: { ...input, context: validation.data } };
   }
 
   return { data: validation.data };

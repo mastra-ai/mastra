@@ -11,7 +11,7 @@ import {
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
-import type { TracingContext } from '../../ai-tracing';
+import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
@@ -121,45 +121,57 @@ export class CoreToolBuilder extends MastraBase {
     });
 
     const execFunction = async (args: unknown, execOptions: ToolExecutionOptions | ToolCallOptions) => {
-      if (isVercelTool(tool)) {
-        return tool?.execute?.(args, execOptions as ToolExecutionOptions) ?? undefined;
+      // Create tool span if we have an agent span available
+      const toolSpan = options.agentAISpan?.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: `tool: ${options.name}`,
+        input: args,
+        attributes: {
+          toolId: options.name,
+          toolDescription: options.description,
+          toolType: logType || 'tool',
+        },
+      });
+
+      try {
+        let result;
+
+        if (isVercelTool(tool)) {
+          // Handle Vercel tools (AI SDK tools)
+          result = await tool?.execute?.(args, execOptions as ToolExecutionOptions);
+        } else {
+          // Handle Mastra tools
+          result = await tool?.execute?.(
+            {
+              context: args,
+              threadId: options.threadId,
+              resourceId: options.resourceId,
+              mastra: options.mastra,
+              memory: options.memory,
+              runId: options.runId,
+              runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+              writer: new ToolStream(
+                {
+                  prefix: 'tool',
+                  callId: execOptions.toolCallId,
+                  name: options.name,
+                  runId: options.runId!,
+                },
+                options.writableStream || (execOptions as any).writableStream,
+              ),
+              // Inject tracing context with the tool span as currentSpan
+              tracingContext: { currentSpan: toolSpan },
+            },
+            execOptions as ToolExecutionOptions & ToolCallOptions,
+          );
+        }
+
+        toolSpan?.end({ output: result });
+        return result ?? undefined;
+      } catch (error) {
+        toolSpan?.error({ error: error as Error });
+        throw error;
       }
-
-      // Extract tracingContext if it was injected by _wrapToolWithAITracing
-      let actualArgs = args;
-      let tracingContext: TracingContext | undefined = undefined;
-
-      if (args && typeof args === 'object' && 'tracingContext' in args) {
-        const { tracingContext: extractedTracingContext, ...restArgs } = args as any;
-        tracingContext = extractedTracingContext;
-        actualArgs = restArgs;
-      }
-
-      return (
-        tool?.execute?.(
-          {
-            context: actualArgs,
-            threadId: options.threadId,
-            resourceId: options.resourceId,
-            mastra: options.mastra,
-            memory: options.memory,
-            runId: options.runId,
-            runtimeContext: options.runtimeContext ?? new RuntimeContext(),
-            writer: new ToolStream(
-              {
-                prefix: 'tool',
-                callId: execOptions.toolCallId,
-                name: options.name,
-                runId: options.runId!,
-              },
-              options.writableStream || (execOptions as any).writableStream,
-            ),
-            // Pass through the tracingContext if it was injected
-            tracingContext,
-          },
-          execOptions as ToolExecutionOptions & ToolCallOptions,
-        ) ?? undefined
-      );
     };
 
     return async (args: unknown, execOptions?: ToolExecutionOptions | ToolCallOptions) => {
