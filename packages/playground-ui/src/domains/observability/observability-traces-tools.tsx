@@ -4,13 +4,13 @@ import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 
 type ObservabilityTracesToolsProps = {
-  onEntityChange: (val: string) => void;
   selectedEntity?: string;
   entityOptions?: { value: string; label: string }[];
+  onEntityChange: (val: string) => void;
+  selectedDateFrom?: Date | undefined;
+  selectedDateTo?: Date | undefined;
   onReset?: () => void;
-  onDateChange?: (value: Date | null | undefined, type: 'from' | 'to') => void;
-  selectedDateFrom?: Date | null | undefined;
-  selectedDateTo?: Date | null | undefined;
+  onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
 };
 
 export function ObservabilityTracesTools({
@@ -39,7 +39,7 @@ export function ObservabilityTracesTools({
         <DateTimePicker
           placeholder="From"
           value={selectedDateFrom}
-          onValueChange={date => onDateChange?.(date, 'from')}
+          onValueChange={date => onDateChange?.(date || undefined, 'from')}
           clearable={true}
           className="min-w-[15rem]"
           defaultTimeStrValue="12:00 AM"
@@ -47,7 +47,7 @@ export function ObservabilityTracesTools({
         <DateTimePicker
           placeholder="To"
           value={selectedDateTo}
-          onValueChange={date => onDateChange?.(date, 'to')}
+          onValueChange={date => onDateChange?.(date || undefined, 'to')}
           clearable={true}
           className="min-w-[15rem]"
           defaultTimeStrValue="11:59 PM"
