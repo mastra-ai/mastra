@@ -39,11 +39,7 @@ type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
 // Extract specific flow control properties (excluding batching)
 export type InngestFlowControlConfig = Pick<
   InngestCreateFunctionConfig,
-  | 'concurrency'
-  | 'rateLimit' 
-  | 'throttle'
-  | 'debounce'
-  | 'priority'
+  'concurrency' | 'rateLimit' | 'throttle' | 'debounce' | 'priority'
 >;
 
 // Union type for Inngest workflows with flow control
@@ -55,10 +51,10 @@ export type InngestWorkflowConfig<
 > = WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps> & InngestFlowControlConfig;
 
 // Compile-time compatibility assertion
-type _AssertInngestCompatibility = InngestFlowControlConfig extends 
-  Pick<Parameters<Inngest['createFunction']>[0], keyof InngestFlowControlConfig>
-  ? true 
-  : never;
+type _AssertInngestCompatibility =
+  InngestFlowControlConfig extends Pick<Parameters<Inngest['createFunction']>[0], keyof InngestFlowControlConfig>
+    ? true
+    : never;
 const _compatibilityCheck: _AssertInngestCompatibility = true;
 
 export type InngestEngineType = {
@@ -374,16 +370,15 @@ export class InngestWorkflow<
 
   constructor(params: InngestWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
     const { concurrency, rateLimit, throttle, debounce, priority, ...workflowParams } = params;
-    
+
     super(workflowParams as WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>);
-    
-    const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority })
-      .filter(([_, value]) => value !== undefined);
-    
-    this.flowControlConfig = flowControlEntries.length > 0 
-      ? Object.fromEntries(flowControlEntries) 
-      : undefined;
-    
+
+    const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
+      ([_, value]) => value !== undefined,
+    );
+
+    this.flowControlConfig = flowControlEntries.length > 0 ? Object.fromEntries(flowControlEntries) : undefined;
+
     this.#mastra = params.mastra!;
     this.inngest = inngest;
   }

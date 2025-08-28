@@ -7843,15 +7843,15 @@ describe('MastraInngestWorkflow', () => {
         // Flow control properties
         concurrency: {
           limit: 5,
-          key: 'event.data.userId'
+          key: 'event.data.userId',
         },
         rateLimit: {
           period: '1h',
-          limit: 100
+          limit: 100,
         },
         priority: {
-          run: 'event.data.priority ?? 50'
-        }
+          run: 'event.data.priority ?? 50',
+        },
       });
 
       expect(workflow).toBeDefined();
@@ -7888,8 +7888,8 @@ describe('MastraInngestWorkflow', () => {
         steps: [step1],
         // Only concurrency control
         concurrency: {
-          limit: 10
-        }
+          limit: 10,
+        },
       });
 
       expect(workflow).toBeDefined();
@@ -7925,8 +7925,8 @@ describe('MastraInngestWorkflow', () => {
         steps: [step1],
         retryConfig: {
           attempts: 3,
-          delay: 1000
-        }
+          delay: 1000,
+        },
       });
 
       expect(workflow).toBeDefined();
@@ -7963,24 +7963,24 @@ describe('MastraInngestWorkflow', () => {
         // All flow control properties
         concurrency: {
           limit: 5,
-          key: 'event.data.userId'
+          key: 'event.data.userId',
         },
         rateLimit: {
           period: '1m',
-          limit: 10
+          limit: 10,
         },
         throttle: {
           period: '10s',
           limit: 1,
-          key: 'event.data.organizationId'
+          key: 'event.data.organizationId',
         },
         debounce: {
           period: '5s',
-          key: 'event.data.messageId'
+          key: 'event.data.messageId',
         },
         priority: {
-          run: 'event.data.priority ?? 0'
-        }
+          run: 'event.data.priority ?? 0',
+        },
       });
 
       expect(workflow).toBeDefined();
