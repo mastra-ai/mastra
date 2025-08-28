@@ -93,7 +93,7 @@ for await (const chunk of stream) {
 
 Below is an example of events that may be emitted. Each event always includes a `type` and can include additional fields like `from` and `payload`.
 
-```typescript
+```typescript {2,8,11}
 {
   type: 'start',
   runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',

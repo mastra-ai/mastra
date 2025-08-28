@@ -80,9 +80,28 @@ for await (const chunk of stream) {
 }
 ```
 
-
 ## Tool using an agent
 
-...
+Pipe an agent’s `textStream` to the tool’s `writer`. This streams partial output, and Mastra automatically aggregates the agent’s usage into the tool run.
 
+```typescript showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ context, mastra, writer }) => {
+    const { city } = context;
+
+    const testAgent = mastra?.getAgent("testAgent");
+    const stream = await testAgent?.streamVNext(`What is the weather in ${city}$?`);
+
+    await stream!.textStream.pipeTo(writer!);
+
+    return {
+      value: await stream!.text
+    };
+  }
+});
+```
 
