@@ -2,7 +2,7 @@ services:
   postgres:
     image: ankane/pgvector:v0.5.1
     ports:
-      - '5434:5432'
+      - '5435:5432'
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -17,7 +17,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - '6370:6379'
+      - '6371:6379'
     command: redis-server --requirepass redis_password
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
@@ -27,7 +27,7 @@ services:
   serverless-redis-http:
     image: hiett/serverless-redis-http:latest
     ports:
-      - '8079:80'
+      - '8080:80'
     environment:
       SRH_MODE: env
       SRH_TOKEN: test_token
