@@ -22,16 +22,17 @@ type TraceDialogProps = {
   parentTraceId?: string;
   isOpen: boolean;
   onClose?: () => void;
-  onNext?: (() => void) | null;
-  onPrevious?: (() => void) | null;
+  onNext?: () => void;
+  onPrevious?: () => void;
 };
 
 export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious }: TraceDialogProps) {
   const { data: detailedTrace } = useAITrace(parentTraceId, { enabled: !!parentTraceId });
 
+  const rawSpans = detailedTrace?.spans || [];
+
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const [selectedSpanId, setSelectedSpanId] = useState<any>(null);
-  const [selectedSpan, setSelectedSpan] = useState<any>(null);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const [combinedViewProportion, setCombinedViewProportion] = useState<'1/1' | '1/2' | '1/3'>('1/1');
 
@@ -73,17 +74,17 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
   // }, [selectedSpanId, spans]);
 
   const toNextSpan = () => {
-    // const currentIndex = spanIds?.findIndex(id => id === selectedSpanId);
-    // if (currentIndex === -1 || currentIndex === (spanIds?.length || 0) - 1) {
-    //   return null; // No next event
-    // }
-    // const prevSpanId = spanIds?.[(currentIndex || 0) + 1];
-    // const prevSpan = spans?.find((span: any) => span.id === prevSpanId);
-    // if (!prevSpan) {
-    //   console.warn('Span not found for id:', prevSpanId);
-    //   return;
-    // }
-    // setSelectedSpanId(prevSpanId);
+    const currentIndex = rawSpans.findIndex(span => span.spanId === selectedSpanId);
+    if (currentIndex === -1 || currentIndex === (rawSpans.length || 0) - 1) {
+      return null; // No next event
+    }
+    const prevSpanId = rawSpans[(currentIndex || 0) + 1].spanId;
+    const prevSpan = rawSpans.find((span: any) => span.spanId === prevSpanId);
+    if (!prevSpan) {
+      console.warn('Span not found for id:', prevSpanId);
+      return;
+    }
+    setSelectedSpanId(prevSpanId);
   };
 
   const toPreviousSpan = () => {
