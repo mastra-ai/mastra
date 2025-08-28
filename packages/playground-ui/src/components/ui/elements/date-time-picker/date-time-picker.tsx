@@ -69,7 +69,6 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
 };
 
 function getCompoundDate({ date, timeStr = '' }: { date: Date; timeStr?: string }) {
-  console.log('getCompoundDate', { date, timeStr });
   if (!isValid(date)) {
     return '';
   }
