@@ -42,7 +42,7 @@ export class AgentBuilder extends Agent {
   private builderConfig: AgentBuilderConfig;
 
   /**
-   * Private constructor - use AgentBuilder.create() instead
+   * Constructor for AgentBuilder
    */
   constructor(config: AgentBuilderConfig) {
     const additionalInstructions = config.instructions ? `## Priority Instructions \n\n${config.instructions}` : '';

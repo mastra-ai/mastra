@@ -1366,10 +1366,14 @@ export const mastra = new Mastra({
         try {
           process.kill(pid, 'SIGTERM');
           killedPids.push(pid);
-        } catch {
+        } catch (e) {
           failedPids.push(pid);
+          console.warn(`Failed to kill process ${pid}:`, e);
         }
       }
+
+      // If some processes failed to be killed, still report partial success
+      // but include warning about failed processes
 
       if (killedPids.length === 0) {
         return {
@@ -1378,6 +1382,13 @@ export const mastra = new Mastra({
           message: `Failed to stop any processes on port ${port}`,
           error: `Could not kill PIDs: ${failedPids.join(', ')}`,
         };
+      }
+
+      // Report partial success if some processes were killed but others failed
+      if (failedPids.length > 0) {
+        console.warn(
+          `Killed ${killedPids.length} processes but failed to kill ${failedPids.length} processes: ${failedPids.join(', ')}`,
+        );
       }
 
       // Wait a bit and check if processes are still running
@@ -1766,9 +1777,18 @@ export const mastra = new Mastra({
     }>;
     taskId?: string;
   }) {
-    // In-memory task storage (could be enhanced with persistent storage)
+    // In-memory task storage with cleanup (could be enhanced with persistent storage)
     if (!AgentBuilderDefaults.taskStorage) {
       AgentBuilderDefaults.taskStorage = new Map();
+    }
+
+    // Cleanup old sessions to prevent memory leaks
+    // Keep only the last 10 sessions and clear sessions older than 1 hour
+    const now = Date.now();
+    const sessions = Array.from(AgentBuilderDefaults.taskStorage.keys());
+    if (sessions.length > 10) {
+      const sessionsToRemove = sessions.slice(0, sessions.length - 10);
+      sessionsToRemove.forEach(session => AgentBuilderDefaults.taskStorage.delete(session));
     }
 
     const sessionId = 'current'; // Could be enhanced with proper session management

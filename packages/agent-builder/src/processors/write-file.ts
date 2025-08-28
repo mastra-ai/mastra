@@ -11,7 +11,7 @@ export class WriteToDiskProcessor extends MemoryProcessor {
   }
 
   async process(messages: CoreMessage[]): Promise<CoreMessage[]> {
-    await writeFile(`${this.prefix}-${Date.now()}.json`, JSON.stringify(messages, null, 2));
+    await writeFile(`${this.prefix}-${Date.now()}-${process.pid}.json`, JSON.stringify(messages, null, 2));
     return messages;
   }
 }

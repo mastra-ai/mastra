@@ -1,4 +1,6 @@
 import type { MastraLanguageModel, ToolsInput } from '@mastra/core/agent';
+import type { MastraStorage } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
 import { z } from 'zod';
 
 /**
@@ -8,9 +10,9 @@ export interface AgentBuilderConfig {
   /** The language model to use for agent generation */
   model: MastraLanguageModel;
   /** Storage provider for memory (optional) */
-  storage?: any;
+  storage?: MastraStorage;
   /** Vector provider for memory (optional) */
-  vectorProvider?: any;
+  vectorProvider?: MastraVector;
   /** Additional tools to include beyond the default set */
   tools?: ToolsInput;
   /** Custom instructions to append to the default system prompt */
@@ -117,14 +119,14 @@ export const CopiedFileSchema = z.object({
   source: z.string(),
   destination: z.string(),
   unit: z.object({
-    kind: z.string(),
+    kind: z.enum(UNIT_KINDS),
     id: z.string(),
   }),
 });
 
 export const ConflictSchema = z.object({
   unit: z.object({
-    kind: z.string(),
+    kind: z.enum(UNIT_KINDS),
     id: z.string(),
   }),
   issue: z.string(),
@@ -151,7 +153,7 @@ export const FileCopyResultSchema = z.object({
 // Intelligent merge schemas and types
 export const ConflictResolutionSchema = z.object({
   unit: z.object({
-    kind: z.string(),
+    kind: z.enum(UNIT_KINDS),
     id: z.string(),
   }),
   issue: z.string(),
