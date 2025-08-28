@@ -16,7 +16,7 @@ Think of `Mastra` as a top-level registry:
 ## Importing
 
 ```typescript
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 ```
 
 ## Constructor
@@ -32,7 +32,7 @@ constructor(config?: Config);
 The Mastra class is typically initialized in your `src/mastra/index.ts` file:
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 import { weatherAgent } from "./agents/weather-agent";
 
@@ -138,7 +138,9 @@ The constructor accepts an optional `Config` object to customize its behavior an
     {
       name: "bundler",
       type: "BundlerConfig",
-      description: "Configuration for the asset bundler.",
+      description: "Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.",
+      isOptional: true,
+      defaultValue: "{ externals: [], sourcemap: false, transpilePackages: [] }",
     },
   ]}
 />

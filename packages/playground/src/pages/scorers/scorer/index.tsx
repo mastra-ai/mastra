@@ -463,7 +463,7 @@ function ScoreDetails({
               </Button>
               <Dialog.Close asChild>
                 <button
-                  className="inline-flex bg-surface5 appearance-none items-center justify-center rounded-md p-[.2rem] focus:shadow-[0_0_0_2px] focus:outline-none"
+                  className="inline-flex bg-surface5 appearance-none items-center justify-center rounded-md p-[.2rem]"
                   aria-label="Close"
                 >
                   <XIcon />

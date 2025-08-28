@@ -27,7 +27,7 @@ class CompositeExporter {
         return httpTarget === "/api/telemetry";
       }).map((span) => span.spanContext().traceId)
     );
-    const filteredSpans = spans.filter((span) => !telemetryTraceIds.has(span.spanContext().traceId));
+    const filteredSpans = spans.filter((span) => !telemetryTraceIds.has(span.spanContext().traceId) && !span.instrumentationScope?.name?.startsWith('@opentelemetry'));
     if (filteredSpans.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS });
       return;

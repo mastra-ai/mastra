@@ -112,7 +112,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             </>
           ) : (
             <textarea
-              className="w-full min-h-[150px] p-3 border border-border1 rounded-lg bg-surface3 font-mono text-sm text-icon5 resize-none focus:outline-none focus:ring-2 focus:ring-surface4"
+              className="w-full min-h-[150px] p-3 border border-border1 rounded-lg bg-surface3 font-mono text-sm text-icon5 resize-none"
               value={editValue}
               onChange={e => setEditValue(e.target.value)}
               disabled={isUpdating}

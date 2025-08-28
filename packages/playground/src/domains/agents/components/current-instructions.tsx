@@ -101,7 +101,7 @@ export function CurrentInstructions({
                   value={userComment}
                   onChange={e => onCommentChange(e.target.value)}
                   placeholder="Add your comments or requirements for enhancing your agent's prompt..."
-                  className="resize-none text-ui-sm w-full placeholder:text-icon3 bg-transparent block disabled:text-icon3 outline-none focus-visible:ring-1 focus-visible:ring-accent3"
+                  className="resize-none text-ui-sm w-full placeholder:text-icon3 bg-transparent block disabled:text-icon3"
                   disabled={Boolean(isEnhancing || enhancedPrompt)}
                 />
 

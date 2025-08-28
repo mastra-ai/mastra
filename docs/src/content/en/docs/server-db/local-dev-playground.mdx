@@ -184,6 +184,25 @@ export const mastra = new Mastra({
 });
 ```
 
+## Bundler options
+
+Use `transpilePackages` to compile TypeScript packages or libraries. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  // ...
+  bundler: {
+    transpilePackages: ["utils"],
+    externals: ["ui"],
+    sourcemap: true
+  }
+});
+```
+
+> See [Mastra Class](../../reference/core/mastra-class.mdx) for more configuration options.
+
 
 ## Next steps
 
