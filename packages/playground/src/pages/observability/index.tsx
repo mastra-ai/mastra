@@ -76,22 +76,26 @@ export default function Observability() {
     setDialogIsOpen(true);
   };
 
-  const toPreviousItem = (id: string) => {
-    const currentIndex = aiTraces.findIndex(event => event?.traceId === id);
+  const toPreviousItem = () => {
+    const currentIndex = aiTraces.findIndex(event => event.traceId === selectedTraceId);
+    console.log('currentIndex', currentIndex);
+    const prevItem = aiTraces[currentIndex + 1];
+    console.log('prevItem', prevItem);
 
-    if (currentIndex === -1 || currentIndex === (events.length || 0) - 1) {
-      return null; // No next event
+    if (prevItem) {
+      setSelectedTraceId(prevItem.traceId);
     }
-    setSelectedTraceId(aiTraces[(currentIndex || 0) + 1].traceId);
   };
 
-  const toNextItem = (id: string) => {
-    const currentIndex = aiTraces.findIndex(event => event?.traceId === id);
+  const toNextItem = () => {
+    const currentIndex = aiTraces.findIndex(event => event.traceId === selectedTraceId);
+    console.log('currentIndex', currentIndex);
+    const nextItem = aiTraces[currentIndex - 1];
+    console.log('nextItem', nextItem);
 
-    if ((currentIndex || 0) <= 0) {
-      return null; // No previous event
+    if (nextItem) {
+      setSelectedTraceId(nextItem.traceId);
     }
-    setSelectedTraceId(aiTraces[(currentIndex || 0) - 1].traceId);
   };
 
   return (
@@ -131,8 +135,8 @@ export default function Observability() {
         parentTraceId={selectedTraceId}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={selectedTraceId ? () => toNextItem(selectedTraceId) : undefined}
-        onPrevious={selectedTraceId ? () => toPreviousItem(selectedTraceId) : undefined}
+        onNext={aiTraces.length > 1 ? toNextItem : undefined}
+        onPrevious={aiTraces.length > 1 ? toPreviousItem : undefined}
       />
     </>
   );
