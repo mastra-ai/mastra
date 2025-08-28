@@ -48,9 +48,9 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('node:util', () => ({
   default: {
-    promisify: vi.fn((fn) => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
+    promisify: vi.fn(() => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
   },
-  promisify: vi.fn((fn) => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
+  promisify: vi.fn(() => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
 }));
 
 const utils = await import('./utils');

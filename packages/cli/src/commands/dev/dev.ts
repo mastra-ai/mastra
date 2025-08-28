@@ -289,10 +289,10 @@ export async function dev({
 
     if (currentServerProcess) {
       currentServerProcess.kill('SIGINT');
-      await new Promise(resolve => currentServerProcess?.once('exit', resolve))
-    } 
+      await new Promise(resolve => currentServerProcess?.once('exit', resolve));
+    }
 
-    await watcher.close().catch(() => {})
-    process.exit(0)
+    await watcher.close().catch(() => {});
+    process.exit(0);
   });
 }

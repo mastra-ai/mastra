@@ -6,7 +6,7 @@ const mockExit = vi.hoisted(() => vi.fn());
 vi.stubGlobal('process', {
   ...process,
   exit: mockExit,
-  argv: ['node', 'test'],  // Override command line args
+  argv: ['node', 'test'], // Override command line args
 });
 
 // Mock commander to prevent CLI from running

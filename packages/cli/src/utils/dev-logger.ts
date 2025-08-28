@@ -93,7 +93,7 @@ export class DevLogger {
 
   fileChange(file: string): void {
     const prefix = this.formatPrefix('⚡', pc.cyan);
-    const fileName = path.basename(file) 
+    const fileName = path.basename(file);
     console.log(`${prefix} ${pc.cyan('File changed:')} ${pc.dim(fileName)}`);
   }
 
