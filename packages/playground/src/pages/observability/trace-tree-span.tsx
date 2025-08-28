@@ -9,7 +9,7 @@ import {
   TimerIcon,
 } from 'lucide-react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { KeyValueList } from '@mastra/playground-ui';
+import { KeyValueList, UISpan } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { format } from 'date-fns/format';
 import { useState } from 'react';
@@ -42,9 +42,9 @@ function TreePositionMark({ isLastChild, isNextToLastChild, hasChildren }: TreeS
 }
 
 type TraceTreeSpanProps = {
-  span: any;
+  span: UISpan;
   depth?: number;
-  onSpanClick?: (span: any) => void;
+  onSpanClick?: (span: UISpan) => void;
   selectedSpanId?: string;
   isFirstChild?: boolean;
   isLastChild?: boolean;
@@ -77,7 +77,7 @@ export function TraceTreeSpan({
   return (
     <>
       <button
-        onClick={() => onSpanClick?.(span.id)}
+        onClick={() => onSpanClick?.(span)}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         type="button"
@@ -98,7 +98,7 @@ export function TraceTreeSpan({
               isLastChild={isLastChild}
               isNextToLastChild={isNextToLastChild}
               isFirstChild={isFirstChild}
-              hasChildren={hasChildren}
+              hasChildren={Boolean(hasChildren)}
             />
           )}
           <div
@@ -198,8 +198,8 @@ export function TraceTreeSpan({
         </HoverCard.Portal>
       </HoverCard.Root>
 
-      {hasChildren > 0 &&
-        span.spans.map((childSpan: any, idx: number, array: any[]) => {
+      {hasChildren &&
+        span.spans?.map((childSpan: UISpan, idx: number, array: UISpan[]) => {
           const isFirstChild = idx === 0;
           const isLastChild = idx === array.length - 1;
           const isNextToLastChild = idx === array.length - 2;
