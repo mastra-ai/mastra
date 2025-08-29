@@ -12,6 +12,7 @@ const meta = {
   "textual-difference": "Textual Difference",
   "tone-consistency": "Tone Consistency",
   "tool-call-accuracy": "Tool Call Accuracy",
+  "prompt-alignment": "Prompt Alignment",
   toxicity: "Toxicity",
 };
 export default meta;

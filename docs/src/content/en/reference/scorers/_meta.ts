@@ -13,6 +13,7 @@ const meta = {
   "textual-difference": "TextualDifference",
   "tone-consistency": "ToneConsistency",
   "tool-call-accuracy": "ToolCallAccuracy",
+  "prompt-alignment": "PromptAlignment",
   toxicity: "Toxicity",
 };
 

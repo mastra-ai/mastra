@@ -1,3 +1,4 @@
+import type { Tool } from '@mastra/core';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { createScorer } from '@mastra/core/scores';
@@ -12,7 +13,7 @@ import { TOOL_SELECTION_ACCURACY_INSTRUCTIONS, createAnalyzePrompt, createReason
 
 export interface ToolCallAccuracyOptions {
   model: MastraLanguageModel;
-  availableTools: Array<{ name: string; description: string }>;
+  availableTools: Tool[];
 }
 
 const analyzeOutputSchema = z.object({
@@ -27,7 +28,7 @@ const analyzeOutputSchema = z.object({
 });
 
 export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolCallAccuracyOptions) {
-  const toolDefinitions = availableTools.map(tool => `${tool.name}: ${tool.description}`).join('\n');
+  const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
 
   return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Tool Call Accuracy (LLM)',
