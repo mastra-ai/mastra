@@ -43,6 +43,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   outputProcessors?: OutputProcessor[];
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
+  maxSteps?: number;
   _internal?: StreamInternal;
   output?: OUTPUT;
 };
