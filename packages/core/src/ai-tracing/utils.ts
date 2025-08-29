@@ -3,6 +3,10 @@
  * used in AI tracing and observability.
  */
 
+import type { RuntimeContext } from '../di';
+import { getSelectedAITracing } from './registry';
+import type { AISpan, AISpanType, AISpanTypeMap, TracingContext } from './types';
+
 /**
  * Removes non-serializable values from a metadata object.
  * @param metadata - An object with arbitrary values
@@ -41,4 +45,48 @@ export function isSerializable(value: any): boolean {
  */
 export function omitKeys<T extends Record<string, any>>(obj: T, keysToOmit: string[]): Partial<T> {
   return Object.fromEntries(Object.entries(obj).filter(([key]) => !keysToOmit.includes(key))) as Partial<T>;
+}
+
+/**
+ * Creates or gets a child span from existing tracing context or starts a new trace.
+ * This helper consolidates the common pattern of creating spans that can either be:
+ * 1. Children of an existing span (when tracingContext.currentSpan exists)
+ * 2. New root spans (when no current span exists)
+ *
+ * @param options - Configuration object for span creation
+ * @returns The created AI span or undefined if tracing is disabled
+ */
+export function getOrCreateSpan<T extends AISpanType>(options: {
+  type: T;
+  name: string;
+  input?: any;
+  attributes?: AISpanTypeMap[T];
+  metadata?: Record<string, any>;
+  tracingContext?: TracingContext;
+  runtimeContext?: RuntimeContext;
+}): AISpan<T> | undefined {
+  const { type, attributes, tracingContext, runtimeContext, ...rest } = options;
+
+  // If we have a current span, create a child span
+  if (tracingContext?.currentSpan) {
+    return tracingContext.currentSpan.createChildSpan({
+      type,
+      attributes,
+      ...rest,
+    });
+  }
+
+  // Otherwise, try to create a new root span
+  const aiTracing = getSelectedAITracing({
+    runtimeContext: runtimeContext,
+  });
+
+  return aiTracing?.startSpan({
+    type,
+    attributes,
+    startOptions: {
+      runtimeContext,
+    },
+    ...rest,
+  });
 }

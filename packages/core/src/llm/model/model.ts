@@ -17,7 +17,7 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
-import type { AISpan, AnyAISpan } from '../../ai-tracing';
+import type { AnyAISpan, TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -115,12 +115,12 @@ export class MastraLLMV1 extends MastraBase {
 
   private _startAISpan(
     model: LanguageModel,
-    agentAISpan: AISpan<AISpanType.AGENT_RUN>,
+    currentSpan: AnyAISpan,
     name: string,
     streaming: boolean,
     options: any,
   ): AnyAISpan {
-    return agentAISpan?.createChildSpan({
+    return currentSpan.createChildSpan({
       name,
       type: AISpanType.LLM_GENERATION,
       input: options.prompt,
@@ -140,13 +140,19 @@ export class MastraLLMV1 extends MastraBase {
     });
   }
 
-  private _wrapModel(model: LanguageModel, agentAISpan?: AISpan<AISpanType.AGENT_RUN>): LanguageModel {
-    if (!agentAISpan) {
+  private _wrapModel(model: LanguageModel, tracingContext: TracingContext): LanguageModel {
+    if (!tracingContext.currentSpan) {
       return model;
     }
 
     const wrappedDoGenerate = async (options: any) => {
-      const llmSpan = this._startAISpan(model, agentAISpan, `llm generate: '${model.modelId}'`, false, options);
+      const llmSpan = this._startAISpan(
+        model,
+        tracingContext.currentSpan!,
+        `llm generate: '${model.modelId}'`,
+        false,
+        options,
+      );
 
       try {
         const result = await model.doGenerate(options);
@@ -170,7 +176,13 @@ export class MastraLLMV1 extends MastraBase {
     };
 
     const wrappedDoStream = async (options: any) => {
-      const llmSpan = this._startAISpan(model, agentAISpan, `llm stream: '${model.modelId}'`, true, options);
+      const llmSpan = this._startAISpan(
+        model,
+        tracingContext.currentSpan!,
+        `llm stream: '${model.modelId}'`,
+        true,
+        options,
+      );
 
       try {
         const result = await model.doStream(options);
@@ -259,7 +271,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
@@ -307,7 +319,7 @@ export class MastraLLMV1 extends MastraBase {
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
       ...rest,
       messages,
-      model: this._wrapModel(model, agentAISpan),
+      model: this._wrapModel(model, tracingContext),
       temperature,
       tools: {
         ...(tools as Tools),
@@ -404,7 +416,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
     const model = this.#model;
@@ -423,7 +435,7 @@ export class MastraLLMV1 extends MastraBase {
       const argsForExecute: OriginalGenerateObjectOptions<Z> = {
         ...rest,
         messages,
-        model: this._wrapModel(model, agentAISpan),
+        model: this._wrapModel(model, tracingContext),
         // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
@@ -492,7 +504,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
     const model = this.#model;
@@ -521,7 +533,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
-      model: this._wrapModel(model, agentAISpan),
+      model: this._wrapModel(model, tracingContext),
       temperature,
       tools: {
         ...(tools as Tools),
@@ -654,7 +666,7 @@ export class MastraLLMV1 extends MastraBase {
     onFinish,
     structuredOutput,
     telemetry,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
     const model = this.#model;
@@ -674,7 +686,7 @@ export class MastraLLMV1 extends MastraBase {
 
       const argsForExecute: OriginalStreamObjectOptions<T> = {
         ...rest,
-        model: this._wrapModel(model, agentAISpan),
+        model: this._wrapModel(model, tracingContext),
         onFinish: async props => {
           try {
             // @ts-expect-error - onFinish is not inferred correctly

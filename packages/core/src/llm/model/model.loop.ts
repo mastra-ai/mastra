@@ -16,7 +16,6 @@ import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
 import { MessageList } from '../../agent';
 import { AISpanType } from '../../ai-tracing';
-import type { AISpan } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
@@ -135,7 +134,7 @@ export class MastraLLMVNext extends MastraBase {
     options,
     outputProcessors,
     providerOptions,
-    agentAISpan,
+    tracingContext,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -159,7 +158,7 @@ export class MastraLLMVNext extends MastraBase {
       output = this._applySchemaCompat(output) as any; // TODO: types for schema compat
     }
 
-    const llmAISpan = agentAISpan?.createChildSpan({
+    const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm stream: '${model.modelId}'`,
       type: AISpanType.LLM_GENERATION,
       input: messages,

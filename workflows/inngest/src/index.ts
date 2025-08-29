@@ -1294,6 +1294,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       },
     });
 
+    const innerTracingContext: TracingContext = { currentSpan: stepAISpan };
+
     const startedAt = await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
@@ -1550,9 +1552,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           writableStream,
           inputData: prevOutput,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: {
-            currentSpan: stepAISpan,
-          },
+          tracingContext: innerTracingContext,
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
             const result = stepResults[step.id];
@@ -1685,6 +1685,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId: executionContext.workflowId,
             stepId: step.id,
             runtimeContext,
+            tracingContext: innerTracingContext,
             disableScorers,
           });
         }
@@ -1796,6 +1797,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       },
     });
 
+    const innerTracingContext: TracingContext = { currentSpan: conditionalSpan };
+
     let execResults: any;
     const truthyIndexes = (
       await Promise.all(
@@ -1818,9 +1821,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 runtimeContext,
                 runCount: -1,
                 inputData: prevOutput,
-                tracingContext: {
-                  currentSpan: evalSpan,
-                },
+                tracingContext: innerTracingContext,
                 getInitData: () => stepResults?.input as any,
                 getStepResult: (step: any) => {
                   if (!step?.id) {
@@ -1913,9 +1914,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runtimeContext,
           writableStream,
           disableScorers,
-          tracingContext: {
-            currentSpan: conditionalSpan,
-          },
+          tracingContext: innerTracingContext,
         }),
       ),
     );

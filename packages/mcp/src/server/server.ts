@@ -609,12 +609,12 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async ({ context, runtimeContext }) => {
+        execute: async ({ context, runtimeContext, tracingContext }) => {
           this.logger.debug(
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
           try {
-            const response = await agent.generate(context.message, { runtimeContext });
+            const response = await agent.generate(context.message, { runtimeContext, tracingContext });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -628,6 +628,7 @@ export class MCPServer extends MCPServerBase {
         logger: this.logger,
         mastra: this.mastra,
         runtimeContext: new RuntimeContext(),
+        tracingContext: { currentSpan: undefined },
         description: agentToolDefinition.description,
       };
       const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
@@ -707,6 +708,7 @@ export class MCPServer extends MCPServerBase {
         logger: this.logger,
         mastra: this.mastra,
         runtimeContext: new RuntimeContext(),
+        tracingContext: { currentSpan: undefined },
         description: workflowToolDefinition.description,
       };
 
@@ -757,6 +759,7 @@ export class MCPServer extends MCPServerBase {
         runtimeContext: new RuntimeContext(),
         mastra: this.mastra,
         logger: this.logger,
+        tracingContext: { currentSpan: undefined },
         description: toolInstance?.description,
       };
 

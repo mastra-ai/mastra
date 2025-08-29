@@ -168,7 +168,7 @@ export function workflowLoopStream<
             nonUser: [],
           },
         },
-        currentSpan: llmAISpan,
+        tracingContext: { currentSpan: llmAISpan },
       });
 
       if (executionResult.status !== 'success') {

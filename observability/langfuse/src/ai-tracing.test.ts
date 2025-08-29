@@ -657,6 +657,8 @@ function createMockSpan({
     error: vi.fn(),
     update: vi.fn(),
     createChildSpan: vi.fn(),
+    createEventSpan: vi.fn(),
+    isEvent: false,
   } as AnyAISpan;
 
   return mockSpan;
