@@ -1,4 +1,4 @@
-import type { TextStreamPart, ToolSet, UIMessage } from 'ai-v5';
+import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage } from 'ai-v5';
 
 export function getResponseUIMessageId({
   originalMessages,
@@ -22,7 +22,7 @@ export function getResponseUIMessageId({
       : responseMessageId;
 }
 
-export function convertFullStreamChunkToUIMessageStream({
+export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMessage>({
   part,
   messageMetadataValue,
   sendReasoning,
@@ -32,7 +32,7 @@ export function convertFullStreamChunkToUIMessageStream({
   sendFinish,
   responseMessageId,
 }: {
-  part: TextStreamPart<ToolSet>;
+  part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
   messageMetadataValue?: any;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -40,7 +40,7 @@ export function convertFullStreamChunkToUIMessageStream({
   sendStart?: boolean;
   sendFinish?: boolean;
   responseMessageId?: string;
-}) {
+}): InferUIMessageChunk<UI_MESSAGE> | undefined {
   const partType = part.type;
 
   switch (partType) {
@@ -166,6 +166,13 @@ export function convertFullStreamChunkToUIMessageStream({
         output: part.output,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+      };
+    }
+
+    case 'tool-output': {
+      return {
+        id: part.toolCallId,
+        ...part.output,
       };
     }
 

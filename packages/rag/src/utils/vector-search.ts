@@ -1,9 +1,9 @@
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import { embedV1, embedV2 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
-import type { DatabaseConfig } from '../tools/types';
+import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
-interface VectorQuerySearchParams {
+type VectorQuerySearchParams = {
   indexName: string;
   vectorStore: MastraVector;
   queryText: string;
@@ -14,7 +14,7 @@ interface VectorQuerySearchParams {
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
-}
+} & ProviderOptions;
 
 interface VectorQuerySearchResult {
   results: QueryResult[];
@@ -40,6 +40,7 @@ export const vectorQuerySearch = async ({
   includeVectors = false,
   maxRetries = 2,
   databaseConfig = {},
+  providerOptions,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   let embeddingResult;
 
@@ -48,6 +49,7 @@ export const vectorQuerySearch = async ({
       model: model,
       value: queryText,
       maxRetries,
+      ...(providerOptions && { providerOptions }),
     });
   } else {
     embeddingResult = await embedV1({
