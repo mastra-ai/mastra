@@ -5,8 +5,11 @@ import { AISpanType, getSelectedAITracing, wrapMastra } from '../ai-tracing';
 import type { AISpan, AnyAISpan, TracingContext } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { MastraScorers } from '../scores';
+import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
+import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -153,6 +156,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async execute<TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    disableScorers?: boolean;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
@@ -173,7 +177,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, currentSpan } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, currentSpan, disableScorers } =
+      params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
@@ -262,6 +267,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
           writableStream: params.writableStream,
+          disableScorers,
         });
 
         // if step result is not success, stop and return
@@ -699,6 +705,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext,
     skipEmits = false,
     writableStream,
+    disableScorers,
     serializedStepGraph,
     tracingContext,
   }: {
@@ -717,6 +724,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext: RuntimeContext;
     skipEmits?: boolean;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
     tracingContext: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
@@ -825,7 +833,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const result = await runStep({
           runId,
           workflowId,
-          mastra: wrapMastra(this.mastra!, { currentSpan: stepAISpan }),
+          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
@@ -877,7 +885,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
             writableStream,
           ),
+          // Disable scorers must be explicitly set to false they are on by default
+          scorers: disableScorers === false ? undefined : step.scorers,
         });
+
+        if (step.scorers) {
+          await this.runScorers({
+            scorers: step.scorers,
+            runId,
+            input: prevOutput,
+            output: result,
+            workflowId,
+            stepId: step.id,
+            runtimeContext,
+            disableScorers,
+          });
+        }
 
         if (suspended) {
           execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
@@ -987,6 +1010,71 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return { ...stepInfo, ...execResults };
   }
 
+  protected async runScorers({
+    scorers,
+    runId,
+    input,
+    output,
+    workflowId,
+    stepId,
+    runtimeContext,
+    disableScorers,
+  }: {
+    scorers: DynamicArgument<MastraScorers>;
+    runId: string;
+    input: any;
+    output: any;
+    runtimeContext: RuntimeContext;
+    workflowId: string;
+    stepId: string;
+    disableScorers?: boolean;
+  }) {
+    let scorersToUse = scorers;
+    if (typeof scorersToUse === 'function') {
+      try {
+        scorersToUse = await scorersToUse({
+          runtimeContext: runtimeContext,
+        });
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'WORKFLOW_FAILED_TO_FETCH_SCORERS',
+            domain: 'MASTRA_WORKFLOW',
+            category: ErrorCategory.USER,
+            details: {
+              runId,
+              workflowId,
+              stepId,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString(), error);
+      }
+    }
+
+    if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
+      for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
+        runScorer({
+          scorerId: id,
+          scorerObject: scorerObject,
+          runId: runId,
+          input: [input],
+          output: output,
+          runtimeContext: runtimeContext,
+          entity: {
+            id: workflowId,
+            stepId: stepId,
+          },
+          structuredOutput: true,
+          source: 'LIVE',
+          entityType: 'WORKFLOW',
+        });
+      }
+    }
+  }
+
   async executeParallel({
     workflowId,
     runId,
@@ -1001,6 +1089,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    disableScorers,
   }: {
     workflowId: string;
     runId: string;
@@ -1020,6 +1109,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const parallelSpan = tracingContext.currentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_PARALLEL,
@@ -1057,6 +1147,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController,
           runtimeContext,
           writableStream,
+          disableScorers,
         }),
       ),
     );
@@ -1112,6 +1203,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    disableScorers,
   }: {
     workflowId: string;
     runId: string;
@@ -1136,6 +1228,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext.currentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_CONDITIONAL,
@@ -1286,6 +1379,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController,
           runtimeContext,
           writableStream,
+          disableScorers,
         }),
       ),
     );
@@ -1362,6 +1456,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    disableScorers,
     serializedStepGraph,
   }: {
     workflowId: string;
@@ -1387,6 +1482,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
@@ -1422,6 +1518,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        disableScorers,
         serializedStepGraph,
       });
 
@@ -1516,6 +1613,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    disableScorers,
     serializedStepGraph,
   }: {
     workflowId: string;
@@ -1542,6 +1640,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
   }): Promise<StepResult<any, any, any, any>> {
     const { step, opts } = entry;
@@ -1617,6 +1716,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             runtimeContext,
             skipEmits: true,
             writableStream,
+            disableScorers,
             serializedStepGraph,
           });
         }),
@@ -1811,6 +1911,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    disableScorers,
   }: {
     workflowId: string;
     runId: string;
@@ -1830,6 +1931,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
   }): Promise<{
     result: StepResult<any, any, any, any>;
     stepResults?: Record<string, StepResult<any, any, any, any>>;
@@ -1853,6 +1955,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        disableScorers,
         serializedStepGraph,
       });
     } else if (resume?.resumePath?.length && entry.type === 'parallel') {
@@ -1878,6 +1981,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        disableScorers,
       });
 
       // After resuming one parallel step, check if ALL parallel steps are complete
@@ -1971,6 +2075,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        disableScorers,
       });
     } else if (entry.type === 'conditional') {
       execResults = await this.executeConditional({
@@ -1988,6 +2093,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        disableScorers,
       });
     } else if (entry.type === 'loop') {
       execResults = await this.executeLoop({
@@ -2004,6 +2110,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        disableScorers,
         serializedStepGraph,
       });
     } else if (entry.type === 'foreach') {
@@ -2021,6 +2128,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController,
         runtimeContext,
         writableStream,
+        disableScorers,
         serializedStepGraph,
       });
     } else if (entry.type === 'sleep') {
@@ -2338,6 +2446,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController,
           runtimeContext,
           writableStream,
+          disableScorers,
           serializedStepGraph,
         });
       } catch (error) {

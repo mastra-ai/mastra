@@ -1,10 +1,7 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
-import path, { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import path from 'path';
 import { execa } from 'execa';
-import fsExtra from 'fs-extra/esm';
-import type { PackageJson } from 'type-fest';
 import { getPackageManagerAddCommand } from '../utils/package-manager';
 import type { PackageManager } from '../utils/package-manager';
 
@@ -90,15 +87,6 @@ export class DepsService {
     } catch (err) {
       throw err;
     }
-  }
-
-  public async getPackageVersion() {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const pkgJsonPath = path.join(__dirname, '..', 'package.json');
-
-    const content = (await fsExtra.readJSON(pkgJsonPath)) as PackageJson;
-    return content.version;
   }
 
   public async addScriptsToPackageJson(scripts: Record<string, string>) {

@@ -274,8 +274,9 @@ export class MastraLLMV1 extends MastraBase {
 
         let jsonSchemaToUse;
         if ('toJSONSchema' in z) {
+          // Use dynamic property access to avoid import errors in Zod v3
           // @ts-ignore
-          jsonSchemaToUse = z.toJSONSchema(schema) as JSONSchema7;
+          jsonSchemaToUse = (z as any)['toJSONSchema'](schema) as JSONSchema7;
         } else {
           jsonSchemaToUse = zodToJsonSchema(schema, {
             $refStrategy: 'none',

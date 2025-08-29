@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, StreamObjectResult, TextPart, Tool, ToolExecutionOptions, UIMessage } from 'ai';
+import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import type { ModelMessage } from 'ai-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -1411,49 +1411,6 @@ export class Agent<
     return convertedWorkflowTools;
   }
 
-  private _wrapToolWithAITracing(tool: CoreTool, toolType: string, aiSpan?: AnyAISpan): CoreTool {
-    if (!aiSpan || !tool.execute) {
-      return tool;
-    }
-
-    const wrappedExecute = async (params: any, options: ToolExecutionOptions) => {
-      const toolSpan = aiSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
-        name: `tool: ${tool.id}`,
-        input: params,
-        attributes: {
-          toolId: tool.id,
-          toolDescription: tool.description,
-          toolType,
-        },
-      });
-
-      try {
-        const result = await tool.execute?.(params, options);
-        toolSpan.end({ output: result });
-        return result;
-      } catch (error) {
-        toolSpan.error({ error: error as Error });
-        throw error;
-      }
-    };
-
-    return {
-      ...tool,
-      execute: wrappedExecute,
-    };
-  }
-
-  private _wrapToolsWithAITracing(
-    tools: Record<string, CoreTool>,
-    toolType: string,
-    agentAISpan?: AnyAISpan,
-  ): Record<string, CoreTool> {
-    return Object.fromEntries(
-      Object.entries(tools).map(([key, tool]) => [key, this._wrapToolWithAITracing(tool, toolType, agentAISpan)]),
-    );
-  }
-
   private async convertTools({
     toolsets,
     clientTools,
@@ -1528,11 +1485,11 @@ export class Agent<
     });
 
     return this.formatTools({
-      ...this._wrapToolsWithAITracing(assignedTools, 'assigned', agentAISpan),
-      ...this._wrapToolsWithAITracing(memoryTools, 'memory', agentAISpan),
-      ...this._wrapToolsWithAITracing(toolsetTools, 'toolset', agentAISpan),
-      ...this._wrapToolsWithAITracing(clientSideTools, 'client', agentAISpan),
-      ...workflowTools, //workflow tools are already wrapped with AI tracing
+      ...assignedTools,
+      ...memoryTools,
+      ...toolsetTools,
+      ...clientSideTools,
+      ...workflowTools,
     });
   }
 
@@ -2986,6 +2943,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           threadId: result.threadId,
           structuredOutput: result.structuredOutput,
           stopWhen: result.stopWhen,
+          maxSteps: result.maxSteps,
           options: {
             onFinish: async (payload: any) => {
               if (payload.finishReason === 'error') {
