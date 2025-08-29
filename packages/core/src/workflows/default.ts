@@ -5,6 +5,7 @@ import { AISpanType, getSelectedAITracing, wrapMastra } from '../ai-tracing';
 import type { AISpan, AnyAISpan, TracingContext } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { IErrorDefinition } from '../error';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
@@ -41,6 +42,29 @@ export type ExecutionContext = {
  * Default implementation of the ExecutionEngine using XState
  */
 export class DefaultExecutionEngine extends ExecutionEngine {
+  /**
+   * Preprocesses an error caught during workflow execution.
+   *
+   * - Wraps a non-MastraError exception
+   * - Logs error details
+   */
+  protected preprocessExecutionError(
+    e: unknown,
+    errorDefinition: IErrorDefinition<ErrorDomain, ErrorCategory>,
+    logPrefix: string,
+  ): MastraError {
+    const error = e instanceof MastraError ? e : new MastraError(errorDefinition, e);
+
+    // Preserve original stack trace
+    if (!(e instanceof MastraError) && e instanceof Error && e.stack) {
+      error.stack = e.stack;
+    }
+
+    this.logger?.trackException(error);
+    this.logger?.error(logPrefix + error?.stack);
+    return error;
+  }
+
   /**
    * The runCounts map is used to keep track of the run count for each step.
    * The step id is used as the key and the run count is the value.
@@ -314,21 +338,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         // if error occurred during step execution, stop and return
       } catch (e) {
-        const error =
-          e instanceof MastraError
-            ? e
-            : new MastraError(
-                {
-                  id: 'WORKFLOW_ENGINE_STEP_EXECUTION_FAILED',
-                  domain: ErrorDomain.MASTRA_WORKFLOW,
-                  category: ErrorCategory.USER,
-                  details: { workflowId, runId },
-                },
-                e,
-              );
-
-        this.logger?.trackException(error);
-        this.logger?.error(`Error executing step: ${error?.stack}`);
+        const error = this.preprocessExecutionError(
+          e,
+          {
+            id: 'WORKFLOW_ENGINE_STEP_EXECUTION_FAILED',
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            category: ErrorCategory.USER,
+            details: { workflowId, runId },
+          },
+          'Error executing step: ',
+        );
         const result = (await this.fmtReturnValue(
           executionSpan,
           params.emitter,
@@ -912,20 +931,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
-        const error =
-          e instanceof MastraError
-            ? e
-            : new MastraError(
-                {
-                  id: 'WORKFLOW_STEP_INVOKE_FAILED',
-                  domain: ErrorDomain.MASTRA_WORKFLOW,
-                  category: ErrorCategory.USER,
-                  details: { workflowId, runId, stepId: step.id },
-                },
-                e,
-              );
-        this.logger.trackException(error);
-        this.logger.error(`Error executing step ${step.id}: ` + error?.stack);
+        const error = this.preprocessExecutionError(
+          e,
+          {
+            id: 'WORKFLOW_STEP_INVOKE_FAILED',
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            category: ErrorCategory.USER,
+            details: { workflowId, runId, stepId: step.id },
+          },
+          `Error executing step ${step.id}: `,
+        );
 
         stepAISpan?.error({
           error,
@@ -1036,10 +1051,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runtimeContext: runtimeContext,
         });
       } catch (error) {
-        const mastraError = new MastraError(
+        this.preprocessExecutionError(
+          error,
           {
             id: 'WORKFLOW_FAILED_TO_FETCH_SCORERS',
-            domain: 'MASTRA_WORKFLOW',
+            domain: ErrorDomain.MASTRA_WORKFLOW,
             category: ErrorCategory.USER,
             details: {
               runId,
@@ -1047,10 +1063,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               stepId,
             },
           },
-          error,
+          'Error fetching scorers: ',
         );
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString(), error);
       }
     }
 
@@ -1306,20 +1320,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
             return result ? index : null;
           } catch (e: unknown) {
-            const error =
-              e instanceof MastraError
-                ? e
-                : new MastraError(
-                    {
-                      id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
-                      domain: ErrorDomain.MASTRA_WORKFLOW,
-                      category: ErrorCategory.USER,
-                      details: { workflowId, runId },
-                    },
-                    e,
-                  );
-            this.logger.trackException(error);
-            this.logger.error('Error evaluating condition: ' + error?.stack);
+            const error = this.preprocessExecutionError(
+              e,
+              {
+                id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
+                domain: ErrorDomain.MASTRA_WORKFLOW,
+                category: ErrorCategory.USER,
+                details: { workflowId, runId },
+              },
+              'Error evaluating condition: ',
+            );
 
             evalSpan?.error({
               error,
