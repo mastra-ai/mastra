@@ -9,12 +9,12 @@ import {
   EntityOptions,
 } from '@mastra/playground-ui';
 import { useState } from 'react';
-// import { useWorkflows } from '@/hooks/use-workflows';
 import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
 import { TraceDialog } from './TraceDialog';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { format, isToday } from 'date-fns';
+import { useWorkflows } from '@/hooks/use-workflows';
 
 const listColumns = [
   { name: 'id', label: 'ID', size: '16rem' },
@@ -39,6 +39,7 @@ export default function Observability() {
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents } = useAgents();
+  const { data: workflows } = useWorkflows();
   const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces({
     filters: {
       entityId: selectedEntity?.value,
@@ -59,7 +60,15 @@ export default function Observability() {
     type: 'agent' as const,
   }));
 
-  const entityOptions: EntityOptions[] = [...agentOptions, { value: 'all', label: 'All', type: 'workflow' as const }];
+  const legacy = workflows?.[0] || {};
+  const current = workflows?.[1] || {};
+  const workflowOptions: EntityOptions[] = (Object.entries({ ...legacy, ...current }) || []).map(([key, value]) => ({
+    value: key,
+    label: value.name,
+    type: 'workflow' as const,
+  }));
+
+  const entityOptions: EntityOptions[] = [...agentOptions, ...workflowOptions];
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
