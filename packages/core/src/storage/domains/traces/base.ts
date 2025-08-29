@@ -1,5 +1,5 @@
 import { MastraBase } from '../../../base';
-import type { Trace } from '../../../telemetry';
+import type { Trace, TraceRecord } from '../../../telemetry';
 import type { StorageGetTracesArg, PaginationInfo, StorageGetTracesPaginatedArg } from '../../types';
 
 export abstract class TracesStorage extends MastraBase {
@@ -9,6 +9,8 @@ export abstract class TracesStorage extends MastraBase {
       name: 'TRACES',
     });
   }
+
+  abstract getTrace(traceId: string): Promise<TraceRecord>;
 
   abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
 

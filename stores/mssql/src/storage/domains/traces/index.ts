@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { PaginationInfo, PaginationArgs } from '@mastra/core/storage';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import { parseFieldKey } from '@mastra/core/utils';
 import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
@@ -47,6 +48,24 @@ export class TracesMSSQL extends TracesStorage {
     return result.traces;
   }
 
+  public async getTrace(traceId: string): Promise<TraceRecord> {
+    const dataQuery = `SELECT * FROM ${getTableName({ indexName: TABLE_TRACES, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @traceId`;
+    const dataRequest = this.pool.request();
+    dataRequest.input('traceId', traceId);
+    const result = await dataRequest.query(dataQuery);
+    if (!result || result.recordset.length === 0) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_MSSQL_STORE_GET_TRACE_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+      });
+    }
+    return {
+      id: traceId,
+      spans: this.formatSpans(result.recordset),
+    };
+  }
+
   public async getTracesPaginated(
     args: {
       name?: string;
@@ -67,7 +86,7 @@ export class TracesMSSQL extends TracesStorage {
     const currentOffset = page * perPage;
 
     const paramMap: Record<string, any> = {};
-    const conditions: string[] = [];
+    const conditions: string[] = [`[parentSpanId] IS NULL`];
     let paramIndex = 1;
 
     if (name) {
@@ -200,6 +219,25 @@ export class TracesMSSQL extends TracesStorage {
         error,
       );
     }
+  }
+
+  private formatSpans(spans: any[]): Trace[] {
+    return spans.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: JSON.parse(row.status),
+      events: JSON.parse(row.events),
+      links: JSON.parse(row.links),
+      attributes: JSON.parse(row.attributes),
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: row.other,
+      createdAt: row.createdAt,
+    }));
   }
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {

@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { PaginationInfo, StorageGetTracesArg, StorageGetTracesPaginatedArg } from '@mastra/core/storage';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import { createSqlBuilder } from '../../sql-builder';
 import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue } from '../utils';
@@ -56,6 +56,28 @@ export class TracesStorageD1 extends TracesStorage {
     }
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const fullTableName = this.operations.getTableName(TABLE_TRACES);
+    const dataQuery = createSqlBuilder().select('*').from(fullTableName).where('traceId = ?', traceId);
+
+    const result = await this.operations.executeQuery(dataQuery.build());
+
+    if (!isArrayOfRecords(result)) {
+      throw new MastraError({
+        id: 'CLOUDFLARE_D1_STORAGE_GET_TRACE_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Trace not found`,
+        details: { traceId },
+      });
+    }
+
+    return {
+      id: traceId,
+      spans: this.formatSpans(result),
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     const { name, scope, page = 0, perPage = 100, attributes, dateRange } = args;
     const fromDate = dateRange?.start;
@@ -65,6 +87,9 @@ export class TracesStorageD1 extends TracesStorage {
     try {
       const dataQuery = createSqlBuilder().select('*').from(fullTableName).where('1=1');
       const countQuery = createSqlBuilder().count().from(fullTableName).where('1=1');
+
+      dataQuery.andWhere('parentSpanId IS NULL');
+      countQuery.andWhere('parentSpanId IS NULL');
 
       if (name) {
         dataQuery.andWhere('name LIKE ?', `%${name}%`);
@@ -113,19 +138,7 @@ export class TracesStorageD1 extends TracesStorage {
 
       const results = await this.operations.executeQuery(dataQuery.build());
 
-      const traces = isArrayOfRecords(results)
-        ? results.map(
-            (trace: Record<string, any>) =>
-              ({
-                ...trace,
-                attributes: deserializeValue(trace.attributes, 'jsonb'),
-                status: deserializeValue(trace.status, 'jsonb'),
-                events: deserializeValue(trace.events, 'jsonb'),
-                links: deserializeValue(trace.links, 'jsonb'),
-                other: deserializeValue(trace.other, 'jsonb'),
-              }) as Trace,
-          )
-        : [];
+      const traces = isArrayOfRecords(results) ? this.formatSpans(results) : [];
 
       return {
         traces,
@@ -149,6 +162,20 @@ export class TracesStorageD1 extends TracesStorage {
       this.logger?.trackException(mastraError);
       return { traces: [], total: 0, page, perPage, hasMore: false };
     }
+  }
+
+  private formatSpans(spans: Record<string, any>[]): Trace[] {
+    return spans.map(
+      (span: Record<string, any>) =>
+        ({
+          ...span,
+          attributes: deserializeValue(span.attributes, 'jsonb'),
+          status: deserializeValue(span.status, 'jsonb'),
+          events: deserializeValue(span.events, 'jsonb'),
+          links: deserializeValue(span.links, 'jsonb'),
+          other: deserializeValue(span.other, 'jsonb'),
+        }) as Trace,
+    );
   }
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {

@@ -1,8 +1,8 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_TRACES, TracesStorage, safelyParseJSON } from '@mastra/core/storage';
+import { TABLE_TRACES, TracesStorage, removeHttpInstrumentationParents, safelyParseJSON } from '@mastra/core/storage';
 import type { StorageGetTracesArg, StorageGetTracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StoreOperationsLibSQL } from '../operations';
 
@@ -38,6 +38,29 @@ export class TracesLibSQL extends TracesStorage {
     }
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_TRACES} WHERE traceId = ?`,
+      args: [traceId],
+    });
+    const spans = this.formatSpans(result.rows);
+
+    if (spans.length === 0) {
+      throw new MastraError({
+        id: 'LIBSQL_STORE_GET_TRACE_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Trace not found`,
+        details: { traceId },
+      });
+    }
+
+    return {
+      id: traceId,
+      spans,
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
     const fromDate = dateRange?.start;
@@ -45,7 +68,7 @@ export class TracesLibSQL extends TracesStorage {
     const currentOffset = page * perPage;
 
     const queryArgs: InValue[] = [];
-    const conditions: string[] = [];
+    const conditions: string[] = ['parentSpanId IS NULL'];
 
     if (name) {
       conditions.push('name LIKE ?');
@@ -100,26 +123,7 @@ export class TracesLibSQL extends TracesStorage {
         args: [...queryArgs, perPage, currentOffset],
       });
 
-      const traces =
-        dataResult.rows?.map(
-          row =>
-            ({
-              id: row.id,
-              parentSpanId: row.parentSpanId,
-              traceId: row.traceId,
-              name: row.name,
-              scope: row.scope,
-              kind: row.kind,
-              status: safelyParseJSON(row.status),
-              events: safelyParseJSON(row.events),
-              links: safelyParseJSON(row.links),
-              attributes: safelyParseJSON(row.attributes),
-              startTime: row.startTime,
-              endTime: row.endTime,
-              other: safelyParseJSON(row.other),
-              createdAt: row.createdAt,
-            }) as Trace,
-        ) ?? [];
+      const traces = this.formatSpans(dataResult.rows);
 
       return {
         traces,
@@ -140,11 +144,36 @@ export class TracesLibSQL extends TracesStorage {
     }
   }
 
+  private formatSpans(rows: Record<string, any>[]): Trace[] {
+    return (
+      rows?.map(
+        row =>
+          ({
+            id: row.id,
+            parentSpanId: row.parentSpanId,
+            traceId: row.traceId,
+            name: row.name,
+            scope: row.scope,
+            kind: row.kind,
+            status: safelyParseJSON(row.status),
+            events: safelyParseJSON(row.events),
+            links: safelyParseJSON(row.links),
+            attributes: safelyParseJSON(row.attributes),
+            startTime: row.startTime,
+            endTime: row.endTime,
+            other: safelyParseJSON(row.other),
+            createdAt: row.createdAt,
+          }) as Trace,
+      ) ?? []
+    );
+  }
+
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
     this.logger.debug('Batch inserting traces', { count: records.length });
+    const filteredRecords = removeHttpInstrumentationParents(records);
     await this.operations.batchInsert({
       tableName: TABLE_TRACES,
-      records,
+      records: filteredRecords,
     });
   }
 }

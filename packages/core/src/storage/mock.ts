@@ -1,7 +1,7 @@
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
-import type { Trace } from '../telemetry';
+import type { Trace, TraceRecord } from '../telemetry';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
@@ -332,6 +332,10 @@ export class InMemoryStore extends MastraStorage {
     toDate?: Date;
   }): Promise<any[]> {
     return this.stores.traces.getTraces({ name, scope, page, perPage, attributes, filters, fromDate, toDate });
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    return this.stores.traces.getTrace(traceId);
   }
 
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {

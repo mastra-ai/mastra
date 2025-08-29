@@ -17,7 +17,7 @@ import type {
   StorageGetTracesPaginatedArg,
   StorageResourceType,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { StoreLegacyEvalsLance } from './domains/legacy-evals';
 import { StoreMemoryLance } from './domains/memory';
@@ -337,6 +337,10 @@ export class LanceStorage extends MastraStorage {
 
   async getTraceById(args: { traceId: string }): Promise<TraceType> {
     return (this.stores as any).traces.getTraceById(args);
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    return (this.stores as any).traces.getTrace(traceId);
   }
 
   async getTraces(args: {

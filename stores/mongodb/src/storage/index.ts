@@ -18,7 +18,7 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { LegacyEvalsMongoDB } from './domains/legacy-evals';
@@ -247,6 +247,10 @@ export class MongoDBStore extends MastraStorage {
       }[];
   }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages(_args);
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    return this.stores.traces.getTrace(traceId);
   }
 
   async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {

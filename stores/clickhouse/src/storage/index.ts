@@ -21,7 +21,7 @@ import type {
   PaginationArgs,
   StorageResourceType,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { LegacyEvalsStorageClickhouse } from './domains/legacy-evals';
 import { MemoryStorageClickhouse } from './domains/memory';
@@ -287,6 +287,10 @@ export class ClickhouseStore extends MastraStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    return this.stores.traces.getTrace(traceId);
   }
 
   async getTraces(args: StorageGetTracesArg): Promise<any[]> {

@@ -18,7 +18,7 @@ import type {
   StorageDomains,
   PaginationArgs,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { LegacyEvalsStorageD1 } from './domains/legacy-evals';
@@ -410,6 +410,10 @@ export class D1Store extends MastraStorage {
     toDate?: Date;
   }): Promise<Trace[]> {
     return this.stores.traces.getTraces(args);
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    return this.stores.traces.getTrace(traceId);
   }
 
   public async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {

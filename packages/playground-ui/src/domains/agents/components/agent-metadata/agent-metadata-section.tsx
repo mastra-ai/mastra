@@ -22,7 +22,7 @@ export const AgentMetadataSection = ({ title, children, hint }: AgentMetadataSec
         {hint && (
           <TooltipProvider>
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger asChild>
                 <Link href={hint.link} target="_blank" rel="noopener noreferrer">
                   <Icon className="text-icon3" size="sm">
                     <InfoIcon />

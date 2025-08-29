@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageGetTracesArg, PaginationInfo, PaginationArgs } from '@mastra/core/storage';
 import { TracesStorage, TABLE_TRACES } from '@mastra/core/storage';
+import type { TraceRecord } from '@mastra/core/telemetry';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, parseJSON } from '../utils';
@@ -40,6 +41,32 @@ export class TracesUpstash extends TracesStorage {
     }
   }
 
+  public async getTrace(traceId: string): Promise<TraceRecord> {
+    const pattern = `${TABLE_TRACES}:*`;
+    const keys = await this.operations.scanKeys(pattern);
+
+    const pipeline = this.client.pipeline();
+    keys.forEach(key => pipeline.get(key));
+    const results = await pipeline.exec();
+
+    const filteredSpans = results.filter(
+      (record): record is Record<string, any> =>
+        record !== null && typeof record === 'object' && (record as any).traceId === traceId,
+    );
+
+    if (!filteredSpans || filteredSpans.length === 0) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_UPSTASH_STORE_GET_TRACE_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+      });
+    }
+    return {
+      spans: this.formatSpans(filteredSpans),
+      id: traceId,
+    };
+  }
+
   public async getTracesPaginated(
     args: {
       name?: string;
@@ -71,7 +98,8 @@ export class TracesUpstash extends TracesStorage {
       const results = await pipeline.exec();
 
       let filteredTraces = results.filter(
-        (record): record is Record<string, any> => record !== null && typeof record === 'object',
+        (record): record is Record<string, any> =>
+          record !== null && typeof record === 'object' && (record as any).parentSpanId === null,
       );
 
       if (name) {
@@ -107,22 +135,7 @@ export class TracesUpstash extends TracesStorage {
 
       filteredTraces.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      const transformedTraces = filteredTraces.map(record => ({
-        id: record.id,
-        parentSpanId: record.parentSpanId,
-        traceId: record.traceId,
-        name: record.name,
-        scope: record.scope,
-        kind: record.kind,
-        status: parseJSON(record.status),
-        events: parseJSON(record.events),
-        links: parseJSON(record.links),
-        attributes: parseJSON(record.attributes),
-        startTime: record.startTime,
-        endTime: record.endTime,
-        other: parseJSON(record.other),
-        createdAt: ensureDate(record.createdAt),
-      }));
+      const transformedTraces = this.formatSpans(filteredTraces);
 
       const total = transformedTraces.length;
       const resolvedPerPage = perPage || 100;
@@ -161,6 +174,25 @@ export class TracesUpstash extends TracesStorage {
         hasMore: false,
       };
     }
+  }
+
+  private formatSpans(spans: any[]) {
+    return spans.map(record => ({
+      id: record.id,
+      parentSpanId: record.parentSpanId,
+      traceId: record.traceId,
+      name: record.name,
+      scope: record.scope,
+      kind: record.kind,
+      status: parseJSON(record.status),
+      events: parseJSON(record.events),
+      links: parseJSON(record.links),
+      attributes: parseJSON(record.attributes),
+      startTime: record.startTime,
+      endTime: record.endTime,
+      other: parseJSON(record.other),
+      createdAt: ensureDate(record.createdAt)?.toISOString() || '',
+    }));
   }
 
   async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {

@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { PaginationInfo, StorageGetTracesArg, StorageGetTracesPaginatedArg } from '@mastra/core/storage';
 import { TABLE_TRACES, TracesStorage, safelyParseJSON } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StoreOperationsMongoDB } from '../operations';
 
 export class TracesStorageMongoDB extends TracesStorage {
@@ -34,6 +34,40 @@ export class TracesStorageMongoDB extends TracesStorage {
     }
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    let collection;
+    try {
+      collection = await this.operations.getCollection(TABLE_TRACES);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_TRACE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: 'Trace not found',
+          details: { traceId },
+        },
+        error,
+      );
+    }
+
+    const result = await collection.find({ traceId }).toArray();
+    if (result.length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_STORE_GET_TRACE_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: 'Trace not found',
+        details: { traceId },
+      });
+    }
+
+    return {
+      spans: this.formatSpans(result),
+      id: traceId,
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
     const fromDate = dateRange?.start;
@@ -41,6 +75,8 @@ export class TracesStorageMongoDB extends TracesStorage {
     const currentOffset = page * perPage;
 
     const query: any = {};
+    query['parentSpanId'] = null;
+
     if (name) {
       query['name'] = new RegExp(name);
     }
@@ -96,22 +132,7 @@ export class TracesStorageMongoDB extends TracesStorage {
         .skip(currentOffset)
         .toArray();
 
-      const traces = result.map(row => ({
-        id: row.id,
-        parentSpanId: row.parentSpanId,
-        traceId: row.traceId,
-        name: row.name,
-        scope: row.scope,
-        kind: row.kind,
-        status: safelyParseJSON(row.status),
-        events: safelyParseJSON(row.events),
-        links: safelyParseJSON(row.links),
-        attributes: safelyParseJSON(row.attributes),
-        startTime: row.startTime,
-        endTime: row.endTime,
-        other: safelyParseJSON(row.other),
-        createdAt: row.createdAt,
-      })) as Trace[];
+      const traces = this.formatSpans(result);
 
       return {
         traces,
@@ -130,6 +151,25 @@ export class TracesStorageMongoDB extends TracesStorage {
         error,
       );
     }
+  }
+
+  private formatSpans(spans: any[]): Trace[] {
+    return spans.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: safelyParseJSON(row.status),
+      events: safelyParseJSON(row.events),
+      links: safelyParseJSON(row.links),
+      attributes: safelyParseJSON(row.attributes),
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: safelyParseJSON(row.other),
+      createdAt: row.createdAt,
+    })) as Trace[];
   }
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
