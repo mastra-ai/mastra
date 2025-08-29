@@ -34,7 +34,11 @@ type TraceItem = {
 
 export default function Observability() {
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
-  const [selectedEntity, setSelectedEntity] = useState<EntityOptions | undefined>(undefined);
+  const [selectedEntity, setSelectedEntity] = useState<EntityOptions | undefined>({
+    value: 'all',
+    label: 'All',
+    type: 'all' as const,
+  });
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
