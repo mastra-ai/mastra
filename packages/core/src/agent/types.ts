@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { AISpan, AISpanType, TracingContext } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -33,10 +33,6 @@ export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, Me
 export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
-
-export type AgentAISpanProperties = {
-  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-};
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 

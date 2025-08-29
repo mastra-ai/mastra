@@ -8,6 +8,7 @@
 
 import type { AITracingExporter, AITracingEvent, AnyAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, sanitizeMetadata, omitKeys } from '@mastra/core/ai-tracing';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient } from 'langfuse';
 
@@ -20,6 +21,8 @@ export interface LangfuseExporterConfig {
   baseUrl: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
+  /** Logger level for diagnostic messages (default: 'warn') */
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Additional options to pass to the Langfuse client */
   options?: any;
 }
@@ -36,9 +39,11 @@ export class LangfuseExporter implements AITracingExporter {
   private client: Langfuse;
   private realtime: boolean;
   private traceMap = new Map<string, TraceData>();
+  private logger: ConsoleLogger;
 
   constructor(config: LangfuseExporterConfig) {
     this.realtime = config.realtime ?? false;
+    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
     this.client = new Langfuse({
       publicKey: config.publicKey,
       secretKey: config.secretKey,
@@ -74,8 +79,15 @@ export class LangfuseExporter implements AITracingExporter {
 
     const traceData = this.traceMap.get(span.trace.id);
     if (!traceData) {
-      console.log('NO TRACE');
-      // TODO: log warning
+      this.logger.warn('Langfuse exporter: No trace data found for span', {
+        traceId: span.trace.id,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        isRootSpan: span.isRootSpan,
+        parentSpanId: span.parent?.id,
+        method: 'handleSpanStarted',
+      });
       return;
     }
 
@@ -95,15 +107,30 @@ export class LangfuseExporter implements AITracingExporter {
   private async handleSpanUpdateOrEnd(span: AnyAISpan, isUpdate: boolean): Promise<void> {
     const traceData = this.traceMap.get(span.trace.id);
     if (!traceData) {
-      console.log('NO TRACE');
-      // TODO: log warning
+      this.logger.warn('Langfuse exporter: No trace data found for span', {
+        traceId: span.trace.id,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        isRootSpan: span.isRootSpan,
+        parentSpanId: span.parent?.id,
+        method: isUpdate ? 'handleSpanUpdate' : 'handleSpanEnd',
+      });
       return;
     }
 
     const langfuseSpan = traceData.spans.get(span.id);
     if (!langfuseSpan) {
-      console.log('NO SPAN');
-      // TODO: log warning
+      this.logger.warn('Langfuse exporter: No Langfuse span found for span update/end', {
+        traceId: span.trace.id,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        isRootSpan: span.isRootSpan,
+        parentSpanId: span.parent?.id,
+        availableSpanIds: Array.from(traceData.spans.keys()),
+        method: isUpdate ? 'handleSpanUpdate' : 'handleSpanEnd',
+      });
       return;
     }
 

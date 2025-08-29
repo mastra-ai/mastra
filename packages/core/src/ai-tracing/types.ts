@@ -331,7 +331,7 @@ export interface AISpan<TType extends AISpanType> {
     metadata?: Record<string, any>;
   }): AISpan<TChildType>;
 
-  /** Create event span - can be any span type independent of parent
+  /** Create event span - can be any span type independent of parent 
       Event spans have no input, and no endTime.
   */
   createEventSpan<TChildType extends AISpanType>(options: {
