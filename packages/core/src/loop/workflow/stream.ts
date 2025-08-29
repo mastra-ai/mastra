@@ -14,14 +14,19 @@ export function workflowLoopStream<
   OUTPUT extends OutputSchema | undefined = undefined,
 >({
   telemetry_settings,
-  model,
+  models,
   toolChoice,
   modelSettings,
   _internal,
   modelStreamSpan,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
-  return new ReadableStream<ChunkType>({
+  let model = {
+    modelId: '',
+    provider: '',
+    specificationVersion: '' as 'v1' | 'v2',
+  };
+  const stream = new ReadableStream<ChunkType>({
     start: async controller => {
       const writer = new WritableStream<ChunkType>({
         write: chunk => {
@@ -41,7 +46,7 @@ export function workflowLoopStream<
 
       const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
         messageId: messageId!,
-        model,
+        models,
         telemetry_settings,
         _internal,
         modelSettings,
@@ -87,7 +92,7 @@ export function workflowLoopStream<
 
           modelStreamSpan.setAttributes({
             'stream.response.id': inputData.metadata.id,
-            'stream.response.model': model.modelId,
+            'stream.response.model': inputData.metadata.modelId,
             ...(inputData.metadata.providerMetadata
               ? { 'stream.response.providerMetadata': JSON.stringify(inputData.metadata.providerMetadata) }
               : {}),
@@ -102,6 +107,12 @@ export function workflowLoopStream<
                 }
               : {}),
           });
+
+          model = {
+            modelId: inputData.metadata.modelId,
+            provider: inputData.metadata.modelProvider,
+            specificationVersion: inputData.metadata.modelVersion as 'v1' | 'v2',
+          };
 
           modelStreamSpan.end();
 
@@ -185,4 +196,9 @@ export function workflowLoopStream<
       controller.close();
     },
   });
+
+  return {
+    stream,
+    model,
+  };
 }

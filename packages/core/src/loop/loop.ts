@@ -8,7 +8,7 @@ import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflow/stream';
 
 export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
-  model,
+  models,
   logger,
   runId,
   idGenerator,
@@ -45,8 +45,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const { rootSpan } = getRootSpan({
     operationId: mode === 'stream' ? `mastra.stream` : `mastra.generate`,
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
+      modelId: models[0]?.model?.modelId!,
+      provider: models[0]?.model?.provider!,
     },
     modelSettings,
     headers: modelSettings?.headers ?? rest.headers,
@@ -64,8 +64,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   const { rootSpan: modelStreamSpan } = getRootSpan({
     operationId: `mastra.${mode}.aisdk.doStream`,
     model: {
-      modelId: model.modelId,
-      provider: model.provider,
+      modelId: models[0]?.model?.modelId!,
+      provider: models[0]?.model?.provider!,
     },
     modelSettings,
     headers: modelSettings?.headers ?? rest.headers,
@@ -73,7 +73,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   });
 
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
-    model,
+    models,
     runId: runIdToUse,
     logger: loggerToUse,
     startTimestamp: startTimestamp!,
@@ -88,7 +88,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     ...rest,
   };
 
-  const streamFn = workflowLoopStream(workflowLoopProps);
+  const { stream: streamFn, model } = workflowLoopStream(workflowLoopProps);
 
   return new MastraModelOutput({
     model: {
@@ -103,8 +103,16 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       telemetry_settings,
       rootSpan,
       toolCallStreaming: rest.toolCallStreaming,
-      onFinish: rest.options?.onFinish,
-      onStepFinish: rest.options?.onStepFinish,
+      onFinish: props =>
+        rest.options?.onFinish?.({
+          ...props,
+          model,
+        }),
+      onStepFinish: props =>
+        rest.options?.onStepFinish?.({
+          ...props,
+          model,
+        }),
       includeRawChunks: !!includeRawChunks,
       output: rest.output,
       outputProcessors,

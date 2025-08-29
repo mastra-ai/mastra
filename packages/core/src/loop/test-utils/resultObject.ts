@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
-  createTestModel,
+  createTestModels,
   defaultSettings,
   modelWithFiles,
   modelWithReasoning,
@@ -27,7 +27,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           warnings: [{ type: 'other', message: 'test-warning' }],
         }),
         messageList,
@@ -52,7 +52,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -94,7 +94,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -128,7 +128,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -160,7 +160,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
         ...defaultSettings(),
       });
@@ -243,7 +243,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -279,7 +279,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -332,7 +332,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should resolve with full text', async () => {
       const result = loopFn({
         runId,
-        model: createTestModel(),
+        models: createTestModels(),
         messageList: new MessageList(),
         ...defaultSettings(),
       });
@@ -348,7 +348,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -363,7 +363,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -378,7 +378,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithSources,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
@@ -393,7 +393,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithFiles,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -407,7 +407,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it.todo('should add the reasoning from the model response to the step result', async () => {
       const result = loopFn({
         runId,
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList: new MessageList(),
         ...defaultSettings(),
       });
@@ -534,6 +534,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     },
                   ],
                   "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
                   "timestamp": 1970-01-01T00:00:00.000Z,
                 },
                 "usage": {
@@ -553,7 +555,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithSources,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
@@ -612,6 +614,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "usage": {
@@ -631,7 +635,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList: new MessageList(),
-        model: modelWithFiles,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -696,6 +700,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "usage": {
@@ -726,7 +732,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',
@@ -781,7 +787,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',

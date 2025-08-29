@@ -6,6 +6,7 @@ import { MastraLLMVNext } from './model.loop';
 
 const model = new MastraLLMVNext({
   model: openai('gpt-4o-mini'),
+  allModels: [{ model: openai('gpt-4o-mini'), retry: 0, id: 'test-model' }],
 });
 
 describe('MastraLLMVNext', () => {

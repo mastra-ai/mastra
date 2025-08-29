@@ -22,18 +22,29 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
+import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
 
 export class MastraLLMVNext extends MastraBase {
   #model: LanguageModelV2;
+  #allModels: ModelManagerModelConfig[];
   #mastra?: Mastra;
 
-  constructor({ model, mastra }: { model: LanguageModelV2; mastra?: Mastra }) {
+  constructor({
+    model,
+    mastra,
+    allModels,
+  }: {
+    model: LanguageModelV2;
+    mastra?: Mastra;
+    allModels: ModelManagerModelConfig[];
+  }) {
     super({ name: 'aisdk' });
 
     this.#model = model;
+    this.#allModels = allModels;
 
     if (mastra) {
       this.#mastra = mastra;
@@ -134,6 +145,7 @@ export class MastraLLMVNext extends MastraBase {
     outputProcessors,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
+    const firstModel = this.#allModels[0]?.model!;
     let stopWhenToUse;
 
     if (maxSteps && typeof maxSteps === 'number') {
@@ -142,7 +154,6 @@ export class MastraLLMVNext extends MastraBase {
       stopWhenToUse = stopWhen;
     }
 
-    const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
       threadId,
@@ -164,7 +175,7 @@ export class MastraLLMVNext extends MastraBase {
 
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         messageList,
-        model: this.#model,
+        models: this.#allModels,
         tools: tools as Tools,
         stopWhen: stopWhenToUse,
         toolChoice,
@@ -187,8 +198,8 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: model.modelId,
-                    modelProvider: model.provider,
+                    modelId: props.model.modelId,
+                    modelProvider: props.model.provider,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
@@ -232,8 +243,8 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: model.modelId,
-                    modelProvider: model.provider,
+                    modelId: props.model.modelId,
+                    modelProvider: props.model.provider,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
@@ -271,8 +282,8 @@ export class MastraLLMVNext extends MastraBase {
           domain: ErrorDomain.LLM,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            modelId: model.modelId,
-            modelProvider: model.provider,
+            modelId: firstModel.modelId,
+            modelProvider: firstModel.provider,
             runId: runId ?? 'unknown',
             threadId: threadId ?? 'unknown',
             resourceId: resourceId ?? 'unknown',

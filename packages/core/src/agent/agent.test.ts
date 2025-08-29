@@ -1308,6 +1308,94 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(usedModelName).toBe('premium');
     });
 
+    if (version === 'v2') {
+      it('should use fallback model', async () => {
+        let usedModelName = '';
+
+        // Create two different models
+        let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
+        let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+        premiumModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        standardModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                throw new Error('Simulated stream error');
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: standardModel,
+          fallbackModels: [
+            {
+              model: premiumModel,
+            },
+          ],
+        });
+
+        await agent.streamVNext('Test message');
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(usedModelName).toBe('premium');
+      });
+    }
+
     it('should handle boolean generateTitle config for backward compatibility', async () => {
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
@@ -6004,6 +6092,98 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // Second message should not have metadata
       expect(secondUserMessage?.content.metadata).toBeUndefined();
     });
+  });
+
+  it(`${version} - should take and return fallback models`, async () => {
+    const agent = new Agent({
+      name: 'test',
+      instructions: 'test agent instructions',
+      model: openaiModel,
+      fallbackModels: [
+        {
+          model: openai('gpt-4o-mini'),
+        },
+        {
+          model: openai('gpt-4.1'),
+        },
+      ],
+    });
+
+    const fallbacks = agent.fallbackModels;
+    expect(fallbacks).toBeDefined();
+    expect(fallbacks?.length).toBe(2);
+    const fallback1Model = fallbacks?.[0].model as LanguageModelV1;
+    expect(fallback1Model.modelId).toBe('gpt-4o-mini');
+    const fallback2Model = fallbacks?.[1].model as LanguageModelV1;
+    expect(fallback2Model.modelId).toBe('gpt-4.1');
+  });
+
+  it(`${version} - should reorder fallback models`, async () => {
+    const agent = new Agent({
+      name: 'test',
+      instructions: 'test agent instructions',
+      model: openaiModel,
+      fallbackModels: [
+        {
+          model: openai('gpt-4o-mini'),
+        },
+        {
+          model: openai('gpt-4.1'),
+        },
+      ],
+    });
+
+    const fallbacks = agent.fallbackModels;
+
+    const fallbackIds = fallbacks?.map(f => f.id) || [];
+    const reversedFallbackIds = [...fallbackIds].reverse();
+
+    agent.reorderFallbackModels(reversedFallbackIds);
+
+    const reorderedFallbacks = agent.fallbackModels;
+    expect(reorderedFallbacks).toBeDefined();
+    expect(reorderedFallbacks?.length).toBe(2);
+    expect(reorderedFallbacks?.[0].id).toBe(reversedFallbackIds[0]);
+    expect(reorderedFallbacks?.[1].id).toBe(reversedFallbackIds[1]);
+
+    const fallback1Model = reorderedFallbacks?.[0].model as LanguageModelV1;
+    expect(fallback1Model.modelId).toBe('gpt-4.1');
+    const fallback2Model = reorderedFallbacks?.[1].model as LanguageModelV1;
+    expect(fallback2Model.modelId).toBe('gpt-4o-mini');
+  });
+
+  it(`${version} - should update fallback model`, async () => {
+    const agent = new Agent({
+      name: 'test',
+      instructions: 'test agent instructions',
+      model: openaiModel,
+      fallbackModels: [
+        {
+          model: openai('gpt-4o-mini'),
+        },
+        {
+          model: openai('gpt-4.1'),
+        },
+      ],
+    });
+
+    const fallbacks = agent.fallbackModels || [];
+    const fallback1Id = fallbacks?.[0].id || '';
+
+    agent.updateFallbackModel({
+      id: fallback1Id,
+      model: openai('gpt-4'),
+      maxRetries: 5,
+    });
+
+    const updatedFallbacks = agent.fallbackModels;
+    expect(updatedFallbacks).toBeDefined();
+    expect(updatedFallbacks?.length).toBe(2);
+    const fallback1Model = updatedFallbacks?.[0].model as LanguageModelV1;
+    expect(fallback1Model.modelId).toBe('gpt-4');
+    expect(updatedFallbacks?.[0].maxRetries).toBe(5);
+    const fallback2Model = updatedFallbacks?.[1].model as LanguageModelV1;
+    expect(fallback2Model.modelId).toBe('gpt-4.1');
   });
 
   it(`${version} - stream - should pass and call client side tools with experimental output`, async () => {

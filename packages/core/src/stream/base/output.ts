@@ -111,6 +111,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
   #streamConsumed = false;
 
+  #model: {
+    modelId: string;
+    provider: string;
+    version: 'v1' | 'v2';
+  };
+
   /**
    * Unique identifier for this execution run.
    */
@@ -144,6 +150,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#options = options;
 
     this.runId = options.runId;
+
+    this.#model = _model;
 
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
@@ -408,6 +416,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               if (options?.rootSpan) {
                 options.rootSpan.setAttributes({
+                  'aisdk.model.id': self.#model.modelId,
+                  'aisdk.model.provider': self.#model.provider,
                   ...(baseFinishStep?.usage?.reasoningTokens
                     ? {
                         'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
