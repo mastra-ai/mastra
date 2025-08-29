@@ -78,9 +78,7 @@ export default function Observability() {
 
   const toPreviousItem = () => {
     const currentIndex = aiTraces.findIndex(event => event.traceId === selectedTraceId);
-    console.log('currentIndex', currentIndex);
     const prevItem = aiTraces[currentIndex + 1];
-    console.log('prevItem', prevItem);
 
     if (prevItem) {
       setSelectedTraceId(prevItem.traceId);
@@ -89,9 +87,7 @@ export default function Observability() {
 
   const toNextItem = () => {
     const currentIndex = aiTraces.findIndex(event => event.traceId === selectedTraceId);
-    console.log('currentIndex', currentIndex);
     const nextItem = aiTraces[currentIndex - 1];
-    console.log('nextItem', nextItem);
 
     if (nextItem) {
       setSelectedTraceId(nextItem.traceId);
