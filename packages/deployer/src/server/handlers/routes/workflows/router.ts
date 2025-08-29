@@ -16,6 +16,7 @@ import {
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
   streamWorkflowHandler,
+  observeStreamWorkflowHandler,
   streamVNextWorkflowHandler,
   watchWorkflowHandler,
 } from './handlers';
@@ -584,6 +585,37 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       tags: ['workflows'],
     }),
     streamWorkflowHandler,
+  );
+
+  router.post(
+    '/:workflowId/observe-stream',
+    describeRoute({
+      description: 'Observe workflow stream in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'workflow stream observed',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    observeStreamWorkflowHandler,
   );
 
   router.post(

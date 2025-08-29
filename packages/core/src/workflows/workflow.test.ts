@@ -301,6 +301,166 @@ describe('Workflow', () => {
       });
     });
 
+    it('should continue streaming current run on subsequent stream calls', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRunAsync();
+
+      const { getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+
+      const result = await getWorkflowState();
+
+      expect(result.status).toBe('suspended');
+
+      if (result.status !== 'suspended') {
+        expect.fail('Workflow is not suspended');
+      }
+
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+      expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
+      run.resume({ resumeData: resumeData as any, step: promptAgent });
+
+      const { stream, getWorkflowState: getWorkflowState2 } = run.stream();
+
+      let index = 0;
+
+      for await (const data of stream) {
+        if (index === 0) {
+          expect(data.payload).toMatchObject({
+            id: 'promptAgent',
+            payload: { userInput: 'test input' },
+            startedAt: expect.any(Number),
+            resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+            resumedAt: expect.any(Number),
+            suspendedAt: expect.any(Number),
+          });
+        }
+
+        index++;
+      }
+
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+
+      const resumeResult = await getWorkflowState2();
+
+      expect(resumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
     it('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',

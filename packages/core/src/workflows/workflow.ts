@@ -1133,6 +1133,7 @@ export class Workflow<
 /**
  * Represents a workflow run that can be executed
  */
+
 export class Run<
   TEngineType = any,
   TSteps extends Step<string, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, TEngineType>[],
@@ -1180,6 +1181,8 @@ export class Run<
    * The storage for this run
    */
   #mastra?: Mastra;
+
+  #observerHandlers: (() => void)[] = [];
 
   get mastra() {
     return this.#mastra;
@@ -1296,10 +1299,25 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+  stream({
+    inputData,
+    runtimeContext,
+    onChunk,
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    onChunk?: (chunk: StreamEvent) => Promise<unknown>;
+  } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
   } {
+    if (this.closeStreamAction) {
+      return {
+        stream: this.observeStream().stream,
+        getWorkflowState: () => this.executionResults!,
+      };
+    }
+
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
@@ -1307,6 +1325,9 @@ export class Run<
       try {
         // watch-v2 events are data stream events, so we need to cast them to the correct type
         await writer.write(event as any);
+        if (onChunk) {
+          await onChunk(event as any);
+        }
       } catch {}
     }, 'watch-v2');
 
@@ -1316,6 +1337,8 @@ export class Run<
         payload: { runId: this.runId },
       });
       unwatch();
+      await Promise.all(this.#observerHandlers.map(handler => handler()));
+      this.#observerHandlers = [];
 
       try {
         await writer.close();
@@ -1341,6 +1364,39 @@ export class Run<
     return {
       stream: readable,
       getWorkflowState: () => this.executionResults!,
+    };
+  }
+
+  /**
+   * Observe the workflow stream
+   * @returns A readable stream of the workflow events
+   */
+  observeStream(): {
+    stream: ReadableStream<StreamEvent>;
+  } {
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = this.watch(async event => {
+      try {
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
+      } catch {}
+    }, 'watch-v2');
+
+    this.#observerHandlers.push(async () => {
+      unwatch();
+      try {
+        await writer.close();
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
+      }
+    });
+
+    return {
+      stream: readable,
     };
   }
 
