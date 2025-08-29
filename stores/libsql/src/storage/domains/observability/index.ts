@@ -112,7 +112,10 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     let actualWhereClause = whereClause.sql || '';
 
     if (entityId && entityType) {
-      const statement = `json_extract(metadata, '$.resourceId') = ?`;
+      const statement =
+        entityType === 'workflow'
+          ? `json_extract(attributes, '$.workflowId') = ?`
+          : `json_extract(attributes, '$.agentId') = ?`;
 
       whereClause.args.push(entityId);
 

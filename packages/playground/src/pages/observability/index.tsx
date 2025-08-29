@@ -55,7 +55,7 @@ export default function Observability() {
   });
 
   const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([key, value]) => ({
-    value: key,
+    value: value.name,
     label: value.name,
     type: 'agent' as const,
   }));
@@ -63,7 +63,7 @@ export default function Observability() {
   const legacy = workflows?.[0] || {};
   const current = workflows?.[1] || {};
   const workflowOptions: EntityOptions[] = (Object.entries({ ...legacy, ...current }) || []).map(([key, value]) => ({
-    value: key,
+    value: value.name,
     label: value.name,
     type: 'workflow' as const,
   }));
