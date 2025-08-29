@@ -1,23 +1,24 @@
 'use client';
 
 import { format, isValid } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { Button } from '../buttons';
 import { DatePicker } from './date-picker';
-import { Input } from '../../input';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
 import { cn } from '@/lib/utils';
 import { TimePicker } from './time-picker';
+import { InputField } from '../form-fields';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
   value: Date | undefined | null;
+  minValue?: Date | null;
+  maxValue?: Date | null;
   defaultTimeStrValue?: string;
   onValueChange: (date: Date | undefined | null) => void;
-  clearable?: boolean;
 };
 
 export type DateTimePickerProps =
@@ -26,6 +27,8 @@ export type DateTimePickerProps =
 
 export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   value,
+  minValue,
+  maxValue,
   defaultTimeStrValue,
   onValueChange,
   children,
@@ -51,14 +54,15 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl w-auto p-0 bg-[#171717]"
+        className="backdrop-blur-4xl w-auto p-0 bg-surface4 max-w-[16.5rem]"
         align="start"
         data-testid="datepicker-calendar"
       >
         <DateTimePickerContent
           value={value}
+          minValue={minValue}
+          maxValue={maxValue}
           onValueChange={onValueChange}
-          clearable={props.clearable}
           setOpenPopover={setOpenPopover}
           defaultTimeStrValue={defaultTimeStrValue}
           {...props}
@@ -69,7 +73,6 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
 };
 
 function getCompoundDate({ date, timeStr = '' }: { date: Date; timeStr?: string }) {
-  console.log('getCompoundDate', { date, timeStr });
   if (!isValid(date)) {
     return '';
   }
@@ -87,9 +90,10 @@ function getCompoundDate({ date, timeStr = '' }: { date: Date; timeStr?: string 
 
 export const DateTimePickerContent = ({
   value,
+  minValue,
+  maxValue,
   onValueChange,
   setOpenPopover,
-  clearable,
   placeholder,
   className,
   defaultTimeStrValue,
@@ -99,10 +103,11 @@ export const DateTimePickerContent = ({
   placeholder?: string;
   className?: string;
 }) => {
+  const [localErrorMsg, setLocalErrorMsg] = React.useState<string | null>(null);
   const [dateInputValue, setDateInputValue] = React.useState<string>(
     value ? format(getCompoundDate({ date: value, timeStr: defaultTimeStrValue }), 'PP p') : '',
   );
-  const [timeValue, setTimeValue] = React.useState<string>(defaultTimeStrValue || '');
+  const [timeStrValue, setTimeStrValue] = React.useState<string>(defaultTimeStrValue || '');
   const [selected, setSelected] = React.useState<Date | undefined>(value ? new Date(value) : undefined);
 
   const debouncedDateUpdate = useDebouncedCallback((date: Date) => {
@@ -119,6 +124,24 @@ export const DateTimePickerContent = ({
     debouncedDateUpdate(date);
   };
 
+  const updateInputValue = (date: Date | string) => {
+    if (isValid(date)) {
+      if (maxValue && date > maxValue) {
+        setLocalErrorMsg(`The selected date should be before ${format(maxValue, 'PP p')}`);
+        setDateInputValue('');
+      } else if (minValue && date < minValue) {
+        setLocalErrorMsg(`The selected date should be after ${format(minValue, 'PP p')}`);
+        setDateInputValue('');
+      } else {
+        setDateInputValue(format(date, 'PP p'));
+        setLocalErrorMsg('');
+      }
+    } else {
+      setDateInputValue('');
+      setLocalErrorMsg('');
+    }
+  };
+
   const dateInputValueDate = new Date(dateInputValue);
   const dateInputValueIsValid = isValid(dateInputValueDate);
   const newValueDefined = dateInputValueIsValid && dateInputValueDate !== value;
@@ -126,29 +149,29 @@ export const DateTimePickerContent = ({
   const handleDaySelect = (date: Date | undefined) => {
     setSelected(date);
     if (date) {
-      const newDate = getCompoundDate({ date, timeStr: timeValue });
-      setDateInputValue(format(newDate, 'PP p'));
+      const newDate = getCompoundDate({ date, timeStr: timeStrValue });
+      updateInputValue(newDate);
     } else {
-      setDateInputValue('');
+      updateInputValue('');
     }
   };
 
   const handleMonthSelect = (date: Date | undefined) => {
     setSelected(date);
     if (date) {
-      const newDate = getCompoundDate({ date, timeStr: timeValue });
-      setDateInputValue(format(newDate, 'PP p'));
+      const newDate = getCompoundDate({ date, timeStr: timeStrValue });
+      updateInputValue(newDate);
     } else {
-      setDateInputValue('');
+      updateInputValue('');
     }
   };
 
   const handleTimeStrChange = (val: string) => {
-    setTimeValue(val);
+    setTimeStrValue(val);
 
     if (dateInputValueIsValid) {
-      const newDate = getCompoundDate({ date: dateInputValueDate, timeStr: timeValue });
-      setDateInputValue(format(newDate, 'PP p'));
+      const newDate = getCompoundDate({ date: dateInputValueDate, timeStr: val });
+      updateInputValue(newDate);
     }
   };
 
@@ -165,14 +188,14 @@ export const DateTimePickerContent = ({
     onValueChange(null);
     setSelected(undefined);
     setDateInputValue('');
-    setTimeValue('');
+    setTimeStrValue('');
     setOpenPopover?.(false);
   };
 
   return (
     <div
       aria-label="Choose date"
-      className={cn('relative mt-2 flex flex-col', className)}
+      className={cn('relative mt-2 flex flex-col ', className)}
       onKeyDown={e => {
         e.stopPropagation();
         if (e.key === 'Escape') {
@@ -180,13 +203,24 @@ export const DateTimePickerContent = ({
         }
       }}
     >
-      <Input
+      <InputField
         type="text"
         value={dateInputValue}
         onChange={handleInputChange}
         placeholder={placeholder}
         className="m-4 mb-0 !w-auto"
       />
+
+      {localErrorMsg && (
+        <div
+          className={cn(
+            'text-[0.875rem] m-[1rem] mb-0 text-icon3',
+            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:mt-[0.2em] [&>svg]:text-red-500 [&>svg]:float-left [&>svg]:mr-[0.5rem]',
+          )}
+        >
+          <CircleAlertIcon /> {localErrorMsg}
+        </div>
+      )}
 
       <DatePicker
         mode="single"
