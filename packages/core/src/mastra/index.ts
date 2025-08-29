@@ -732,19 +732,36 @@ do:
     return this.#scorers;
   }
 
-  public getScorer<TScorerName extends keyof TScorers>(name: TScorerName): TScorers[TScorerName] {
-    const scorer = this.#scorers?.[name];
+  public getScorer<TScorerKey extends keyof TScorers>(key: TScorerKey): TScorers[TScorerKey] {
+    const scorer = this.#scorers?.[key];
     if (!scorer) {
       const error = new MastraError({
-        id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+        id: 'MASTRA_GET_SCORER_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: `Scorer with name ${String(name)} not found`,
+        text: `Scorer with ${String(key)} not found`,
       });
       this.#logger?.trackException(error);
       throw error;
     }
     return scorer;
+  }
+
+  public getScorerByName(name: string): MastraScorer<any, any, any, any> {
+    for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
+      if (value.name === name) {
+        return value;
+      }
+    }
+
+    const error = new MastraError({
+      id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Scorer with name ${String(name)} not found`,
+    });
+    this.#logger?.trackException(error);
+    throw error;
   }
 
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {

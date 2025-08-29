@@ -6259,9 +6259,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
-          onFinish: props => {
-            console.log('onFinish', props);
-          },
         });
       } else {
         result = await agent.streamVNext('Hello world', {
@@ -6282,17 +6279,42 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       );
     });
 
-    it(`${version} - should call runScorer with correct parameters`, async () => {
+    it(`${version} - can use scorer name for scorer config for generate`, async () => {
       if (version === 'v1') {
         await agent.generate('Hello world', {
           scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
+            scorer1: { scorer: scorer1.name },
           },
         });
       } else {
         await agent.generateVNext('Hello world', {
           scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: scorer1,
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - should call runScorer with correct parameters`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
           },
         });
       }

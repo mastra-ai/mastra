@@ -82,7 +82,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
 
   // Fallback to mastra-registered scorer
   if (!scorerToUse) {
-    const mastraRegisteredScorer = mastra.getScorer(scorerId);
+    const mastraRegisteredScorer = mastra.getScorerByName(scorerId);
     scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
   }
 

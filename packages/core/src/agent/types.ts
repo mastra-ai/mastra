@@ -22,7 +22,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorers } from '../scores';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
@@ -132,7 +132,7 @@ export type AgentGenerateOptions<
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers;
+  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
   returnScorerData?: boolean;
   /**
@@ -222,7 +222,7 @@ export type AgentStreamOptions<
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers;
+  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 } & (
   | {
       /**

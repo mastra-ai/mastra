@@ -44,10 +44,11 @@ export const chefModelV2Agent = new Agent({
     myWorkflow,
   },
   scorers: ({ mastra }) => {
-    const scorer1 = mastra?.getScorer('scorer1');
-    if (!scorer1) {
-      throw new Error('Scorer not found');
+    if (!mastra) {
+      throw new Error('Mastra not found');
     }
+    const scorer1 = mastra.getScorer('testScorer');
+
     return {
       scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
     };
