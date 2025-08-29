@@ -982,6 +982,9 @@ importers:
       '@mastra/agent-builder':
         specifier: workspace:*
         version: link:..
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../../stores/libsql
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
