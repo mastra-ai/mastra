@@ -98,9 +98,10 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     filters,
     pagination,
   }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+    console.log('LOOOOOL -----');
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
-    const { componentName, ...actualFilters } = filters || {};
+    const { entityId, entityType, ...actualFilters } = filters || {};
 
     const filtersWithDateRange: Record<string, any> = {
       ...actualFilters,
@@ -111,11 +112,10 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
     let actualWhereClause = whereClause.sql || '';
 
-    console.log('dafouks', filters);
+    if (entityId && entityType) {
+      const statement = `json_extract(metadata, '$.resourceId') = ?`;
 
-    if (componentName) {
-      const statement = `json_extract(attributes, '$.componentName') = ?`;
-      whereClause.args.push(componentName);
+      whereClause.args.push(entityId);
 
       if (actualWhereClause) {
         actualWhereClause += ` AND ${statement}`;
@@ -124,9 +124,9 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       }
     }
 
-    const orderBy = 'startedAt DESC';
-
     console.log('actualWhereClause', { actualWhereClause, args: whereClause.args });
+
+    const orderBy = 'startedAt DESC';
 
     let count = 0;
     try {
@@ -160,7 +160,10 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     try {
       const spans = await this.operations.loadMany<AISpanRecord>({
         tableName: TABLE_AI_SPANS,
-        whereClause,
+        whereClause: {
+          sql: actualWhereClause,
+          args: whereClause.args,
+        },
         orderBy,
         offset: page * perPage,
         limit: perPage,

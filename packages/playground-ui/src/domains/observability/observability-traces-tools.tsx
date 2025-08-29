@@ -3,10 +3,12 @@ import { Button } from '@/components/ui/elements/buttons';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 
+export type EntityOptions = { value: string; label: string; type: 'agent' | 'workflow' };
+
 type ObservabilityTracesToolsProps = {
-  selectedEntity?: string;
-  entityOptions?: { value: string; label: string }[];
-  onEntityChange: (val: string) => void;
+  selectedEntity?: EntityOptions;
+  entityOptions?: EntityOptions[];
+  onEntityChange: (val: EntityOptions) => void;
   selectedDateFrom?: Date | undefined;
   selectedDateTo?: Date | undefined;
   onReset?: () => void;
@@ -29,8 +31,13 @@ export function ObservabilityTracesTools({
         name={'select-entity'}
         placeholder="Select..."
         options={entityOptions || []}
-        onValueChange={onEntityChange}
-        value={selectedEntity}
+        onValueChange={val => {
+          const entity = entityOptions?.find(entity => entity.value === val);
+          if (entity) {
+            onEntityChange(entity);
+          }
+        }}
+        value={selectedEntity?.value || ''}
         className="min-w-[20rem]"
       />
 

@@ -6,6 +6,7 @@ import {
   EntryList,
   ObservabilityTracesTools,
   PageHeader,
+  EntityOptions,
 } from '@mastra/playground-ui';
 import { useState } from 'react';
 // import { useWorkflows } from '@/hooks/use-workflows';
@@ -30,14 +31,15 @@ type EventType = {
 
 export default function Observability() {
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
-  const [selectedEntity, setSelectedEntity] = useState<string | undefined>(undefined);
+  const [selectedEntity, setSelectedEntity] = useState<EntityOptions | undefined>(undefined);
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents } = useAgents();
   const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces({
     filters: {
-      componentName: selectedEntity,
+      entityId: selectedEntity?.value,
+      entityType: selectedEntity?.type,
     },
     dateRange:
       selectedDateFrom && selectedDateTo
@@ -48,13 +50,13 @@ export default function Observability() {
         : undefined,
   });
 
-  // const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
-  const entities = [
-    ...(Object.entries(agents) || []).map(([, value]) => ({ id: value.name, name: value.name, type: 'agent' })),
-    { id: 'all', name: 'All', type: 'all' },
-  ];
+  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([key, value]) => ({
+    value: key,
+    label: value.name,
+    type: 'agent' as const,
+  }));
 
-  const entityOptions = entities.map(entity => ({ value: entity.id, label: entity.name }));
+  const entityOptions: EntityOptions[] = [...agentOptions, { value: 'all', label: 'All', type: 'workflow' as const }];
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
