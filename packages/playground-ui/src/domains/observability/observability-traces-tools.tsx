@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/elements/buttons';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 
-export type EntityOptions = { value: string; label: string; type: 'agent' | 'workflow' };
+export type EntityOptions = { value: string; label: string; type: 'agent' | 'workflow' | 'all' };
 
 type ObservabilityTracesToolsProps = {
   selectedEntity?: EntityOptions;

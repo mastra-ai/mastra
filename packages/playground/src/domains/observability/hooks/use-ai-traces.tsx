@@ -32,7 +32,7 @@ const fetchAITracesFn = async ({
 };
 
 export interface AITracesFilters {
-  filters: AITracesPaginatedArg['filters'];
+  filters?: AITracesPaginatedArg['filters'];
   dateRange?: {
     start?: Date;
     end?: Date;

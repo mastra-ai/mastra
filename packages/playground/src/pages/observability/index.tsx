@@ -41,10 +41,13 @@ export default function Observability() {
   const { data: agents } = useAgents();
   const { data: workflows } = useWorkflows();
   const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces({
-    filters: {
-      entityId: selectedEntity?.value,
-      entityType: selectedEntity?.type,
-    },
+    filters:
+      selectedEntity?.type === 'all'
+        ? undefined
+        : {
+            entityId: selectedEntity?.value,
+            entityType: selectedEntity?.type,
+          },
     dateRange:
       selectedDateFrom && selectedDateTo
         ? {
@@ -68,7 +71,11 @@ export default function Observability() {
     type: 'workflow' as const,
   }));
 
-  const entityOptions: EntityOptions[] = [...agentOptions, ...workflowOptions];
+  const entityOptions: EntityOptions[] = [
+    { value: 'all', label: 'All', type: 'all' as const },
+    ...agentOptions,
+    ...workflowOptions,
+  ];
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
