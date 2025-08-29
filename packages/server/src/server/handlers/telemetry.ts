@@ -15,6 +15,28 @@ interface TelemetryContext extends Context {
   };
 }
 
+export async function getTraceHandler({ mastra, traceId }: { traceId: string } & Context) {
+  try {
+    if (!traceId) {
+      throw new HTTPException(400, { message: 'Trace ID is required' });
+    }
+
+    const telemetry = mastra.getTelemetry();
+    const storage = mastra.getStorage();
+    if (!telemetry) {
+      throw new HTTPException(400, { message: 'Telemetry is not initialized' });
+    }
+
+    if (!storage) {
+      return [];
+    }
+
+    return await storage.getTrace(traceId);
+  } catch (error) {
+    return handleError(error, 'Error getting telemetry');
+  }
+}
+
 export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
   try {
     const telemetry = mastra.getTelemetry();
