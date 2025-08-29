@@ -113,6 +113,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return spans.filter(span => {
       if (filter?.name && span.name !== filter.name) return false;
       if (filter?.spanType && span.spanType !== filter.spanType) return false;
+
+      if (filter?.entityType === 'agent' && filter.entityId !== span.attributes?.agentId) return false;
+
+      if (filter?.entityType === 'workflow' && filter.entityId !== span.attributes?.workflowId) return false;
+
       return true;
     });
   }

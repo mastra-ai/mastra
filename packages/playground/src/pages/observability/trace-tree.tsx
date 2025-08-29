@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils';
 import { TraceTreeSpan } from './trace-tree-span';
+import { UISpan } from '@mastra/playground-ui';
 
 type TraceTreeProps = {
-  spans?: any[];
-  onSpanClick: (spanId: string) => void;
+  spans?: UISpan[];
+  onSpanClick: (span: UISpan) => void;
   selectedSpanId?: string;
   overallLatency: number;
   overallStartTime: string;
@@ -24,7 +25,7 @@ export function TraceTree({
         //    'border border-red-500',
       )}
     >
-      {spans?.map((span: any) => (
+      {spans?.map((span: UISpan) => (
         <TraceTreeSpan
           key={span.id}
           span={span}

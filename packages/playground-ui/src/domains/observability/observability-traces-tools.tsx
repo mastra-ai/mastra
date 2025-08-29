@@ -3,14 +3,16 @@ import { Button } from '@/components/ui/elements/buttons';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 
+export type EntityOptions = { value: string; label: string; type: 'agent' | 'workflow' | 'all' };
+
 type ObservabilityTracesToolsProps = {
-  onEntityChange: (val: string) => void;
-  selectedEntity?: string;
-  entityOptions?: { value: string; label: string }[];
+  selectedEntity?: EntityOptions;
+  entityOptions?: EntityOptions[];
+  onEntityChange: (val: EntityOptions) => void;
+  selectedDateFrom?: Date | undefined;
+  selectedDateTo?: Date | undefined;
   onReset?: () => void;
-  onDateChange?: (value: Date | null | undefined, type: 'from' | 'to') => void;
-  selectedDateFrom?: Date | null | undefined;
-  selectedDateTo?: Date | null | undefined;
+  onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
 };
 
 export function ObservabilityTracesTools({
@@ -29,8 +31,13 @@ export function ObservabilityTracesTools({
         name={'select-entity'}
         placeholder="Select..."
         options={entityOptions || []}
-        onValueChange={onEntityChange}
-        value={selectedEntity}
+        onValueChange={val => {
+          const entity = entityOptions?.find(entity => entity.value === val);
+          if (entity) {
+            onEntityChange(entity);
+          }
+        }}
+        value={selectedEntity?.value || ''}
         className="min-w-[20rem]"
       />
 
@@ -39,16 +46,16 @@ export function ObservabilityTracesTools({
         <DateTimePicker
           placeholder="From"
           value={selectedDateFrom}
-          onValueChange={date => onDateChange?.(date, 'from')}
-          clearable={true}
+          maxValue={selectedDateTo}
+          onValueChange={date => onDateChange?.(date || undefined, 'from')}
           className="min-w-[15rem]"
           defaultTimeStrValue="12:00 AM"
         />
         <DateTimePicker
           placeholder="To"
           value={selectedDateTo}
-          onValueChange={date => onDateChange?.(date, 'to')}
-          clearable={true}
+          minValue={selectedDateFrom}
+          onValueChange={date => onDateChange?.(date || undefined, 'to')}
           className="min-w-[15rem]"
           defaultTimeStrValue="11:59 PM"
         />

@@ -100,19 +100,39 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
+    const { entityId, entityType, ...actualFilters } = filters || {};
 
     const filtersWithDateRange: Record<string, any> = {
-      ...filters,
+      ...actualFilters,
       ...buildDateRangeFilter(pagination?.dateRange, 'startedAt'),
+      parentSpanId: null,
     };
     const whereClause = prepareWhereClause(filtersWithDateRange, AI_SPAN_SCHEMA);
+
+    let actualWhereClause = whereClause.sql || '';
+
+    if (entityId && entityType) {
+      const statement =
+        entityType === 'workflow'
+          ? `json_extract(attributes, '$.workflowId') = ?`
+          : `json_extract(attributes, '$.agentId') = ?`;
+
+      whereClause.args.push(entityId);
+
+      if (actualWhereClause) {
+        actualWhereClause += ` AND ${statement}`;
+      } else {
+        actualWhereClause += `WHERE ${statement}`;
+      }
+    }
+
     const orderBy = 'startedAt DESC';
 
     let count = 0;
     try {
       count = await this.operations.loadTotalCount({
         tableName: TABLE_AI_SPANS,
-        whereClause: { sql: whereClause.sql, args: whereClause.args },
+        whereClause: { sql: actualWhereClause, args: whereClause.args },
       });
     } catch (error) {
       throw new MastraError(
@@ -140,7 +160,10 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     try {
       const spans = await this.operations.loadMany<AISpanRecord>({
         tableName: TABLE_AI_SPANS,
-        whereClause,
+        whereClause: {
+          sql: actualWhereClause,
+          args: whereClause.args,
+        },
         orderBy,
         offset: page * perPage,
         limit: perPage,

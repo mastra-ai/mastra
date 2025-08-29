@@ -3,18 +3,18 @@ import { Column, getColumnTemplate } from './shared';
 
 export function EntryListItem({
   item,
-  selectedItem,
+  selectedItemId,
   onClick,
   children,
   columns,
 }: {
   item: any;
-  selectedItem: any | null;
+  selectedItemId?: string;
   onClick?: (score: string) => void;
   children?: React.ReactNode;
   columns?: Column[];
 }) {
-  const isSelected = selectedItem && selectedItem?.id === item.id;
+  const isSelected = selectedItemId && selectedItemId === item.id;
 
   const handleClick = () => {
     return onClick && onClick(item?.id);
