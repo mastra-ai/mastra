@@ -1051,10 +1051,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runtimeContext: runtimeContext,
         });
       } catch (error) {
-        const mastraError = new MastraError(
+        this.preprocessExecutionError(
+          error,
           {
             id: 'WORKFLOW_FAILED_TO_FETCH_SCORERS',
-            domain: 'MASTRA_WORKFLOW',
+            domain: ErrorDomain.MASTRA_WORKFLOW,
             category: ErrorCategory.USER,
             details: {
               runId,
@@ -1062,10 +1063,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               stepId,
             },
           },
-          error,
+          'Error fetching scorers: ',
         );
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString(), error);
       }
     }
 
