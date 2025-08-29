@@ -11,7 +11,6 @@ import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { MastraScorers } from '../scores';
-import { runScorer } from '../scores/hooks';
 import { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -21,7 +20,7 @@ import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
-import type { ExecuteFunction, ExecuteFunctionParams, Step } from './step';
+import type { ExecuteFunction, Step } from './step';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -149,61 +148,6 @@ export function createStep<
     | Agent<any, any, any>
     | ToolStep<TStepInput, TStepOutput, any>,
 ): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
-  const wrapExecute = (
-    execute: ExecuteFunction<
-      z.infer<TStepInput>,
-      z.infer<TStepOutput>,
-      z.infer<TResumeSchema>,
-      z.infer<TSuspendSchema>,
-      DefaultEngineType
-    >,
-  ) => {
-    return async (
-      executeParams: ExecuteFunctionParams<
-        z.infer<TStepInput>,
-        z.infer<TResumeSchema>,
-        z.infer<TSuspendSchema>,
-        DefaultEngineType
-      >,
-    ) => {
-      const executeResult = await execute(executeParams);
-
-      if (params instanceof Agent || params instanceof Tool) {
-        return executeResult;
-      }
-
-      let scorersToUse = params.scorers;
-
-      if (typeof scorersToUse === 'function') {
-        scorersToUse = await scorersToUse({
-          runtimeContext: executeParams.runtimeContext,
-        });
-      }
-
-      if (scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
-        for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
-          runScorer({
-            scorerId: id,
-            scorerObject: scorerObject,
-            runId: executeParams.runId,
-            input: [executeParams.inputData],
-            output: executeResult,
-            runtimeContext: executeParams.runtimeContext,
-            entity: {
-              id: executeParams.workflowId,
-              stepId: params.id,
-            },
-            structuredOutput: true,
-            source: 'LIVE',
-            entityType: 'WORKFLOW',
-          });
-        }
-      }
-
-      return executeResult;
-    };
-  };
-
   if (params instanceof Agent) {
     return {
       id: params.name,
@@ -217,7 +161,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: wrapExecute(async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -280,7 +224,7 @@ export function createStep<
         return {
           text: await streamPromise.promise,
         };
-      }),
+      },
     };
   }
 
@@ -295,13 +239,14 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: wrapExecute(async ({ inputData, mastra, runtimeContext }) => {
+      execute: async ({ inputData, mastra, runtimeContext, tracingContext }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
+          tracingContext,
         });
-      }),
+      },
     };
   }
 
@@ -314,7 +259,7 @@ export function createStep<
     suspendSchema: params.suspendSchema,
     scorers: params.scorers,
     retries: params.retries,
-    execute: wrapExecute(params.execute),
+    execute: params.execute,
   };
 }
 
@@ -908,7 +853,7 @@ export class Workflow<
    * @param options Optional configuration for the run
    * @returns A Run instance that can be used to execute the workflow
    */
-  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
+  createRun(options?: { runId?: string; disableScorers?: boolean }): Run<TEngineType, TSteps, TInput, TOutput> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -930,6 +875,7 @@ export class Workflow<
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
         serializedStepGraph: this.serializedStepGraph,
+        disableScorers: options?.disableScorers,
         cleanup: () => this.#runs.delete(runIdToUse),
       });
 
@@ -945,7 +891,10 @@ export class Workflow<
    * @param options Optional configuration for the run
    * @returns A Run instance that can be used to execute the workflow
    */
-  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+  async createRunAsync(options?: {
+    runId?: string;
+    disableScorers?: boolean;
+  }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -967,6 +916,7 @@ export class Workflow<
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
         serializedStepGraph: this.serializedStepGraph,
+        disableScorers: options?.disableScorers,
         cleanup: () => this.#runs.delete(runIdToUse),
       });
 
@@ -1202,6 +1152,11 @@ export class Run<
   readonly runId: string;
 
   /**
+   * Whether to disable scorers for this run
+   */
+  readonly disableScorers?: boolean;
+
+  /**
    * Internal state of the workflow run
    */
   protected state: Record<string, any> = {};
@@ -1252,6 +1207,7 @@ export class Run<
     };
     cleanup?: () => void;
     serializedStepGraph: SerializedStepFlowEntry[];
+    disableScorers?: boolean;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -1262,6 +1218,7 @@ export class Run<
     this.emitter = new EventEmitter();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
+    this.disableScorers = params.disableScorers;
   }
 
   public get abortController(): AbortController {
@@ -1302,6 +1259,7 @@ export class Run<
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      disableScorers: this.disableScorers,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       input: inputData,
