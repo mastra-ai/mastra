@@ -1712,8 +1712,9 @@ export const mastra = new Mastra({
     // TypeScript validation (legacy approach)
     if (validationType.includes('types')) {
       try {
-        const tscCommand = 'npx tsc --noEmit';
-        await exec(tscCommand, execOptions);
+        // Use execFile for safe argument passing to avoid shell interpretation
+        const args = ['tsc', '--noEmit'];
+        await execFile('npx', args, execOptions);
         validationsPassed.push('types');
       } catch (error: any) {
         let tsOutput = '';
@@ -1737,8 +1738,8 @@ export const mastra = new Mastra({
     // ESLint validation
     if (validationType.includes('lint')) {
       try {
-        const eslintCommand = `npx eslint . --format json`;
-        const { stdout } = await exec(eslintCommand, execOptions);
+        const eslintArgs = ['eslint', '--format', 'json'];
+        const { stdout } = await execFile('npx', eslintArgs, execOptions);
 
         if (stdout) {
           const eslintResults = JSON.parse(stdout);
@@ -2324,7 +2325,36 @@ export const mastra = new Mastra({
 
       // Use ripgrep for fast searching
       // const excludePatterns = includeTests ? [] : ['*test*', '*spec*', '__tests__'];
-      const languagePattern = language ? `*.${language}` : '*';
+      // Only allow a list of known extensions/language types to prevent shell injection
+      const ALLOWED_LANGUAGES = [
+        'js',
+        'ts',
+        'jsx',
+        'tsx',
+        'py',
+        'java',
+        'go',
+        'cpp',
+        'c',
+        'cs',
+        'rb',
+        'php',
+        'rs',
+        'kt',
+        'swift',
+        'm',
+        'scala',
+        'sh',
+        'json',
+        'yaml',
+        'yml',
+        'toml',
+        'ini',
+      ];
+      let languagePattern = '*';
+      if (language && ALLOWED_LANGUAGES.includes(language)) {
+        languagePattern = `*.${language}`;
+      }
 
       switch (action) {
         case 'definitions':
