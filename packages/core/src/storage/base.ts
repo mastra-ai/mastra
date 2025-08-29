@@ -1,4 +1,5 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
+import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
@@ -523,6 +524,25 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * OBSERVABILITY
    */
+
+  /**
+   * Provides hints for AI tracing strategy selection by the DefaultExporter.
+   * Storage adapters can override this to specify their preferred and supported strategies.
+   */
+  public get aiTracingStrategy(): {
+    preferred: TracingStrategy;
+    supported: TracingStrategy[];
+  } {
+    if (this.stores?.observability) {
+      return this.stores.observability.aiTracingStrategy;
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_TRACING_STRATEGY_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
 
   /**
    * Creates a single AI span record in the storage provider.

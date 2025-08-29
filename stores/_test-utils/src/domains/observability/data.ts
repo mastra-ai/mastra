@@ -4,12 +4,12 @@ import type { AISpanRecord } from '@mastra/core/storage';
 
 export function createSampleAISpanForDB({
   name,
-  scope,
   traceId,
   parentSpanId,
   startedAt,
   endedAt,
   spanType,
+  isEvent,
 }: {
   name: string;
   scope: string;
@@ -18,6 +18,7 @@ export function createSampleAISpanForDB({
   startedAt?: Date;
   endedAt?: Date;
   spanType?: AISpanType;
+  isEvent?: boolean;
 }): AISpanRecord {
   const now = startedAt || new Date();
   const end = endedAt || new Date(now.getTime() + 1000); // 1 second later
@@ -48,6 +49,7 @@ export function createSampleAISpanForDB({
     input: [{ role: 'user', content: 'test input' }],
     output: [{ role: 'assistant', content: 'test output' }],
     error: null,
+    isEvent: isEvent || false,
   };
 }
 
@@ -62,6 +64,7 @@ export function createRootSpan(
     startedAt,
     endedAt,
     spanType,
+    isEvent,
   }: {
     name: string;
     scope: string;
@@ -69,6 +72,7 @@ export function createRootSpan(
     startedAt?: Date;
     endedAt?: Date;
     spanType?: AISpanType;
+    isEvent?: boolean;
   } = {
     name: 'test-root-span',
     scope: 'test-scope',
@@ -82,6 +86,7 @@ export function createRootSpan(
     startedAt,
     endedAt,
     spanType,
+    isEvent,
   });
 }
 
@@ -95,6 +100,7 @@ export function createChildSpan({
   traceId,
   startedAt,
   endedAt,
+  isEvent,
 }: {
   name: string;
   scope: string;
@@ -102,6 +108,7 @@ export function createChildSpan({
   traceId?: string;
   startedAt?: Date;
   endedAt?: Date;
+  isEvent?: boolean;
 }): AISpanRecord {
   return createSampleAISpanForDB({
     name,
@@ -110,5 +117,6 @@ export function createChildSpan({
     parentSpanId,
     startedAt,
     endedAt,
+    isEvent,
   });
 }

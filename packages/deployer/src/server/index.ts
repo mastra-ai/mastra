@@ -512,7 +512,8 @@ export async function createHonoServer(
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const host = serverOptions?.host ?? 'localhost';
 
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_URL%%'`, `'http://${host}:${port}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }

@@ -70,7 +70,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -104,7 +104,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -135,7 +135,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -166,7 +166,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -200,7 +200,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -278,6 +278,55 @@ importers:
         specifier: ^3.25.67
         version: 3.25.76
 
+  deployers/cloud:
+    dependencies:
+      '@mastra/core':
+        specifier: '>=0.10.1-0 <0.16.0-0'
+        version: 0.14.1(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.0.17)
+      '@mastra/deployer':
+        specifier: workspace:^
+        version: link:../../packages/deployer
+      '@mastra/loggers':
+        specifier: workspace:*
+        version: link:../../packages/loggers
+      execa:
+        specifier: ^9.6.0
+        version: 9.6.0
+      fs-extra:
+        specifier: ^11.3.0
+        version: 11.3.0
+      pino:
+        specifier: ^9.7.0
+        version: 9.7.0
+      redis:
+        specifier: ^5.8.0
+        version: 5.8.2
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@types/fs-extra':
+        specifier: ^11.0.4
+        version: 11.0.4
+      '@types/node':
+        specifier: ^20.17.57
+        version: 20.19.9
+      eslint:
+        specifier: ^9.30.1
+        version: 9.34.0(jiti@2.4.2)
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)
+
   deployers/cloudflare:
     dependencies:
       '@babel/core':
@@ -319,7 +368,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -351,7 +400,7 @@ importers:
         specifier: ^11.3.0
         version: 11.3.0
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -374,7 +423,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -417,7 +466,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -636,7 +685,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3))
@@ -694,7 +743,7 @@ importers:
         version: 7.0.3
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.3))
@@ -712,7 +761,7 @@ importers:
     dependencies:
       mem0ai:
         specifier: ^2.1.36
-        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
+        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -731,7 +780,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -740,7 +789,7 @@ importers:
         version: 5.8.3
       typescript-eslint:
         specifier: ^8.38.0
-        version: 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
+        version: 8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3)
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)
@@ -820,7 +869,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -890,7 +939,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -985,7 +1034,7 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -1026,7 +1075,7 @@ importers:
         version: 5.0.0
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       memfs:
         specifier: ^4.17.2
         version: 4.17.2
@@ -1078,7 +1127,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -1241,7 +1290,7 @@ importers:
         version: 6.14.0
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       fast-deep-equal:
         specifier: ^3.1.3
         version: 3.1.3
@@ -1314,7 +1363,7 @@ importers:
         version: 0.25.8
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       mastra:
         specifier: workspace:^
         version: link:../cli
@@ -1450,7 +1499,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       fetch-to-node:
         specifier: ^2.1.0
         version: 2.1.0
@@ -1535,7 +1584,7 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -1603,7 +1652,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -1635,8 +1684,11 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod-from-json-schema:
-        specifier: ^0.0.5
-        version: 0.0.5
+        specifier: ^0.5.0
+        version: 0.5.0
+      zod-from-json-schema-v3:
+        specifier: npm:zod-from-json-schema@^0.0.5
+        version: zod-from-json-schema@0.0.5
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.2.12
@@ -1670,7 +1722,7 @@ importers:
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       hono:
         specifier: ^4.8.12
         version: 4.8.12
@@ -1752,7 +1804,7 @@ importers:
         version: 7.0.3
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       hono:
         specifier: ^4.8.12
         version: 4.8.12
@@ -1810,7 +1862,7 @@ importers:
         version: 7.0.3
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       hono:
         specifier: ^4.8.12
         version: 4.8.12
@@ -1909,7 +1961,7 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -1941,7 +1993,7 @@ importers:
         version: 8.15.5
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -1950,7 +2002,7 @@ importers:
         version: 5.8.3
       typescript-eslint:
         specifier: ^8.38.0
-        version: 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
+        version: 8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3)
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)
@@ -2127,9 +2179,6 @@ importers:
       '@radix-ui/react-checkbox':
         specifier: ^1.3.2
         version: 1.3.2(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@radix-ui/react-collapsible':
-        specifier: ^1.1.11
-        version: 1.1.11(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@radix-ui/react-dialog':
         specifier: ^1.1.14
         version: 1.1.14(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -2265,7 +2314,7 @@ importers:
     devDependencies:
       '@eslint/js':
         specifier: ^9.33.0
-        version: 9.33.0
+        version: 9.34.0
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.9)
@@ -2615,7 +2664,7 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -2658,7 +2707,7 @@ importers:
         version: 4.3.16(react@19.1.1)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -2724,7 +2773,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       superjson:
         specifier: ^2.2.2
         version: 2.2.2
@@ -2782,7 +2831,7 @@ importers:
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.4.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -2826,7 +2875,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -2863,7 +2912,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -2900,7 +2949,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -2943,10 +2992,10 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250816.0
-        version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+        specifier: ^4.20250816.1
+        version: 4.20250823.1(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -2989,10 +3038,10 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250816.0
-        version: 4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+        specifier: ^4.20250816.1
+        version: 4.20250823.1(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3035,7 +3084,7 @@ importers:
         version: 1.11.0(debug@4.4.1)
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3087,7 +3136,7 @@ importers:
         version: 1.11.0(debug@4.4.1)
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3127,7 +3176,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3164,7 +3213,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3210,7 +3259,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3250,7 +3299,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.29.0
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3284,7 +3333,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3333,7 +3382,7 @@ importers:
         version: 8.15.5
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3370,7 +3419,7 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3407,7 +3456,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3444,7 +3493,7 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3487,7 +3536,7 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3524,7 +3573,7 @@ importers:
         version: 17.0.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3558,7 +3607,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3595,7 +3644,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3615,7 +3664,7 @@ importers:
         specifier: ^3.13.0
         version: 3.13.0(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3635,7 +3684,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3652,7 +3701,7 @@ importers:
         specifier: ^1.59.0
         version: 1.59.0(encoding@0.1.13)
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3672,7 +3721,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3702,7 +3751,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       pnpm:
         specifier: 10.12.4
         version: 10.12.4
@@ -3728,7 +3777,7 @@ importers:
         specifier: ^6.2.0
         version: 6.2.0
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3745,7 +3794,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3760,7 +3809,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
+        version: 1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.2.1
@@ -3788,7 +3837,7 @@ importers:
         version: 8.18.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3808,7 +3857,7 @@ importers:
         specifier: ^1.8.2
         version: 1.8.2
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3828,7 +3877,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3845,7 +3894,7 @@ importers:
         specifier: ^5.11.0
         version: 5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3865,7 +3914,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3908,7 +3957,7 @@ importers:
         version: 8.18.1
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3925,7 +3974,7 @@ importers:
   voice/playai:
     dependencies:
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3945,7 +3994,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3975,7 +4024,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -3995,7 +4044,7 @@ importers:
         specifier: ^2.5.4
         version: 2.5.4
       zod:
-        specifier: ^3.0.0 || ^4.0.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -4015,7 +4064,7 @@ importers:
         version: 20.19.9
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.5)(typescript@5.8.3)(yaml@2.8.0)
@@ -4038,7 +4087,7 @@ importers:
         specifier: ^3.40.1
         version: 3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.12)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(typescript@5.8.3)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
@@ -4073,7 +4122,7 @@ importers:
         version: 4.3.19(react@19.1.1)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
-        version: 9.31.0(jiti@2.4.2)
+        version: 9.34.0(jiti@2.4.2)
       execa:
         specifier: ^9.6.0
         version: 9.6.0
@@ -5491,32 +5540,32 @@ packages:
     resolution: {integrity: sha512-7ORY85rphRazqHzImNXMrh4vsaPrpetFoTWpZYueCO2bbO6PXYDXp/GQ4DgxnGIqbWB/Di1Ai+Xuwq2o7DJ36A==}
     engines: {node: '>=16'}
 
-  '@cloudflare/workerd-darwin-64@1.20250816.0':
-    resolution: {integrity: sha512-yN1Rga4ufTdrJPCP4gEqfB47i1lWi3teY5IoeQbUuKnjnCtm4pZvXur526JzCmaw60Jx+AEWf5tizdwRd5hHBQ==}
+  '@cloudflare/workerd-darwin-64@1.20250823.0':
+    resolution: {integrity: sha512-yRLJc1cQNqQYcDViOk7kpTXnR5XuBP7B/Ms5KBdlQ6eTr2Vsg9mfKqWKInjzY8/Cx+p+Sic2Tbld42gcYkiM2A==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
 
-  '@cloudflare/workerd-darwin-arm64@1.20250816.0':
-    resolution: {integrity: sha512-WyKPMQhbU+TTf4uDz3SA7ZObspg7WzyJMv/7J4grSddpdx2A4Y4SfPu3wsZleAOIMOAEVi0A1sYDhdltKM7Mxg==}
+  '@cloudflare/workerd-darwin-arm64@1.20250823.0':
+    resolution: {integrity: sha512-KJnikUe6J29Ga1QMPKNCc8eHD56DdBlu5XE5LoBH/AYRrbS5UI1d5F844hUWoFKJb8KRaPIH9F849HZWfNa1vw==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
 
-  '@cloudflare/workerd-linux-64@1.20250816.0':
-    resolution: {integrity: sha512-NWHOuFnVBaPRhLHw8kjPO9GJmc2P/CTYbnNlNm0EThyi57o/oDx0ldWLJqEHlrdEPOw7zEVGBqM/6M+V9agC6w==}
+  '@cloudflare/workerd-linux-64@1.20250823.0':
+    resolution: {integrity: sha512-4QFXq4eDWEAK5QjGxRe0XUTBax1Fgarc08HETL6q0y/KPZp2nOTLfjLjklTn/qEiztafNFoJEIwhkiknHeOi/g==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
 
-  '@cloudflare/workerd-linux-arm64@1.20250816.0':
-    resolution: {integrity: sha512-FR+/yhaWs7FhfC3GKsM3+usQVrGEweJ9qyh7p+R6HNwnobgKr/h5ATWvJ4obGJF6ZHHodgSe+gOSYR7fkJ1xAQ==}
+  '@cloudflare/workerd-linux-arm64@1.20250823.0':
+    resolution: {integrity: sha512-sODSrSVe4W/maoBu76qb0sJGBhxhSM2Q2tg/+G7q1IPgRZSzArMKIPrW6nBnmBrrG1O0X6aoAdID6w5hfuEM4g==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
 
-  '@cloudflare/workerd-windows-64@1.20250816.0':
-    resolution: {integrity: sha512-0lqClj2UMhFa8tCBiiX7Zhd5Bjp0V+X8oNBG6V6WsR9p9/HlIHAGgwRAM7aYkyG+8KC8xlbC89O2AXUXLpHx0g==}
+  '@cloudflare/workerd-windows-64@1.20250823.0':
+    resolution: {integrity: sha512-WaNqUOXUnrcEI+i2NI4+okA9CrJMI9n2XTfVtDg/pLvcA/ZPTz23MEFMZU1splr4SslS1th1NBO38RMPnDB4rA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
@@ -6249,16 +6298,8 @@ packages:
     resolution: {integrity: sha512-ENIdc4iLu0d93HeYirvKmrzshzofPw6VkZRKQGe9Nv46ZnWUzcF1xV01dcvEg/1wXUR61OmmlSfyeyO7EvjLxQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@eslint/config-helpers@0.3.0':
-    resolution: {integrity: sha512-ViuymvFmcJi04qdZeDc2whTHryouGcDlaxPqarTD0ZE10ISpxGUVZGZDx4w01upyIynL3iu6IXH2bS1NhclQMw==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
   '@eslint/config-helpers@0.3.1':
     resolution: {integrity: sha512-xR93k9WhrDYpXHORXpxVL5oHj3Era7wo6k/Wd8/IsQNnZUTzkGS29lyn3nAT05v6ltUuTFVCCYDEGfy2Or/sPA==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@eslint/core@0.15.0':
-    resolution: {integrity: sha512-b7ePw78tEWWkpgZCDYkbqDOP8dmM6qe+AOC6iuJqlq1R/0ahMAeH3qynpnqKFGkMltrp44ohV4ubGyvLX28tzw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   '@eslint/core@0.15.2':
@@ -6269,24 +6310,12 @@ packages:
     resolution: {integrity: sha512-gtF186CXhIl1p4pJNGZw8Yc6RlshoePRvE0X91oPGb3vZ8pM3qOS9W9NGPat9LziaBV7XrJWGylNQXkGcnM3IQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@eslint/js@9.31.0':
-    resolution: {integrity: sha512-LOm5OVt7D4qiKCqoiPbA7LWmI+tbw1VbTUowBcUMgQSuM6poJufkFkYDcQpo5KfgD39TnNySV26QjOh7VFpSyw==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@eslint/js@9.33.0':
-    resolution: {integrity: sha512-5K1/mKhWaMfreBGJTwval43JJmkip0RmM+3+IuqupeSKNC/Th2Kc7ucaq5ovTSra/OOKB9c58CGSz3QMVbWt0A==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
   '@eslint/js@9.34.0':
     resolution: {integrity: sha512-EoyvqQnBNsV1CWaEJ559rxXL4c8V92gxirbawSmVUOWXlsRxxQXl6LmCpdUblgxgSkDIqKnhzba2SjRTI/A5Rw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   '@eslint/object-schema@2.1.6':
     resolution: {integrity: sha512-RBMg5FRL0I0gs51M/guSAj5/e14VQ4tpZnQNWwuDT66P14I43ItmPfIZRhO9fUVIPOAQXU47atlywZ/czoqFPA==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@eslint/plugin-kit@0.3.2':
-    resolution: {integrity: sha512-4SaFZCNfJqvk/kenHpI8xvN42DMaoycy4PzKc5otHxRswww1kAt82OlBuwRVLofCACCTZEcla2Ydxv8scMXaTg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   '@eslint/plugin-kit@0.3.5':
@@ -6406,11 +6435,11 @@ packages:
     resolution: {integrity: sha512-CsmGFNZVL0mPrgcrkBPJ5LB8TPEKiPsER0N5h3nAkkPIeyAGGn3YwuRWyQhDYI5/XWLp11LlDEWqL8B14aYtNg==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.15.0':
-    resolution: {integrity: sha512-4CSW+hRTESWl3xVtde7pkQ3E+dDFhDq+m4ztmccRctZfx1gKy3v0M9STIMGk6Nq0s6O2uKMXupOZQ1JGorXVwQ==}
+  '@google/genai@1.16.0':
+    resolution: {integrity: sha512-hdTYu39QgDFxv+FB6BK2zi4UIJGWhx2iPc0pHQ0C5Q/RCi+m+4gsryIzTGO+riqWcUA8/WGYp6hpqckdOBNysw==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.11.0
+      '@modelcontextprotocol/sdk': ^1.11.4
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
@@ -7024,6 +7053,7 @@ packages:
   '@lancedb/lancedb@0.21.2':
     resolution: {integrity: sha512-3RPsGbdhFbwgy7GisQnlgf+5r6R73N4xIkPNISJfvratJ5kVoQIuswra/jJxAf8N5tKriD9UnrQyUsRbmblwFQ==}
     engines: {node: '>= 18'}
+    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
@@ -7122,11 +7152,23 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
+  '@mastra/core@0.14.1':
+    resolution: {integrity: sha512-DYAIJhEUUEOd7u6sVMXLExHFmYjpQrSShSypDDswTXauoVJNgCeEjyRRxDM0sN9+mfm8Q5Ai44c5/2PMMW+ObQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      zod: ^3.0.0
+
   '@mastra/rag@1.0.2':
     resolution: {integrity: sha512-Nk7LdgBdEvLV6JaFkkurVb1DsSfdmnlipQ+tmQAOT29M/q+7xFMts50AZjbLrU1m/FyFGg1Bvdr3ejtYgphFcQ==}
     peerDependencies:
       '@mastra/core': ^0.10.0-alpha.0
       ai: ^4.0.0
+
+  '@mastra/schema-compat@0.10.7':
+    resolution: {integrity: sha512-lY1V57fHfCRVafNuwmDEmQJNncVZI+wdOdvL/WbgYWLQmL3YjBl3CrM+7yTOM/gG/GPKm8BRxmqnHLhS1rD1zg==}
+    peerDependencies:
+      ai: ^4.0.0
+      zod: ^3.0.0
 
   '@mdx-js/react@3.1.0':
     resolution: {integrity: sha512-QjHtSaoameoalGnKDT3FoIl4+9RwyTmo9ZJGBdLOks/YOiWHoRDI3PUwEzOE7kEmGcV3AFcp9K6dYu9rEuKLAQ==}
@@ -11767,16 +11809,6 @@ packages:
     resolution: {integrity: sha512-Uhdk5sfqcee/9H/rCOJikYz67o0a2Tw2hGRPOG2Y1R2dg7brRe1uG0yaNQDHu+TO/uQPF/5eCapvYSmHUjt7JQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  eslint@9.31.0:
-    resolution: {integrity: sha512-QldCVh/ztyKJJZLr4jXNUByx3gR+TDYZCRXEktiZoUR3PGy4qCmSbkxcIle8GEwGpb5JBZazlaJ/CxLidXdEbQ==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    hasBin: true
-    peerDependencies:
-      jiti: '*'
-    peerDependenciesMeta:
-      jiti:
-        optional: true
-
   eslint@9.34.0:
     resolution: {integrity: sha512-RNCHRX5EwdrESy3Jc9o8ie8Bog+PeYvvSR8sDGoZxNFTvZ4dlxUB3WzQ3bQMztFrSRODGrLLj8g6OFuGY/aiQg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -13385,6 +13417,7 @@ packages:
 
   libsql@0.5.17:
     resolution: {integrity: sha512-RRlj5XQI9+Wq+/5UY8EnugSWfRmHEw4hn3DKlPrkUgZONsge1PwTtHcpStP6MSNi8ohcbsRgEHJaymA33a8cBw==}
+    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   lilconfig@3.1.3:
@@ -13831,8 +13864,8 @@ packages:
     resolution: {integrity: sha512-r9deDe9p5FJUPZAk3A59wGH7Ii9YrjjWw0jmw/liSbHl2CHiyXj6FcDXDu2K3TjVAXqiJdaw3xxwlZZr9E6nHg==}
     hasBin: true
 
-  miniflare@4.20250816.0:
-    resolution: {integrity: sha512-HuakGvmsU8aC60wsHP7Su+BgJFly1GmKbmbR/nqIz0Xlk6wcd/pp3vZ7jtbT3unf+aeBOlEO/CzcUb8xFsJLdA==}
+  miniflare@4.20250823.1:
+    resolution: {integrity: sha512-qjbF69XXyHXk4R//q0a9MLraKE9MLKZ/94k6jKcfouJ0g+se7VyMzCBryeWA534+ZAlNM4Ay5gqYr1v3Wk6ctQ==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -16784,8 +16817,8 @@ packages:
     resolution: {integrity: sha512-JNjcULU2e4KJwUNv6CHgI46UvDGitb6dGryHajXTDiLgg1/RiGoPSDw4kZfYnwGtEXf2ZMeIewDQgFGzkCB2Sg==}
     engines: {node: '>=12.17'}
 
-  workerd@1.20250816.0:
-    resolution: {integrity: sha512-5gIvHPE/3QVlQR1Sc1NdBkWmqWj/TSgIbY/f/qs9lhiLBw/Da+HbNBTVYGjvwYqEb3NQ+XQM4gAm5b2+JJaUJg==}
+  workerd@1.20250823.0:
+    resolution: {integrity: sha512-95lToK9zeaC7bX5ZmlP/wz6zqoUPBk3hhec1JjEMGZrxsXY9cPRkjWNCcjDctQ17U97vjMcY/ymchgx7w8Cfmg==}
     engines: {node: '>=16'}
     hasBin: true
 
@@ -17046,6 +17079,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.3(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/gateway@1.0.7(zod@4.0.17)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.3(zod@4.0.17)
+      zod: 4.0.17
+
   '@ai-sdk/gateway@1.0.9(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -17142,6 +17181,14 @@ snapshots:
       eventsource-parser: 3.0.3
       zod: 3.25.76
       zod-to-json-schema: 3.24.6(zod@3.25.76)
+
+  '@ai-sdk/provider-utils@3.0.3(zod@4.0.17)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.3
+      zod: 4.0.17
+      zod-to-json-schema: 3.24.6(zod@4.0.17)
 
   '@ai-sdk/provider-utils@3.0.4(zod@3.25.76)':
     dependencies:
@@ -19350,19 +19397,19 @@ snapshots:
     dependencies:
       '@clickhouse/client-common': 1.12.1
 
-  '@cloudflare/workerd-darwin-64@1.20250816.0':
+  '@cloudflare/workerd-darwin-64@1.20250823.0':
     optional: true
 
-  '@cloudflare/workerd-darwin-arm64@1.20250816.0':
+  '@cloudflare/workerd-darwin-arm64@1.20250823.0':
     optional: true
 
-  '@cloudflare/workerd-linux-64@1.20250816.0':
+  '@cloudflare/workerd-linux-64@1.20250823.0':
     optional: true
 
-  '@cloudflare/workerd-linux-arm64@1.20250816.0':
+  '@cloudflare/workerd-linux-arm64@1.20250823.0':
     optional: true
 
-  '@cloudflare/workerd-windows-64@1.20250816.0':
+  '@cloudflare/workerd-windows-64@1.20250823.0':
     optional: true
 
   '@cloudflare/workers-types@4.20250823.0': {}
@@ -19815,11 +19862,6 @@ snapshots:
   '@esbuild/win32-x64@0.25.8':
     optional: true
 
-  '@eslint-community/eslint-utils@4.7.0(eslint@9.31.0(jiti@2.4.2))':
-    dependencies:
-      eslint: 9.31.0(jiti@2.4.2)
-      eslint-visitor-keys: 3.4.3
-
   '@eslint-community/eslint-utils@4.7.0(eslint@9.34.0(jiti@2.4.2))':
     dependencies:
       eslint: 9.34.0(jiti@2.4.2)
@@ -19835,13 +19877,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@eslint/config-helpers@0.3.0': {}
-
   '@eslint/config-helpers@0.3.1': {}
-
-  '@eslint/core@0.15.0':
-    dependencies:
-      '@types/json-schema': 7.0.15
 
   '@eslint/core@0.15.2':
     dependencies:
@@ -19861,18 +19897,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@eslint/js@9.31.0': {}
-
-  '@eslint/js@9.33.0': {}
-
   '@eslint/js@9.34.0': {}
 
   '@eslint/object-schema@2.1.6': {}
-
-  '@eslint/plugin-kit@0.3.2':
-    dependencies:
-      '@eslint/core': 0.15.0
-      levn: 0.4.1
 
   '@eslint/plugin-kit@0.3.5':
     dependencies:
@@ -20056,7 +20083,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)':
+  '@google/genai@1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)':
     dependencies:
       google-auth-library: 9.15.1(encoding@0.1.13)
       ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
@@ -20820,6 +20847,63 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
+  '@mastra/core@0.14.1(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.0.17)':
+    dependencies:
+      '@a2a-js/sdk': 0.2.5
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.0.17)
+      '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.3(zod@4.0.17)'
+      '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.0'
+      '@ai-sdk/ui-utils': 1.2.11(zod@4.0.17)
+      '@mastra/schema-compat': 0.10.7(ai@4.3.19(react@19.1.1)(zod@4.0.17))(zod@4.0.17)
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+      '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/otlp-exporter-base': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/otlp-transformer': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-metrics': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-node': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/semantic-conventions': 1.36.0
+      '@sindresorhus/slugify': 2.2.1
+      ai: 4.3.19(react@19.1.1)(zod@4.0.17)
+      ai-v5: ai@5.0.15(zod@4.0.17)
+      date-fns: 3.6.0
+      dotenv: 16.6.1
+      hono: 4.8.12
+      hono-openapi: 0.4.8(hono@4.8.12)(openapi-types@12.1.3)(zod@4.0.17)
+      js-tiktoken: 1.0.20
+      json-schema: 0.4.0
+      json-schema-to-zod: 2.6.1
+      p-map: 7.0.3
+      pino: 9.7.0
+      pino-pretty: 13.0.0
+      radash: 12.1.1
+      sift: 17.1.3
+      xstate: 5.20.1
+      zod: 4.0.17
+      zod-to-json-schema: 3.24.6(zod@4.0.17)
+    transitivePeerDependencies:
+      - '@hono/arktype-validator'
+      - '@hono/effect-validator'
+      - '@hono/typebox-validator'
+      - '@hono/valibot-validator'
+      - '@hono/zod-validator'
+      - '@sinclair/typebox'
+      - '@valibot/to-json-schema'
+      - arktype
+      - effect
+      - encoding
+      - openapi-types
+      - react
+      - supports-color
+      - valibot
+      - zod-openapi
+
   '@mastra/rag@1.0.2(@mastra/core@packages+core)(ai@4.3.19(react@19.1.1)(zod@3.25.76))(encoding@0.1.13)':
     dependencies:
       '@mastra/core': link:packages/core
@@ -20835,6 +20919,14 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
       - encoding
+
+  '@mastra/schema-compat@0.10.7(ai@4.3.19(react@19.1.1)(zod@4.0.17))(zod@4.0.17)':
+    dependencies:
+      ai: 4.3.19(react@19.1.1)(zod@4.0.17)
+      json-schema: 0.4.0
+      zod: 4.0.17
+      zod-from-json-schema: 0.0.5
+      zod-to-json-schema: 3.24.6(zod@4.0.17)
 
   '@mdx-js/react@3.1.0(@types/react@19.1.9)(react@19.1.1)':
     dependencies:
@@ -24259,23 +24351,6 @@ snapshots:
     dependencies:
       '@types/yargs-parser': 21.0.3
 
-  '@typescript-eslint/eslint-plugin@8.38.0(@typescript-eslint/parser@8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)':
-    dependencies:
-      '@eslint-community/regexpp': 4.12.1
-      '@typescript-eslint/parser': 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/scope-manager': 8.38.0
-      '@typescript-eslint/type-utils': 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/utils': 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/visitor-keys': 8.38.0
-      eslint: 9.31.0(jiti@2.4.2)
-      graphemer: 1.4.0
-      ignore: 7.0.5
-      natural-compare: 1.4.0
-      ts-api-utils: 2.1.0(typescript@5.8.3)
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
   '@typescript-eslint/eslint-plugin@8.38.0(@typescript-eslint/parser@8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
@@ -24289,18 +24364,6 @@ snapshots:
       ignore: 7.0.5
       natural-compare: 1.4.0
       ts-api-utils: 2.1.0(typescript@5.8.3)
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
-  '@typescript-eslint/parser@8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)':
-    dependencies:
-      '@typescript-eslint/scope-manager': 8.38.0
-      '@typescript-eslint/types': 8.38.0
-      '@typescript-eslint/typescript-estree': 8.38.0(typescript@5.8.3)
-      '@typescript-eslint/visitor-keys': 8.38.0
-      debug: 4.4.1(supports-color@8.1.1)
-      eslint: 9.31.0(jiti@2.4.2)
       typescript: 5.8.3
     transitivePeerDependencies:
       - supports-color
@@ -24335,18 +24398,6 @@ snapshots:
     dependencies:
       typescript: 5.8.3
 
-  '@typescript-eslint/type-utils@8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)':
-    dependencies:
-      '@typescript-eslint/types': 8.38.0
-      '@typescript-eslint/typescript-estree': 8.38.0(typescript@5.8.3)
-      '@typescript-eslint/utils': 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
-      debug: 4.4.1(supports-color@8.1.1)
-      eslint: 9.31.0(jiti@2.4.2)
-      ts-api-utils: 2.1.0(typescript@5.8.3)
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
   '@typescript-eslint/type-utils@8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3)':
     dependencies:
       '@typescript-eslint/types': 8.38.0
@@ -24373,17 +24424,6 @@ snapshots:
       minimatch: 9.0.5
       semver: 7.7.2
       ts-api-utils: 2.1.0(typescript@5.8.3)
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
-  '@typescript-eslint/utils@8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)':
-    dependencies:
-      '@eslint-community/eslint-utils': 4.7.0(eslint@9.31.0(jiti@2.4.2))
-      '@typescript-eslint/scope-manager': 8.38.0
-      '@typescript-eslint/types': 8.38.0
-      '@typescript-eslint/typescript-estree': 8.38.0(typescript@5.8.3)
-      eslint: 9.31.0(jiti@2.4.2)
       typescript: 5.8.3
     transitivePeerDependencies:
       - supports-color
@@ -24875,6 +24915,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.3(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
+
+  ai@5.0.15(zod@4.0.17):
+    dependencies:
+      '@ai-sdk/gateway': 1.0.7(zod@4.0.17)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.3(zod@4.0.17)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.0.17
 
   ai@5.0.19(zod@3.25.76):
     dependencies:
@@ -26583,48 +26631,6 @@ snapshots:
 
   eslint-visitor-keys@4.2.1: {}
 
-  eslint@9.31.0(jiti@2.4.2):
-    dependencies:
-      '@eslint-community/eslint-utils': 4.7.0(eslint@9.31.0(jiti@2.4.2))
-      '@eslint-community/regexpp': 4.12.1
-      '@eslint/config-array': 0.21.0
-      '@eslint/config-helpers': 0.3.0
-      '@eslint/core': 0.15.0
-      '@eslint/eslintrc': 3.3.1
-      '@eslint/js': 9.31.0
-      '@eslint/plugin-kit': 0.3.2
-      '@humanfs/node': 0.16.6
-      '@humanwhocodes/module-importer': 1.0.1
-      '@humanwhocodes/retry': 0.4.3
-      '@types/estree': 1.0.8
-      '@types/json-schema': 7.0.15
-      ajv: 6.12.6
-      chalk: 4.1.2
-      cross-spawn: 7.0.6
-      debug: 4.4.1(supports-color@8.1.1)
-      escape-string-regexp: 4.0.0
-      eslint-scope: 8.4.0
-      eslint-visitor-keys: 4.2.1
-      espree: 10.4.0
-      esquery: 1.6.0
-      esutils: 2.0.3
-      fast-deep-equal: 3.1.3
-      file-entry-cache: 8.0.0
-      find-up: 5.0.0
-      glob-parent: 6.0.2
-      ignore: 5.3.2
-      imurmurhash: 0.1.4
-      is-glob: 4.0.3
-      json-stable-stringify-without-jsonify: 1.0.1
-      lodash.merge: 4.6.2
-      minimatch: 3.1.2
-      natural-compare: 1.4.0
-      optionator: 0.9.4
-    optionalDependencies:
-      jiti: 2.4.2
-    transitivePeerDependencies:
-      - supports-color
-
   eslint@9.34.0(jiti@2.4.2):
     dependencies:
       '@eslint-community/eslint-utils': 4.7.0(eslint@9.34.0(jiti@2.4.2))
@@ -27564,6 +27570,14 @@ snapshots:
     optionalDependencies:
       hono: 4.8.12
       zod: 3.25.76
+
+  hono-openapi@0.4.8(hono@4.8.12)(openapi-types@12.1.3)(zod@4.0.17):
+    dependencies:
+      json-schema-walker: 2.0.0
+      openapi-types: 12.1.3
+    optionalDependencies:
+      hono: 4.8.12
+      zod: 4.0.17
 
   hono@4.8.12: {}
 
@@ -29014,11 +29028,11 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
+  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.0(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
     dependencies:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
       '@cloudflare/workers-types': 4.20250823.0
-      '@google/genai': 1.15.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
+      '@google/genai': 1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       '@langchain/core': 0.3.59(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76))
       '@mistralai/mistralai': 1.7.2(zod@3.25.76)
       '@qdrant/js-client-rest': 1.15.0(typescript@5.8.3)
@@ -29307,7 +29321,7 @@ snapshots:
 
   mini-svg-data-uri@1.4.4: {}
 
-  miniflare@4.20250816.0(bufferutil@4.0.9)(utf-8-validate@6.0.3):
+  miniflare@4.20250823.1(bufferutil@4.0.9)(utf-8-validate@6.0.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       acorn: 8.14.0
@@ -29317,7 +29331,7 @@ snapshots:
       sharp: 0.33.5
       stoppable: 1.1.0
       undici: 7.12.0
-      workerd: 1.20250816.0
+      workerd: 1.20250823.0
       ws: 8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       youch: 4.1.0-beta.10
       zod: 3.22.3
@@ -32003,17 +32017,6 @@ snapshots:
     optionalDependencies:
       rxjs: 7.8.1
 
-  typescript-eslint@8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3):
-    dependencies:
-      '@typescript-eslint/eslint-plugin': 8.38.0(@typescript-eslint/parser@8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/parser': 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/typescript-estree': 8.38.0(typescript@5.8.3)
-      '@typescript-eslint/utils': 8.38.0(eslint@9.31.0(jiti@2.4.2))(typescript@5.8.3)
-      eslint: 9.31.0(jiti@2.4.2)
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
   typescript-eslint@8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3):
     dependencies:
       '@typescript-eslint/eslint-plugin': 8.38.0(@typescript-eslint/parser@8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3)
@@ -32579,13 +32582,13 @@ snapshots:
 
   wordwrapjs@5.1.0: {}
 
-  workerd@1.20250816.0:
+  workerd@1.20250823.0:
     optionalDependencies:
-      '@cloudflare/workerd-darwin-64': 1.20250816.0
-      '@cloudflare/workerd-darwin-arm64': 1.20250816.0
-      '@cloudflare/workerd-linux-64': 1.20250816.0
-      '@cloudflare/workerd-linux-arm64': 1.20250816.0
-      '@cloudflare/workerd-windows-64': 1.20250816.0
+      '@cloudflare/workerd-darwin-64': 1.20250823.0
+      '@cloudflare/workerd-darwin-arm64': 1.20250823.0
+      '@cloudflare/workerd-linux-64': 1.20250823.0
+      '@cloudflare/workerd-linux-arm64': 1.20250823.0
+      '@cloudflare/workerd-windows-64': 1.20250823.0
 
   wrap-ansi@6.2.0:
     dependencies:

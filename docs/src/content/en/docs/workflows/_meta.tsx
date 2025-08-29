@@ -4,6 +4,7 @@ const meta = {
   "control-flow": "Control Flow",
   "suspend-and-resume": "Suspend & Resume",
   "pausing-execution": "Sleep & Events",
+  "error-handling": "Error Handling",
   "input-data-mapping": "Input Data Mapping",
   "using-with-agents-and-tools": "Agents and Tools",
   streaming: <Tag text="new">Streaming</Tag>,
