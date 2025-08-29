@@ -16,8 +16,6 @@ export function EntryListItem({
 }) {
   const isSelected = selectedItem && selectedItem?.id === item.id;
 
-  console.log('selectedItem', selectedItem, item, isSelected);
-
   const handleClick = () => {
     return onClick && onClick(item?.id);
   };

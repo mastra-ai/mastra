@@ -32,8 +32,6 @@ export function EntryList({
   columns?: Column[];
   searchTerm?: string;
 }) {
-  console.log('selectedItem', selectedItem);
-
   if (isLoading) {
     return (
       <div className="flex border border-border1 w-full h-[3.5rem] items-center justify-center text-[0.875rem] text-icon3 rounded-lg">
