@@ -511,11 +511,11 @@ const programmaticFileCopyStep = createStep({
       const copiedFiles: Array<{
         source: string;
         destination: string;
-        unit: { kind: string; id: string };
+        unit: { kind: 'integration' | 'mcp-server' | 'tool' | 'workflow' | 'agent' | 'network' | 'other'; id: string };
       }> = [];
 
       const conflicts: Array<{
-        unit: { kind: string; id: string };
+        unit: { kind: 'integration' | 'mcp-server' | 'tool' | 'workflow' | 'agent' | 'network' | 'other'; id: string };
         issue: string;
         sourceFile: string;
         targetFile: string;

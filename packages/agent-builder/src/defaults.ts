@@ -1798,8 +1798,7 @@ export const mastra = new Mastra({
     }
 
     // Cleanup old sessions to prevent memory leaks
-    // Keep only the last 10 sessions and clear sessions older than 1 hour
-    const now = Date.now();
+    // Keep only the last 10 sessions
     const sessions = Array.from(AgentBuilderDefaults.taskStorage.keys());
     if (sessions.length > 10) {
       const sessionsToRemove = sessions.slice(0, sessions.length - 10);
