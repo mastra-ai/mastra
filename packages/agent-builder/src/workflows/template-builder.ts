@@ -10,7 +10,7 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { AgentBuilder } from '..';
 import { AgentBuilderDefaults } from '../defaults';
-import type { TemplateUnit } from '../types';
+import type { TemplateUnit, UnitKind } from '../types';
 import {
   ApplyResultSchema,
   AgentBuilderInputSchema,
@@ -511,11 +511,11 @@ const programmaticFileCopyStep = createStep({
       const copiedFiles: Array<{
         source: string;
         destination: string;
-        unit: { kind: 'integration' | 'mcp-server' | 'tool' | 'workflow' | 'agent' | 'network' | 'other'; id: string };
+        unit: { kind: UnitKind; id: string };
       }> = [];
 
       const conflicts: Array<{
-        unit: { kind: 'integration' | 'mcp-server' | 'tool' | 'workflow' | 'agent' | 'network' | 'other'; id: string };
+        unit: { kind: UnitKind; id: string };
         issue: string;
         sourceFile: string;
         targetFile: string;
