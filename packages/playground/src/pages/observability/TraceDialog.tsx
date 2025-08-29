@@ -79,30 +79,20 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
 
   const toNextSpan = () => {
     const currentIndex = rawSpans.findIndex(span => span.spanId === selectedSpanId);
-    if (currentIndex === -1 || currentIndex === (rawSpans.length || 0) - 1) {
-      return null; // No next event
+    const nextSpan = rawSpans[currentIndex + 1];
+
+    if (nextSpan) {
+      setSelectedSpanId(nextSpan.spanId);
     }
-    const prevSpanId = rawSpans[(currentIndex || 0) + 1].spanId;
-    const prevSpan = rawSpans.find((span: any) => span.spanId === prevSpanId);
-    if (!prevSpan) {
-      console.warn('Span not found for id:', prevSpanId);
-      return;
-    }
-    setSelectedSpanId(prevSpanId);
   };
 
   const toPreviousSpan = () => {
-    // const currentIndex = spanIds?.findIndex(id => id === selectedSpanId);
-    // if (currentIndex === -1 || currentIndex === (spanIds?.length || 0) - 1) {
-    //   return null; // No next event
-    // }
-    // const nextSpanId = spanIds?.[(currentIndex || 0) - 1];
-    // const nextSpan = spans?.find((span: any) => span.id === nextSpanId);
-    // if (!nextSpan) {
-    //   console.warn('Span not found for id:', nextSpanId);
-    //   return;
-    // }
-    // setSelectedSpanId(nextSpanId);
+    const currentIndex = rawSpans.findIndex(span => span.spanId === selectedSpanId);
+    const prevSpan = rawSpans[currentIndex - 1];
+
+    if (prevSpan) {
+      setSelectedSpanId(prevSpan.spanId);
+    }
   };
 
   const selectedSpanInfo = [
