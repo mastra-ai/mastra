@@ -1,21 +1,21 @@
 import type { Mastra } from '@mastra/core';
 import {
-  getWorkflowsHandler as getOriginalWorkflowsHandler,
-  getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
-  startAsyncWorkflowHandler as getOriginalStartAsyncWorkflowHandler,
-  createWorkflowRunHandler as getOriginalCreateWorkflowRunHandler,
-  startWorkflowRunHandler as getOriginalStartWorkflowRunHandler,
-  watchWorkflowHandler as getOriginalWatchWorkflowHandler,
-  streamWorkflowHandler as getOriginalStreamWorkflowHandler,
-  streamVNextWorkflowHandler as getOriginalStreamVNextWorkflowHandler,
-  resumeAsyncWorkflowHandler as getOriginalResumeAsyncWorkflowHandler,
-  resumeWorkflowHandler as getOriginalResumeWorkflowHandler,
-  getWorkflowRunsHandler as getOriginalGetWorkflowRunsHandler,
-  getWorkflowRunByIdHandler as getOriginalGetWorkflowRunByIdHandler,
-  getWorkflowRunExecutionResultHandler as getOriginalGetWorkflowRunExecutionResultHandler,
-  cancelWorkflowRunHandler as getOriginalCancelWorkflowRunHandler,
-  sendWorkflowRunEventHandler as getOriginalSendWorkflowRunEventHandler,
-} from '@mastra/server/handlers/workflows';
+  getAgentBuilderActionsHandler as getOriginalAgentBuilderActionsHandler,
+  getAgentBuilderActionByIdHandler as getOriginalAgentBuilderActionByIdHandler,
+  startAsyncAgentBuilderActionHandler as getOriginalStartAsyncAgentBuilderActionHandler,
+  createAgentBuilderActionRunHandler as getOriginalCreateAgentBuilderActionRunHandler,
+  startAgentBuilderActionRunHandler as getOriginalStartAgentBuilderActionRunHandler,
+  watchAgentBuilderActionHandler as getOriginalWatchAgentBuilderActionHandler,
+  streamAgentBuilderActionHandler as getOriginalStreamAgentBuilderActionHandler,
+  streamVNextAgentBuilderActionHandler as getOriginalStreamVNextAgentBuilderActionHandler,
+  resumeAsyncAgentBuilderActionHandler as getOriginalResumeAsyncAgentBuilderActionHandler,
+  resumeAgentBuilderActionHandler as getOriginalResumeAgentBuilderActionHandler,
+  getAgentBuilderActionRunsHandler as getOriginalGetAgentBuilderActionRunsHandler,
+  getAgentBuilderActionRunByIdHandler as getOriginalGetAgentBuilderActionRunByIdHandler,
+  getAgentBuilderActionRunExecutionResultHandler as getOriginalGetAgentBuilderActionRunExecutionResultHandler,
+  cancelAgentBuilderActionRunHandler as getOriginalCancelAgentBuilderActionRunHandler,
+  sendAgentBuilderActionRunEventHandler as getOriginalSendAgentBuilderActionRunEventHandler,
+} from '@mastra/server/handlers/agent-builder-actions';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { stream } from 'hono/streaming';
@@ -26,11 +26,11 @@ export async function getAgentBuilderActionsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
 
-    const workflows = await getOriginalWorkflowsHandler({
+    const actions = await getOriginalAgentBuilderActionsHandler({
       mastra,
     });
 
-    return c.json(workflows);
+    return c.json(actions);
   } catch (error) {
     return handleError(error, 'Error getting agent builder actions');
   }
@@ -41,12 +41,12 @@ export async function getAgentBuilderActionByIdHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const actionId = c.req.param('actionId');
 
-    const workflow = await getOriginalWorkflowByIdHandler({
+    const action = await getOriginalAgentBuilderActionByIdHandler({
       mastra,
-      workflowId: actionId,
+      actionId,
     });
 
-    return c.json(workflow);
+    return c.json(action);
   } catch (error) {
     return handleError(error, 'Error getting agent builder action by ID');
   }
@@ -60,10 +60,10 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
     const runId = c.req.query('runId');
     const body = await c.req.json();
 
-    const result = await getOriginalStartAsyncWorkflowHandler({
+    const result = await getOriginalStartAsyncAgentBuilderActionHandler({
       mastra,
       runtimeContext,
-      workflowId: actionId,
+      actionId,
       runId,
       ...body,
     });
@@ -80,9 +80,9 @@ export async function createAgentBuilderActionRunHandler(c: Context) {
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
 
-    const result = await getOriginalCreateWorkflowRunHandler({
+    const result = await getOriginalCreateAgentBuilderActionRunHandler({
       mastra,
-      workflowId: actionId,
+      actionId,
       runId,
     });
 
@@ -104,10 +104,10 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId is required' });
     }
 
-    const result = await getOriginalStartWorkflowRunHandler({
+    const result = await getOriginalStartAgentBuilderActionRunHandler({
       mastra,
       runtimeContext,
-      workflowId: actionId,
+      actionId,
       runId,
       ...body,
     });
@@ -125,9 +125,9 @@ export async function watchAgentBuilderActionHandler(c: Context) {
     const runId = c.req.query('runId');
 
     return stream(c, async stream => {
-      const originalStream = await getOriginalWatchWorkflowHandler({
+      const originalStream = await getOriginalWatchAgentBuilderActionHandler({
         mastra,
-        workflowId: actionId,
+        actionId,
         runId,
       });
 
@@ -158,10 +158,10 @@ export async function streamAgentBuilderActionHandler(c: Context) {
     const body = await c.req.json();
 
     return stream(c, async stream => {
-      const originalStream = await getOriginalStreamWorkflowHandler({
+      const originalStream = await getOriginalStreamAgentBuilderActionHandler({
         mastra,
         runtimeContext,
-        workflowId: actionId,
+        actionId,
         runId,
         ...body,
       });
@@ -193,10 +193,10 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
     const body = await c.req.json();
 
     return stream(c, async stream => {
-      const originalStream = await getOriginalStreamVNextWorkflowHandler({
+      const originalStream = await getOriginalStreamVNextAgentBuilderActionHandler({
         mastra,
         runtimeContext,
-        workflowId: actionId,
+        actionId,
         runId,
         ...body,
       });
@@ -231,10 +231,10 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId is required' });
     }
 
-    const result = await getOriginalResumeAsyncWorkflowHandler({
+    const result = await getOriginalResumeAsyncAgentBuilderActionHandler({
       mastra,
       runtimeContext,
-      workflowId: actionId,
+      actionId,
       runId,
       ...body,
     });
@@ -257,10 +257,10 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId is required' });
     }
 
-    const result = await getOriginalResumeWorkflowHandler({
+    const result = await getOriginalResumeAgentBuilderActionHandler({
       mastra,
       runtimeContext,
-      workflowId: actionId,
+      actionId,
       runId,
       ...body,
     });
@@ -281,9 +281,9 @@ export async function getAgentBuilderActionRunsHandler(c: Context) {
     const offset = c.req.query('offset');
     const resourceId = c.req.query('resourceId');
 
-    const runs = await getOriginalGetWorkflowRunsHandler({
+    const runs = await getOriginalGetAgentBuilderActionRunsHandler({
       mastra,
-      workflowId: actionId,
+      actionId,
       fromDate,
       toDate,
       limit: limit ? parseInt(limit) : undefined,
@@ -303,9 +303,9 @@ export async function getAgentBuilderActionRunByIdHandler(c: Context) {
     const actionId = c.req.param('actionId');
     const runId = c.req.param('runId');
 
-    const run = await getOriginalGetWorkflowRunByIdHandler({
+    const run = await getOriginalGetAgentBuilderActionRunByIdHandler({
       mastra,
-      workflowId: actionId,
+      actionId,
       runId,
     });
 
@@ -321,9 +321,9 @@ export async function getAgentBuilderActionRunExecutionResultHandler(c: Context)
     const actionId = c.req.param('actionId');
     const runId = c.req.param('runId');
 
-    const result = await getOriginalGetWorkflowRunExecutionResultHandler({
+    const result = await getOriginalGetAgentBuilderActionRunExecutionResultHandler({
       mastra,
-      workflowId: actionId,
+      actionId,
       runId,
     });
 
@@ -339,9 +339,9 @@ export async function cancelAgentBuilderActionRunHandler(c: Context) {
     const actionId = c.req.param('actionId');
     const runId = c.req.param('runId');
 
-    const result = await getOriginalCancelWorkflowRunHandler({
+    const result = await getOriginalCancelAgentBuilderActionRunHandler({
       mastra,
-      workflowId: actionId,
+      actionId,
       runId,
     });
 
@@ -358,9 +358,9 @@ export async function sendAgentBuilderActionRunEventHandler(c: Context) {
     const runId = c.req.param('runId');
     const body = await c.req.json();
 
-    const result = await getOriginalSendWorkflowRunEventHandler({
+    const result = await getOriginalSendAgentBuilderActionRunEventHandler({
       mastra,
-      workflowId: actionId,
+      actionId,
       runId,
       ...body,
     });

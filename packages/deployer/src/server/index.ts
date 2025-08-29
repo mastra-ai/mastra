@@ -23,6 +23,7 @@ import { rootHandler } from './handlers/root';
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { agentBuilderActionsRouter } from './handlers/routes/agent-builder-actions/router';
+import { registerAgentBuilderWorkflows } from '@mastra/server/handlers/agent-builder-actions';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
@@ -76,6 +77,9 @@ export async function createHonoServer(
     tools: {},
   },
 ) {
+  // Register agent builder workflows for internal use
+  registerAgentBuilderWorkflows();
+  
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
