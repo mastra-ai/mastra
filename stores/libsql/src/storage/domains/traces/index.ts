@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_TRACES, TracesStorage, removeHttpInstrumentationParents, safelyParseJSON } from '@mastra/core/storage';
+import { TABLE_TRACES, TracesStorage, safelyParseJSON } from '@mastra/core/storage';
 import type { StorageGetTracesArg, StorageGetTracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
 import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -170,10 +170,9 @@ export class TracesLibSQL extends TracesStorage {
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
     this.logger.debug('Batch inserting traces', { count: records.length });
-    const filteredRecords = removeHttpInstrumentationParents(records);
     await this.operations.batchInsert({
       tableName: TABLE_TRACES,
-      records: filteredRecords,
+      records,
     });
   }
 }
