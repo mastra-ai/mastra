@@ -2811,6 +2811,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const streamResult = llm.stream({
           ...inputData,
           outputProcessors,
+          returnScorerData: options.returnScorerData,
         });
 
         if (options.format === 'aisdk') {

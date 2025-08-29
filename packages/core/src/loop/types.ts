@@ -22,6 +22,7 @@ export type LoopConfig = {
   onAbort?: (event: any) => Promise<void> | void;
   activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
+  returnScorerData?: boolean;
 };
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
@@ -46,6 +47,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   maxSteps?: number;
   _internal?: StreamInternal;
   output?: OUTPUT;
+  returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
 };
