@@ -29,7 +29,6 @@ const planningIterationStep = createStep({
       discoveredWorkflows,
       projectStructure,
       research,
-      previousPlan,
       userAnswers,
     } = inputData;
 
@@ -78,7 +77,6 @@ const planningIterationStep = createStep({
       const planningAgent = new Agent({
         model: resolveModel(runtimeContext),
         instructions: taskPlanningPrompts.planningAgent.instructions({
-          previousPlan,
           storedQAPairs,
         }),
         name: 'Workflow Planning Agent',
@@ -88,29 +86,28 @@ const planningIterationStep = createStep({
       // Check if we have user feedback from rejected task list in input data
       const hasTaskFeedback = Boolean(userAnswers && userAnswers.taskFeedback);
 
-      const planningPrompt =
-        previousPlan || storedQAPairs.some(pair => pair.answer)
-          ? taskPlanningPrompts.planningAgent.refinementPrompt({
-              action,
-              workflowName,
-              description,
-              requirements,
-              discoveredWorkflows,
-              projectStructure,
-              research,
-              storedQAPairs,
-              hasTaskFeedback,
-              userAnswers,
-            })
-          : taskPlanningPrompts.planningAgent.initialPrompt({
-              action,
-              workflowName,
-              description,
-              requirements,
-              discoveredWorkflows,
-              projectStructure,
-              research,
-            });
+      const planningPrompt = storedQAPairs.some(pair => pair.answer)
+        ? taskPlanningPrompts.planningAgent.refinementPrompt({
+            action,
+            workflowName,
+            description,
+            requirements,
+            discoveredWorkflows,
+            projectStructure,
+            research,
+            storedQAPairs,
+            hasTaskFeedback,
+            userAnswers,
+          })
+        : taskPlanningPrompts.planningAgent.initialPrompt({
+            action,
+            workflowName,
+            description,
+            requirements,
+            discoveredWorkflows,
+            projectStructure,
+            research,
+          });
 
       const result = await planningAgent.generateVNext(planningPrompt, {
         output: PlanningAgentOutputSchema,

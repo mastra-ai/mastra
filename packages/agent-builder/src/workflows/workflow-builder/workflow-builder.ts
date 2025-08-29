@@ -551,7 +551,7 @@ export const workflowBuilderWorkflow = createWorkflow({
       projectStructure: projectResult,
       // research: researchResult,
       research,
-      previousPlan: undefined,
+
       userAnswers: undefined,
     };
   })
@@ -585,41 +585,3 @@ export const workflowBuilderWorkflow = createWorkflow({
   // Step 5: Execute the approved tasks
   .then(taskExecutionStep)
   .commit();
-
-// Helper function to create a workflow
-export async function createWorkflowWithBuilder(
-  workflowName: string,
-  description: string,
-  requirements: string,
-  projectPath: string,
-) {
-  console.log(`Creating workflow: ${workflowName}`);
-
-  // This would be called by the CLI or other entry points
-  // The actual workflow execution would be handled by the Mastra engine
-  return {
-    workflowName,
-    description,
-    requirements,
-    projectPath,
-    action: 'create' as const,
-  };
-}
-
-// Helper function to edit a workflow
-export async function editWorkflowWithBuilder(
-  workflowName: string,
-  description: string,
-  requirements: string,
-  projectPath: string,
-) {
-  console.log(`Editing workflow: ${workflowName}`);
-
-  return {
-    workflowName,
-    description,
-    requirements,
-    projectPath,
-    action: 'edit' as const,
-  };
-}

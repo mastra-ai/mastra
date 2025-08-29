@@ -46,7 +46,7 @@ export const restrictedTaskManager = createTool({
     // Convert to the expected format for manageTaskList
     const adaptedContext = {
       ...context,
-      action: context.action as 'list' | 'update' | 'complete' | 'create' | 'remove',
+      action: context.action,
       tasks: context.tasks?.map(task => ({
         ...task,
         priority: task.priority || ('medium' as const),

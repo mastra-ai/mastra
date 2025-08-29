@@ -14,13 +14,7 @@ export const PlanningIterationInputSchema = z.object({
   discoveredWorkflows: z.array(DiscoveredWorkflowSchema),
   projectStructure: ProjectDiscoveryResultSchema,
   research: WorkflowResearchResultSchema,
-  previousPlan: z
-    .object({
-      tasks: TaskSchema,
-      questions: z.array(z.string()),
-      reasoning: z.string(),
-    })
-    .optional(),
+
   userAnswers: z.record(z.string()).optional(),
 });
 

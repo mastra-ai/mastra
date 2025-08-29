@@ -1990,8 +1990,7 @@ export const mastra = new Mastra({
     }> = [];
 
     try {
-      const eslintCommand = `npx eslint "${filePath}" --format json`;
-      const { stdout } = await exec(eslintCommand, { cwd: projectPath });
+      const { stdout } = await execFile('npx', ['eslint', filePath, '--format', 'json'], { cwd: projectPath });
 
       if (stdout) {
         const eslintResults = JSON.parse(stdout);

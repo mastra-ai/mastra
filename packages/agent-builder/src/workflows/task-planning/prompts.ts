@@ -4,7 +4,7 @@
 
 export interface TaskPlanningPrompts {
   planningAgent: {
-    instructions: (context: { previousPlan?: any; storedQAPairs: any[] }) => string;
+    instructions: (context: { storedQAPairs: any[] }) => string;
     refinementPrompt: (context: {
       action: string;
       workflowName?: string;
@@ -49,8 +49,6 @@ PLANNING RESPONSIBILITIES:
 - NEVER ask questions that have already been answered before
 5. **Incorporate Feedback**: Use any previous answers or feedback to refine the plan
 
-${context.previousPlan ? `PREVIOUS PLAN CONTEXT:\nTasks: ${JSON.stringify(context.previousPlan.tasks, null, 2)}\nQuestions: ${JSON.stringify(context.previousPlan.questions, null, 2)}\nReasoning: ${context.previousPlan.reasoning}` : ''}
-
 ${
   context.storedQAPairs.length > 0
     ? `PREVIOUS QUESTION-ANSWER PAIRS (${context.storedQAPairs.length} total):\n${context.storedQAPairs
@@ -86,7 +84,7 @@ PROJECT CONTEXT:
 - Project Structure: ${JSON.stringify(context.projectStructure, null, 2)}
 - Research: ${JSON.stringify(context.research, null, 2)}
 
-${context.hasTaskFeedback ? `\nUSER FEEDBACK ON PREVIOUS TASK LIST:\n${context.userAnswers.taskFeedback}\n\nPLEASE INCORPORATE THIS FEEDBACK INTO THE REFINED TASK LIST.` : ''}
+${context.hasTaskFeedback ? `\nUSER FEEDBACK ON PREVIOUS TASK LIST:\n${context.userAnswers?.taskFeedback}\n\nPLEASE INCORPORATE THIS FEEDBACK INTO THE REFINED TASK LIST.` : ''}
 
 Refine the task list and determine if any additional questions are needed.`,
 

@@ -7,6 +7,7 @@ import { dirname, basename, extname, resolve } from 'path';
 import { promisify } from 'util';
 import { openai as openai_v5 } from '@ai-sdk/openai_v5';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
 
@@ -411,7 +412,7 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
 }
 
 // Helper function to resolve the model to use
-export const resolveModel = (runtimeContext: any): MastraLanguageModel => {
+export const resolveModel = (runtimeContext: RuntimeContext): MastraLanguageModel => {
   const modelFromContext = runtimeContext.get('model');
   if (modelFromContext) {
     console.log(`Using model: ${modelFromContext}`);

@@ -396,15 +396,6 @@ CRITICAL REQUIREMENTS:
 - Then use taskManager with action 'list' to see your pre-loaded tasks
 - Use taskManager with action 'update' to mark tasks as 'in_progress' or 'completed'
 
-MANDATORY WORKFLOW FILE ORGANIZATION:
-You MUST create workflow files using this EXACT structure:
-
-📁 src/mastra/workflows/${context.workflowName?.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'new-workflow'}/
-├── 📄 types.ts          # All Zod schemas and TypeScript types
-├── 📄 steps.ts          # All individual step definitions  
-├── 📄 workflow.ts       # Main workflow composition and export
-└── 📄 utils.ts          # Helper functions (if needed)
-
 CRITICAL FILE ORGANIZATION RULES:
 - **ALWAYS create a dedicated folder** for the workflow in src/mastra/workflows/
 - **Folder name MUST be kebab-case** version of workflow name  
@@ -423,15 +414,6 @@ Use taskManager with action 'list' to see the current status of all tasks. You m
 
 REMAINING TASKS TO COMPLETE (${context.pendingTasks.length} tasks):
 ${context.pendingTasks.map((task, index) => `${index + 1}. [${task.id}] ${task.content}`).join('\n')}
-
-REMINDER - MANDATORY WORKFLOW FILE ORGANIZATION:
-You MUST create workflow files using this EXACT structure:
-
-📁 src/mastra/workflows/${context.workflowName?.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'new-workflow'}/
-├── 📄 types.ts          # All Zod schemas and TypeScript types
-├── 📄 steps.ts          # All individual step definitions  
-├── 📄 workflow.ts       # Main workflow composition and export
-└── 📄 utils.ts          # Helper functions (if needed)
 
 CRITICAL: You must complete ALL of these remaining ${context.pendingTasks.length} tasks. Use taskManager with action 'list' to check current status and action 'update' to mark tasks as completed.
 
