@@ -10,13 +10,14 @@ import { highlight } from './syntax-highlighter';
 
 interface MarkdownRendererProps {
   children: string;
+  className?: string;
 }
 
-export function MarkdownRenderer({ children }: MarkdownRendererProps) {
+export function MarkdownRenderer({ children, className }: MarkdownRendererProps) {
   const processedText = children.replace(/\\n/g, '\n');
 
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className="space-y-3">
+    <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className={cn('space-y-3', className)}>
       {processedText}
     </Markdown>
   );

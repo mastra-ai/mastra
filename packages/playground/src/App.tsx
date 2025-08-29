@@ -25,6 +25,9 @@ import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
 import MCPs from './pages/mcps';
 import MCPServerToolExecutor from './pages/mcps/tool';
+import Datasets from './pages/datasets';
+import Dataset from './pages/datasets/dataset';
+import AgentVersionsPage from './pages/agents/agent/versions';
 
 import { McpServerPage } from './pages/mcps/[serverId]';
 
@@ -65,6 +68,16 @@ function App() {
                 >
                   <Route path="/scorers" element={<Scorers />} />
                   <Route path="/scorers/:scorerId" element={<Scorer />} />
+                </Route>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/datasets" element={<Datasets />} />
+                  <Route path="/datasets/:datasetId" element={<Dataset />} />
                 </Route>
                 <Route
                   element={
@@ -123,6 +136,7 @@ function App() {
                     <Route path="chat/:threadId" element={<Agent />} />
                     <Route path="evals" element={<AgentEvalsPage />} />
                     <Route path="traces" element={<AgentTracesPage />} />
+                    <Route path="versions" element={<AgentVersionsPage />} />
                   </Route>
                   <Route path="/tools" element={<Tools />} />
                   <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />

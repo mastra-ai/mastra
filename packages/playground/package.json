@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",
+    "@faker-js/faker": "^9.8.0",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.1",
     "@lukeed/uuid": "^2.0.1",
