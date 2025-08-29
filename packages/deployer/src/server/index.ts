@@ -22,6 +22,7 @@ import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { agentBuilderActionsRouter } from './handlers/routes/agent-builder-actions/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
@@ -395,6 +396,8 @@ export async function createHonoServer(
 
   // Agents routes
   app.route('/api/agents', agentsRouter(bodyLimitOptions));
+  // Agent Builder Actions routes
+  app.route('/api/agent-builder-actions', agentBuilderActionsRouter(bodyLimitOptions));
   // Networks routes
   app.route('/api/networks', vNextNetworksRouter(bodyLimitOptions));
   app.route('/api/networks', networksRouter(bodyLimitOptions));
