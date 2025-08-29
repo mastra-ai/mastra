@@ -39,16 +39,16 @@ export function ObservabilityTracesTools({
         <DateTimePicker
           placeholder="From"
           value={selectedDateFrom}
+          maxValue={selectedDateTo}
           onValueChange={date => onDateChange?.(date, 'from')}
-          clearable={true}
           className="min-w-[15rem]"
           defaultTimeStrValue="12:00 AM"
         />
         <DateTimePicker
           placeholder="To"
           value={selectedDateTo}
+          minValue={selectedDateFrom}
           onValueChange={date => onDateChange?.(date, 'to')}
-          clearable={true}
           className="min-w-[15rem]"
           defaultTimeStrValue="11:59 PM"
         />

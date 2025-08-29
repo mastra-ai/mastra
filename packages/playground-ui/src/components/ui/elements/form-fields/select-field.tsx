@@ -50,6 +50,7 @@ export function SelectField({
           id="select-dataset"
           className={cn(
             'w-full border border-[rgba(255,255,255,0.15)] rounded-lg min-h-[2.5rem] min-w-[5rem] gap-[0.5rem]',
+            'focus:border-[#18fb6f]',
           )}
         >
           <SelectValue placeholder={placeholder} />
