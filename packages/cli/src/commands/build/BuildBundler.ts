@@ -1,7 +1,5 @@
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
-import { copy } from 'fs-extra';
-import { join } from 'node:path';
 
 export class BuildBundler extends Bundler {
   constructor() {
