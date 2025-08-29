@@ -86,4 +86,4 @@ export type Trace = {
 export type TraceRecord = {
   id: string;
   spans: Trace[];
-}
+};

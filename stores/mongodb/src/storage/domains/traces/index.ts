@@ -39,10 +39,11 @@ export class TracesStorageMongoDB extends TracesStorage {
     try {
       collection = await this.operations.getCollection(TABLE_TRACES);
     } catch (error) {
-      throw new MastraError({
-        id: 'STORAGE_MONGODB_STORE_GET_TRACE_FAILED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.THIRD_PARTY,
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_TRACE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
           text: 'Trace not found',
           details: { traceId },
         },

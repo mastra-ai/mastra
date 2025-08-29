@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_TRACES, TracesStorage, safelyParseJSON } from '@mastra/core/storage';
+import { TABLE_TRACES, TracesStorage, removeHttpInstrumentationParents, safelyParseJSON } from '@mastra/core/storage';
 import type { StorageGetTracesArg, StorageGetTracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
 import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -46,15 +46,13 @@ export class TracesLibSQL extends TracesStorage {
     const spans = this.formatSpans(result.rows);
 
     if (spans.length === 0) {
-      throw new MastraError(
-        {
-          id: 'LIBSQL_STORE_GET_TRACE_NOT_FOUND',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Trace not found`,
-          details: { traceId },
-        },
-      );
+      throw new MastraError({
+        id: 'LIBSQL_STORE_GET_TRACE_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Trace not found`,
+        details: { traceId },
+      });
     }
 
     return {
@@ -147,32 +145,35 @@ export class TracesLibSQL extends TracesStorage {
   }
 
   private formatSpans(rows: Record<string, any>[]): Trace[] {
-    return rows?.map(
-      row =>
-        ({
-          id: row.id,
-          parentSpanId: row.parentSpanId,
-          traceId: row.traceId,
-          name: row.name,
-          scope: row.scope,
-          kind: row.kind,
-          status: safelyParseJSON(row.status),
-          events: safelyParseJSON(row.events),
-          links: safelyParseJSON(row.links),
-          attributes: safelyParseJSON(row.attributes),
-          startTime: row.startTime,
-          endTime: row.endTime,
-          other: safelyParseJSON(row.other),
-          createdAt: row.createdAt,
-        }) as Trace,
-    ) ?? [];
+    return (
+      rows?.map(
+        row =>
+          ({
+            id: row.id,
+            parentSpanId: row.parentSpanId,
+            traceId: row.traceId,
+            name: row.name,
+            scope: row.scope,
+            kind: row.kind,
+            status: safelyParseJSON(row.status),
+            events: safelyParseJSON(row.events),
+            links: safelyParseJSON(row.links),
+            attributes: safelyParseJSON(row.attributes),
+            startTime: row.startTime,
+            endTime: row.endTime,
+            other: safelyParseJSON(row.other),
+            createdAt: row.createdAt,
+          }) as Trace,
+      ) ?? []
+    );
   }
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
     this.logger.debug('Batch inserting traces', { count: records.length });
+    const filteredRecords = removeHttpInstrumentationParents(records);
     await this.operations.batchInsert({
       tableName: TABLE_TRACES,
-      records,
+      records: filteredRecords,
     });
   }
 }
