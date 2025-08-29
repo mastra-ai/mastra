@@ -77,5 +77,24 @@
     "@mastra/voice-speechify": "0.11.2",
     "@mastra/inngest": "0.12.2"
   },
-  "changesets": []
+  "changesets": [
+    "brave-months-lay",
+    "bright-ducks-mix",
+    "empty-women-cry",
+    "funny-monkeys-grab",
+    "gentle-baboons-end",
+    "metal-melons-whisper",
+    "mighty-hands-tell",
+    "plain-worms-melt",
+    "seven-taxes-lay",
+    "shy-zebras-act",
+    "slimy-tables-check",
+    "slow-lands-hope",
+    "small-trains-heal",
+    "sour-melons-raise",
+    "spotty-houses-eat",
+    "stupid-wolves-grab",
+    "true-tools-pull",
+    "two-laws-juggle"
+  ]
 }

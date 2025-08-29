@@ -396,6 +396,138 @@ srv.close();
 
 After running the workflow, you can view and monitor your workflow runs in real time using the Inngest dashboard at [http://localhost:8288](http://localhost:8288).
 
+## Inngest Flow Control Configuration
+
+Inngest workflows support advanced flow control features including concurrency limits, rate limiting, throttling, debouncing, and priority queuing. These features help manage workflow execution at scale and prevent resource overload.
+
+### Concurrency Control
+
+Control how many workflow instances can run simultaneously:
+
+```ts showLineNumbers copy
+const workflow = createWorkflow({
+  id: 'user-processing-workflow',
+  inputSchema: z.object({ userId: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  steps: [processUserStep],
+  // Limit to 10 concurrent executions, scoped by user ID
+  concurrency: { 
+    limit: 10, 
+    key: 'event.data.userId' // Per-user concurrency
+  },
+});
+```
+
+### Rate Limiting
+
+Limit the number of workflow executions within a time period:
+
+```ts showLineNumbers copy
+const workflow = createWorkflow({
+  id: 'api-sync-workflow',
+  inputSchema: z.object({ endpoint: z.string() }),
+  outputSchema: z.object({ status: z.string() }),
+  steps: [apiSyncStep],
+  // Maximum 1000 executions per hour
+  rateLimit: { 
+    period: '1h', 
+    limit: 1000
+  },
+});
+```
+
+### Throttling
+
+Ensure minimum time between workflow executions:
+
+```ts showLineNumbers copy
+const workflow = createWorkflow({
+  id: 'email-notification-workflow',
+  inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
+  outputSchema: z.object({ sent: z.boolean() }),
+  steps: [sendEmailStep],
+  // Only one execution per 10 seconds per organization
+  throttle: { 
+    period: '10s', 
+    limit: 1,
+    key: 'event.data.organizationId'
+  },
+});
+```
+
+### Debouncing
+
+Delay execution until no new events arrive within a time window:
+
+```ts showLineNumbers copy
+const workflow = createWorkflow({
+  id: 'search-index-workflow',
+  inputSchema: z.object({ documentId: z.string() }),
+  outputSchema: z.object({ indexed: z.boolean() }),
+  steps: [indexDocumentStep],
+  // Wait 5 seconds of no updates before indexing
+  debounce: { 
+    period: '5s', 
+    key: 'event.data.documentId'
+  },
+});
+```
+
+### Priority Queuing
+
+Set execution priority for workflows:
+
+```ts showLineNumbers copy
+const workflow = createWorkflow({
+  id: 'order-processing-workflow',
+  inputSchema: z.object({ orderId: z.string(), priority: z.number().optional() }),
+  outputSchema: z.object({ processed: z.boolean() }),
+  steps: [processOrderStep],
+  // Higher priority orders execute first
+  priority: { 
+    run: 'event.data.priority ?? 50' // Dynamic priority, default 50
+  },
+});
+```
+
+### Combined Flow Control
+
+You can combine multiple flow control features:
+
+```ts showLineNumbers copy
+const workflow = createWorkflow({
+  id: 'comprehensive-workflow',
+  inputSchema: z.object({ 
+    userId: z.string(), 
+    organizationId: z.string(),
+    priority: z.number().optional() 
+  }),
+  outputSchema: z.object({ result: z.string() }),
+  steps: [comprehensiveStep],
+  // Multiple flow control features
+  concurrency: { 
+    limit: 5, 
+    key: 'event.data.userId' 
+  },
+  rateLimit: { 
+    period: '1m', 
+    limit: 100 
+  },
+  throttle: { 
+    period: '10s', 
+    limit: 1,
+    key: 'event.data.organizationId' 
+  },
+  priority: { 
+    run: 'event.data.priority ?? 0' 
+  }
+});
+```
+
+All flow control features are optional. If not specified, workflows run with Inngest's default behavior. Flow control configuration is validated by Inngest's native implementation, ensuring compatibility and correctness.
+
+For detailed information about flow control options and their behavior, see the [Inngest Flow Control documentation](https://www.inngest.com/docs/guides/flow-control).
+
 ## Workflows (Legacy)
 
 The following links provide example documentation for legacy workflows:

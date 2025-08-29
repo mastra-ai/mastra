@@ -99,6 +99,8 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         mastra,
         runId,
         runtimeContext,
+        // TODO: Pass proper tracing context when server API supports tracing
+        tracingContext: { currentSpan: undefined },
       });
       return result;
     } catch (error) {
@@ -146,6 +148,8 @@ export async function executeAgentToolHandler({
       runtimeContext,
       mastra,
       runId: agentId,
+      // TODO: Pass proper tracing context when server API supports tracing
+      tracingContext: { currentSpan: undefined },
     });
 
     return result;
