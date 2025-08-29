@@ -3,7 +3,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { TraceType } from '@mastra/core/memory';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
 import type { PaginationInfo, StorageGetTracesPaginatedArg } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StoreOperationsLance } from '../operations';
 
 export class StoreTracesLance extends TracesStorage {
@@ -122,11 +122,32 @@ export class StoreTracesLance extends TracesStorage {
     }
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const table = await this.client.openTable(TABLE_TRACES);
+    const query = table.query().where(`\`traceId\` = '${traceId}'`);
+    const records = await query.toArray();
+
+    if (records.length === 0) {
+      throw new MastraError({
+        id: 'LANCE_STORE_GET_TRACE_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: 'Trace not found',
+        details: { traceId },
+      });
+    }
+
+    return {
+      spans: this.formatSpans(records),
+      id: traceId,
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     try {
       const table = await this.client.openTable(TABLE_TRACES);
       const query = table.query();
-      const conditions: string[] = [];
+      const conditions: string[] = ['`parentSpanId` IS NULL'];
       if (args.name) {
         conditions.push(`name = '${args.name}'`);
       }
@@ -163,25 +184,7 @@ export class StoreTracesLance extends TracesStorage {
         query.offset(offset);
       }
       const records = await query.toArray();
-      const traces = records.map(record => {
-        const processed = {
-          ...record,
-          attributes: record.attributes ? JSON.parse(record.attributes) : {},
-          status: record.status ? JSON.parse(record.status) : {},
-          events: record.events ? JSON.parse(record.events) : [],
-          links: record.links ? JSON.parse(record.links) : [],
-          other: record.other ? JSON.parse(record.other) : {},
-          startTime: new Date(record.startTime),
-          endTime: new Date(record.endTime),
-          createdAt: new Date(record.createdAt),
-        };
-        if (processed.parentSpanId === null || processed.parentSpanId === undefined) {
-          processed.parentSpanId = '';
-        } else {
-          processed.parentSpanId = String(processed.parentSpanId);
-        }
-        return processed as Trace;
-      });
+      const traces = this.formatSpans(records);
       return {
         traces,
         total,
@@ -200,6 +203,27 @@ export class StoreTracesLance extends TracesStorage {
         error,
       );
     }
+  }
+
+  private formatSpans(spans: any[]) {
+    return spans.map(span => {
+      const processed = {
+        ...span,
+        parentSpanId: span.parentSpanId ? span.parentSpanId : null,
+        attributes: span.attributes ? JSON.parse(span.attributes) : {},
+        status: span.status ? JSON.parse(span.status) : {},
+        events: span.events ? JSON.parse(span.events) : [],
+        links: span.links ? JSON.parse(span.links) : [],
+        other: span.other ? JSON.parse(span.other) : {},
+        startTime: new Date(span.startTime),
+        endTime: new Date(span.endTime),
+        createdAt: new Date(span.createdAt),
+      };
+      if (processed.parentSpanId) {
+        processed.parentSpanId = String(processed.parentSpanId);
+      }
+      return processed as Trace;
+    });
   }
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {

@@ -1,5 +1,5 @@
 import type { AbstractAgent } from '@ag-ui/client';
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import { AGUIAdapter } from './adapters/agui';
 import {
@@ -49,6 +49,7 @@ import type {
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
+  GetTraceResponse,
 } from './types';
 
 export class MastraClient extends BaseResource {
@@ -393,6 +394,10 @@ export class MastraClient extends BaseResource {
     } else {
       return this.request(`/api/telemetry`);
     }
+  }
+
+  public getTrace(traceId: string): Promise<GetTraceResponse> {
+    return this.request(`/api/telemetry/${traceId}`);
   }
 
   /**

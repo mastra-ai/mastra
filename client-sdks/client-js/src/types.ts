@@ -361,6 +361,11 @@ export interface GetTelemetryResponse {
   traces: Span[];
 }
 
+export interface GetTraceResponse {
+  id: string;
+  spans: Span[];
+}
+
 export interface GetTelemetryParams {
   name?: string;
   scope?: string;

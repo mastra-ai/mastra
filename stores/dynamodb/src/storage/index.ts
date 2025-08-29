@@ -21,7 +21,7 @@ import type {
   StorageResourceType,
   ThreadSortOptions,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
@@ -347,6 +347,10 @@ export class DynamoDBStore extends MastraStorage {
     filters?: Record<string, any>;
   }): Promise<any[]> {
     return this.stores.traces.getTraces(args);
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    return this.stores.traces.getTrace(traceId);
   }
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {

@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { PaginationInfo, StorageGetTracesArg, StorageGetTracesPaginatedArg } from '@mastra/core/storage';
 import { TABLE_TRACES, TracesStorage, safelyParseJSON } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
@@ -49,6 +49,26 @@ export class TracesPG extends TracesStorage {
     }
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const result = await this.client.manyOrNone<Record<string, any>>(
+      `SELECT * FROM ${getTableName({ indexName: TABLE_TRACES, schemaName: getSchemaName(this.schema) })} WHERE "traceId" = $1`,
+      [traceId],
+    );
+    if (!result || result.length === 0) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PG_STORE_GET_TRACE_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+      });
+    }
+    const spans = this.formatSpans(result);
+
+    return {
+      spans,
+      id: traceId,
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
     const fromDate = dateRange?.start;
@@ -56,7 +76,7 @@ export class TracesPG extends TracesStorage {
     const currentOffset = page * perPage;
 
     const queryParams: any[] = [];
-    const conditions: string[] = [];
+    const conditions: string[] = ['"parentSpanId" IS NULL'];
     let paramIndex = 1;
 
     if (name) {
@@ -114,22 +134,7 @@ export class TracesPG extends TracesStorage {
         [...queryParams, perPage, currentOffset],
       );
 
-      const traces = dataResult.map(row => ({
-        id: row.id,
-        parentSpanId: row.parentSpanId,
-        traceId: row.traceId,
-        name: row.name,
-        scope: row.scope,
-        kind: row.kind,
-        status: safelyParseJSON(row.status),
-        events: safelyParseJSON(row.events),
-        links: safelyParseJSON(row.links),
-        attributes: safelyParseJSON(row.attributes),
-        startTime: row.startTime,
-        endTime: row.endTime,
-        other: safelyParseJSON(row.other),
-        createdAt: row.createdAtZ || row.createdAt,
-      })) as Trace[];
+      const traces = this.formatSpans(dataResult);
 
       return {
         traces,
@@ -148,6 +153,25 @@ export class TracesPG extends TracesStorage {
         error,
       );
     }
+  }
+
+  private formatSpans(spans: any[]): Trace[] {
+    return spans.map(row => ({
+      id: row.id,
+      parentSpanId: row.parentSpanId,
+      traceId: row.traceId,
+      name: row.name,
+      scope: row.scope,
+      kind: row.kind,
+      status: safelyParseJSON(row.status),
+      events: safelyParseJSON(row.events),
+      links: safelyParseJSON(row.links),
+      attributes: safelyParseJSON(row.attributes),
+      startTime: row.startTime,
+      endTime: row.endTime,
+      other: safelyParseJSON(row.other),
+      createdAt: row.createdAtZ || row.createdAt,
+    })) as Trace[];
   }
 
   async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {

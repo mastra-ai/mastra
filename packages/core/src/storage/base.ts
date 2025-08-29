@@ -4,7 +4,7 @@ import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores';
-import type { Trace } from '../telemetry';
+import type { Trace, TraceRecord } from '../telemetry';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
@@ -303,6 +303,8 @@ export abstract class MastraStorage extends MastraBase {
         `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
+
+  abstract getTrace(traceId: string): Promise<TraceRecord>;
 
   abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
 

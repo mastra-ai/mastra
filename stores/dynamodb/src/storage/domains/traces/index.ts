@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
 import type { PaginationInfo, StorageGetTracesPaginatedArg } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { Service } from 'electrodb';
 import type { StoreOperationsDynamoDB } from '../operations';
 
@@ -99,6 +99,28 @@ export class TracesStorageDynamoDB extends TracesStorage {
     }
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const query = await this.service.entities.trace.query.byTraceId({ entity: 'trace', traceId });
+    const results = await query.go({
+      order: 'desc',
+    });
+
+    if (!results.data.length) {
+      throw new MastraError({
+        id: 'STORAGE_DYNAMODB_STORE_GET_TRACE_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Trace not found`,
+        details: { traceId },
+      });
+    }
+
+    return {
+      id: traceId,
+      spans: this.formatSpans(results.data) as Trace[],
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
     this.logger.debug('Getting traces with pagination', { name, scope, page, perPage, attributes, filters, dateRange });
@@ -108,9 +130,17 @@ export class TracesStorageDynamoDB extends TracesStorage {
 
       // Determine which index to use based on the provided filters
       if (name) {
-        query = this.service.entities.trace.query.byName({ entity: 'trace', name });
+        query = this.service.entities.trace.query.byParentSpanAndName({
+          entity: 'trace',
+          parentSpanId: 'ROOT_SPAN',
+          name,
+        });
       } else if (scope) {
-        query = this.service.entities.trace.query.byScope({ entity: 'trace', scope });
+        query = this.service.entities.trace.query.byParentSpanAndScope({
+          entity: 'trace',
+          parentSpanId: 'ROOT_SPAN',
+          scope,
+        });
       } else {
         this.logger.warn('Performing a scan operation on traces - consider using a more specific query');
         query = this.service.entities.trace.scan;
@@ -189,81 +219,7 @@ export class TracesStorageDynamoDB extends TracesStorage {
       const end = start + perPage;
       const paginatedData = filteredData.slice(start, end);
 
-      const traces = paginatedData.map((item: any) => {
-        // Handle the case where attributes might be stored as "[object Object]" or JSON string
-        let attributes: Record<string, any> | undefined;
-        if (item.attributes) {
-          if (typeof item.attributes === 'string') {
-            if (item.attributes === '[object Object]') {
-              attributes = undefined;
-            } else {
-              try {
-                attributes = JSON.parse(item.attributes);
-              } catch {
-                attributes = undefined;
-              }
-            }
-          } else if (typeof item.attributes === 'object') {
-            attributes = item.attributes;
-          }
-        }
-
-        let status: Record<string, any> | undefined;
-        if (item.status) {
-          if (typeof item.status === 'string') {
-            try {
-              status = JSON.parse(item.status);
-            } catch {
-              status = undefined;
-            }
-          } else if (typeof item.status === 'object') {
-            status = item.status;
-          }
-        }
-
-        let events: any[] | undefined;
-        if (item.events) {
-          if (typeof item.events === 'string') {
-            try {
-              events = JSON.parse(item.events);
-            } catch {
-              events = undefined;
-            }
-          } else if (Array.isArray(item.events)) {
-            events = item.events;
-          }
-        }
-
-        let links: any[] | undefined;
-        if (item.links) {
-          if (typeof item.links === 'string') {
-            try {
-              links = JSON.parse(item.links);
-            } catch {
-              links = undefined;
-            }
-          } else if (Array.isArray(item.links)) {
-            links = item.links;
-          }
-        }
-
-        return {
-          id: item.id,
-          parentSpanId: item.parentSpanId,
-          name: item.name,
-          traceId: item.traceId,
-          scope: item.scope,
-          kind: item.kind,
-          attributes,
-          status,
-          events,
-          links,
-          other: item.other,
-          startTime: item.startTime,
-          endTime: item.endTime,
-          createdAt: item.createdAt,
-        };
-      });
+      const traces = this.formatSpans(paginatedData) as Trace[];
 
       return {
         traces,
@@ -282,5 +238,83 @@ export class TracesStorageDynamoDB extends TracesStorage {
         error,
       );
     }
+  }
+
+  formatSpans(spans: TraceRecord['spans']) {
+    return spans.map((item: any) => {
+      // Handle the case where attributes might be stored as "[object Object]" or JSON string
+      let attributes: Record<string, any> | undefined;
+      if (item.attributes) {
+        if (typeof item.attributes === 'string') {
+          if (item.attributes === '[object Object]') {
+            attributes = undefined;
+          } else {
+            try {
+              attributes = JSON.parse(item.attributes);
+            } catch {
+              attributes = undefined;
+            }
+          }
+        } else if (typeof item.attributes === 'object') {
+          attributes = item.attributes;
+        }
+      }
+
+      let status: Record<string, any> | undefined;
+      if (item.status) {
+        if (typeof item.status === 'string') {
+          try {
+            status = JSON.parse(item.status);
+          } catch {
+            status = undefined;
+          }
+        } else if (typeof item.status === 'object') {
+          status = item.status;
+        }
+      }
+
+      let events: any[] | undefined;
+      if (item.events) {
+        if (typeof item.events === 'string') {
+          try {
+            events = JSON.parse(item.events);
+          } catch {
+            events = undefined;
+          }
+        } else if (Array.isArray(item.events)) {
+          events = item.events;
+        }
+      }
+
+      let links: any[] | undefined;
+      if (item.links) {
+        if (typeof item.links === 'string') {
+          try {
+            links = JSON.parse(item.links);
+          } catch {
+            links = undefined;
+          }
+        } else if (Array.isArray(item.links)) {
+          links = item.links;
+        }
+      }
+
+      return {
+        id: item.id,
+        parentSpanId: item.parentSpanId === 'ROOT_SPAN' ? null : item.parentSpanId,
+        name: item.name,
+        traceId: item.traceId,
+        scope: item.scope,
+        kind: item.kind,
+        attributes,
+        status,
+        events,
+        links,
+        other: item.other,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        createdAt: item.createdAt,
+      };
+    });
   }
 }

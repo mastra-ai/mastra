@@ -2,7 +2,7 @@ import { AISpanType } from '@mastra/core/ai-tracing';
 import { MastraStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type { AISpanRecord } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createRootSpan, createChildSpan } from './data';
+import { createRootAISpan, createChildAISpan } from './data';
 
 export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
   describe('AI Span Operations', () => {
@@ -12,13 +12,13 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
     describe('single span', () => {
       it('should store the span successfully', async () => {
-        const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
+        const span = createRootAISpan({ name: 'test-root-span', scope: 'test-scope' });
 
         await expect(storage.createAISpan(span)).resolves.not.toThrow();
       });
 
       it('should make the span retrievable via trace', async () => {
-        const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
+        const span = createRootAISpan({ name: 'test-root-span', scope: 'test-scope' });
         await storage.createAISpan(span);
 
         const trace = await storage.getAITrace(span.traceId);
@@ -28,7 +28,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
 
       it('should preserve span properties', async () => {
-        const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
+        const span = createRootAISpan({ name: 'test-root-span', scope: 'test-scope' });
         await storage.createAISpan(span);
 
         const trace = await storage.getAITrace(span.traceId);
@@ -54,8 +54,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const scope = 'test-scope';
         const traceId = `test-trace-${Date.now()}`;
 
-        const rootSpan = createRootSpan({ name: 'root-span', scope, traceId });
-        const childSpan = createChildSpan({ name: 'child-span', scope, parentSpanId: rootSpan.spanId, traceId });
+        const rootSpan = createRootAISpan({ name: 'root-span', scope, traceId });
+        const childSpan = createChildAISpan({ name: 'child-span', scope, parentSpanId: rootSpan.spanId, traceId });
 
         // Test storage operations
         await expect(storage.createAISpan(rootSpan)).resolves.not.toThrow();
@@ -66,8 +66,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const scope = 'test-scope';
         const traceId = `test-trace-${Date.now()}`;
 
-        const rootSpan = createRootSpan({ name: 'root-span', scope, traceId });
-        const childSpan = createChildSpan({ name: 'child-span', scope, parentSpanId: rootSpan.spanId, traceId });
+        const rootSpan = createRootAISpan({ name: 'root-span', scope, traceId });
+        const childSpan = createChildAISpan({ name: 'child-span', scope, parentSpanId: rootSpan.spanId, traceId });
 
         await storage.createAISpan(rootSpan);
         await storage.createAISpan(childSpan);
@@ -88,7 +88,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
     describe('updateAISpan', () => {
       it('should update the span successfully', async () => {
-        const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
+        const span = createRootAISpan({ name: 'test-root-span', scope: 'test-scope' });
         await storage.createAISpan(span);
 
         await storage.updateAISpan({
@@ -104,7 +104,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
 
       it('should update the span and preserve other properties', async () => {
-        const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
+        const span = createRootAISpan({ name: 'test-root-span', scope: 'test-scope' });
         await storage.createAISpan(span);
 
         await storage.updateAISpan({
@@ -124,9 +124,9 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
     describe('batchCreateAISpans', () => {
       it('should create multiple spans in batch and make them retrievable', async () => {
         const spans = [
-          createRootSpan({ name: 'root-span-1', scope: 'test-scope' }),
-          createRootSpan({ name: 'root-span-2', scope: 'test-scope' }),
-          createRootSpan({ name: 'root-span-3', scope: 'test-scope' }),
+          createRootAISpan({ name: 'root-span-1', scope: 'test-scope' }),
+          createRootAISpan({ name: 'root-span-2', scope: 'test-scope' }),
+          createRootAISpan({ name: 'root-span-3', scope: 'test-scope' }),
         ];
 
         await storage.batchCreateAISpans({ records: spans });
@@ -144,7 +144,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
 
       it('should preserve span properties in batch creation', async () => {
-        const span = createRootSpan({
+        const span = createRootAISpan({
           name: 'test-span-properties',
           scope: 'test-scope',
           startedAt: new Date('2024-01-01T00:00:00Z'),
@@ -171,7 +171,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
     describe('batchUpdateAISpans', () => {
       it('should update a single span in batch', async () => {
-        const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
+        const span = createRootAISpan({ name: 'test-root-span', scope: 'test-scope' });
         await storage.createAISpan(span);
 
         await storage.batchUpdateAISpans({
@@ -184,8 +184,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       it('should update a multiple spans in batch', async () => {
         const spans = [
-          createRootSpan({ name: 'test-root-span', scope: 'test-scope' }),
-          createRootSpan({ name: 'test-root-span-2', scope: 'test-scope' }),
+          createRootAISpan({ name: 'test-root-span', scope: 'test-scope' }),
+          createRootAISpan({ name: 'test-root-span-2', scope: 'test-scope' }),
         ] as AISpanRecord[];
 
         await storage.batchCreateAISpans({ records: spans });
@@ -207,8 +207,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
     describe('batchDeleteAISpans', () => {
       it('should delete a multiple spans in batch', async () => {
         const spans = [
-          createRootSpan({ name: 'test-root-span', scope: 'test-scope' }),
-          createRootSpan({ name: 'test-root-span-2', scope: 'test-scope' }),
+          createRootAISpan({ name: 'test-root-span', scope: 'test-scope' }),
+          createRootAISpan({ name: 'test-root-span-2', scope: 'test-scope' }),
         ];
 
         await storage.batchCreateAISpans({ records: spans });
@@ -227,14 +227,14 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
 
       it('should delete multiple spans in a single trace', async () => {
-        const rootSpan = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
-        const childSpan1 = createChildSpan({
+        const rootSpan = createRootAISpan({ name: 'test-root-span', scope: 'test-scope' });
+        const childSpan1 = createChildAISpan({
           name: 'test-child-span',
           scope: 'test-scope',
           parentSpanId: rootSpan.spanId,
           traceId: rootSpan.traceId,
         });
-        const childSpan2 = createChildSpan({
+        const childSpan2 = createChildAISpan({
           name: 'test-child-span-2',
           scope: 'test-scope',
           parentSpanId: rootSpan.spanId,
@@ -258,28 +258,28 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         // Create test traces with different properties for filtering
         const traces = [
           // Trace 1: Workflow spans
-          createRootSpan({
+          createRootAISpan({
             name: 'workflow-trace-1',
             scope: 'test-scope',
             spanType: AISpanType.WORKFLOW_RUN,
             startedAt: new Date('2024-01-01T00:00:00Z'),
           }),
           // Trace 2: Agent spans
-          createRootSpan({
+          createRootAISpan({
             name: 'agent-trace-1',
             scope: 'test-scope',
             spanType: AISpanType.AGENT_RUN,
             startedAt: new Date('2024-01-02T00:00:00Z'),
           }),
           // Trace 3: Tool spans
-          createRootSpan({
+          createRootAISpan({
             name: 'tool-trace-1',
             scope: 'test-scope',
             spanType: AISpanType.TOOL_CALL,
             startedAt: new Date('2024-01-03T00:00:00Z'),
           }),
           // Trace 4: Another workflow
-          createRootSpan({
+          createRootAISpan({
             name: 'workflow-trace-2',
             scope: 'test-scope',
             spanType: AISpanType.WORKFLOW_RUN,
