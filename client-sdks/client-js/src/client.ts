@@ -13,6 +13,7 @@ import {
   A2A,
   MCPTool,
   LegacyWorkflow,
+  Templates,
   Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
@@ -488,6 +489,13 @@ export class MastraClient extends BaseResource {
    */
   public getA2A(agentId: string) {
     return new A2A(this.options, agentId);
+  }
+
+  /**
+   * Gets a Templates resource instance.
+   */
+  public getTemplates() {
+    return new Templates(this.options);
   }
 
   /**

@@ -34,6 +34,8 @@ import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
+import Templates from './pages/templates';
+import Template from './pages/templates/template';
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
@@ -56,6 +58,16 @@ function App() {
           <BrowserRouter>
             <LinkComponentWrapper>
               <Routes>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/templates" element={<Templates />} />
+                  <Route path="/templates/:templateSlug" element={<Template />} />
+                </Route>
                 <Route
                   element={
                     <Layout>

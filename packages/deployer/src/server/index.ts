@@ -29,6 +29,7 @@ import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks/
 import { observabilityRouter } from './handlers/routes/observability/router';
 import { scoresRouter } from './handlers/routes/scores/router';
 import { telemetryRouter } from './handlers/routes/telemetry/router';
+import { templatesRouter } from './handlers/routes/templates/router';
 import { toolsRouter } from './handlers/routes/tools/router';
 import { vectorRouter } from './handlers/routes/vector/router';
 import { workflowsRouter } from './handlers/routes/workflows/router';
@@ -416,6 +417,8 @@ export async function createHonoServer(
   app.route('/api/logs', logsRouter());
   // Scores routes
   app.route('/api/scores', scoresRouter(bodyLimitOptions));
+  // Template routes
+  app.route('/api/templates', templatesRouter(bodyLimitOptions));
   // Tool routes
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
