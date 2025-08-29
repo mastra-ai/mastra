@@ -6,8 +6,10 @@ import * as AIV5 from 'ai-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
+import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
+import { downloadAssetsFromMessages } from './prompt/download-assets';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
@@ -229,13 +231,61 @@ export class MessageList {
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
-      llmPrompt: (): LanguageModelV2Prompt => {
+      llmPrompt: async (
+        options: {
+          downloadConcurrency?: number;
+          downloadRetries?: number;
+          supportedUrls?: Record<string, RegExp[]>;
+        } = {
+          downloadConcurrency: 10,
+          downloadRetries: 3,
+        },
+      ): Promise<LanguageModelV2Prompt> => {
         const modelMessages = this.all.aiV5.model();
         const systemMessages = this.aiV4CoreMessagesToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
         );
-        const messages = [...systemMessages, ...modelMessages];
+
+        const downloadedAssets = await downloadAssetsFromMessages({
+          messages: modelMessages,
+          downloadConcurrency: options?.downloadConcurrency,
+          downloadRetries: options?.downloadRetries,
+          supportedUrls: options?.supportedUrls,
+        });
+
+        let messages = [...systemMessages, ...modelMessages];
+
+        if (Object.keys(downloadedAssets || {}).length > 0) {
+          messages = messages.map(message => {
+            if (message.role === 'user') {
+              if (typeof message.content === 'string') {
+                return {
+                  role: 'user' as const,
+                  content: [{ type: 'text' as const, text: message.content }],
+                  providerOptions: message.providerOptions,
+                } as AIV5Type.ModelMessage;
+              }
+
+              const convertedContent = message.content
+                .map(part => {
+                  if (part.type === 'image' || part.type === 'file') {
+                    return convertImageFilePart(part, downloadedAssets);
+                  }
+                  return part;
+                })
+                .filter(part => part.type !== 'text' || part.text !== '');
+
+              return {
+                role: 'user' as const,
+                content: convertedContent,
+                providerOptions: message.providerOptions,
+              } as AIV5Type.ModelMessage;
+            }
+
+            return message;
+          });
+        }
 
         // Ensure we have at least one user message
         const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
@@ -2129,7 +2179,9 @@ export class MessageList {
   }
 
   private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    return AIV5.convertToModelMessages(this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages)));
+    const preprocessed = this.addStartStepPartsForAIV5(this.sanitizeV5UIMessages(messages));
+    const result = AIV5.convertToModelMessages(preprocessed);
+    return result;
   }
   private addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
     for (const message of messages) {

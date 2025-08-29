@@ -40,7 +40,17 @@ class CompositeExporter {
         return httpTarget === "/api/telemetry";
       }).map((span) => span.spanContext().traceId)
     );
-    const filteredSpans = spans.filter((span) => !telemetryTraceIds.has(span.spanContext().traceId) && !span.instrumentationScope?.name?.startsWith('@opentelemetry'));
+
+    const filteredSpans = spans.filter((span) => {
+      // instrumentation-http spans are the root spans for a trace.
+      // Other @opentelemetry spans are noisy and we do not display them.
+      // At the storage layer, we remove the HTTP instrumentation spans entirely.
+      // And promote their direct children to root spans.
+      return !(span.instrumentationScope?.name?.startsWith('@opentelemetry') &&
+      span.instrumentationScope?.name !== '@opentelemetry/instrumentation-http') &&
+       !telemetryTraceIds.has(span.spanContext().traceId)
+    });
+
     if (filteredSpans.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS });
       return;

@@ -2690,6 +2690,56 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
+  describe(`${version} - agent llmPrompt`, () => {
+    it('should download assets from messages', async () => {
+      const agent = new Agent({
+        name: 'llmPrompt-agent',
+        instructions: 'test agent',
+        model: openaiModel,
+      });
+
+      let result;
+
+      if (version === 'v1') {
+        result = await agent.generate([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      } else {
+        result = await agent.generateVNext([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      }
+
+      expect(result.text.toLowerCase()).toContain('google');
+    });
+  });
+
   describe(`${version} - agent tool handling`, () => {
     it('should handle tool name collisions caused by formatting', async () => {
       // Create two tool names that will collide after truncation to 63 chars
