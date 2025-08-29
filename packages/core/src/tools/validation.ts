@@ -22,95 +22,88 @@ export function validateToolInput<T = any>(
     return { data: input };
   }
 
-  // Extract the actual input data from various context formats
-  let actualInput = input;
-  let validationResult;
-  let returnStructure: 'direct' | 'context' | 'inputData' = 'direct';
+  // Store validation results to avoid duplicate validation
+  type ValidationAttempt = {
+    result: z.SafeParseReturnType<any, T>;
+    data: unknown;
+    structure: 'direct' | 'context' | 'inputData';
+  };
+
+  const validationAttempts: ValidationAttempt[] = [];
 
   // Try validating the input directly first
   const directValidation = schema.safeParse(input);
+  validationAttempts.push({
+    result: directValidation,
+    data: input,
+    structure: 'direct',
+  });
+
   if (directValidation.success) {
     return { data: input };
   }
 
   // Handle ToolExecutionContext format { context: data, ... }
   if (input && typeof input === 'object' && 'context' in input) {
-    actualInput = (input as any).context;
+    const contextData = (input as any).context;
+    const contextValidation = schema.safeParse(contextData);
+    validationAttempts.push({
+      result: contextValidation,
+      data: contextData,
+      structure: 'context',
+    });
 
-    // Try validating the unwrapped context
-    const contextValidation = schema.safeParse(actualInput);
     if (contextValidation.success) {
-      validationResult = contextValidation;
-      returnStructure = 'context';
+      return { data: { ...(input as object), context: contextValidation.data } };
     }
-  }
 
-  // Handle StepExecutionContext format { context: { inputData: data, ... }, ... }
-  if (!validationResult && actualInput && typeof actualInput === 'object' && 'inputData' in actualInput) {
-    const inputDataValue = (actualInput as any).inputData;
+    // Handle StepExecutionContext format { context: { inputData: data, ... }, ... }
+    if (contextData && typeof contextData === 'object' && 'inputData' in contextData) {
+      const inputDataValue = (contextData as any).inputData;
+      const inputDataValidation = schema.safeParse(inputDataValue);
+      validationAttempts.push({
+        result: inputDataValidation,
+        data: inputDataValue,
+        structure: 'inputData',
+      });
 
-    // Try validating the unwrapped inputData
-    const inputDataValidation = schema.safeParse(inputDataValue);
-    if (inputDataValidation.success) {
-      validationResult = inputDataValidation;
-      returnStructure = 'inputData';
-    }
-  }
-
-  // If one of the unwrapping attempts worked, return the appropriate structure
-  if (validationResult) {
-    if (returnStructure === 'context') {
-      return { data: { ...(input as object), context: validationResult.data } };
-    } else if (returnStructure === 'inputData') {
-      // For inputData unwrapping, preserve the structure if the original context had additional properties
-      // but return just the validated data if it was a pure inputData wrapper
-      if (input && typeof input === 'object' && 'context' in input) {
-        const originalContext = (input as any).context;
-        const contextKeys = Object.keys(originalContext);
+      if (inputDataValidation.success) {
+        // For inputData unwrapping, preserve the structure if the original context had additional properties
+        // but return just the validated data if it was a pure inputData wrapper
+        const contextKeys = Object.keys(contextData);
 
         // If context only has inputData, return the full structure with the validated data
         // Otherwise, return just the validated inputData
         if (contextKeys.length === 1 && contextKeys[0] === 'inputData') {
-          return { data: { ...(input as object), context: { inputData: validationResult.data } } };
+          return { data: { ...(input as object), context: { inputData: inputDataValidation.data } } };
         } else {
           // Multiple keys in context, return just the validated data
-          return { data: validationResult.data };
+          return { data: inputDataValidation.data };
         }
       }
-      return { data: validationResult.data };
     }
   }
 
-  // If none of the unwrapping attempts work, use the best validation error
-  // Try to provide the most specific error message possible
-  let bestValidation = directValidation;
+  // All validations failed, find the best error to return
+  // Prefer the most specific error (deepest unwrapping level that has meaningful errors)
+  let bestAttempt = validationAttempts[0]; // Start with direct validation
 
-  if (input && typeof input === 'object' && 'context' in input) {
-    const contextValidation = schema.safeParse((input as any).context);
-    if (contextValidation.error && contextValidation.error.issues.length > 0) {
-      bestValidation = contextValidation;
-      actualInput = (input as any).context;
-    }
-
-    // Try the nested inputData path
-    if (actualInput && typeof actualInput === 'object' && 'inputData' in actualInput) {
-      const inputDataValidation = schema.safeParse((actualInput as any).inputData);
-      if (inputDataValidation.error && inputDataValidation.error.issues.length > 0) {
-        bestValidation = inputDataValidation;
-        actualInput = (actualInput as any).inputData;
-      }
+  for (const attempt of validationAttempts) {
+    if (!attempt.result.success && attempt.result.error.issues.length > 0) {
+      bestAttempt = attempt;
     }
   }
 
-  if (!bestValidation.success) {
-    const errorMessages = bestValidation.error.issues
+  // Use the best validation attempt for error reporting
+  if (bestAttempt && !bestAttempt.result.success) {
+    const errorMessages = bestAttempt.result.error.issues
       .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
       .join('\n');
 
     const error: ValidationError<T> = {
       error: true,
-      message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(actualInput, null, 2)}`,
-      validationErrors: bestValidation.error.format(),
+      message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(bestAttempt.data, null, 2)}`,
+      validationErrors: bestAttempt.result.error.format() as z.ZodFormattedError<T>,
     };
 
     return { data: input, error };
