@@ -17,8 +17,10 @@ import { Link } from 'react-router';
 // import { TraceSpanTree } from './trace-tree-span';
 import { TraceTree } from './trace-tree';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
+import { AISpanRecord } from '@mastra/core';
 
 type TraceDialogProps = {
+  trace?: AISpanRecord;
   parentTraceId?: string;
   isOpen: boolean;
   onClose?: () => void;
@@ -26,7 +28,7 @@ type TraceDialogProps = {
   onPrevious?: () => void;
 };
 
-export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious }: TraceDialogProps) {
+export function TraceDialog({ parentTraceId, trace, isOpen, onClose, onNext, onPrevious }: TraceDialogProps) {
   const { data: detailedTrace } = useAITrace(parentTraceId, { enabled: !!parentTraceId });
 
   const rawSpans = detailedTrace?.spans || [];
@@ -84,7 +86,40 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
     }
   };
 
-  const selectedSpanInfo = [
+  const traceInfo = [
+    {
+      key: 'name',
+      label: 'Name',
+      value: trace?.name,
+    },
+    {
+      key: 'id',
+      label: 'Trace ID',
+      value: trace?.traceId,
+    },
+    {
+      key: 'entityId',
+      label: 'Entity ID',
+      value: trace?.attributes?.agentId || trace?.attributes?.workflowId || 'N/A',
+    },
+    {
+      key: 'entityType',
+      label: 'Entity Type',
+      value: trace?.attributes?.agentId ? 'Agent' : trace?.attributes?.workflowId ? 'Workflow' : 'N/A',
+    },
+    {
+      key: 'runId',
+      label: 'Run ID',
+      value: trace?.metadata?.runId || 'N/A',
+    },
+    {
+      key: 'createdAt',
+      label: 'Created At',
+      value: format(new Date(trace?.createdAt || ''), 'PPpp'),
+    },
+  ];
+
+  const selectedSpanTimingInfo = [
     {
       key: 'id',
       label: 'Span ID',
@@ -158,13 +193,16 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
             <h2>Trace</h2>
           </SideDialogHeader>
 
-          <TraceTree
-            spans={hierarchicalSpans}
-            onSpanClick={handleSpanClick}
-            selectedSpanId={selectedSpanId}
-            overallLatency={hierarchicalSpans?.[0]?.latency || 0}
-            overallStartTime={hierarchicalSpans?.[0]?.startTime || ''}
-          />
+          <div>
+            <KeyValueList data={traceInfo} LinkComponent={Link} />
+            <TraceTree
+              spans={hierarchicalSpans}
+              onSpanClick={handleSpanClick}
+              selectedSpanId={selectedSpanId}
+              overallLatency={hierarchicalSpans?.[0]?.latency || 0}
+              overallStartTime={hierarchicalSpans?.[0]?.startTime || ''}
+            />
+          </div>
 
           {combinedView && (
             <div className="overflow-y-auto border-t-2 border-gray-500 grid grid-rows-[auto_1fr]">
@@ -184,7 +222,7 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
 
               <div className="grid grid-cols-[20rem_1fr] p-[1.5rem] overflow-y-auto">
                 <div className="overflow-y-auto">
-                  <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
+                  <KeyValueList data={selectedSpanTimingInfo} LinkComponent={Link} />
                 </div>
                 <div className="overflow-y-auto">
                   <SpanDetails span={selectedSpan} />
@@ -217,7 +255,7 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
           <SideDialogHeader>
             <h2>{selectedSpan?.name}</h2>
           </SideDialogHeader>
-          <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
+          <KeyValueList data={selectedSpanTimingInfo} LinkComponent={Link} />
           <SpanDetails span={selectedSpan} />
         </div>
       </SideDialog>
@@ -231,7 +269,7 @@ function SpanDetails({ span }: { span: any }) {
       <SideDialogCodeSection title="Input" codeStr={JSON.stringify(span.input || {}, null, 2)} />
       <SideDialogCodeSection title="Output" codeStr={JSON.stringify(span.output || {}, null, 2)} />
       <SideDialogCodeSection title="Metadata" codeStr={JSON.stringify(span.metadata || {}, null, 2)} />
-      <SideDialogCodeSection title="Parameters" codeStr={JSON.stringify(span.parameters || {}, null, 2)} />
+      <SideDialogCodeSection title="Attributes" codeStr={JSON.stringify(span.attributes || {}, null, 2)} />
     </div>
   );
 }

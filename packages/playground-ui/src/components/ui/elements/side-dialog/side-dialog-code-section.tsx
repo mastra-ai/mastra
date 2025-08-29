@@ -4,10 +4,7 @@ import { json } from '@codemirror/lang-json';
 import { CopyButton } from '../../copy-button';
 import { useMemo, useState } from 'react';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import { Colors } from '@/ds/tokens';
 import { tags as t } from '@lezer/highlight';
-import { Button } from '../buttons';
-import { AlignJustifyIcon, AlignLeftIcon, ListOrderedIcon, WrapTextIcon } from 'lucide-react';
 
 const useCodemirrorTheme = () => {
   return useMemo(
@@ -34,7 +31,6 @@ export type SideDialogCodeSectionProps = {
 
 export function SideDialogCodeSection({ codeStr = '', title }: SideDialogCodeSectionProps) {
   const theme = useCodemirrorTheme();
-  const [isWrapped, setIsWrapped] = useState(false);
   const [isMultilineText, setIsMultilineText] = useState(false);
   const finalCodeStr = isMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
 
@@ -45,24 +41,19 @@ export function SideDialogCodeSection({ codeStr = '', title }: SideDialogCodeSec
           <h3>{title}</h3>
           <div className="flex gap-2 items-center justify-end">
             <CopyButton content={codeStr || 'No content'} />
-            <Button variant="ghost" onClick={() => setIsWrapped(!isWrapped)}>
-              {isWrapped ? <ListOrderedIcon /> : <WrapTextIcon />}
-            </Button>
+            {/* 
+              Temporary hidden we need a checker with check if this tool is applicable for a particular code 
+            
             <Button variant="ghost" onClick={() => setIsMultilineText(!isMultilineText)}>
               {isMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-            </Button>
+            </Button> */}
           </div>
         </div>
         <div
           className={cn('bg-surface3 p-[1rem] overflow-auto text-icon4 text-[0.875rem] [&>div]:border-none break-all')}
         >
-          {/* <CodeMirrorBlock value={JSON.stringify(span?.output || {}, null, 2).replace(/\\n/g, '\n')} /> */}
           {codeStr && (
-            <ReactCodeMirror
-              extensions={[json(), isWrapped ? EditorView.lineWrapping : []]}
-              theme={theme}
-              value={finalCodeStr}
-            />
+            <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
           )}
         </div>
       </div>
