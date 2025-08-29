@@ -151,10 +151,6 @@ export class MastraLLMVNext extends MastraBase {
       tools: Object.keys(tools || {}),
     });
 
-    if (output) {
-      output = this._applySchemaCompat(output) as any; // TODO: types for schema compat
-    }
-
     try {
       const messageList = new MessageList({
         threadId,
