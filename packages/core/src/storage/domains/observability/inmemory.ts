@@ -113,6 +113,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return spans.filter(span => {
       if (filter?.name && span.name !== filter.name) return false;
       if (filter?.spanType && span.spanType !== filter.spanType) return false;
+      if (filter?.componentName && span.attributes?.componentName !== filter.componentName) return false;
       return true;
     });
   }

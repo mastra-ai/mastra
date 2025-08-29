@@ -31,7 +31,7 @@ export async function getAITraceHandler(c: Context) {
 export async function getAITracesPaginatedHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const { page, perPage, name, spanType, start, end } = c.req.query();
+    const { page, perPage, name, spanType, start, end, componentName } = c.req.query();
 
     const pagination: AITracesPaginatedArg['pagination'] = {
       page: parseInt(page || '0'),
@@ -47,7 +47,7 @@ export async function getAITracesPaginatedHandler(c: Context) {
         return c.json({ error: 'Invalid spanType' }, 400);
       }
     }
-
+    if (componentName) filters.componentName = componentName;
     const dateRange: { start?: Date; end?: Date } = {};
     if (start) {
       try {

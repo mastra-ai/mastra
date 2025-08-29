@@ -66,17 +66,6 @@ export function TraceDialog({ parentTraceId, isOpen, onClose, onNext, onPrevious
     setDialogIsOpen(true);
   };
 
-  // useEffect(() => {
-  //   if (selectedSpanId && spans) {
-  //     const span = spans.find((span: any) => span.id === selectedSpanId);
-  //     if (span) {
-  //       setSelectedSpan(span);
-  //     } else {
-  //       console.warn('Span not found for id:', selectedSpanId);
-  //     }
-  //   }
-  // }, [selectedSpanId, spans]);
-
   const toNextSpan = () => {
     const currentIndex = rawSpans.findIndex(span => span.spanId === selectedSpanId);
     const nextSpan = rawSpans[currentIndex + 1];
