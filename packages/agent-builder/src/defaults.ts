@@ -2389,42 +2389,48 @@ export const mastra = new Mastra({
 
       const { beforeLines = 2, afterLines = 2 } = searchContext;
 
-      let rgCommand = 'rg';
+      // Build command and arguments array safely
+      const rgArgs: string[] = [];
 
       // Add context lines
-      if (beforeLines > 0 || afterLines > 0) {
-        rgCommand += ` -A ${afterLines} -B ${beforeLines}`;
+      if (beforeLines > 0) {
+        rgArgs.push('-B', beforeLines.toString());
+      }
+      if (afterLines > 0) {
+        rgArgs.push('-A', afterLines.toString());
       }
 
       // Add line numbers
-      rgCommand += ' -n';
+      rgArgs.push('-n');
 
       // Handle search type
       if (type === 'regex') {
-        rgCommand += ' -e';
+        rgArgs.push('-e');
       } else if (type === 'fuzzy') {
-        rgCommand += ' --fixed-strings';
+        rgArgs.push('--fixed-strings');
       }
 
       // Add file type filters
       if (fileTypes.length > 0) {
         fileTypes.forEach(ft => {
-          rgCommand += ` --type-add 'custom:*.${ft}' -t custom`;
+          rgArgs.push('--type-add', `custom:*.${ft}`, '-t', 'custom');
         });
       }
 
       // Add exclude patterns
       excludePaths.forEach(path => {
-        rgCommand += ` --glob '!${path}'`;
+        rgArgs.push('--glob', `!${path}`);
       });
 
       // Add max count
-      rgCommand += ` -m ${maxResults}`;
+      rgArgs.push('-m', maxResults.toString());
 
-      // Add search paths
-      rgCommand += ` "${query}" ${paths.join(' ')}`;
+      // Add the search query and paths
+      rgArgs.push(query);
+      rgArgs.push(...paths);
 
-      const { stdout } = await exec(rgCommand, {
+      // Execute safely using execFile
+      const { stdout } = await execFile('rg', rgArgs, {
         cwd: projectPath,
       });
       const lines = stdout.split('\n').filter(line => line.trim());
