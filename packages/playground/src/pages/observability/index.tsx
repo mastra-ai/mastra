@@ -14,19 +14,22 @@ import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
 import { TraceDialog } from './TraceDialog';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
+import { format, isToday } from 'date-fns';
 
 const listColumns = [
-  { name: 'id', label: 'ID', size: '5rem' },
+  { name: 'id', label: 'ID', size: '16rem' },
   { name: 'date', label: 'Date', size: '5rem' },
   { name: 'time', label: 'Time', size: '5rem' },
-  { name: 'entityName', label: 'Entity', size: '8rem' },
+  { name: 'name', label: 'Name', size: '1fr' },
+  { name: 'entityId', label: 'Entity', size: '1fr' },
 ];
 
-type EventType = {
+type TraceItem = {
   id: string;
-  date: Date;
-  time: Date;
-  entityName: string;
+  date: string;
+  time: string;
+  name: string;
+  entityId: string;
 };
 
 export default function Observability() {
@@ -74,12 +77,18 @@ export default function Observability() {
     setSelectedDateTo(value);
   };
 
-  const events: EventType[] = aiTraces.map(trace => ({
-    id: trace.traceId,
-    date: trace.createdAt,
-    time: trace.createdAt,
-    entityName: trace.name,
-  }));
+  const items: TraceItem[] = aiTraces.map(trace => {
+    const createdAtDate = new Date(trace.createdAt);
+    const isTodayDate = isToday(createdAtDate);
+
+    return {
+      id: trace?.traceId,
+      date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+      time: format(createdAtDate, 'HH:mm:ss'),
+      name: trace?.name,
+      entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
+    };
+  });
 
   const handleOnListItem = (id: string) => {
     if (id === selectedTraceId) {
@@ -131,7 +140,7 @@ export default function Observability() {
               <div>Loading...</div>
             ) : (
               <EntryList
-                items={events}
+                items={items}
                 selectedItemId={selectedTraceId}
                 onItemClick={handleOnListItem}
                 columns={listColumns}
