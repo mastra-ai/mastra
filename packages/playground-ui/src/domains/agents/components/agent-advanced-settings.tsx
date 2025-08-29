@@ -253,7 +253,7 @@ export const AgentAdvancedSettings = () => {
               onChange={setProviderOptionsValue}
               theme={theme}
               extensions={[jsonLanguage]}
-              className="h-[300px] overflow-scroll rounded-lg border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 p-2"
+              className="h-[300px] overflow-scroll rounded-lg border bg-transparent shadow-sm transition-colors p-2"
             />
             {error && (
               <Txt variant="ui-md" className="text-accent2">
