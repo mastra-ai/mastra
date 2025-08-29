@@ -31,7 +31,7 @@ export async function getAITraceHandler(c: Context) {
 export async function getAITracesPaginatedHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const { page, perPage, name, spanType, start, end, entityId, entityType } = c.req.query();
+    const { page, perPage, name, spanType, dateRange, entityId, entityType } = c.req.query();
 
     const pagination: AITracesPaginatedArg['pagination'] = {
       page: parseInt(page || '0'),
@@ -51,25 +51,21 @@ export async function getAITracesPaginatedHandler(c: Context) {
       filters.entityId = entityId;
       filters.entityType = entityType;
     }
-    const dateRange: { start?: Date; end?: Date } = {};
-    if (start) {
+
+    let start: Date | undefined;
+    let end: Date | undefined;
+    if (dateRange) {
       try {
-        dateRange.start = new Date(start);
+        const parsedDateRange = JSON.parse(dateRange);
+        start = parsedDateRange.start ? new Date(parsedDateRange.start) : undefined;
+        end = parsedDateRange.end ? new Date(parsedDateRange.end) : undefined;
       } catch {
         return c.json({ error: 'Invalid start date' }, 400);
       }
     }
 
-    if (end) {
-      try {
-        dateRange.end = new Date(end);
-      } catch {
-        return c.json({ error: 'Invalid end date' }, 400);
-      }
-    }
-
-    if (Object.keys(dateRange).length > 0) {
-      pagination.dateRange = dateRange;
+    if (start || end) {
+      pagination.dateRange = { start, end };
     }
 
     const result = await getOriginalAITracesPaginatedHandler({

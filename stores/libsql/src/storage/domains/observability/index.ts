@@ -98,7 +98,6 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     filters,
     pagination,
   }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
-    console.log('LOOOOOL -----');
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const { entityId, entityType, ...actualFilters } = filters || {};
@@ -123,8 +122,6 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
         actualWhereClause += `WHERE ${statement}`;
       }
     }
-
-    console.log('actualWhereClause', { actualWhereClause, args: whereClause.args });
 
     const orderBy = 'startedAt DESC';
 

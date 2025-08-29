@@ -43,7 +43,7 @@ export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['ai-traces', filters],
+    queryKey: ['ai-traces', filters, dateRange],
     queryFn: ({ pageParam }) =>
       fetchAITracesFn({
         page: pageParam,
