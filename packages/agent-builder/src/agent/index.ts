@@ -7,7 +7,7 @@ import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
 import { WriteToDiskProcessor } from '../processors/write-file';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
-import { agentBuilderTemplateWorkflow } from '../workflows';
+import { agentBuilderTemplateWorkflow, workflowBuilderWorkflow } from '../workflows';
 
 // =============================================================================
 // Template Merge Workflow Implementation
@@ -62,6 +62,7 @@ export class AgentBuilder extends Agent {
       },
       workflows: {
         'merge-template': agentBuilderTemplateWorkflow,
+        'workflow-builder': workflowBuilderWorkflow,
       },
       memory: new Memory({
         options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,

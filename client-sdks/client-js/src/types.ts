@@ -524,6 +524,46 @@ export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
 }
 
+// Template installation types
+export interface TemplateInstallationRequest {
+  /** Template repository URL or slug */
+  repo: string;
+  /** Git ref (branch/tag/commit) to install from */
+  ref?: string;
+  /** Template slug for identification */
+  slug?: string;
+  /** Target project path */
+  targetPath?: string;
+  /** Environment variables for template */
+  variables?: Record<string, string>;
+}
+
+export interface TemplateInstallationResult {
+  success: boolean;
+  applied: boolean;
+  branchName?: string;
+  message: string;
+  // Optional error message from workflow
+  error?: string;
+  // Optional validation result details
+  validationResults?: {
+    valid: boolean;
+    errorsFixed: number;
+    remainingErrors: number;
+  };
+  // Optional array of errors from different steps
+  errors?: string[];
+  // Optional detailed step results
+  stepResults?: {
+    copySuccess: boolean;
+    mergeSuccess: boolean;
+    validationSuccess: boolean;
+    filesCopied: number;
+    conflictsSkipped: number;
+    conflictsResolved: number;
+  };
+}
+
 export interface GetAITraceResponse {
   trace: AITraceRecord;
 }
