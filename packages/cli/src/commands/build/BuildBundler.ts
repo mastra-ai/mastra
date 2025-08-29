@@ -1,19 +1,15 @@
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
+import { copy } from 'fs-extra';
+import { join } from 'node:path';
 
 export class BuildBundler extends Bundler {
-  private customEnvFile?: string;
-
-  constructor(customEnvFile?: string) {
+  constructor() {
     super('Build');
-    this.customEnvFile = customEnvFile;
   }
 
   getEnvFiles(): Promise<string[]> {
     const possibleFiles = ['.env.production', '.env.local', '.env'];
-    if (this.customEnvFile) {
-      possibleFiles.unshift(this.customEnvFile);
-    }
 
     try {
       const fileService = new FileService();
