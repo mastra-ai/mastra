@@ -7,6 +7,7 @@ settings:
 overrides:
   typescript: ^5.8.3
   '@types/node': ^20.17.57
+  cookie: '>=0.7.0'
 
 importers:
 
@@ -183,8 +184,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: ^7.57.0
-        version: 7.57.0(express@5.1.0)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))
+        specifier: ^7.69.1
+        version: 7.69.1(express@5.1.0)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10392,8 +10393,8 @@ packages:
     resolution: {integrity: sha512-MCOl/WzRNuc/bbXzTN3L7b7Co+cwrNPMsRV6zV5ZLhiMkl6ROBYtZq1BpY7xX/muTy7DWeYw3JiZp6swbkULiQ==}
     hasBin: true
 
-  '@workos-inc/node@7.57.0':
-    resolution: {integrity: sha512-CD+WuxabDc27GHyAytYYy4SbrWA+8rFRO/2PRCVxfHxx8goqNWwzkkz/uVYA7MpGNpNv7B+I1pHvoerEElva+g==}
+  '@workos-inc/node@7.69.1':
+    resolution: {integrity: sha512-ml2TqUHjUVkubq4EnIIM1O1g+eR0ctKnpdHUJntG/1PuVt64CfntJrAUi/5ePgR4d12EeXunHyjOTK75k+f9Ww==}
     engines: {node: '>=16'}
 
   '@xyflow/react@12.8.2':
@@ -11349,10 +11350,6 @@ packages:
   cookie-signature@1.2.2:
     resolution: {integrity: sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg==}
     engines: {node: '>=6.6.0'}
-
-  cookie@0.5.0:
-    resolution: {integrity: sha512-YZ3GUyn/o8gfKJlnlX7g7xq4gyO6OSuhGPKaaGssGB2qgDUS0gPgtTvoyZLTt9Ab6dC4hfc9dV5arkvc/OCmrw==}
-    engines: {node: '>= 0.6'}
 
   cookie@0.7.1:
     resolution: {integrity: sha512-6DnInpx7SJ2AK3+CTUE/ZM0vWTUboZCegxhC2xiIydHR9jNuTAASBrfEpHhiGOZw/nX51bHt6YQl8jsGo4y/0w==}
@@ -25082,12 +25079,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@workos-inc/node@7.57.0(express@5.1.0)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))':
+  '@workos-inc/node@7.69.1(express@5.1.0)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))':
     dependencies:
       iron-session: 6.3.1(express@5.1.0)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))
       jose: 5.6.3
       leb: 1.0.0
       pluralize: 8.0.0
+      qs: 6.14.0
     transitivePeerDependencies:
       - express
       - koa
@@ -26215,8 +26213,6 @@ snapshots:
   cookie-signature@1.0.6: {}
 
   cookie-signature@1.2.2: {}
-
-  cookie@0.5.0: {}
 
   cookie@0.7.1: {}
 
@@ -28208,7 +28204,7 @@ snapshots:
       '@types/express': 4.17.23
       '@types/koa': 2.15.0
       '@types/node': 20.19.9
-      cookie: 0.5.0
+      cookie: 1.0.2
       iron-webcrypto: 0.2.8
     optionalDependencies:
       express: 5.1.0
