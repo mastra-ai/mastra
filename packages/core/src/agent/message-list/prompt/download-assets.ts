@@ -86,8 +86,8 @@ export async function downloadAssetsFromMessages({
 
   const downloadedFiles = await pMap(
     filesToDownload,
-    async message => {
-      return downloadFromUrl({ url: message.url, downloadRetries });
+    async fileItem => {
+      return downloadFromUrl({ url: fileItem.url, downloadRetries });
     },
     {
       concurrency: downloadConcurrency,
