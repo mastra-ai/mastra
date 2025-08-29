@@ -497,7 +497,55 @@ do:
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
+    /*
+      Register Mastra instance with AI tracing exporters and initialize them
+    */
+    if (config?.observability) {
+      this.registerAITracingExporters();
+      this.initAITracingExporters();
+    }
+
     this.setLogger({ logger });
+  }
+
+  /**
+   * Register this Mastra instance with AI tracing exporters that need it
+   */
+  private registerAITracingExporters(): void {
+    const allTracingInstances = getAllAITracing();
+    allTracingInstances.forEach(tracing => {
+      const exporters = tracing.getExporters();
+      exporters.forEach(exporter => {
+        // Check if exporter has __registerMastra method
+        if ('__registerMastra' in exporter && typeof (exporter as any).__registerMastra === 'function') {
+          (exporter as any).__registerMastra(this);
+        }
+      });
+    });
+  }
+
+  /**
+   * Initialize all AI tracing exporters after registration is complete
+   */
+  private initAITracingExporters(): void {
+    const allTracingInstances = getAllAITracing();
+
+    allTracingInstances.forEach(tracing => {
+      const exporters = tracing.getExporters();
+      exporters.forEach(exporter => {
+        // Initialize exporter if it has an init method
+        if ('init' in exporter && typeof exporter.init === 'function') {
+          try {
+            exporter.init();
+          } catch (error) {
+            this.#logger?.warn('Failed to initialize AI tracing exporter', {
+              exporterName: exporter.name,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      });
+    });
   }
 
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {

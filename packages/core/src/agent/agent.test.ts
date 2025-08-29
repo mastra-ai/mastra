@@ -688,6 +688,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         defaultGenerateOptions: {
           maxSteps: 7,
         },
+        defaultVNextStreamOptions: {
+          maxSteps: 7,
+        },
       });
 
       let response;
@@ -695,6 +698,30 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         response = await agent.generate('Call testTool 10 times.', {
           toolChoice: 'required',
+        });
+      } else {
+        response = await agent.generateVNext('Call testTool 10 times.', {
+          toolChoice: 'required',
+        });
+      }
+
+      expect(response.steps.length).toBe(7);
+    }, 500000);
+
+    it('should reach default max steps / stopWhen', async () => {
+      const agent = new Agent({
+        name: 'Test agent',
+        instructions: 'Test agent',
+        model: openaiModel,
+        tools: integration.getStaticTools(),
+      });
+
+      let response;
+
+      if (version === 'v1') {
+        response = await agent.generate('Call testTool 10 times.', {
+          toolChoice: 'required',
+          maxSteps: 7,
         });
       } else {
         response = await agent.generateVNext('Call testTool 10 times.', {
@@ -2672,6 +2699,56 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Verify that default instructions were used when null was returned
       expect(capturedPrompt).toContain('you will generate a short title');
+    });
+  });
+
+  describe(`${version} - agent llmPrompt`, () => {
+    it('should download assets from messages', async () => {
+      const agent = new Agent({
+        name: 'llmPrompt-agent',
+        instructions: 'test agent',
+        model: openaiModel,
+      });
+
+      let result;
+
+      if (version === 'v1') {
+        result = await agent.generate([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      } else {
+        result = await agent.generateVNext([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      }
+
+      expect(result.text.toLowerCase()).toContain('google');
     });
   });
 
