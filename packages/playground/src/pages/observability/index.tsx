@@ -29,17 +29,29 @@ type EventType = {
 };
 
 export default function Observability() {
-  const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
   const [selectedEntity, setSelectedEntity] = useState<string | undefined>(undefined);
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents } = useAgents();
+  const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces({
+    filters: {
+      componentName: selectedEntity,
+    },
+    dateRange:
+      selectedDateFrom && selectedDateTo
+        ? {
+            end: selectedDateTo,
+            start: selectedDateFrom,
+          }
+        : undefined,
+  });
 
   // const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const entities = [
-    ...(Object.entries(agents) || []).map(([key, value]) => ({ id: key, name: value.name, type: 'agent' })),
+    ...(Object.entries(agents) || []).map(([, value]) => ({ id: value.name, name: value.name, type: 'agent' })),
+    { id: 'all', name: 'All', type: 'all' },
   ];
 
   const entityOptions = entities.map(entity => ({ value: entity.id, label: entity.name }));

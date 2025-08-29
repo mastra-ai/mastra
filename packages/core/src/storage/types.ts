@@ -190,6 +190,7 @@ export interface AITracesPaginatedArg {
   filters?: {
     name?: string;
     spanType?: AISpanType;
+    componentName?: string;
   };
   pagination?: PaginationArgs;
 }
