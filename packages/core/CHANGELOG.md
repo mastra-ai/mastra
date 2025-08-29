@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.15.3-alpha.2
+
+### Patch Changes
+
+- [#7129](https://github.com/mastra-ai/mastra/pull/7129) [`822c2e8`](https://github.com/mastra-ai/mastra/commit/822c2e88a3ecbffb7c680e6227976006ccefe6a8) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix custom output (tool-output) in ai-sdk stream output
+
 ## 0.15.3-alpha.1
 
 ### Patch Changes
