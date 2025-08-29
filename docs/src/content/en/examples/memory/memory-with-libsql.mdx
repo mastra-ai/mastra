@@ -5,7 +5,7 @@ description: Example for how to use Mastra's memory system with LibSQL storage a
 
 # Memory with LibSQL
 
-This example demonstrates how to use Mastra's memory system with LibSQL, which is an option for storage and vector database backend.
+This example demonstrates how to use Mastra's memory system with LibSQL as the storage backend.
 
 ## Prerequisites
 
@@ -15,6 +15,12 @@ This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your 
 OPENAI_API_KEY=<your-api-key>
 ```
 
+And install the following package:
+
+```bash copy
+npm install @mastra/libsql
+```
+
 ## Adding memory to an agent
 
 To add LibSQL memory to an agent use the `Memory` class and create a new `storage` key using `LibSQLStore`. The `url` can either by a remote location, or a local file system resource.
@@ -22,8 +28,8 @@ To add LibSQL memory to an agent use the `Memory` class and create a new `storag
 ```typescript filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
   name: "libsql-agent",
@@ -31,9 +37,10 @@ export const libsqlAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:../mastra.db"
+      url: "file:libsql-agent.db"
     }),
     options: {
+      lastMessages: 10,
       threads: {
         generateTitle: true
       }
@@ -42,9 +49,9 @@ export const libsqlAgent = new Agent({
 });
 ```
 
-## Local embeddings with FastEmbed
+## Local embeddings with fastembed
 
-Embeddings are numeric vectors that represent text so the agent can semantically recall related messages. This example uses `@mastra/fastembed` to generate embeddings locally—no external API calls—keeping data on-device, reducing cost, and giving predictable latency.
+Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
 
 Install `fastembed` to get started:
 
@@ -54,11 +61,11 @@ npm install @mastra/fastembed
 
 Add the following to your agent:
 
-```typescript {15-18, 20-24} filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
+```typescript filename="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
 export const libsqlAgent = new Agent({
@@ -67,7 +74,7 @@ export const libsqlAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
-      url: "file:../mastra.db"
+      url: "file:libsql-agent.db"
     }),
     vector: new LibSQLVector({
       connectionUrl: "file:local.db"
@@ -87,7 +94,7 @@ export const libsqlAgent = new Agent({
 });
 ```
 
-## Usage Example
+## Usage example
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: false` to disable recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
@@ -96,11 +103,27 @@ import "dotenv/config";
 
 import { mastra } from "./mastra";
 
+const threadId = "123";
+const resourceId = "user-456";
+
 const agent = mastra.getAgent("libsqlAgent");
 
-const stream = await agent.stream("What did we discuss earlier?", {
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  },
   memoryOptions: {
-    lastMessages: false,
+    lastMessages: 5,
     semanticRecall: {
       topK: 3,
       messageRange: 2
