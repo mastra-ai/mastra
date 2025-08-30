@@ -23,7 +23,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@browserbasehq/stagehand": "^2.4.2",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.0.4",

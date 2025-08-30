@@ -26,7 +26,7 @@
     "@mastra/memory": "latest",
     "ai": "^4.3.19",
     "pdf2json": "^3.1.3",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.19.2",

@@ -28,7 +28,7 @@
   "dependencies": {
     "openai-realtime-api": "^1.0.8",
     "ws": "^8.18.3",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -40,7 +40,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
