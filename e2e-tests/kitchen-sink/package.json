@@ -13,8 +13,8 @@
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^20.19.0",
-    "@types/react": "^19.1.11",
-    "@types/react-dom": "^19.1.8",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
     "execa": "^9.6.0",
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
