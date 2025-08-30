@@ -9443,7 +9443,7 @@ describe('Workflow', () => {
         inputSchema: prevStep.outputSchema.extend({ c: z.string() }),
         ...sharedStepAttrs,
       });
-      // @ts-expect-error -- superset step should not be allowed
+      // @ts-expect-error -- extra-required-key-step should not be allowed
       workflow.then(prevStep).then(extraRequiredKeyStep);
 
       const distinctTypeStep = createStep({
@@ -9451,7 +9451,7 @@ describe('Workflow', () => {
         inputSchema: z.string(),
         ...sharedStepAttrs,
       });
-      // @ts-expect-error -- distinct step should not be allowed
+      // @ts-expect-error -- distinct-type-step should not be allowed
       workflow.then(prevStep).then(distinctTypeStep);
     });
   });
