@@ -21,4 +21,5 @@ export default {
   turbopuffer: "TurboPuffer",
   upstash: "UpstashVector",
   lance: "LanceVector",
+  s3vectors: "S3Vectors",
 };
