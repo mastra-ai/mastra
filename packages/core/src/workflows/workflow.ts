@@ -421,7 +421,7 @@ export class Workflow<
   then<TStepInputSchema extends z.ZodType<any>, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
     step: Step<
       TStepId,
-      TPrevSchema extends TStepInputSchema ? TStepInputSchema : never,
+      z.TypeOf<TPrevSchema> extends z.TypeOf<TStepInputSchema> ? TStepInputSchema : never,
       TSchemaOut,
       any,
       any,

@@ -1155,7 +1155,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -2943,7 +2943,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -2993,7 +2993,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -3056,7 +3056,7 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: z.object({ value: z.string() }),
         outputSchema: z.object({
           result: z.string(),
         }),
@@ -7000,7 +7000,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({ success: z.boolean() }),
         execute: final,
       });
@@ -7237,7 +7237,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({ finalValue: z.number() }),
         execute: final,
       });
@@ -7368,7 +7368,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -7503,7 +7503,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -7639,7 +7639,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({ finalValue: z.number() }),
           execute: final,
         });
@@ -7817,7 +7817,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({
             finalValue: z.number(),
           }),
@@ -8164,7 +8164,7 @@ describe('Workflow', () => {
         });
         const finalStep = createStep({
           id: 'final',
-          inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+          inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
           outputSchema: z.object({
             finalValue: z.number(),
           }),
@@ -8282,7 +8282,7 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
         outputSchema: z.object({
           finalValue: z.number(),
         }),
@@ -8724,7 +8724,7 @@ describe('Workflow', () => {
       const step = createStep({
         id: 'step1',
         execute,
-        inputSchema: z.object({ human: z.boolean() }),
+        inputSchema: z.object({ human: z.boolean().optional() }),
         outputSchema: z.object({}),
       });
       const workflow = createWorkflow({
@@ -9389,7 +9389,7 @@ describe('Workflow', () => {
       const prevStep = createStep({
         id: 'prev-step',
         inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ a: z.string(), b: z.string() }),
+        outputSchema: z.object({ a: z.string(), b: z.string().optional() }),
         execute: async () => {
           return { a: 'a', b: 'b' };
         },
@@ -9408,35 +9408,51 @@ describe('Workflow', () => {
 
       const equalStep = createStep({
         id: 'equal-step',
-        inputSchema: z.object({ a: z.string(), b: z.string() }),
+        inputSchema: prevStep.outputSchema,
         ...sharedStepAttrs,
       });
       // this is ok
       workflow.then(prevStep).then(equalStep);
 
-      const subsetStep = createStep({
-        id: 'subset-step',
-        inputSchema: z.object({ a: z.string() }),
+      const missingRequiredKeyStep = createStep({
+        id: 'missing-required-key-step',
+        inputSchema: prevStep.outputSchema.omit({ a: true }),
         ...sharedStepAttrs,
       });
       // this is ok
-      workflow.then(prevStep).then(subsetStep);
+      workflow.then(prevStep).then(missingRequiredKeyStep);
 
-      const supersetStep = createStep({
-        id: 'superset-step',
-        inputSchema: z.object({ a: z.string(), b: z.string(), c: z.string() }),
+      const missingOptionalKeyStep = createStep({
+        id: 'missing-optional-key-step',
+        inputSchema: prevStep.outputSchema.omit({ b: true }),
+        ...sharedStepAttrs,
+      });
+      // this is ok
+      workflow.then(prevStep).then(missingOptionalKeyStep);
+
+      const extraOptionalKeyStep = createStep({
+        id: 'extra-optional-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string().optional() }),
+        ...sharedStepAttrs,
+      });
+      // this is ok
+      workflow.then(prevStep).then(extraOptionalKeyStep);
+
+      const extraRequiredKeyStep = createStep({
+        id: 'extra-required-key-step',
+        inputSchema: prevStep.outputSchema.extend({ c: z.string() }),
         ...sharedStepAttrs,
       });
       // @ts-expect-error -- superset step should not be allowed
-      workflow.then(prevStep).then(supersetStep);
+      workflow.then(prevStep).then(extraRequiredKeyStep);
 
-      const distinctStep = createStep({
-        id: 'distinct-step',
+      const distinctTypeStep = createStep({
+        id: 'distinct-type-step',
         inputSchema: z.string(),
         ...sharedStepAttrs,
       });
       // @ts-expect-error -- distinct step should not be allowed
-      workflow.then(prevStep).then(distinctStep);
+      workflow.then(prevStep).then(distinctTypeStep);
     });
   });
 });
