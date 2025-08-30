@@ -4,10 +4,10 @@ import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, WatchEvent, WorkflowInfo } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
-import { getWorkflowInfo } from '../utils';
+import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 
-interface WorkflowContext extends Context {
+export interface WorkflowContext extends Context {
   workflowId?: string;
   runId?: string;
 }
@@ -34,10 +34,15 @@ async function getWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
 
   let workflow;
 
-  try {
-    workflow = mastra.getWorkflow(workflowId);
-  } catch (error) {
-    logger.debug('Error getting workflow, searching agents for workflow', error);
+  // First check registry for temporary workflows
+  workflow = WorkflowRegistry.getWorkflow(workflowId);
+
+  if (!workflow) {
+    try {
+      workflow = mastra.getWorkflow(workflowId);
+    } catch (error) {
+      logger.debug('Error getting workflow, searching agents for workflow', error);
+    }
   }
 
   if (!workflow) {
@@ -253,7 +258,10 @@ export async function watchWorkflowHandler({
   mastra,
   workflowId,
   runId,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<ReadableStream<string>> {
+  eventType = 'watch',
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  eventType?: 'watch' | 'watch-v2';
+}): Promise<ReadableStream<string>> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -280,7 +288,8 @@ export async function watchWorkflowHandler({
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
       start(controller) {
-        unwatch = _run.watch(({ type, payload, eventTimestamp }) => {
+        unwatch = _run.watch((event: any) => {
+          const { type, payload, eventTimestamp } = event;
           controller.enqueue(JSON.stringify({ type, payload, eventTimestamp, runId }));
 
           if (asyncRef) {
@@ -290,15 +299,19 @@ export async function watchWorkflowHandler({
 
           // a run is finished if the status is not running
           asyncRef = setImmediate(async () => {
-            const runDone = payload.workflowState.status !== 'running';
+            const runDone = eventType === 'watch' ? payload.workflowState.status !== 'running' : type === 'finish';
             if (runDone) {
               controller.close();
               unwatch?.();
             }
           });
-        });
+        }, eventType);
       },
       cancel() {
+        if (asyncRef) {
+          clearImmediate(asyncRef);
+          asyncRef = null;
+        }
         unwatch?.();
       },
     });
