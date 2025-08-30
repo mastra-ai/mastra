@@ -9383,4 +9383,60 @@ describe('Workflow', () => {
       expect(typedStep).toBeDefined();
     });
   });
+
+  describe('typescript', () => {
+    it('should allow a steps input schema to be a subset of the previous step output schema', () => {
+      const prevStep = createStep({
+        id: 'prev-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ a: z.string(), b: z.string() }),
+        execute: async () => {
+          return { a: 'a', b: 'b' };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.boolean(),
+      });
+
+      const sharedStepAttrs = {
+        outputSchema: z.boolean(),
+        execute: async () => true,
+      } satisfies Partial<Parameters<typeof createStep>[0]>;
+
+      const equalStep = createStep({
+        id: 'equal-step',
+        inputSchema: z.object({ a: z.string(), b: z.string() }),
+        ...sharedStepAttrs,
+      });
+      // this is ok
+      workflow.then(prevStep).then(equalStep);
+
+      const subsetStep = createStep({
+        id: 'subset-step',
+        inputSchema: z.object({ a: z.string() }),
+        ...sharedStepAttrs,
+      });
+      // this is ok
+      workflow.then(prevStep).then(subsetStep);
+
+      const supersetStep = createStep({
+        id: 'superset-step',
+        inputSchema: z.object({ a: z.string(), b: z.string(), c: z.string() }),
+        ...sharedStepAttrs,
+      });
+      // @ts-expect-error -- superset step should not be allowed
+      workflow.then(prevStep).then(supersetStep);
+
+      const distinctStep = createStep({
+        id: 'distinct-step',
+        inputSchema: z.string(),
+        ...sharedStepAttrs,
+      });
+      // @ts-expect-error -- distinct step should not be allowed
+      workflow.then(prevStep).then(distinctStep);
+    });
+  });
 });
