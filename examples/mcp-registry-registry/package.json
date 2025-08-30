@@ -17,7 +17,7 @@
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/mcp-registry-registry": "latest",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {
