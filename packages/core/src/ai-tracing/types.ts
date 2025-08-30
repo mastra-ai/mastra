@@ -21,6 +21,8 @@ export enum AISpanType {
   GENERIC = 'generic',
   /** LLM generation with model calls, token usage, prompts, completions */
   LLM_GENERATION = 'llm_generation',
+  /** Individual LLM streaming chunk/event */
+  LLM_CHUNK = 'llm_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
   /** Function/tool execution with inputs, outputs, errors */
@@ -97,6 +99,18 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   };
   /** Whether this was a streaming response */
   streaming?: boolean;
+  /** Reason the generation finished */
+  finishReason?: string;
+}
+
+/**
+ * LLM Chunk attributes - for individual streaming chunks/events
+ */
+export interface LLMChunkAttributes extends AIBaseAttributes {
+  /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
+  chunkType?: string;
+  /** Sequence number of this chunk in the stream */
+  sequenceNumber?: number;
 }
 
 /**
@@ -222,6 +236,7 @@ export interface AISpanTypeMap {
   [AISpanType.AGENT_RUN]: AgentRunAttributes;
   [AISpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [AISpanType.LLM_GENERATION]: LLMGenerationAttributes;
+  [AISpanType.LLM_CHUNK]: LLMChunkAttributes;
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [AISpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
@@ -257,6 +272,8 @@ export interface AISpan<TType extends AISpanType> {
   startTime: Date;
   /** When span ended */
   endTime?: Date;
+  /** Is an event span? (event occurs at startTime, has no endTime) */
+  isEvent: boolean;
   /** AI-specific attributes - strongly typed based on span type */
   attributes?: AISpanTypeMap[TType];
   /** Parent span reference (undefined for root spans) */
@@ -314,6 +331,17 @@ export interface AISpan<TType extends AISpanType> {
     metadata?: Record<string, any>;
   }): AISpan<TChildType>;
 
+  /** Create event span - can be any span type independent of parent
+      Event spans have no input, and no endTime.
+  */
+  createEventSpan<TChildType extends AISpanType>(options: {
+    type: TChildType;
+    name: string;
+    output?: any;
+    attributes?: AISpanTypeMap[TChildType];
+    metadata?: Record<string, any>;
+  }): AISpan<TChildType>;
+
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean;
 }
@@ -333,12 +361,16 @@ export interface AISpanOptions<TType extends AISpanType> {
   type: TType;
   /** Input data */
   input?: any;
+  /** Output data (for event spans) */
+  output?: any;
   /** Span attributes */
   attributes?: AISpanTypeMap[TType];
   /** Span metadata */
   metadata?: Record<string, any>;
   /** Parent span */
   parent?: AnyAISpan;
+  /** Is an event span? */
+  isEvent: boolean;
 }
 
 // ============================================================================
@@ -371,6 +403,8 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.NEVER }
   | { type: SamplingStrategyType.RATIO; probability: number }
   | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
+
+export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
 
 /**
  * Configuration for a single AI tracing instance
@@ -425,6 +459,9 @@ export type AITracingEvent =
 export interface AITracingExporter {
   /** Exporter name */
   name: string;
+
+  /** Initialize exporter (called after all dependencies are ready) */
+  init?(): void;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;

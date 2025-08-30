@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.15.0",
+  "version": "0.15.3-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -144,7 +144,7 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.14.2-0 <0.15.0-0",
+    "@mastra/core": ">=0.15.2-0 <0.16.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   }
 }

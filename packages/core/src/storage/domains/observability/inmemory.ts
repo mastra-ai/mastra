@@ -1,3 +1,4 @@
+import type { TracingStrategy } from '../../../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '../../types';
 import type { StoreOperations } from '../operations';
@@ -12,6 +13,16 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     super();
     this.collection = collection;
     this.operations = operations;
+  }
+
+  public get aiTracingStrategy(): {
+    preferred: TracingStrategy;
+    supported: TracingStrategy[];
+  } {
+    return {
+      preferred: 'realtime',
+      supported: ['realtime', 'batch-with-updates', 'insert-only'],
+    };
   }
 
   async createAISpan(span: AISpanRecord): Promise<void> {

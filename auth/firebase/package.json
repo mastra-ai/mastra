@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-firebase",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Mastra Firebase Auth integration",
   "type": "module",
   "main": "dist/index.js",
