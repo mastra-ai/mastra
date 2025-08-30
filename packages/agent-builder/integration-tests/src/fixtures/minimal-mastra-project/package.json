@@ -9,7 +9,7 @@
   "dependencies": {
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
-    "zod": "^3.25.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
