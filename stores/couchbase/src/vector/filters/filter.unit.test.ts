@@ -1,54 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CouchbaseFilterTranslator } from './filter';
 
-describe.skip('sample', () => {
-  it('sample', () => {
-    const translator = new CouchbaseFilterTranslator();
-    const filter = {
-      $and: [
-        {
-          field3: {
-            $eq: 'value3',
-            $ne: 'value4',
-          },
-        },
-        {
-          field4: {
-            $eq: 'value4',
-            $ne: 'value5',
-          },
-        },
-      ],
-      $or: [
-        {
-          field5: { $eq: 'value5' },
-          field6: { $ne: 'value6' },
-        },
-        {
-          field5: { $eq: 'value5' },
-          field6: { $ne: 'value6' },
-        },
-      ],
-      $not: {
-        field7: { $eq: 'value7' },
-        field8: { $ne: 'value8' },
-      },
-      field1: {
-        $eq: 'value1',
-        $ne: 'value2',
-      },
-      field2: {
-        $gt: 10,
-        $gte: 10,
-        $lt: 10,
-        $lte: 10,
-      },
-    };
-    const result = translator.translate(filter);
-    console.log(JSON.stringify(result, null, 2));
-  });
-});
-
 /**
  * Test suite for CouchbaseFilterTranslator
  *
