@@ -325,8 +325,8 @@ export class InngestRun<
     const unwatch = this.watch(async event => {
       if ((event as any).type === 'workflow-agent-call-start') {
         currentToolData = {
-          name: (event as any).name,
-          args: (event as any).args,
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
         };
         await writer.write({
           ...event.payload,

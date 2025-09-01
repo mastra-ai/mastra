@@ -428,8 +428,8 @@ export class EventedRun<
       console.log('raw_event', event);
       if ((event as any).type === 'workflow-agent-call-start') {
         currentToolData = {
-          name: (event as any).name,
-          args: (event as any).args,
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
         };
         await writer.write({
           ...event.payload,
@@ -504,8 +504,8 @@ export class EventedRun<
     const unwatch = await this.watchAsync(async event => {
       if ((event as any).type === 'workflow-agent-call-start') {
         currentToolData = {
-          name: (event as any).name,
-          args: (event as any).args,
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
         };
         await writer.write({
           ...event.payload,
