@@ -802,7 +802,7 @@ describe('CouchbaseFilterTranslator - table-driven tests', () => {
       {
         name: 'mixed types in operators',
         input: { price: { $gt: 10, $lt: '20' } },
-        errorPattern: /is string but expected number/,
+        errorPattern: /Mixed data types/,
       },
       { name: 'undefined field type', input: { price: {} }, errorPattern: /Unsupported field type/ },
       { name: 'invalid $nor structure', input: { $nor: {} } },
