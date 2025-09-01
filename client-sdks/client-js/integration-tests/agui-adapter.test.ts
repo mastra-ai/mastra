@@ -46,7 +46,7 @@ describe('AGUIAdapter Integration Tests', () => {
         console.error('Mastra server error:', data.toString());
       });
 
-      setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
+      setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
     });
   });
 
