@@ -640,7 +640,7 @@ describe('Unit Testing CouchbaseSearchStore', () => {
           queryVector: [1.0, 2.0, 3.0],
           includeVector: true,
         }),
-      ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase Search Store');
+      ).rejects.toThrow('Including vectors in search results is not yet supported by the CouchbaseSearchStore');
     });
 
     it('should throw error for empty vectors array in upsert', async () => {

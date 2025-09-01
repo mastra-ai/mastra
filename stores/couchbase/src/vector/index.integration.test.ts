@@ -451,7 +451,7 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
           queryVector: [1.0, 2.0, 3.0],
           includeVector: true,
         }),
-      ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase Search Store');
+      ).rejects.toThrow('Including vectors in search results is not yet supported by the CouchbaseSearchStore');
     }, 50000);
 
     it('should upsert vectors with generated ids', async () => {
