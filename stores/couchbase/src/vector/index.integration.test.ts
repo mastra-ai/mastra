@@ -8,7 +8,7 @@ import axios from 'axios';
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { CouchbaseVector, DISTANCE_MAPPING } from './index';
+import { CouchbaseSearchStore, DISTANCE_MAPPING } from './index';
 
 const containerName = 'mastra_couchbase_testing';
 
@@ -102,9 +102,9 @@ async function checkBucketHealth(
   throw new Error(`Bucket '${bucketName}' health check failed after ${maxAttempts} attempts.`);
 }
 
-describe('Integration Testing CouchbaseVector', async () => {
+describe('Integration Testing CouchbaseSearchStore', async () => {
   // Use Couchbase Enterprise 7.6+ which supports vector search
-  let couchbase_client: CouchbaseVector;
+  let couchbase_client: CouchbaseSearchStore;
   let cluster: Cluster;
   let bucket: Bucket;
   let scope: Scope;
@@ -173,7 +173,7 @@ describe('Integration Testing CouchbaseVector', async () => {
 
   describe('Connection', () => {
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseVector({
+      couchbase_client = new CouchbaseSearchStore({
         connectionString,
         username,
         password,
@@ -231,17 +231,29 @@ describe('Integration Testing CouchbaseVector', async () => {
       [0.0, 0.0, 1.0],
     ];
     const testMetadata = [
-      { label: 'x-axis' },
+      {
+        label: 'x-axis',
+        brightness: 10,
+      },
       {
         label: 'y-axis',
         text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+        brightness: 20,
       },
-      { label: 'z-axis' },
+      {
+        label: 'z-axis',
+        brightness: 30,
+      },
     ];
     let testVectorIds: string[] = ['test_id_1', 'test_id_2', 'test_id_3'];
 
     beforeAll(async () => {
-      await couchbase_client.createIndex({ indexName: test_indexName, dimension, metric: 'euclidean' });
+      await couchbase_client.createIndex({
+        indexName: test_indexName,
+        dimension,
+        metric: 'euclidean',
+        fields_to_index: [{ name: 'brightness', type: 'number' }],
+      });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
 
@@ -283,7 +295,7 @@ describe('Integration Testing CouchbaseVector', async () => {
 
     it('should query vectors and return nearest neighbors', async () => {
       const queryVector = [1.0, 0.1, 0.1];
-      const topK = 3;
+      const topK = 2;
 
       const results = await couchbase_client.query({
         indexName: test_indexName,
@@ -328,6 +340,67 @@ describe('Integration Testing CouchbaseVector', async () => {
       // In this case, it should be the X-axis vector [1,0,0] since our query is [1.0,0.1,0.1]
       const firstResult = await collection.get(results[0].id);
       expect(firstResult.content.embedding[0]).toBeCloseTo(1.0, 1);
+    }, 50000);
+
+    it('should query vectors with filtering', async () => {
+      const queryVector = [1.0, 0.1, 0.1];
+      const topK = 3;
+
+      const results = await couchbase_client.query({
+        indexName: test_indexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.brightness': {
+            $eq: 10,
+          },
+        },
+      });
+
+      // Verify results - we should only get the vector with brightness = 10
+      expect(results).toHaveLength(1);
+
+      // Verify it's the correct vector (first one with brightness = 10)
+      const result = results[0];
+      expect(result.id).toBe(testVectorIds[0]);
+      expect(result.metadata?.brightness).toBe(10);
+      expect(result.metadata?.label).toBe('x-axis');
+
+      // Verify with another filter - brightness = 20
+      const results2 = await couchbase_client.query({
+        indexName: test_indexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.brightness': {
+            $eq: 20,
+          },
+        },
+      });
+
+      // Verify results - we should only get the vector with brightness = 20
+      expect(results2).toHaveLength(1);
+      expect(results2[0].id).toBe(testVectorIds[1]);
+      expect(results2[0].metadata?.brightness).toBe(20);
+      expect(results2[0].metadata?.label).toBe('y-axis');
+
+      // Test a range filter
+      const resultsRange = await couchbase_client.query({
+        indexName: test_indexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.brightness': {
+            $gt: 10,
+            $lt: 31,
+          },
+        },
+      });
+
+      // Should get vectors with brightness between 10 and 30 (exclusive of 10)
+      expect(resultsRange).toHaveLength(2);
+      const ids = resultsRange.map(r => r.id).sort();
+      expect(ids).toEqual([testVectorIds[1], testVectorIds[2]].sort());
     }, 50000);
 
     it('should update the vector by id', async () => {
@@ -378,7 +451,7 @@ describe('Integration Testing CouchbaseVector', async () => {
           queryVector: [1.0, 2.0, 3.0],
           includeVector: true,
         }),
-      ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase vector store');
+      ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase Search Store');
     }, 50000);
 
     it('should upsert vectors with generated ids', async () => {

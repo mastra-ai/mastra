@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
-import { CouchbaseVector, DISTANCE_MAPPING } from './index';
+import { CouchbaseSearchStore, DISTANCE_MAPPING } from './index';
 
 const dimension = vi.hoisted(() => 3);
 const test_bucketName = vi.hoisted(() => 'test-bucket');
@@ -119,6 +119,27 @@ const mockVectorQueryCreateFn = vi.hoisted(() =>
   }),
 );
 
+const mockFilterTranslator = vi.hoisted(() => ({
+  translate: vi.fn().mockImplementation(filter => {
+    // For empty filter or filter with no keys (like {})
+    if (!filter || Object.keys(filter).length === 0) {
+      return {};
+    }
+    // Return complex filter for filter test
+    return {
+      conjuncts: [
+        {
+          field: 'metadata.brightness',
+          min: 10,
+          max: 10,
+          inclusive_min: true,
+          inclusive_max: true,
+        },
+      ],
+    };
+  }),
+}));
+
 vi.mock('couchbase', () => {
   return {
     connect: mockCouchbaseConnectFn,
@@ -130,6 +151,16 @@ vi.mock('couchbase', () => {
     },
     VectorQuery: {
       create: mockVectorQueryCreateFn,
+    },
+  };
+});
+
+vi.mock('./filters/filter', () => {
+  return {
+    CouchbaseFilterTranslator: class {
+      translate(_filter: any) {
+        return mockFilterTranslator.translate(_filter);
+      }
     },
   };
 });
@@ -150,10 +181,11 @@ function clearAllMocks() {
   mockVectorSearchFn.mockClear();
   mockVectorQueryCreateFn.mockClear();
   mockNumCandidatesFn.mockClear();
+  mockFilterTranslator.translate.mockClear();
 }
 
-describe('Unit Testing CouchbaseVector', () => {
-  let couchbase_client: CouchbaseVector;
+describe('Unit Testing CouchbaseSearchStore', () => {
+  let couchbase_client: CouchbaseSearchStore;
 
   describe('Connection', () => {
     beforeAll(async () => {
@@ -165,7 +197,7 @@ describe('Unit Testing CouchbaseVector', () => {
     });
 
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseVector({
+      couchbase_client = new CouchbaseSearchStore({
         connectionString: 'COUCHBASE_CONNECTION_STRING',
         username: 'COUCHBASE_USERNAME',
         password: 'COUCHBASE_PASSWORD',
@@ -200,7 +232,7 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Index Operations', () => {
     beforeAll(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector({
+      couchbase_client = new CouchbaseSearchStore({
         connectionString: 'COUCHBASE_CONNECTION_STRING',
         username: 'COUCHBASE_USERNAME',
         password: 'COUCHBASE_PASSWORD',
@@ -236,15 +268,16 @@ describe('Unit Testing CouchbaseVector', () => {
             type_field: 'type',
           },
           mapping: {
+            analysis: {},
             default_analyzer: 'standard',
             default_datetime_parser: 'dateTimeOptional',
             default_field: '_all',
             default_mapping: {
-              dynamic: true,
+              dynamic: false,
               enabled: false,
             },
             default_type: '_default',
-            docvalues_dynamic: true,
+            docvalues_dynamic: false,
             index_dynamic: true,
             store_dynamic: true,
             type_field: '_type',
@@ -253,7 +286,25 @@ describe('Unit Testing CouchbaseVector', () => {
                 dynamic: true,
                 enabled: true,
                 properties: {
+                  metadata: {
+                    dynamic: true,
+                    enabled: true,
+                    properties: {
+                      content: {
+                        enabled: true,
+                        fields: [
+                          {
+                            index: true,
+                            name: 'content',
+                            store: true,
+                            type: 'text',
+                          },
+                        ],
+                      },
+                    },
+                  },
                   embedding: {
+                    dynamic: false,
                     enabled: true,
                     fields: [
                       {
@@ -263,20 +314,6 @@ describe('Unit Testing CouchbaseVector', () => {
                         similarity: 'dot_product',
                         type: 'vector',
                         vector_index_optimized_for: 'recall',
-                        store: true,
-                        docvalues: true,
-                        include_term_vectors: true,
-                      },
-                    ],
-                  },
-                  content: {
-                    enabled: true,
-                    fields: [
-                      {
-                        index: true,
-                        name: 'content',
-                        store: true,
-                        type: 'text',
                       },
                     ],
                   },
@@ -293,9 +330,8 @@ describe('Unit Testing CouchbaseVector', () => {
         sourceParams: {},
         sourceType: 'gocbcore',
         planParams: {
-          maxPartitionsPerPIndex: 64,
-          indexPartitions: 16,
-          numReplicas: 0,
+          maxPartitionsPerPIndex: 1024,
+          indexPartitions: 1,
         },
       });
       expect(mockUpsertIndexFn).toHaveResolved();
@@ -343,7 +379,7 @@ describe('Unit Testing CouchbaseVector', () => {
 
   describe('Vector Operations', () => {
     beforeAll(async () => {
-      couchbase_client = new CouchbaseVector({
+      couchbase_client = new CouchbaseSearchStore({
         connectionString: 'COUCHBASE_CONNECTION_STRING',
         username: 'COUCHBASE_USERNAME',
         password: 'COUCHBASE_PASSWORD',
@@ -428,17 +464,23 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockSearchRequestCreateFn).toHaveBeenCalledWith('mockVectorSearch');
 
       expect(mockVectorSearchFn).toHaveBeenCalledTimes(1);
-      expect(mockVectorSearchFn).toHaveBeenCalledWith('mockVectorQuery');
+      expect(mockVectorSearchFn).toHaveBeenCalledWith({ numCandidates: expect.any(Function) });
 
       expect(mockVectorQueryCreateFn).toHaveBeenCalledTimes(1);
       expect(mockVectorQueryCreateFn).toHaveBeenCalledWith('embedding', queryVector);
 
-      expect(mockNumCandidatesFn).toHaveBeenCalledTimes(1);
-      expect(mockNumCandidatesFn).toHaveBeenCalledWith(topK);
-
       expect(mockScopeSearchFn).toHaveBeenCalledTimes(1);
       expect(mockScopeSearchFn).toHaveBeenCalledWith(test_indexName, 'mockRequest', {
         fields: ['*'],
+        raw: {
+          knn: [
+            {
+              field: 'embedding',
+              vector: queryVector,
+              k: topK,
+            },
+          ],
+        },
       });
       expect(mockScopeSearchFn).toHaveResolved();
 
@@ -460,6 +502,44 @@ describe('Unit Testing CouchbaseVector', () => {
           metadata: { label: 'test-label' },
         },
       ]);
+    }, 50000);
+
+    it('should query vectors with filter', async () => {
+      const queryVector = [1.0, 0.1, 0.1];
+      const topK = 3;
+      const filter = {
+        brightness: {
+          $eq: 10,
+        },
+      };
+
+      const results = await couchbase_client.query({
+        indexName: test_indexName,
+        queryVector,
+        topK,
+        filter,
+      });
+
+      expect(mockScopeSearchFn).toHaveBeenCalledTimes(1);
+      expect(mockScopeSearchFn).toHaveBeenCalledWith(test_indexName, 'mockRequest', {
+        fields: ['*'],
+        raw: {
+          knn: [
+            {
+              field: 'embedding',
+              vector: queryVector,
+              k: topK,
+              filter: {
+                conjuncts: [
+                  { field: 'metadata.brightness', min: 10, max: 10, inclusive_min: true, inclusive_max: true },
+                ],
+              },
+            },
+          ],
+        },
+      });
+
+      expect(results).toHaveLength(3);
     }, 50000);
 
     it('should update the vector by id', async () => {
@@ -510,7 +590,7 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Error Cases and Edge Cases', () => {
     beforeAll(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector({
+      couchbase_client = new CouchbaseSearchStore({
         connectionString: 'COUCHBASE_CONNECTION_STRING',
         username: 'COUCHBASE_USERNAME',
         password: 'COUCHBASE_PASSWORD',
@@ -560,7 +640,7 @@ describe('Unit Testing CouchbaseVector', () => {
           queryVector: [1.0, 2.0, 3.0],
           includeVector: true,
         }),
-      ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase vector store');
+      ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase Search Store');
     });
 
     it('should throw error for empty vectors array in upsert', async () => {
@@ -577,7 +657,7 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Vector Dimension Tracking', () => {
     beforeEach(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector({
+      couchbase_client = new CouchbaseSearchStore({
         connectionString: 'COUCHBASE_CONNECTION_STRING',
         username: 'COUCHBASE_USERNAME',
         password: 'COUCHBASE_PASSWORD',
@@ -647,7 +727,7 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Implementation Details', () => {
     beforeEach(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector({
+      couchbase_client = new CouchbaseSearchStore({
         connectionString: 'COUCHBASE_CONNECTION_STRING',
         username: 'COUCHBASE_USERNAME',
         password: 'COUCHBASE_PASSWORD',
