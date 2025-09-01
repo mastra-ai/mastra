@@ -39,6 +39,7 @@ export abstract class ExecutionEngine extends MastraBase {
   abstract execute<TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    disableScorers?: boolean;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
@@ -50,7 +51,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
-    parentSpan?: AnyAISpan;
+    currentSpan?: AnyAISpan;
     retryConfig?: {
       attempts?: number;
       delay?: number;

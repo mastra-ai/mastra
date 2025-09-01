@@ -1,20 +1,4 @@
 import type {
-  MastraMessageV1,
-  AiMessageType,
-  CoreMessage,
-  QueryResult,
-  StorageThreadType,
-  WorkflowRuns,
-  WorkflowRun,
-  LegacyWorkflowRuns,
-  StorageGetMessagesArg,
-  PaginationInfo,
-  MastraMessageV2,
-  OutputSchema,
-  AITraceRecord,
-  AISpanRecord,
-} from '@mastra/core';
-import type {
   AgentExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
@@ -22,11 +6,23 @@ import type {
   UIMessageWithMetadata,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
-
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
+import type { AiMessageType, MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorer, MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type {
+  AITraceRecord,
+  AISpanRecord,
+  LegacyWorkflowRuns,
+  StorageGetMessagesArg,
+  PaginationInfo,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
+import type { OutputSchema } from '@mastra/core/stream';
+import type { QueryResult } from '@mastra/core/vector';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,

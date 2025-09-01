@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.10.24-alpha.0",
+  "version": "0.11.3-alpha.3",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -27,6 +27,7 @@
   "homepage": "https://github.com/mastra-ai/mastra/tree/main/client-sdks/client-js#readme",
   "license": "Apache-2.0",
   "scripts": {
+    "lint": "eslint .",
     "build": "tsup --config tsup.config.ts",
     "dev": "pnpm build --watch",
     "test": "vitest run && pnpm run test:integration",
@@ -43,7 +44,7 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
-    "zod": "^3.0.0 || ^4.0.0"
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.28.3",
@@ -55,6 +56,7 @@
     "@types/node": "^20.19.0",
     "zod": "^3.25.67",
     "ai": "^4.3.19",
+    "eslint": "^9.34.0",
     "globby": "^14.1.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

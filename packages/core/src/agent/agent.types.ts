@@ -2,11 +2,12 @@ import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { z, ZodSchema } from 'zod';
+import type { TracingContext } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { LoopConfig, LoopOptions } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorers } from '../scores';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
@@ -52,6 +53,9 @@ export type AgentExecutionOptions<
   /** Telemetry collection settings for observability */
   telemetry?: TelemetrySettings;
 
+  /** Maximum number of steps to run */
+  maxSteps?: number;
+
   /** Conditions for stopping execution (e.g., step count, token limit) */
   stopWhen?: LoopOptions['stopWhen'];
 
@@ -84,9 +88,11 @@ export type AgentExecutionOptions<
   modelSettings?: LoopOptions['modelSettings'];
 
   /** Evaluation scorers to run on the execution results */
-  scorers?: MastraScorers;
+  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
+  /** AI tracing context for span hierarchy and metadata */
+  tracingContext?: TracingContext;
 };
 
 export type InnerAgentExecutionOptions<

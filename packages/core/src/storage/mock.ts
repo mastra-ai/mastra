@@ -2,7 +2,7 @@ import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores/types';
 import type { Trace } from '../telemetry';
-import type { WorkflowRunState } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
@@ -156,6 +156,40 @@ export class InMemoryStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     await this.stores.operations.insert({ tableName, record });
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    runtimeContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined> {
+    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {

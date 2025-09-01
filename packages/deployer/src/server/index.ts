@@ -4,9 +4,9 @@ import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import type { Mastra } from '@mastra/core';
-import { Telemetry } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Telemetry } from '@mastra/core/telemetry';
 import { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -20,7 +20,6 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
-
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
@@ -207,6 +206,8 @@ export async function createHonoServer(
         app.put(route.path, ...middlewares, handler);
       } else if (route.method === 'DELETE') {
         app.delete(route.path, ...middlewares, handler);
+      } else if (route.method === 'PATCH') {
+        app.patch(route.path, ...middlewares, handler);
       } else if (route.method === 'ALL') {
         app.all(route.path, ...middlewares, handler);
       }
@@ -511,7 +512,8 @@ export async function createHonoServer(
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const host = serverOptions?.host ?? 'localhost';
 
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_URL%%'`, `'http://${host}:${port}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
@@ -562,6 +564,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       }
     },
   );
+
+  await mastra.startEventEngine();
 
   return server;
 }

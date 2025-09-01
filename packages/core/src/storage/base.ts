@@ -1,11 +1,11 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
+import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { ScoreRowData, ScoringSource } from '../scores';
 import type { Trace } from '../telemetry';
-
-import type { WorkflowRunState } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
   TABLE_WORKFLOW_SNAPSHOT,
@@ -401,6 +401,35 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
+  abstract updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>>;
+
+  abstract updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
+  }): Promise<WorkflowRunState | undefined>;
+
   async loadWorkflowSnapshot({
     workflowName,
     runId,
@@ -495,6 +524,25 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * OBSERVABILITY
    */
+
+  /**
+   * Provides hints for AI tracing strategy selection by the DefaultExporter.
+   * Storage adapters can override this to specify their preferred and supported strategies.
+   */
+  public get aiTracingStrategy(): {
+    preferred: TracingStrategy;
+    supported: TracingStrategy[];
+  } {
+    if (this.stores?.observability) {
+      return this.stores.observability.aiTracingStrategy;
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_TRACING_STRATEGY_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
 
   /**
    * Creates a single AI span record in the storage provider.

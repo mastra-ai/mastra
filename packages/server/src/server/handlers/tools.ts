@@ -1,8 +1,8 @@
 import type { RuntimeContext } from '@mastra/core/di';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { isVercelTool } from '@mastra/core/tools';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -99,6 +99,8 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         mastra,
         runId,
         runtimeContext,
+        // TODO: Pass proper tracing context when server API supports tracing
+        tracingContext: { currentSpan: undefined },
       });
       return result;
     } catch (error) {
@@ -146,6 +148,8 @@ export async function executeAgentToolHandler({
       runtimeContext,
       mastra,
       runId: agentId,
+      // TODO: Pass proper tracing context when server API supports tracing
+      tracingContext: { currentSpan: undefined },
     });
 
     return result;

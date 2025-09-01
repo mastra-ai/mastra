@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.14.2-alpha.0",
+  "version": "0.15.3-alpha.3",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -68,6 +68,16 @@
       "require": {
         "types": "./dist/network/vNext/index.d.ts",
         "default": "./dist/network/vNext/index.cjs"
+      }
+    },
+    "./workflows/evented": {
+      "import": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/evented/index.d.ts",
+        "default": "./dist/workflows/evented/index.cjs"
       }
     },
     "./vector/filter": {
@@ -140,6 +150,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./utils/zod-to-json": {
+      "import": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.js"
+      },
+      "require": {
+        "types": "./dist/zod-to-json.d.ts",
+        "default": "./dist/zod-to-json.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -175,7 +195,7 @@
     "@opentelemetry/semantic-conventions": "^1.36.0",
     "@sindresorhus/slugify": "^2.2.1",
     "ai": "^4.3.19",
-    "ai-v5": "npm:ai@5.0.15",
+    "ai-v5": "npm:ai@5.0.28",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
     "hono": "^4.8.12",
@@ -192,11 +212,11 @@
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
-    "zod": "^3.0.0 || ^4.0.0"
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.23",
     "@babel/core": "^7.28.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

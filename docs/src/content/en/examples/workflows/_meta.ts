@@ -8,6 +8,7 @@ const meta = {
   "agent-as-step": "Agent as Step",
   "tool-as-step": "Tool as Step",
   "human-in-the-loop": "Human in the Loop",
+  "human-in-the-loop-multi-turn": "Multi-turn Human in the Loop",
   "inngest-workflow": "Inngest Workflow",
 };
 

@@ -1,4 +1,4 @@
-import type { WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
+import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import sql from 'mssql';
@@ -42,6 +42,43 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.pool = pool;
     this.operations = operations;
     this.schema = schema;
+  }
+
+  updateWorkflowResults(
+    {
+      // workflowName,
+      // runId,
+      // stepId,
+      // result,
+      // runtimeContext,
+    }: {
+      workflowName: string;
+      runId: string;
+      stepId: string;
+      result: StepResult<any, any, any, any>;
+      runtimeContext: Record<string, any>;
+    },
+  ): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error('Method not implemented.');
+  }
+  updateWorkflowState(
+    {
+      // workflowName,
+      // runId,
+      // opts,
+    }: {
+      workflowName: string;
+      runId: string;
+      opts: {
+        status: string;
+        result?: StepResult<any, any, any, any>;
+        error?: string;
+        suspendedPaths?: Record<string, number[]>;
+        waitingPaths?: Record<string, number[]>;
+      };
+    },
+  ): Promise<WorkflowRunState | undefined> {
+    throw new Error('Method not implemented.');
   }
 
   async persistWorkflowSnapshot({

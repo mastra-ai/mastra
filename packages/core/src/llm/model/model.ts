@@ -14,13 +14,14 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
 import type { AISpan, AnyAISpan } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
-import { delay } from '../../utils';
+import { delay, isZodType } from '../../utils';
 
 import type {
   GenerateObjectWithMessagesArgs,
@@ -224,11 +225,14 @@ export class MastraLLMV1 extends MastraBase {
       }
     };
 
-    return {
-      ...model,
-      doGenerate: wrappedDoGenerate,
-      doStream: wrappedDoStream,
-    };
+    // Create a proper proxy to preserve all model properties including getters/setters
+    return new Proxy(model, {
+      get(target, prop) {
+        if (prop === 'doGenerate') return wrappedDoGenerate;
+        if (prop === 'doStream') return wrappedDoStream;
+        return target[prop as keyof typeof target];
+      },
+    });
   }
 
   async __text<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined>({
@@ -264,11 +268,26 @@ export class MastraLLMV1 extends MastraBase {
       this.logger.debug('[LLM] - Using experimental output', {
         runId,
       });
-      if (typeof (experimental_output as any).parse === 'function') {
+
+      if (isZodType(experimental_output)) {
         schema = experimental_output as z.ZodType<inferOutput<Z>>;
         if (schema instanceof z.ZodArray) {
           schema = schema._def.type as z.ZodType<inferOutput<Z>>;
         }
+
+        let jsonSchemaToUse;
+        if ('toJSONSchema' in z) {
+          // Use dynamic property access to avoid import errors in Zod v3
+          // @ts-ignore
+          jsonSchemaToUse = (z as any)['toJSONSchema'](schema) as JSONSchema7;
+        } else {
+          jsonSchemaToUse = zodToJsonSchema(schema, {
+            $refStrategy: 'none',
+            target: 'jsonSchema7',
+          }) as JSONSchema7;
+        }
+
+        schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
       } else {
         schema = jsonSchema(experimental_output as JSONSchema7) as Schema<inferOutput<Z>>;
       }

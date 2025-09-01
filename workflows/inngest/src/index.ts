@@ -1,10 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
-import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
-import { AISpanType } from '@mastra/core/ai-tracing';
+import type { Agent } from '@mastra/core/agent';
+import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
 import type { TracingContext, AnyAISpan } from '@mastra/core/ai-tracing';
 import { RuntimeContext } from '@mastra/core/di';
+import type { Mastra } from '@mastra/core/mastra';
+import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, ToolStream } from '@mastra/core/tools';
 import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
@@ -29,6 +32,30 @@ import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
+
+// Extract Inngest's native flow control configuration types
+type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
+
+// Extract specific flow control properties (excluding batching)
+export type InngestFlowControlConfig = Pick<
+  InngestCreateFunctionConfig,
+  'concurrency' | 'rateLimit' | 'throttle' | 'debounce' | 'priority'
+>;
+
+// Union type for Inngest workflows with flow control
+export type InngestWorkflowConfig<
+  TWorkflowId extends string = string,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
+> = WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps> & InngestFlowControlConfig;
+
+// Compile-time compatibility assertion
+type _AssertInngestCompatibility =
+  InngestFlowControlConfig extends Pick<Parameters<Inngest['createFunction']>[0], keyof InngestFlowControlConfig>
+    ? true
+    : never;
+const _compatibilityCheck: _AssertInngestCompatibility = true;
 
 export type InngestEngineType = {
   step: any;
@@ -162,6 +189,7 @@ export class InngestRun<
         context: {} as any,
         activePaths: [],
         suspendedPaths: {},
+        waitingPaths: {},
         timestamp: Date.now(),
         status: 'running',
       },
@@ -338,9 +366,19 @@ export class InngestWorkflow<
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
+  private readonly flowControlConfig?: InngestFlowControlConfig;
 
-  constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
-    super(params);
+  constructor(params: InngestWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
+    const { concurrency, rateLimit, throttle, debounce, priority, ...workflowParams } = params;
+
+    super(workflowParams as WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>);
+
+    const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
+      ([_, value]) => value !== undefined,
+    );
+
+    this.flowControlConfig = flowControlEntries.length > 0 ? Object.fromEntries(flowControlEntries) : undefined;
+
     this.#mastra = params.mastra!;
     this.inngest = inngest;
   }
@@ -485,6 +523,7 @@ export class InngestWorkflow<
           value: {},
           context: {},
           activePaths: [],
+          waitingPaths: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
           result: undefined,
@@ -508,6 +547,8 @@ export class InngestWorkflow<
         // @ts-ignore
         retries: this.retryConfig?.attempts ?? 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        // Spread flow control configuration
+        ...this.flowControlConfig,
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
@@ -558,7 +599,7 @@ export class InngestWorkflow<
           runtimeContext: new RuntimeContext(), // TODO
           resume,
           abortController: new AbortController(),
-          parentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+          currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
         });
 
         return { result, runId };
@@ -763,7 +804,7 @@ export function createStep<
       execute: async ({ inputData, mastra, runtimeContext, tracingContext }) => {
         return params.execute({
           context: inputData,
-          mastra,
+          mastra: wrapMastra(mastra, tracingContext),
           runtimeContext,
           tracingContext,
         });
@@ -796,7 +837,7 @@ export function init(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
+    >(params: InngestWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
       return new InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(params, inngest);
     },
     createStep,
@@ -874,7 +915,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     runtimeContext: RuntimeContext;
     abortController: AbortController;
-    parentSpan?: AnyAISpan;
+    currentSpan?: AnyAISpan;
   }): Promise<TOutput> {
     await params.emitter.emit('watch-v2', {
       type: 'start',
@@ -1008,7 +1049,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }): Promise<void> {
     let { duration, fn } = entry;
 
-    const sleepSpan = tracingContext?.parentSpan?.createChildSpan({
+    const sleepSpan = tracingContext?.currentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
@@ -1028,7 +1069,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           inputData: prevOutput,
           runCount: -1,
           tracingContext: {
-            parentSpan: sleepSpan,
+            currentSpan: sleepSpan,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1121,7 +1162,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }): Promise<void> {
     let { date, fn } = entry;
 
-    const sleepUntilSpan = tracingContext?.parentSpan?.createChildSpan({
+    const sleepUntilSpan = tracingContext?.currentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
@@ -1142,7 +1183,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           inputData: prevOutput,
           runCount: -1,
           tracingContext: {
-            parentSpan: sleepUntilSpan,
+            currentSpan: sleepUntilSpan,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1225,6 +1266,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    disableScorers,
     tracingContext,
   }: {
     step: Step<string, any, any>;
@@ -1240,9 +1282,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
     tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
-    const stepAISpan = tracingContext?.parentSpan?.createChildSpan({
+    const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
       input: prevOutput,
@@ -1508,7 +1551,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           inputData: prevOutput,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: {
-            parentSpan: stepAISpan,
+            currentSpan: stepAISpan,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1631,6 +1674,23 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       return { result: execResults, executionContext, stepResults };
     });
 
+    if (disableScorers !== false) {
+      await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}.score`, async () => {
+        if (step.scorers) {
+          await this.runScorers({
+            scorers: step.scorers,
+            runId: executionContext.runId,
+            input: prevOutput,
+            output: stepRes.result,
+            workflowId: executionContext.workflowId,
+            stepId: step.id,
+            runtimeContext,
+            disableScorers,
+          });
+        }
+      });
+    }
+
     // @ts-ignore
     Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
     // @ts-ignore
@@ -1672,6 +1732,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             context: stepResults as any,
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
+            waitingPaths: {},
             serializedStepGraph,
             status: workflowStatus,
             result,
@@ -1698,6 +1759,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     abortController,
     runtimeContext,
     writableStream,
+    disableScorers,
     tracingContext,
   }: {
     workflowId: string;
@@ -1722,9 +1784,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
+    disableScorers?: boolean;
     tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
-    const conditionalSpan = tracingContext?.parentSpan?.createChildSpan({
+    const conditionalSpan = tracingContext?.currentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: ${entry.conditions.length} conditions`,
       input: prevOutput,
@@ -1756,7 +1819,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 runCount: -1,
                 inputData: prevOutput,
                 tracingContext: {
-                  parentSpan: evalSpan,
+                  currentSpan: evalSpan,
                 },
                 getInitData: () => stepResults?.input as any,
                 getStepResult: (step: any) => {
@@ -1802,7 +1865,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               });
 
               return result ? index : null;
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e: unknown) {
               evalSpan?.error({
                 error: e instanceof Error ? e : new Error(String(e)),
@@ -1850,8 +1912,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           abortController,
           runtimeContext,
           writableStream,
+          disableScorers,
           tracingContext: {
-            parentSpan: conditionalSpan,
+            currentSpan: conditionalSpan,
           },
         }),
       ),
