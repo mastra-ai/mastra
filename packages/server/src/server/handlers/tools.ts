@@ -109,6 +109,41 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
   };
 }
 
+export async function getAgentToolHandler({
+  mastra,
+  agentId,
+  toolId,
+  runtimeContext,
+}: Pick<ToolsContext, 'mastra' | 'toolId'> & {
+  agentId?: string;
+  runtimeContext: RuntimeContext;
+}) {
+  try {
+    const agent = agentId ? mastra.getAgent(agentId) : null;
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    const agentTools = await agent.getTools({ runtimeContext });
+
+    const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
+
+    if (!tool) {
+      throw new HTTPException(404, { message: 'Tool not found' });
+    }
+
+    const serializedTool = {
+      ...tool,
+      inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+      outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+    };
+
+    return serializedTool;
+  } catch (error) {
+    return handleError(error, 'Error getting agent tool');
+  }
+}
+
 export async function executeAgentToolHandler({
   mastra,
   agentId,
