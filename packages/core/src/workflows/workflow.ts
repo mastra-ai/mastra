@@ -177,7 +177,7 @@ export function createStep<
           args: inputData,
         };
         await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
+          type: 'workflow-agent-call-start',
           ...toolData,
         });
         const { fullStream } = await params.stream(inputData.prompt, {
@@ -195,31 +195,13 @@ export function createStep<
         }
 
         for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
-
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-              break;
-
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
-          }
+          await emitter.emit('watch-v2', chunk);
         }
+
+        await emitter.emit('watch-v2', {
+          type: 'workflow-agent-call-finish',
+          ...toolData,
+        });
 
         return {
           text: await streamPromise.promise,
@@ -1312,7 +1294,7 @@ export class Run<
 
     this.closeStreamAction = async () => {
       this.emitter.emit('watch-v2', {
-        type: 'finish',
+        type: 'workflow-finish',
         payload: { runId: this.runId },
       });
       unwatch();
@@ -1327,7 +1309,7 @@ export class Run<
     };
 
     this.emitter.emit('watch-v2', {
-      type: 'start',
+      type: 'workflow-start',
       payload: { runId: this.runId },
     });
     this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
