@@ -1,27 +1,21 @@
 # @mastra/couchbase
 
-A Mastra vector store implementation for Couchbase, enabling powerful vector similarity search capabilities using the official Couchbase Node.js SDK (v4+). Leverages Couchbase Server's built-in Vector Search feature (available in version 7.6.4+).
+A Mastra vector store implementation for Couchbase with vector similarity search and advanced metadata filtering capabilities.
 
 ## Features
 
-- 🚀 Vector similarity search powered by Couchbase Search Service.
-- 📐 Supports Cosine, Euclidean (L2 Norm), and Dot Product distance metrics.
-- 📄 Stores vectors and associated metadata within Couchbase documents in a specified Collection.
-- 🔧 Manages Couchbase Search Indexes specifically configured for vector search (Create, List, Describe, Delete).
-- 🆔 Automatic UUID generation for documents if IDs are not provided during upsert.
-- ☁️ Compatible with both self-hosted Couchbase Server (7.6.4+) and Couchbase Capella.
-- ⚙️ Uses the official Couchbase Node.js SDK v4+.
-- 📈 Built-in telemetry support for tracing operations via `@mastra/core`.
+- Vector similarity search with filtering support
+- Cosine, Euclidean (L2), and Dot Product distance metrics
+- Search index management (create, list, describe, delete)
+- Compatible with Couchbase Server 7.6.4+ and Couchbase Capella
+- Built-in telemetry support
 
 ## Prerequisites
 
-- Couchbase Server (Version 7.6.4 or higher) or Couchbase Capella cluster with the **Search Service** enabled.
-- A configured **Bucket**, **Scope**, and **Collection** within your Couchbase cluster where vectors and metadata will be stored.
-- Couchbase user credentials (`username`, `password`) with permissions to ([Docs](https://docs.couchbase.com/cloud/get-started/connect.html#prerequisites)):
-  - Connect to the cluster.
-  - Read/write documents in the specified Collection (`kv` role usually covers this).
-  - Manage Search Indexes (`search_admin` role on the relevant bucket/scope).
-- Node.js (v18+ recommended).
+- Couchbase Server 7.6.4+ or Couchbase Capella cluster with Search Service enabled
+- Configured Bucket, Scope, and Collection
+- User credentials with Read and Write access
+- Node.js 18+
 
 ## Installation
 
@@ -35,14 +29,16 @@ yarn add @mastra/couchbase
 
 ## Getting Started: A Quick Tutorial
 
-Let's set up `@mastra/couchbase` to store and search vectors in your Couchbase cluster.
+Let's set up `@mastra/couchbase` to store and search vectors with filtering capabilities in your Couchbase cluster.
 
 **Step 1: Connect to Your Cluster**
 
-Instantiate `CouchbaseVector` with your cluster details.
+Instantiate `CouchbaseSearchStore` with your cluster details.
 
 ```typescript
-import { CouchbaseVector } from '@mastra/couchbase';
+import { CouchbaseSearchStore } from '@mastra/couchbase';
+// For backward compatibility, CouchbaseVector is also available:
+// import { CouchbaseVector } from '@mastra/couchbase';
 
 const connectionString = 'couchbases://your_cluster_host?ssl=no_verify'; // Use couchbases:// for Capella/TLS, couchbase:// for local/non-TLS
 const username = 'your_couchbase_user';
@@ -51,7 +47,7 @@ const bucketName = 'your_vector_bucket';
 const scopeName = '_default'; // Or your custom scope name
 const collectionName = 'vector_data'; // Or your custom collection name
 
-const vectorStore = new CouchbaseVector({
+const vectorStore = new CouchbaseSearchStore({
   connectionString,
   username,
   password,
@@ -60,14 +56,14 @@ const vectorStore = new CouchbaseVector({
   collectionName,
 });
 
-console.log('CouchbaseVector instance created. Connecting...');
+console.log('CouchbaseSearchStore instance created. Connecting...');
 ```
 
 _Note_: The actual connection to Couchbase happens lazily upon the first operation.
 
 **Step 2: Create a Vector Search Index**
 
-Define and create a Search Index specifically for vector search on your collection.
+Define and create a Search Index specifically for vector search on your collection. You can also specify additional metadata fields to index for filtering.
 
 ```typescript
 const indexName = 'my_vector_search_index';
@@ -78,6 +74,11 @@ try {
     indexName: indexName,
     dimension: vectorDimension,
     metric: 'cosine', // Or 'euclidean', 'dotproduct'
+    fields_to_index: [
+      { name: 'category', type: 'text' },
+      { name: 'page', type: 'number' },
+      { name: 'timestamp', type: 'datetime' },
+    ], // Optional: metadata fields to enable filtering on
   });
   console.log(`Search index '${indexName}' created or updated successfully.`);
 } catch (error) {
@@ -86,6 +87,8 @@ try {
 ```
 
 _Note_: Index creation in Couchbase is asynchronous. It might take a short while for the index to become fully built and queryable.
+
+**Important:** Filtering will only work on metadata fields that are explicitly indexed using the `fields_to_index` parameter. Fields not included in the index definition cannot be used for filtering operations.
 
 _Best practice_: Implement a delay or polling mechanism to ensure the index is ready using simple delay approach (`await new Promise(resolve => setTimeout(resolve, 2000));`) or implement a more robust solution that polls the index status
 
@@ -140,28 +143,82 @@ Document ID: <generated_or_provided_id>
 
 **Step 4: Find Similar Vectors (Query the Index)**
 
-Use the Search Index to find documents with vectors similar to your query vector.
+Use the Search Index to find documents with vectors similar to your query vector. You can also apply metadata filters to narrow down results.
 
 ```typescript
 const queryVector = Array(vectorDimension).fill(0.15); // Your query vector
 const k = 5; // Number of nearest neighbors to retrieve
+
 try {
+  // Basic vector similarity search
   const results = await vectorStore.query({
     indexName: indexName,
     queryVector: queryVector,
     topK: k,
   });
   console.log(`Found ${results.length} similar results:`, results);
+
+  // Vector search with metadata filtering
+  const filteredResults = await vectorStore.query({
+    indexName: indexName,
+    queryVector: queryVector,
+    topK: k,
+    filter: {
+      'metadata.category': { $eq: 'finance' },
+      'metadata.page': { $gt: 1, $lt: 10 },
+    },
+  });
+  console.log(`Found ${filteredResults.length} filtered results:`, filteredResults);
 } catch (error) {
   console.error('Failed to query vectors:', error);
 }
 ```
 
-_Note_: Metadata `filter` and `includeVector` not yet supported in `query()`
+**Important - Filter Field Names:** When using filters, metadata fields are stored within a `metadata` object in the Couchbase document. Therefore, you must prefix your field names with `metadata.` when creating filters. For example, to filter on a field called `category` that was stored in metadata, use `'metadata.category'` in your filter expression.
+
+**Filtering Operators Supported:**
+
+- **Equality:** `$eq`, `$ne`
+- **Comparison:** `$gt`, `$gte`, `$lt`, `$lte` (for numbers and dates)
+- **Logical:** `$and`, `$or`, `$not`, `$nor`
+
+**Filter Examples:**
+
+```typescript
+// Text equality
+{ 'metadata.category': { $eq: 'finance' } }
+
+// Numeric range
+{ 'metadata.page': { $gte: 1, $lte: 10 } }
+
+// Date comparison
+{ 'metadata.timestamp': { $gt: new Date('2024-01-01') } }
+
+// Boolean filtering
+{ 'metadata.active': { $eq: true } }
+
+// Complex logical operations
+{
+  $and: [
+    { 'metadata.category': { $eq: 'tech' } },
+    { 'metadata.page': { $gt: 5 } }
+  ]
+}
+
+// Multiple conditions with OR
+{
+  $or: [
+    { 'metadata.category': { $eq: 'finance' } },
+    { 'metadata.category': { $eq: 'tech' } }
+  ]
+}
+```
+
+_Note_: `includeVector` option not yet supported in `query()`
 
 Results format:
 
-```
+```js
 [
     {
         id: string, // Document ID
@@ -196,6 +253,47 @@ try {
 
 _Note_: Deleting Index does NOT delete the vectors in the associated Couchbase Collection
 
+## API Reference
+
+### `CouchbaseSearchStore`
+
+**Constructor:**
+
+```typescript
+new CouchbaseSearchStore({
+  connectionString: string,
+  username: string,
+  password: string,
+  bucketName: string,
+  scopeName: string,
+  collectionName: string,
+});
+```
+
+**Key Methods:**
+
+- `createIndex({ indexName, dimension, metric?, fields_to_index? })` - Create vector search index
+- `upsert({ vectors, metadata?, ids? })` - Add/update vectors
+- `query({ indexName, queryVector, topK?, filter? })` - Search similar vectors with filtering
+- `listIndexes()`, `describeIndex({ indexName })`, `deleteIndex({ indexName })` - Index management
+- `updateVector({ id, update })`, `deleteVector({ id })` - Vector management
+- `disconnect()` - Close connection
+
+### Legacy `CouchbaseVector` (Deprecated)
+
+⚠️ Use `CouchbaseSearchStore` for new projects. `CouchbaseVector` lacks filtering support.
+
+## Important Notes
+
+- **Async Operations:** Index creation and large upserts are asynchronous. Allow time for processing before querying.
+- **Field Indexing:** Only `fields_to_index` fields can be filtered. Use `metadata.` prefix in filters.
+- **Document Structure:** Vectors stored in `embedding` field, metadata in `metadata` field.
+- **Limitations:**
+  - `includeVector` not supported in queries
+  - Advanced operators (`$in`, `$regex`, etc.) not yet supported
+  - Index count returns -1
+
+## Links
 ## Advanced Couchbase Vector Usage
 
 - **Distance Metrics Mapping:**
@@ -260,19 +358,5 @@ _Note_: Deleting Index does NOT delete the vectors in the associated Couchbase C
 
 ## Related Links
 
-- [Couchbase Vector Search Documentation](https://docs.couchbase.com/cloud/vector-search/vector-search.html)
-- [Couchbase Node.js SDK Documentation](https://docs.couchbase.com/nodejs-sdk/current/hello-world/start-using-sdk.html)
-- [Couchbase Query Language (SQL++) for working with documents](https://docs.couchbase.com/server/current/n1ql/n1ql-language-reference/index.html)
-- [Couchbase Search Service API / Index Definition](https://docs.couchbase.com/cloud/search/search-index-params.html)
-
----
-
-## 📢 Support Policy
-
-We truly appreciate your interest in this project!
-This project is **community-maintained**, which means it's **not officially supported** by our support team.
-
-If you need help, have found a bug, or want to contribute improvements, the best place to do that is right here — by [opening a GitHub issue](https://github.com/mastra-ai/mastra/issues) (Update this link to your project's issue tracker!).
-Our support portal is unable to assist with requests related to this project, so we kindly ask that all inquiries stay within GitHub.
-
-Your collaboration helps us all move forward together — thank you!
+- [Couchbase Vector Search Docs](https://docs.couchbase.com/cloud/vector-search/vector-search.html)
+- [Couchbase Node.js SDK](https://docs.couchbase.com/nodejs-sdk/current/hello-world/start-using-sdk.html)
