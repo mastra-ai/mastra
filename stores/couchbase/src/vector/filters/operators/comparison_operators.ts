@@ -20,7 +20,7 @@ function GetTypeOfField(value: Record<string, any>): string {
     if (typeOfField === 'undefined') {
       typeOfField = dataType;
     } else if (dataType !== typeOfField) {
-      throw new Error(`Type of field ${op} is ${dataType} but expected ${typeOfField}`);
+      throw new Error(`Mixed data types in field operators: found ${dataType} but expected ${typeOfField}`);
     }
   }
   return typeOfField;
