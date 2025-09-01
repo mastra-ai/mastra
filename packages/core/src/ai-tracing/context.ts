@@ -56,11 +56,13 @@ export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingC
             };
           }
 
-          // Pass through all other methods unchanged
-          return (target as any)[prop];
+          // Pass through all other methods unchanged - bind functions to preserve 'this' context
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
         } catch (error) {
           console.warn('AI Tracing: Failed to wrap method, falling back to original', error);
-          return (target as any)[prop];
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
         }
       },
     });
@@ -93,10 +95,13 @@ export function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingCont
             };
           }
 
-          return (target as any)[prop];
+          // Bind functions to preserve 'this' context for private member access
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
         } catch (error) {
           console.warn('AI Tracing: Failed to wrap agent method, falling back to original', error);
-          return (target as any)[prop];
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
         }
       },
     });
@@ -130,10 +135,13 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: Tr
             };
           }
 
-          return (target as any)[prop];
+          // Bind functions to preserve 'this' context for private member access
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
         } catch (error) {
           console.warn('AI Tracing: Failed to wrap workflow method, falling back to original', error);
-          return (target as any)[prop];
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
         }
       },
     });
