@@ -1376,7 +1376,6 @@ export class Run<
   streamVNext({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}) {
     this.closeStreamAction = async () => {};
 
-    // TODO: use MastraModelOutput
     return new MastraWorkflowStream({
       run: this,
       createStream: writer => {
@@ -1411,31 +1410,13 @@ export class Run<
         };
 
         const unwatch = this.watch(async ({ type, payload }) => {
-          let newPayload: Record<string, any> = payload;
-
-          //@ts-ignore
-          if (type === 'step-start') {
-            const { payload: args, id, ...rest } = newPayload;
-            newPayload = {
-              args,
-              ...rest,
-            };
-            //@ts-ignore
-          } else if (type === 'step-result') {
-            const { output, id, ...rest } = newPayload;
-            newPayload = {
-              result: output,
-              ...rest,
-            };
-          }
-
           buffer.push({
             type,
             runId: this.runId,
             from: ChunkFrom.WORKFLOW,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
-              ...newPayload,
+              ...payload,
             },
           });
 
