@@ -816,7 +816,7 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
       );
 
       if (includeVector) {
-        throw new Error('Including vectors in search results is not yet supported by the Couchbase Search Store');
+        throw new Error('Including vectors in search results is not yet supported by the CouchbaseSearchStore');
       }
       const output = [];
       for (const match of results.rows) {
