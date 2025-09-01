@@ -7,7 +7,7 @@ import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from 
 import type { LoopConfig, LoopOptions } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorers } from '../scores';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
@@ -88,7 +88,7 @@ export type AgentExecutionOptions<
   modelSettings?: LoopOptions['modelSettings'];
 
   /** Evaluation scorers to run on the execution results */
-  scorers?: MastraScorers;
+  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
   /** AI tracing context for span hierarchy and metadata */
