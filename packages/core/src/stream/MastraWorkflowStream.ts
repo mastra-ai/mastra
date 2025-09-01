@@ -74,20 +74,12 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
           payload: {},
         });
 
-        const stream = await createStream(writer);
+        const stream: ReadableStream<ChunkType> = await createStream(writer);
 
         for await (const chunk of stream) {
           // update the usage count
-          if (
-            (chunk.type === 'step-output' &&
-              chunk.payload?.output?.from === 'AGENT' &&
-              chunk.payload?.output?.type === 'finish') ||
-            (chunk.type === 'step-output' &&
-              chunk.payload?.output?.from === 'WORKFLOW' &&
-              chunk.payload?.output?.type === 'finish')
-          ) {
-            const finishPayload = chunk.payload?.output.payload;
-            updateUsageCount(finishPayload.usage);
+          if (chunk.type === 'step-finish') {
+            updateUsageCount(chunk.payload.usage);
           }
 
           controller.enqueue(chunk);
