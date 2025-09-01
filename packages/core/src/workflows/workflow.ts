@@ -1376,6 +1376,7 @@ export class Run<
   streamVNext({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}) {
     this.closeStreamAction = async () => {};
 
+    // TODO: use MastraModelOutput
     return new MastraWorkflowStream({
       run: this,
       createStream: writer => {
