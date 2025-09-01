@@ -113,8 +113,6 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
           },
         });
 
-        stream;
-
         controller.close();
         deferredPromise.resolve();
       },

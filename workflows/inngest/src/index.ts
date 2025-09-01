@@ -329,7 +329,7 @@ export class InngestRun<
           args: (event as any).args,
         };
         await writer.write({
-          ...event,
+          ...event.payload,
           type: 'tool-call-streaming-start',
         } as any);
 
@@ -771,7 +771,7 @@ export function createStep<
         };
         await emitter.emit('watch-v2', {
           type: 'workflow-agent-call-start',
-          ...toolData,
+          payload: toolData,
         });
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
@@ -794,7 +794,7 @@ export function createStep<
 
         await emitter.emit('watch-v2', {
           type: 'workflow-agent-call-finish',
-          ...toolData,
+          payload: toolData,
         });
 
         return {
