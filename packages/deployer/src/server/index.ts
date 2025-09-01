@@ -23,6 +23,7 @@ import { rootHandler } from './handlers/root';
 // import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { filesRouter } from './handlers/routes/files/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
@@ -423,6 +424,8 @@ export async function createHonoServer(
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
   app.route('/api/vector', vectorRouter(bodyLimitOptions));
+  // Files routes
+  app.route('/api/files', filesRouter(bodyLimitOptions));
 
   if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
     app.get(

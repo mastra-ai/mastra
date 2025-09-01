@@ -22,13 +22,17 @@ const InMessageAttachmentWrapper = () => {
   const src = useAttachmentSrc();
   const attachment = useAttachment(a => a);
 
+  const isUrl = attachment?.name?.startsWith('https://');
+
   if (attachment.type === 'image') {
+    const actualSrc = isUrl ? attachment?.name : src;
+
     return (
       <InMessageAttachment
         type="image"
         contentType={undefined}
         nameSlot={<AttachmentPrimitive.Name />}
-        src={src}
+        src={actualSrc}
         data={undefined}
       />
     );
@@ -41,7 +45,7 @@ const InMessageAttachmentWrapper = () => {
         type="document"
         contentType={attachment.contentType}
         nameSlot={<AttachmentPrimitive.Name />}
-        src={src}
+        src={isUrl ? attachment?.name : src}
         data={`data:application/pdf;base64,${pdfText}`}
       />
     );
@@ -75,7 +79,7 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
             {type === 'image' ? (
               <ImageEntry src={src ?? ''} />
             ) : type === 'document' && contentType === 'application/pdf' ? (
-              <PdfEntry data={data ?? ''} />
+              <PdfEntry data={data ?? ''} url={src} />
             ) : (
               <TxtEntry data={data ?? ''} />
             )}

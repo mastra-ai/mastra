@@ -34,6 +34,8 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
   const promises = (attachments ?? [])
     .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
     .map(async attachment => {
+      const isFileFromURL = attachment.name.startsWith('https://');
+
       if (attachment.type === 'document') {
         if (attachment.contentType === 'application/pdf') {
           // @ts-expect-error - TODO: fix this type issue somehow
@@ -43,7 +45,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
             content: [
               {
                 type: 'file' as const,
-                data: `data:application/pdf;base64,${pdfText}`,
+                data: isFileFromURL ? attachment.name : `data:application/pdf;base64,${pdfText}`,
                 mimeType: attachment.contentType,
                 filename: attachment.name,
               },
@@ -64,7 +66,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
         content: [
           {
             type: 'image' as const,
-            image: await fileToBase64(attachment.file!),
+            image: isFileFromURL ? attachment.name : await fileToBase64(attachment.file!),
             mimeType: attachment.file!.type,
           },
         ],
