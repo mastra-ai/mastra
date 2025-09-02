@@ -945,6 +945,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
@@ -7178,6 +7181,7 @@ packages:
   '@lancedb/lancedb@0.21.2':
     resolution: {integrity: sha512-3RPsGbdhFbwgy7GisQnlgf+5r6R73N4xIkPNISJfvratJ5kVoQIuswra/jJxAf8N5tKriD9UnrQyUsRbmblwFQ==}
     engines: {node: '>= 18'}
+    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
@@ -13672,6 +13676,7 @@ packages:
 
   libsql@0.5.17:
     resolution: {integrity: sha512-RRlj5XQI9+Wq+/5UY8EnugSWfRmHEw4hn3DKlPrkUgZONsge1PwTtHcpStP6MSNi8ohcbsRgEHJaymA33a8cBw==}
+    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   lilconfig@3.1.3:
