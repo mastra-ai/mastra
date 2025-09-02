@@ -68,7 +68,14 @@ async function executeToolCallAndRespond({
 
       if (clientTool && clientTool.execute) {
         const result = await clientTool.execute(
-          { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
+          {
+            context: toolCall?.args,
+            runId,
+            resourceId,
+            threadId,
+            runtimeContext: runtimeContext as RuntimeContext,
+            tracingContext: { currentSpan: undefined },
+          },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
             toolCallId: toolCall?.toolCallId,
@@ -239,7 +246,14 @@ export class Agent extends BaseResource {
 
         if (clientTool && clientTool.execute) {
           const result = await clientTool.execute(
-            { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
+            {
+              context: toolCall?.args,
+              runId,
+              resourceId,
+              threadId,
+              runtimeContext: runtimeContext as RuntimeContext,
+              tracingContext: { currentSpan: undefined },
+            },
             {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
@@ -1105,6 +1119,8 @@ export class Agent extends BaseResource {
                     resourceId: processedParams.resourceId,
                     threadId: processedParams.threadId,
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                    // TODO: Pass proper tracing context when client-js supports tracing
+                    tracingContext: { currentSpan: undefined },
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1303,6 +1319,8 @@ export class Agent extends BaseResource {
                     resourceId: processedParams.resourceId,
                     threadId: processedParams.threadId,
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                    // TODO: Pass proper tracing context when client-js supports tracing
+                    tracingContext: { currentSpan: undefined },
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,

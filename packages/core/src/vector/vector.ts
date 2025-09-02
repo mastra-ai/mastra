@@ -1,3 +1,5 @@
+import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { EmbeddingModel as EmbeddingModelV1 } from 'ai';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { VectorFilter } from './filter';
@@ -13,6 +15,7 @@ import type {
   DeleteIndexParams,
 } from './types';
 
+export type MastraEmbeddingModel<T> = EmbeddingModelV1<T> | EmbeddingModelV2<T>;
 export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   constructor() {
     super({ name: 'MastraVector', component: 'VECTOR' });

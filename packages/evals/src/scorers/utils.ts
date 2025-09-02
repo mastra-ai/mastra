@@ -36,6 +36,49 @@ export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent) => {
   return input?.inputMessages.find(({ role }) => role === 'user')?.content;
 };
 
+export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): string[] => {
+  const systemMessages: string[] = [];
+
+  // Add standard system messages
+  if (input?.systemMessages) {
+    systemMessages.push(
+      ...input.systemMessages
+        .map(msg => {
+          // Handle different content types - extract text if it's an array of parts
+          if (typeof msg.content === 'string') {
+            return msg.content;
+          } else if (Array.isArray(msg.content)) {
+            // Extract text from parts array
+            return msg.content
+              .filter(part => part.type === 'text')
+              .map(part => part.text || '')
+              .join(' ');
+          }
+          return '';
+        })
+        .filter(content => content),
+    );
+  }
+
+  // Add tagged system messages (these are specialized system prompts)
+  if (input?.taggedSystemMessages) {
+    Object.values(input.taggedSystemMessages).forEach(messages => {
+      messages.forEach(msg => {
+        if (typeof msg.content === 'string') {
+          systemMessages.push(msg.content);
+        }
+      });
+    });
+  }
+
+  return systemMessages;
+};
+
+export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string => {
+  const systemMessages = getSystemMessagesFromRunInput(input);
+  return systemMessages.join('\n\n');
+};
+
 export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
   return output?.find(({ role }) => role === 'assistant')?.content;
 };

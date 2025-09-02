@@ -75,7 +75,38 @@
     "@mastra/voice-playai": "0.11.2",
     "@mastra/voice-sarvam": "0.11.2",
     "@mastra/voice-speechify": "0.11.2",
-    "@mastra/inngest": "0.12.2"
+    "@mastra/inngest": "0.12.2",
+    "@mastra/agent-builder": "0.0.1-alpha.0",
+    "@mastra/agent-builder-integration-tests": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "beige-islands-speak",
+    "brave-months-lay",
+    "bright-ducks-mix",
+    "easy-eagles-thank",
+    "empty-women-cry",
+    "funny-monkeys-grab",
+    "fuzzy-insects-sneeze",
+    "gentle-baboons-end",
+    "green-dragons-train",
+    "kind-colts-sin",
+    "late-rabbits-brake",
+    "metal-melons-whisper",
+    "mighty-hands-tell",
+    "nice-candies-walk",
+    "nine-comics-guess",
+    "plain-worms-melt",
+    "polite-chairs-wish",
+    "seven-taxes-lay",
+    "shy-zebras-act",
+    "slimy-tables-check",
+    "slow-lands-hope",
+    "small-trains-heal",
+    "sour-melons-raise",
+    "spotty-houses-eat",
+    "stupid-wolves-grab",
+    "tall-bats-draw",
+    "true-tools-pull",
+    "two-laws-juggle"
+  ]
 }

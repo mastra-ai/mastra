@@ -1,0 +1,69 @@
+{
+  "name": "@mastra/agent-builder",
+  "version": "0.0.1-alpha.1",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "pnpm run check && tsup --silent src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting --external typescript",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.0",
+    "@ai-sdk/openai_v5": "npm:@ai-sdk/openai@2.0.15",
+    "@mastra/memory": "workspace:*",
+    "ai": "^5.0.25",
+    "ignore": "^7.0.5",
+    "semver": "^7.7.2",
+    "swpm": "^2.6.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "^20.19.0",
+    "@types/semver": "^7.7.0",
+    "eslint": "^9.30.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.10.7-0 <0.14.0-0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "agent",
+    "agents",
+    "mastra",
+    "builder",
+    "typescript"
+  ]
+}

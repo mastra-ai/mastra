@@ -1,3 +1,4 @@
+import type { TracingStrategy } from '../../../ai-tracing';
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '../../types';
@@ -8,6 +9,20 @@ export class ObservabilityStorage extends MastraBase {
       component: 'STORAGE',
       name: 'OBSERVABILITY',
     });
+  }
+
+  /**
+   * Provides hints for AI tracing strategy selection by the DefaultExporter.
+   * Storage adapters can override this to specify their preferred and supported strategies.
+   */
+  public get aiTracingStrategy(): {
+    preferred: TracingStrategy;
+    supported: TracingStrategy[];
+  } {
+    return {
+      preferred: 'batch-with-updates', // Default for most SQL stores
+      supported: ['realtime', 'batch-with-updates', 'insert-only'],
+    };
   }
 
   /**

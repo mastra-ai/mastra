@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
 import { MastraAITracing } from './base';
-import { DefaultAITracing, DefaultConsoleExporter, SensitiveDataFilter, aiTracingDefaultConfig } from './default';
+import { DefaultAITracing, SensitiveDataFilter, aiTracingDefaultConfig } from './default';
+import { ConsoleExporter } from './exporters';
 import {
   clearAITracingRegistry,
   getAITracing,
@@ -143,7 +144,6 @@ describe('AI Tracing', () => {
       expect(agentSpan.attributes?.agentId).toBe('agent-123');
       expect(agentSpan.startTime).toBeInstanceOf(Date);
       expect(agentSpan.endTime).toBeUndefined();
-      expect(agentSpan.trace).toBe(agentSpan); // Root span is its own trace
       expect(agentSpan.traceId).toBeValidTraceId();
     });
 
@@ -173,7 +173,6 @@ describe('AI Tracing', () => {
       expect(toolSpan.id).toBeValidSpanId();
       expect(toolSpan.type).toBe(AISpanType.TOOL_CALL);
       expect(toolSpan.attributes?.toolId).toBe('tool-456');
-      expect(toolSpan.trace).toBe(agentSpan); // Child inherits trace from parent
       expect(toolSpan.traceId).toBe(agentSpan.traceId); // Child spans inherit trace ID
     });
 
@@ -548,7 +547,7 @@ describe('AI Tracing', () => {
       const tracing = new DefaultAITracing();
 
       expect(tracing.getExporters()).toHaveLength(1);
-      expect(tracing.getExporters()[0]).toBeInstanceOf(DefaultConsoleExporter);
+      expect(tracing.getExporters()[0]).toBeInstanceOf(ConsoleExporter);
     });
 
     it('should shutdown all components', async () => {
@@ -821,7 +820,6 @@ describe('AI Tracing', () => {
             type: options.type,
             attributes: options.attributes,
             parent: options.parent,
-            trace: options.parent?.trace || ({} as any),
             traceId: 'custom-trace-id',
             startTime: new Date(),
             aiTracing: this,
@@ -1053,65 +1051,6 @@ describe('AI Tracing', () => {
       });
 
       expect(toolSpan.attributes?.toolId).toBe('calculator');
-    });
-  });
-
-  describe('DefaultConsoleExporter', () => {
-    it('should log span events with proper formatting', async () => {
-      const logger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      };
-
-      const exporter = new DefaultConsoleExporter(logger as any);
-
-      const mockSpan = {
-        id: 'test-span-1',
-        name: 'test-span',
-        type: AISpanType.AGENT_RUN,
-        startTime: new Date(),
-        endTime: new Date(),
-        traceId: 'trace-123',
-        trace: { traceId: 'trace-123' },
-        attributes: { agentId: 'agent-123', normalField: 'visible-data' },
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
-        span: mockSpan as any,
-      });
-
-      // Should log with proper formatting (no filtering happens in exporter anymore)
-      expect(logger.info).toHaveBeenCalledWith('🚀 SPAN_STARTED');
-      expect(logger.info).toHaveBeenCalledWith('   Type: agent_run');
-      expect(logger.info).toHaveBeenCalledWith('   Name: test-span');
-      expect(logger.info).toHaveBeenCalledWith('   ID: test-span-1');
-      expect(logger.info).toHaveBeenCalledWith('   Trace ID: trace-123');
-
-      // Check that attributes are logged (filtering happens at processor level now)
-      const attributesCall = logger.info.mock.calls.find(call => call[0].includes('Attributes:'));
-      expect(attributesCall).toBeDefined();
-      expect(attributesCall![0]).toContain('visible-data');
-    });
-
-    it('should throw error for unknown events', async () => {
-      const logger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      };
-
-      const exporter = new DefaultConsoleExporter(logger as any);
-
-      await expect(
-        exporter.exportEvent({
-          type: 'unknown_event' as any,
-          span: {} as any,
-        }),
-      ).rejects.toThrow('Tracing event type not implemented: unknown_event');
     });
   });
 
@@ -1418,7 +1357,6 @@ describe('AI Tracing', () => {
 
       // Event span should be properly linked to parent
       expect(eventSpan.parent).toBe(rootSpan);
-      expect(eventSpan.trace).toBe(rootSpan);
       expect(eventSpan.traceId).toBe(rootSpan.traceId);
 
       rootSpan.end();
@@ -1608,10 +1546,6 @@ describe('AI Tracing', () => {
       // Event spans should have llmSpan as parent
       expect(eventSpan1.parent).toBe(llmSpan);
       expect(eventSpan2.parent).toBe(llmSpan);
-
-      // Event spans should have rootSpan as trace
-      expect(eventSpan1.trace).toBe(rootSpan);
-      expect(eventSpan2.trace).toBe(rootSpan);
 
       // All spans should share the same traceId
       expect(eventSpan1.traceId).toBe(rootSpan.traceId);
