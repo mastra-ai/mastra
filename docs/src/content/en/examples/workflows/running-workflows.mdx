@@ -7,6 +7,75 @@ description: Example for how to run workflows.
 
 Workflows can be run from different environments. These examples demonstrate how to execute a workflow using a command line script or by calling the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) from a client-side component.
 
+## From Mastra Client
+
+In this example, a client-side request is made using the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx). The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps.mdx) example.
+
+```typescript filename="src/components/test-run-workflow.tsx"
+import { mastraClient } from "../../lib/mastra-client";
+
+export const TestWorkflow = () => {
+  async function handleClick() {
+    const workflow = await mastraClient.getWorkflow("sequentialSteps");
+
+    const run = await workflow.createRunAsync();
+
+    const result = await workflow.startAsync({
+      runId: run.runId,
+      inputData: {
+        value: 10
+      }
+    });
+
+    console.log(JSON.stringify(result, null, 2));
+  }
+
+  return <button onClick={handleClick}>Test Workflow</button>;
+};
+```
+
+> See [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) for more information.
+
+### Mastra Client output
+
+The output from this workflow run will look similar to the below:
+
+```json
+{
+  "status": "success",
+  "steps": {
+    "input": {
+      "value": 10
+    },
+    "step-1": {
+      "payload": {
+        "value": 10
+      },
+      "startedAt": 1753816719202,
+      "status": "success",
+      "output": {
+        "value": 10
+      },
+      "endedAt": 1753816719203
+    },
+    "step-2": {
+      "payload": {
+        "value": 10
+      },
+      "startedAt": 1753816719203,
+      "status": "success",
+      "output": {
+        "value": 10
+      },
+      "endedAt": 1753816719203
+    }
+  },
+  "result": {
+    "value": 10
+  }
+}
+```
+
 ## From the command line
 
 In this example, a run script has been added to the `src` directory. The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps.mdx) example.
@@ -61,70 +130,17 @@ The output from this workflow run will look similar to the below:
 }
 ```
 
-## Using Mastra Client
+## From curl
 
-In this example, a client-side request is made using the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx). The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps.mdx) example.
+You can run a workflow by sending a `POST` request to your Mastra application's `/start-async` endpoint. Include `inputData` that matches the workflow's `inputSchema`.
 
-```typescript filename="src/components/test-run-workflow.tsx"
-import { mastraClient } from "../../lib/mastra-client";
+```bash
 
-export const TestWorkflow = () => {
-  async function handleClick() {
-    const workflow = await mastraClient.getWorkflow("sequentialSteps");
-
-    const run = await workflow.createRunAsync();
-
-    const result = await workflow.startAsync({
-      runId: run.runId,
-      inputData: {
-        value: 10
-      }
-    });
-
-    console.log(JSON.stringify(result, null, 2));
-  }
-
-  return <button onClick={handleClick}>Test Workflow</button>;
-};
-```
-
-
-### Mastra Client output
-
-The output from this workflow run will look similar to the below:
-
-```json
-{
-  "status": "success",
-  "steps": {
-    "input": {
-      "value": 10
-    },
-    "step-1": {
-      "payload": {
-        "value": 10
-      },
-      "startedAt": 1753816719202,
-      "status": "success",
-      "output": {
-        "value": 10
-      },
-      "endedAt": 1753816719203
-    },
-    "step-2": {
-      "payload": {
-        "value": 10
-      },
-      "startedAt": 1753816719203,
-      "status": "success",
-      "output": {
-        "value": 10
-      },
-      "endedAt": 1753816719203
+curl -X POSThttp://localhost:4111/api/workflows/sequentialSteps/start-async \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputData": {
+      "value": "10"
     }
-  },
-  "result": {
-    "value": 10
-  }
-}
+  }' | jq
 ```
