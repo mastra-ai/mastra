@@ -286,10 +286,10 @@ export async function generateHandler({
 
     const result = await agent.generate(messages, {
       ...rest,
+      abortSignal,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
-      signal: abortSignal,
     });
 
     return result;
@@ -381,10 +381,10 @@ export async function streamGenerateHandler({
 
     const streamResult = await agent.stream(messages, {
       ...rest,
+      abortSignal,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
-      signal: abortSignal,
     });
 
     const streamResponse = rest.output
