@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import { AISpanType, getSelectedAITracing, wrapMastra } from '../ai-tracing';
-import type { AISpan, AnyAISpan, TracingContext } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
+import { AISpanType, wrapMastra, getOrCreateSpan, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
@@ -197,11 +197,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
-    currentSpan?: AnyAISpan;
+    tracingContext?: TracingContext;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, currentSpan, disableScorers } =
+    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, tracingContext, disableScorers } =
       params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
@@ -209,36 +209,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     //clear runCounts
     this.runCounts.clear();
 
-    const spanArgs = {
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
       name: `workflow run: '${workflowId}'`,
       input,
       attributes: {
         workflowId,
       },
-    };
-
-    // if currentSpan passed, use it to build workflowSpan
-    // otherwise, attempt to create new trace
-    let workflowAISpan: AISpan<AISpanType.WORKFLOW_RUN> | undefined;
-    if (currentSpan) {
-      workflowAISpan = currentSpan.createChildSpan({
-        type: AISpanType.WORKFLOW_RUN,
-        ...spanArgs,
-      });
-    } else {
-      const aiTracing = getSelectedAITracing({
-        runtimeContext: runtimeContext,
-      });
-      if (aiTracing) {
-        workflowAISpan = aiTracing.startSpan({
-          type: AISpanType.WORKFLOW_RUN,
-          ...spanArgs,
-          startOptions: {
-            runtimeContext,
-          },
-        });
-      }
-    }
+      tracingContext,
+      runtimeContext,
+    });
 
     if (steps.length === 0) {
       const empty_graph_error = new MastraError({
@@ -762,11 +742,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const stepAISpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
-      input: prevOutput,
+      //input: prevOutput,
       attributes: {
         stepId: step.id,
       },
     });
+
+    const innerTracingContext: TracingContext = { currentSpan: stepAISpan };
 
     if (!skipEmits) {
       await emitter.emit('watch', {
@@ -852,12 +834,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const result = await runStep({
           runId,
           workflowId,
-          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
+          mastra: this.mastra ? wrapMastra(this.mastra, innerTracingContext) : undefined,
           runtimeContext,
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: { currentSpan: stepAISpan },
+          tracingContext: innerTracingContext,
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
             if (!step?.id) {
@@ -917,6 +899,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowId,
             stepId: step.id,
             runtimeContext,
+            tracingContext: innerTracingContext,
             disableScorers,
           });
         }
@@ -1033,6 +1016,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId,
     stepId,
     runtimeContext,
+    tracingContext,
     disableScorers,
   }: {
     scorers: DynamicArgument<MastraScorers>;
@@ -1040,6 +1024,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     input: any;
     output: any;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     workflowId: string;
     stepId: string;
     disableScorers?: boolean;
@@ -1076,7 +1061,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId: runId,
           input: [input],
           output: output,
-          runtimeContext: runtimeContext,
+          runtimeContext,
+          tracingContext,
           entity: {
             id: workflowId,
             stepId: stepId,
@@ -1550,7 +1536,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       const evalSpan = loopSpan?.createChildSpan({
         type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
         name: `condition: ${entry.loopType}`,
-        input: result.output,
+        input: selectFields(result.output, ['stepResult', 'output.text', 'output.object', 'messages']),
         attributes: {
           conditionIndex: iteration,
         },
