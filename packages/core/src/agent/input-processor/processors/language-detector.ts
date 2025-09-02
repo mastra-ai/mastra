@@ -1,3 +1,4 @@
+import type { TracingContext } from '../../../ai-tracing';
 import { LanguageDetector } from '../../../processors/processors/language-detector';
 import type {
   LanguageDetectorOptions,
