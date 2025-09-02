@@ -1,5 +1,8 @@
 storage: ./storage
 
+# Increase max body size to handle large packages
+max_body_size: 100mb
+
 uplinks:
   npmjs:
     url: https://registry.npmjs.org/
