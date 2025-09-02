@@ -1,3 +1,4 @@
+import type { TracingContext } from '../ai-tracing';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { MastraScorerEntry } from './base';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
@@ -9,6 +10,7 @@ export function runScorer({
   input,
   output,
   runtimeContext,
+  tracingContext,
   entity,
   structuredOutput,
   source,
@@ -22,6 +24,7 @@ export function runScorer({
   input: any;
   output: any;
   runtimeContext: Record<string, any>;
+  tracingContext?: TracingContext;
   entity: Record<string, any>;
   structuredOutput: boolean;
   source: ScoringSource;
@@ -58,6 +61,7 @@ export function runScorer({
     input,
     output,
     runtimeContext: Object.fromEntries(runtimeContext.entries()),
+    tracingContext,
     runId,
     source,
     entity,

@@ -2831,7 +2831,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
+      await expect(
+        userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} }),
+      ).rejects.toThrow(/same name/i);
     });
 
     it('should sanitize tool names with invalid characters', async () => {
@@ -2903,7 +2905,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools)).toContain('bad___tool_name');
       expect(Object.keys(tools)).not.toContain(badName);
     });
@@ -2977,7 +2979,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
@@ -3051,7 +3053,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
@@ -6327,6 +6329,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         input: expect.any(Object),
         output: expect.any(Object),
         runtimeContext: expect.any(Object),
+        tracingContext: expect.any(Object),
         entity: expect.objectContaining({
           id: 'Test Agent',
           name: 'Test Agent',

@@ -1265,9 +1265,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    tracingContext,
     writableStream,
     disableScorers,
-    tracingContext,
   }: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1281,9 +1281,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
-    tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
@@ -1685,6 +1685,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId: executionContext.workflowId,
             stepId: step.id,
             runtimeContext,
+            tracingContext: { currentSpan: stepAISpan },
             disableScorers,
           });
         }
