@@ -21,10 +21,6 @@ export type chatRouteOptions<
     }
 );
 
-chatRoute({
-  path: 'test/:agentId',
-  agent: 'test',
-});
 
 export function chatRoute<
   OUTPUT extends OutputSchema | undefined = undefined,
