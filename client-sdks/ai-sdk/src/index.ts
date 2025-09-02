@@ -149,7 +149,6 @@ export function chatRoute<
       }
 
       const agentObj = mastra.getAgent(agentToUse);
-      const agentObj = mastra.getAgent(agentToUse);
       if (!agentObj) {
         throw new Error(`Agent ${agentToUse} not found`);
       }
