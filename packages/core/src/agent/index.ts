@@ -3007,6 +3007,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput: result.structuredOutput,
           stopWhen: result.stopWhen,
           maxSteps: result.maxSteps,
+          providerOptions: result.providerOptions,
           options: {
             onFinish: async (payload: any) => {
               if (payload.finishReason === 'error') {
