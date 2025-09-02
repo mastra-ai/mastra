@@ -16,7 +16,7 @@
     "@mastra/agent-builder": "workspace:*",
     "dotenv": "^16.4.7",
     "json-schema": "^0.4.0",
-    "zod": "^3.24.3"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",

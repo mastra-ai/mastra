@@ -24,7 +24,7 @@
     "mastra": "latest",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {

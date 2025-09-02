@@ -1,4 +1,5 @@
 import type { ToolExecutionOptions } from 'ai';
+import type { ToolCallOptions } from 'ai-v5';
 import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
@@ -58,7 +59,7 @@ export function createTool<
   ? Tool<TSchemaIn, TSchemaOut, TContext> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
-      execute: (context: TContext) => Promise<any>;
+      execute: (context: TContext, options: ToolExecutionOptions | ToolCallOptions) => Promise<any>;
     }
   : Tool<TSchemaIn, TSchemaOut, TContext> {
   return new Tool(opts) as any;

@@ -33,7 +33,7 @@
     "ignore": "^7.0.5",
     "semver": "^7.7.2",
     "swpm": "^2.6.0",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
