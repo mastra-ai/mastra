@@ -4996,8 +4996,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(messagesInOnFinish).toBeDefined();
         expect(messagesInOnFinish).toBeInstanceOf(Array);
 
-        // Verify that we have user and assistant messages
-        expect(hasUserMessage).toBe(true);
+        // response messages should not be user messages
+        expect(hasUserMessage).toBe(false);
+        // Verify that we have assistant messages
         expect(hasAssistantMessage).toBe(true);
 
         // Verify the assistant message content
