@@ -31,6 +31,12 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
           description: "Scale factor to multiply the final score (default: 1)",
           required: false,
         },
+        {
+          name: "evaluationMode",
+          type: "'user' | 'system' | 'both'",
+          description: "Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
+          required: false,
+        },
       ],
     },
   ]}
@@ -57,42 +63,59 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
 
 ### Multi-Dimensional Analysis
 
-Prompt Alignment evaluates responses across four key dimensions with weighted scoring:
+Prompt Alignment evaluates responses across four key dimensions with weighted scoring that adapts based on the evaluation mode:
 
-1. **Intent Alignment** (40% weight)
-   - Identifies the primary intent of the user's prompt
-   - Evaluates whether the response addresses this core purpose
-   - Scored 0.0 (completely misses intent) to 1.0 (perfectly addresses intent)
+#### User Mode ('user')
+Evaluates alignment with user prompts only:
 
-2. **Requirements Fulfillment** (30% weight)
-   - Extracts explicit and implicit requirements from the prompt
-   - Checks if each requirement is satisfied in the response
-   - Overall score based on fulfilled vs. total requirements
+1. **Intent Alignment** (40% weight) - Whether the response addresses the user's core request
+2. **Requirements Fulfillment** (30% weight) - If all user requirements are met
+3. **Completeness** (20% weight) - Whether the response is comprehensive for user needs  
+4. **Response Appropriateness** (10% weight) - If format and tone match user expectations
 
-3. **Completeness** (20% weight)
-   - Assesses whether the response is comprehensive and thorough
-   - Identifies missing elements that should have been included
-   - Scored 0.0 (severely incomplete) to 1.0 (fully complete)
+#### System Mode ('system')
+Evaluates compliance with system guidelines only:
 
-4. **Response Appropriateness** (10% weight)
-   - Evaluates format alignment (e.g., list vs. paragraph, code vs. text)
-   - Checks tone appropriateness (formal, casual, technical)
-   - Scored 0.0 (completely inappropriate) to 1.0 (perfectly appropriate)
+1. **Intent Alignment** (35% weight) - Whether the response follows system behavioral guidelines
+2. **Requirements Fulfillment** (35% weight) - If all system constraints are respected
+3. **Completeness** (15% weight) - Whether the response adheres to all system rules
+4. **Response Appropriateness** (15% weight) - If format and tone match system specifications
+
+#### Both Mode ('both' - default)
+Combines evaluation of both user and system alignment:
+
+- **User alignment**: 70% of final score (using user mode weights)
+- **System compliance**: 30% of final score (using system mode weights)
+- Provides balanced assessment of user satisfaction and system adherence
 
 ### Scoring Formula
 
+**User Mode:**
 ```
 Weighted Score = (intent_score × 0.4) + (requirements_score × 0.3) + 
                  (completeness_score × 0.2) + (appropriateness_score × 0.1)
+Final Score = Weighted Score × scale
+```
 
+**System Mode:**
+```
+Weighted Score = (intent_score × 0.35) + (requirements_score × 0.35) + 
+                 (completeness_score × 0.15) + (appropriateness_score × 0.15)
+Final Score = Weighted Score × scale
+```
+
+**Both Mode (default):**
+```
+User Score = (user dimensions with user weights)
+System Score = (system dimensions with system weights)  
+Weighted Score = (User Score × 0.7) + (System Score × 0.3)
 Final Score = Weighted Score × scale
 ```
 
 **Weight Distribution Rationale**:
-- **Intent Alignment (40%)**: Most critical - the response must address what was asked
-- **Requirements Fulfillment (30%)**: Essential for meeting specific constraints and tasks  
-- **Completeness (20%)**: Important for thorough responses but secondary to correctness
-- **Response Appropriateness (10%)**: Format/tone matching is helpful but not critical
+- **User Mode**: Prioritizes intent (40%) and requirements (30%) for user satisfaction
+- **System Mode**: Balances behavioral compliance (35%) and constraints (35%) equally
+- **Both Mode**: 70/30 split ensures user needs are primary while maintaining system compliance
 
 ### Score Interpretation
 
@@ -111,6 +134,26 @@ Final Score = Weighted Score × scale
 | **Evaluation** | Intent, requirements, completeness, format | Semantic similarity to query | Factual consistency with context |
 | **Use Case** | General prompt following | Information retrieval | RAG/context-based systems |
 | **Dimensions** | 4 weighted dimensions | Single relevance dimension | Single faithfulness dimension |
+
+### When to Use Each Mode
+
+**User Mode (`'user'`)** - Use when:
+- Evaluating customer service responses for user satisfaction
+- Testing content generation quality from user perspective  
+- Measuring how well responses address user questions
+- Focusing purely on request fulfillment without system constraints
+
+**System Mode (`'system'`)** - Use when:
+- Auditing AI safety and compliance with behavioral guidelines
+- Ensuring agents follow brand voice and tone requirements
+- Validating adherence to content policies and constraints
+- Testing system-level behavioral consistency
+
+**Both Mode (`'both'`)** - Use when (default, recommended):
+- Comprehensive evaluation of overall AI agent performance
+- Balancing user satisfaction with system compliance
+- Production monitoring where both user and system requirements matter
+- Holistic assessment of prompt-response alignment
 
 ## Usage Examples
 
@@ -143,18 +186,32 @@ const result = await scorer.run({
 // Result: { score: 0.95, reason: "Excellent alignment - function addresses intent, includes error handling..." }
 ```
 
-### Custom Scale Configuration
+### Custom Configuration Examples
 
 ```typescript
+// Configure scale and evaluation mode
 const scorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o'),
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
+    evaluationMode: 'both' // 'user', 'system', or 'both' (default)
   },
 });
 
+// User-only evaluation - focus on user satisfaction
+const userScorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o'),
+  options: { evaluationMode: 'user' }
+});
+
+// System-only evaluation - focus on compliance
+const systemScorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o'),
+  options: { evaluationMode: 'system' }
+});
+
 const result = await scorer.run(testRun);
-// Result: { score: 8.5, reason: "Score: 8.5 out of 10 - Good alignment with minor format issues..." }
+// Result: { score: 8.5, reason: "Score: 8.5 out of 10 - Good alignment with both user intent and system guidelines..." }
 ```
 
 ### Format-Specific Evaluation
@@ -224,15 +281,28 @@ Measure how well your AI agents follow user instructions:
 ```typescript
 const agent = new Agent({
   name: 'CodingAssistant',
-  instructions: 'You are a helpful coding assistant',
+  instructions: 'You are a helpful coding assistant. Always provide working code examples.',
   model: openai('gpt-4o'),
 });
 
+// Evaluate comprehensive alignment (default)
 const scorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'), // Can use a different model for evaluation
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'both' } // Evaluates both user intent and system guidelines
 });
 
-// Evaluate agent performance
+// Evaluate just user satisfaction
+const userScorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'user' } // Focus only on user request fulfillment
+});
+
+// Evaluate system compliance
+const systemScorer = createPromptAlignmentScorerLLM({
+  model: openai('gpt-4o-mini'),
+  options: { evaluationMode: 'system' } // Check adherence to system instructions
+});
+
 const result = await scorer.run(agentRun);
 ```
 

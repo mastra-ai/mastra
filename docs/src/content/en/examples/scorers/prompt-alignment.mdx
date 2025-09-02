@@ -147,13 +147,107 @@ The output receives a low score because it only partially fulfills the requireme
 
 ## Scorer configuration
 
-You can customize the Prompt Alignment Scorer by adjusting the scale parameter to fit your scoring needs.
+You can customize the Prompt Alignment Scorer by adjusting the scale parameter and evaluation mode to fit your scoring needs.
 
 ```typescript showLineNumbers copy
 const scorer = createPromptAlignmentScorerLLM({ 
   model: openai("gpt-4o-mini"), 
-  options: { scale: 10 } // Score from 0-10 instead of 0-1
+  options: { 
+    scale: 10, // Score from 0-10 instead of 0-1
+    evaluationMode: 'both' // 'user', 'system', or 'both' (default)
+  }
 });
+```
+
+### Evaluation Mode Examples
+
+#### User Mode - Focus on User Prompt Only
+
+Evaluates how well the response addresses the user's request, ignoring system instructions:
+
+```typescript filename="src/example-user-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'user' }
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [{ 
+      role: 'user', 
+      content: "Explain recursion with an example" 
+    }],
+    systemMessages: [{ 
+      role: 'system', 
+      content: "Always provide code examples in Python" 
+    }]
+  },
+  output: { 
+    text: "Recursion is when a function calls itself. For example: factorial(5) = 5 * factorial(4)" 
+  }
+});
+// Scores high for addressing user request, even without Python code
+```
+
+#### System Mode - Focus on System Guidelines Only
+
+Evaluates compliance with system behavioral guidelines and constraints:
+
+```typescript filename="src/example-system-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'system' }
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "You are a helpful assistant. Always be polite, concise, and provide examples." 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "What is machine learning?" 
+    }]
+  },
+  output: { 
+    text: "Machine learning is a subset of AI where computers learn from data. For example, spam filters learn to identify unwanted emails by analyzing patterns in previously marked spam." 
+  }
+});
+// Evaluates politeness, conciseness, and example provision
+```
+
+#### Both Mode - Combined Evaluation (Default)
+
+Evaluates both user intent fulfillment and system compliance with weighted scoring (70% user, 30% system):
+
+```typescript filename="src/example-both-mode.ts" showLineNumbers copy
+const scorer = createPromptAlignmentScorerLLM({ 
+  model: openai("gpt-4o-mini"),
+  options: { evaluationMode: 'both' } // This is the default
+});
+
+const result = await scorer.run({
+  input: {
+    systemMessages: [{ 
+      role: 'system', 
+      content: "Always provide code examples when explaining programming concepts" 
+    }],
+    inputMessages: [{ 
+      role: 'user', 
+      content: "Explain how to reverse a string" 
+    }]
+  },
+  output: { 
+    text: `To reverse a string, you can iterate through it backwards. Here's an example in Python:
+    
+    def reverse_string(s):
+        return s[::-1]
+    
+    # Usage: reverse_string("hello") returns "olleh"` 
+  }
+});
+// High score for both addressing the user's request AND following system guidelines
 ```
 
 > See [createPromptAlignmentScorerLLM](/reference/scorers/prompt-alignment) for a full list of configuration options.
@@ -211,12 +305,23 @@ A multi-dimensional alignment score between 0 and scale (default 0-1):
 
 ### Scoring dimensions
 
-The scorer evaluates four weighted dimensions:
+The scorer evaluates four weighted dimensions that adapt based on the evaluation mode:
 
-- **Intent Alignment (40%)**: Whether the response addresses the core purpose of the prompt
-- **Requirements Fulfillment (30%)**: If all explicit and implicit requirements are met  
-- **Completeness (20%)**: Whether the response is comprehensive and thorough
-- **Response Appropriateness (10%)**: If the format and tone match expectations
+**User Mode Weights:**
+- **Intent Alignment (40%)**: Whether the response addresses the user's core request
+- **Requirements Fulfillment (30%)**: If all user requirements are met  
+- **Completeness (20%)**: Whether the response is comprehensive for the user's needs
+- **Response Appropriateness (10%)**: If the format and tone match user expectations
+
+**System Mode Weights:**
+- **Intent Alignment (35%)**: Whether the response follows system behavioral guidelines
+- **Requirements Fulfillment (35%)**: If all system constraints are respected
+- **Completeness (15%)**: Whether the response adheres to all system rules
+- **Response Appropriateness (15%)**: If the format and tone match system specifications
+
+**Both Mode (Default):**
+- Combines user alignment (70% weight) with system compliance (30% weight)
+- Provides balanced evaluation of both user satisfaction and system adherence
 
 ### runId
 The unique identifier for this scorer run.
