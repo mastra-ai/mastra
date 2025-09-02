@@ -1,9 +1,9 @@
-import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
+import type { AgentExecutionOptions } from '@mastra/core/agent';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
+import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
-import type { JSONSchema7 } from 'json-schema';
 
 export type chatRouteOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -20,7 +20,6 @@ export type chatRouteOptions<
       agent: string;
     }
 );
-
 
 export function chatRoute<
   OUTPUT extends OutputSchema | undefined = undefined,
