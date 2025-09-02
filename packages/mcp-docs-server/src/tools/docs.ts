@@ -39,7 +39,7 @@ async function readMdxContent(docPath: string, queryKeywords: string[]): Promise
   const fullPath = path.resolve(path.join(docsBaseDir, docPath));
   if (!fullPath.startsWith(path.resolve(docsBaseDir))) {
     void logger.error(`Path traversal attempt detected`);
-    return { found: false, content: ""};
+    return { found: false };
   }
   void logger.debug(`Reading MDX content from: ${fullPath}`);
 
