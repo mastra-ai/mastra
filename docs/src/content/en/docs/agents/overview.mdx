@@ -3,6 +3,8 @@ title: "Agent Overview | Agent Documentation | Mastra"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
+import { Steps } from "nextra/components";
+
 # Using Agents
 
 Agents let you build intelligent assistants powered by language models that can make decisions and perform actions. Each agent has required instructions and an LLM, with optional tools and memory.
@@ -261,14 +263,43 @@ const response = await testAgent.generate("Help me organize my day", {
 ```
 
 ## Testing agents locally
+There are two ways to run and test agents.
 
-Use the `mastra dev` CLI command to run your agents behind a local API.
-By default, it loads exported agents from the `src/mastra/agents` directory and creates endpoints for testing (for example, `http://localhost:4111/api/agents/myAgent/generate`).
-It also launches a visual playground where you can chat with your agent and view execution traces.
+<Steps>
+
+#### Mastra Playground
+
+With the Mastra Dev Server running you can test an agent from the Mastra Playground by visiting [http://localhost:4111/agents](http://localhost:4111/agents) in your browser.
 
 > For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
 
-## Next Steps
+#### Command line
+
+Create an agent response using `.generate()` or `.stream()`.
+
+```typescript {7} filename="src/test-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("testAgent");
+
+const response = await agent.generate("Help me organize my day");
+
+console.log(response.text);
+```
+
+> See [.generate()](../../reference/agents/generate.mdx) or [.stream()](../../reference/agents/stream.mdx) for more information.
+
+To test this agent, run the following:
+
+```bash copy
+npx tsx src/test-agent.ts
+```
+
+</Steps>
+
+## Related
 
 - [Agent Memory](./agent-memory.mdx)
 - [Dynamic Agents](./dynamic-agents.mdx)
