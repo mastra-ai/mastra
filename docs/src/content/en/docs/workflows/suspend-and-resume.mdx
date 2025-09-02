@@ -48,8 +48,7 @@ const step1 = createStep({
     const { city } = resumeData ?? {};
 
     if (!city) {
-      await suspend({});
-      return { output: "" };
+      return await suspend({});
     }
 
     return { output: "" };
