@@ -30,7 +30,7 @@ To pause execution at a specific step until user input is received, use the `⁠
 
 ![Suspending a workflow with suspend()](/image/workflows/workflows-suspend-resume-suspend.jpg)
 
-```typescript {17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {16} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
@@ -39,7 +39,6 @@ const step1 = createStep({
   outputSchema: z.object({
     output: z.string()
   }),
-  suspendSchema: z.object({}),
   resumeSchema: z.object({
     city: z.string()
   }),
@@ -47,7 +46,7 @@ const step1 = createStep({
     const { city } = resumeData ?? {};
 
     if (!city) {
-      await suspend({});
+      return await suspend({});
       return { output: "" };
     }
 
@@ -117,8 +116,7 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
 
 When a workflow is suspended, feedback can be surfaced to the user through the `suspendSchema`. Include a reason in the `suspend` payload to explain why the workflow paused.
 
-```typescript {14,25} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-
+```typescript {13,23} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -136,8 +134,7 @@ const step1 = createStep({
   outputSchema: z.object({
     value: z.string()
   }),
-  execute: async ({ inputData, resumeData, suspend }) => {
-    const { value } = inputData;
+  execute: async ({ resumeData, suspend }) => {
     const { confirm } = resumeData ?? {};
 
     if (!confirm) {
@@ -146,9 +143,7 @@ const step1 = createStep({
       });
     }
 
-    return {
-      value: value
-    };
+    return { value: "" };
   }
 });
 
