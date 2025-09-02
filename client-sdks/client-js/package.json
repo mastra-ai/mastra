@@ -41,7 +41,7 @@
     "@mastra/core": "workspace:*",
     "json-schema": "^0.4.0",
     "rxjs": "7.8.1",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.6"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -54,7 +54,7 @@
     "@tsconfig/recommended": "^1.0.9",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.19.0",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "ai": "^4.3.19",
     "eslint": "^9.34.0",
     "globby": "^14.1.0",
