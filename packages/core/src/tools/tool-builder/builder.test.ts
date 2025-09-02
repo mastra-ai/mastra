@@ -608,8 +608,8 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Test tool without agent span',
         runtimeContext: new RuntimeContext(),
-        // No agentAISpan provided
-      } as any,
+        tracingContext: {},
+      },
     });
 
     const builtTool = builder.build();
