@@ -100,7 +100,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
             parsed.dependencies[dependency] = 'workspace:*';
           }
         }
-        // convert all workspace dependencies to *
+        // convert all workspace devDependencies to *
         for (const dependency of Object.keys(parsed.devDependencies || {})) {
           if (parsed.devDependencies[dependency]?.startsWith('workspace:')) {
             parsed.devDependencies[dependency] = 'workspace:*';
