@@ -81,4 +81,4 @@ jobs:
       - name: Approve PR
         run: gh pr review ${{ github.event.pull_request.number }} --approve
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
