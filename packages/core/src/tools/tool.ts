@@ -1,5 +1,5 @@
-import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import type { ToolExecutionOptions } from 'ai';
+import type { ToolCallOptions } from 'ai-v5';
 import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
