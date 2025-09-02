@@ -45,12 +45,11 @@ export const mastra = new Mastra({
 
 In your application you can simply call the useChat hook.
 
-```
+```typescript
 type MyMessage = {}
 const { error, status, sendMessage, messages, regenerate, stop } =
-  useChat<MyMessage>({
+  useChat&lt;MyMessage&gt;({
     transport: new DefaultChatTransport({
       api: 'http://localhost:4111/chat/weatherAgent',
     })
   });
-```
