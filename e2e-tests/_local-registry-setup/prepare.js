@@ -94,6 +94,19 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
           parsed.peerDependencies['@mastra/core'] = 'workspace:*';
         }
 
+        // convert all workspace dependencies to *
+        for (const dependency of Object.keys(parsed.dependencies || {})) {
+          if (parsed.dependencies[dependency]?.startsWith('workspace:')) {
+            parsed.dependencies[dependency] = 'workspace:*';
+          }
+        }
+        // convert all workspace dependencies to *
+        for (const dependency of Object.keys(parsed.devDependencies || {})) {
+          if (parsed.devDependencies[dependency]?.startsWith('workspace:')) {
+            parsed.devDependencies[dependency] = 'workspace:*';
+          }
+        }
+
         writeFileSync(join(monorepoDir, file), JSON.stringify(parsed, null, 2));
       }
     })();
