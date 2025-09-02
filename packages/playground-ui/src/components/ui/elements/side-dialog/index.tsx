@@ -4,3 +4,4 @@ export * from './side-dialog-footer';
 export * from './side-dialog-content';
 export * from './side-dialog-top';
 export * from './side-dialog-code-section';
+export * from './side-dialog-heading';

@@ -8,6 +8,8 @@ import { myWorkflow } from './workflows';
 import { chefModelV2Agent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 
+import { DefaultExporter } from '@mastra/core/ai-tracing';
+
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
 });
@@ -30,6 +32,14 @@ export const mastra = new Mastra({
   },
   logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
+  observability: {
+    instances: {
+      default: {
+        serviceName: 'mastra-app',
+        exporters: [new DefaultExporter({ strategy: 'realtime' })],
+      },
+    },
+  },
   mcpServers: {
     myMcpServer,
     myMcpServerTwo,

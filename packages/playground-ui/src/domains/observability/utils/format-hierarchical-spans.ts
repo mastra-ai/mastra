@@ -1,8 +1,10 @@
-import { AITraceRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core';
 import { UISpan } from '../types';
 
-export const formatHierarchicalSpans = (parentTrace: AITraceRecord): UISpan[] => {
-  if (!parentTrace.spans || parentTrace.spans.length === 0) {
+export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
+  console.log({ spans });
+
+  if (!spans || spans.length === 0) {
     return [];
   }
 
@@ -11,7 +13,7 @@ export const formatHierarchicalSpans = (parentTrace: AITraceRecord): UISpan[] =>
   const rootSpans: UISpan[] = [];
 
   // First pass: create UISpan objects and initialize spans array
-  parentTrace.spans.forEach(spanRecord => {
+  spans?.forEach(spanRecord => {
     const startDate = new Date(spanRecord.startedAt);
     const endDate = spanRecord.endedAt ? new Date(spanRecord.endedAt) : undefined;
 
@@ -29,7 +31,7 @@ export const formatHierarchicalSpans = (parentTrace: AITraceRecord): UISpan[] =>
   });
 
   // Second pass: organize into tree structure
-  parentTrace.spans.forEach(spanRecord => {
+  spans?.forEach(spanRecord => {
     const uiSpan = spanMap.get(spanRecord.spanId)!;
 
     if (spanRecord.parentSpanId === null) {

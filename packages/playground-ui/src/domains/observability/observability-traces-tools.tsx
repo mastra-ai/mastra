@@ -41,7 +41,7 @@ export function ObservabilityTracesTools({
         className="min-w-[20rem]"
       />
 
-      <div className={cn('flex gap-[1rem] items-center flex-wrap')}>
+      <div className={cn('flex gap-[1rem] items-center flex-wrap mr-auto')}>
         <span className={cn('shrink-0 text-[0.875rem] text-icon3')}>Filter by Date & time range</span>
         <DateTimePicker
           placeholder="From"
@@ -60,7 +60,7 @@ export function ObservabilityTracesTools({
           defaultTimeStrValue="11:59 PM"
         />
       </div>
-      <Button variant="primary" onClick={onReset} className="ml-auto">
+      <Button variant="primary" onClick={onReset}>
         Reset <XIcon />
       </Button>
     </div>

@@ -4,3 +4,4 @@ export * from './entry-list';
 export * from './side-dialog';
 export * from './headers';
 export * from './date-time-picker';
+export * from './text';

@@ -47,7 +47,7 @@ export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
     queryFn: ({ pageParam }) =>
       fetchAITracesFn({
         page: pageParam,
-        perPage: 100,
+        perPage: 25,
         dateRange,
         filters,
       }),

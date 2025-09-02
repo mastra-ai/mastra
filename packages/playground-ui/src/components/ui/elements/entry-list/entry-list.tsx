@@ -1,15 +1,17 @@
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
-import { EntryListCell } from './entry-list-cell';
+import { EntryListTextCell } from './entry-list-cell';
 import { EntryListItem } from './entry-list-item';
 import { getColumnTemplate, type Column } from './shared';
 
 import { cn } from '@/lib/utils';
+import { isValidElement } from 'react';
 
 export function EntryList({
   items,
   selectedItemId,
   onItemClick,
   isLoading,
+  isLoadingNextPage,
   total,
   page,
   hasMore,
@@ -18,19 +20,23 @@ export function EntryList({
   perPage,
   columns,
   searchTerm,
+  setEndOfListElement,
 }: {
   items: any[];
   selectedItemId?: string;
   onItemClick?: (item: string) => void;
   isLoading?: boolean;
+  isLoadingNextPage?: boolean;
   total?: number;
   page?: number;
   hasMore?: boolean;
   onNextPage?: () => void;
   onPrevPage?: () => void;
+  onLoadMore?: () => void;
   perPage?: number;
   columns?: Column[];
   searchTerm?: string;
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
 }) {
   if (isLoading) {
     return (
@@ -63,7 +69,7 @@ export function EntryList({
 
       {items?.length > 0 && (
         <>
-          <ul className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none overflow-hidden">
+          <ul className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none overflow-y-auto">
             {items.map(item => {
               return (
                 <EntryListItem
@@ -73,13 +79,29 @@ export function EntryList({
                   onClick={onItemClick}
                   columns={columns}
                 >
-                  {(columns || []).map(col => (
-                    <EntryListCell key={col.name}>{item?.[col.name]}</EntryListCell>
-                  ))}
+                  {(columns || []).map(col => {
+                    const isValidReactElement = isValidElement(item?.[col.name]);
+
+                    return isValidReactElement ? (
+                      item?.[col.name]
+                    ) : (
+                      <EntryListTextCell key={col.name}>{item?.[col.name]}</EntryListTextCell>
+                    );
+                  })}
                 </EntryListItem>
               );
             })}
           </ul>
+
+          {setEndOfListElement && (
+            <div
+              ref={setEndOfListElement}
+              className="text-[0.875rem] text-icon3 opacity-50 flex mt-[2rem] justify-center"
+            >
+              {isLoadingNextPage && 'Loading...'}
+              {!hasMore && 'No more data to load'}
+            </div>
+          )}
 
           {typeof page === 'number' && typeof perPage === 'number' && typeof total === 'number' && (
             <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>

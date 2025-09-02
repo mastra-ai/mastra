@@ -3,6 +3,7 @@ import * as HoverCard from '@radix-ui/react-hover-card';
 import { cn } from '@/lib/utils';
 import { useLinkComponent } from '@/lib/framework';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { ChevronRightIcon } from 'lucide-react';
 
 export type KeyValueListItemValue = {
   id: string;
@@ -86,7 +87,9 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                     value?.map(item => {
                       return item.path ? (
                         <RelationWrapper description={item.description} key={item.id}>
-                          <Link href={item.path}>{item?.name}</Link>
+                          <Link href={item.path}>
+                            {item?.name} <ChevronRightIcon />
+                          </Link>
                         </RelationWrapper>
                       ) : (
                         <span key={item.id}>{item?.name}</span>

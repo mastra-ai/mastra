@@ -7,21 +7,26 @@ import {
   ObservabilityTracesTools,
   PageHeader,
   EntityOptions,
+  getShortId,
+  EntryListStatusCell,
 } from '@mastra/playground-ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
 import { TraceDialog } from './TraceDialog';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
+import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 import { format, isToday } from 'date-fns';
 import { useWorkflows } from '@/hooks/use-workflows';
+import { useSearchParams } from 'react-router';
 
 const listColumns = [
-  { name: 'id', label: 'ID', size: '16rem' },
-  { name: 'date', label: 'Date', size: '5rem' },
+  { name: 'shortId', label: 'ID', size: '6rem' },
+  { name: 'date', label: 'Date', size: '4.5rem' },
   { name: 'time', label: 'Time', size: '5rem' },
   { name: 'name', label: 'Name', size: '1fr' },
-  { name: 'entityId', label: 'Entity', size: '1fr' },
+  { name: 'entityId', label: 'Entity', size: '10rem' },
+  { name: 'status', label: 'Status', size: '3rem' },
 ];
 
 type TraceItem = {
@@ -33,8 +38,9 @@ type TraceItem = {
 };
 
 export default function Observability() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTraceId, setSelectedTraceId] = useState<string | undefined>();
-  const [selectedEntity, setSelectedEntity] = useState<EntityOptions | undefined>({
+  const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
     label: 'All',
     type: 'all' as const,
@@ -44,13 +50,23 @@ export default function Observability() {
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents } = useAgents();
   const { data: workflows } = useWorkflows();
-  const { data: aiTraces = [], isLoading: isLoadingAiTraces } = useAITraces({
+
+  const { data: aiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
+
+  const {
+    data: aiTraces = [],
+    isLoading: isLoadingAiTraces,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    setEndOfListElement,
+  } = useAITraces({
     filters:
-      selectedEntity?.type === 'all'
+      selectedEntityOption?.type === 'all'
         ? undefined
         : {
-            entityId: selectedEntity?.value,
-            entityType: selectedEntity?.type,
+            entityId: selectedEntityOption?.value,
+            entityType: selectedEntityOption?.type,
           },
     dateRange:
       selectedDateFrom && selectedDateTo
@@ -61,7 +77,7 @@ export default function Observability() {
         : undefined,
   });
 
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([key, value]) => ({
+  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
     value: value.name,
     label: value.name,
     type: 'agent' as const,
@@ -69,7 +85,7 @@ export default function Observability() {
 
   const legacy = workflows?.[0] || {};
   const current = workflows?.[1] || {};
-  const workflowOptions: EntityOptions[] = (Object.entries({ ...legacy, ...current }) || []).map(([key, value]) => ({
+  const workflowOptions: EntityOptions[] = (Object.entries({ ...legacy, ...current }) || []).map(([, value]) => ({
     value: value.name,
     label: value.name,
     type: 'workflow' as const,
@@ -81,9 +97,20 @@ export default function Observability() {
     ...workflowOptions,
   ];
 
+  useEffect(() => {
+    if (entityOptions) {
+      const entityName = searchParams.get('entity');
+      const entityOption = entityOptions.find(option => option.value === entityName);
+      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
+        console.log('updating entity option', entityOption, selectedEntityOption);
+        setSelectedEntityOption(entityOption);
+      }
+    }
+  }, [searchParams, selectedEntityOption, entityOptions]);
+
   const handleReset = () => {
     setSelectedTraceId(undefined);
-    setSelectedEntity(undefined);
+    setSearchParams({ entity: 'all' });
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
@@ -97,16 +124,22 @@ export default function Observability() {
     setSelectedDateTo(value);
   };
 
+  const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
+    option?.value && setSearchParams({ entity: option?.value });
+  };
+
   const items: TraceItem[] = aiTraces.map(trace => {
     const createdAtDate = new Date(trace.createdAt);
     const isTodayDate = isToday(createdAtDate);
 
     return {
-      id: trace?.traceId,
+      id: trace.traceId,
+      shortId: getShortId(trace?.traceId) || 'n/a',
       date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
       time: format(createdAtDate, 'HH:mm:ss'),
       name: trace?.name,
       entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
+      status: <EntryListStatusCell status={trace?.attributes?.status} />,
     };
   });
 
@@ -144,13 +177,17 @@ export default function Observability() {
           <HeaderTitle>Observability</HeaderTitle>
         </Header>
 
-        <div className={cn(`h-full overflow-y-scroll`)}>
-          <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid gap-[2rem]')}>
-            <PageHeader title="Observability" description="View and manage observability events." icon={<EyeIcon />} />
+        <div className={cn(`grid overflow-y-auto h-full`)}>
+          <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
+            <PageHeader
+              title="Observability"
+              description="Explore observability traces for your entities"
+              icon={<EyeIcon />}
+            />
             <ObservabilityTracesTools
-              onEntityChange={setSelectedEntity}
+              onEntityChange={handleSelectedEntityChange}
               onReset={handleReset}
-              selectedEntity={selectedEntity}
+              selectedEntity={selectedEntityOption}
               entityOptions={entityOptions}
               onDateChange={handleDataChange}
               selectedDateFrom={selectedDateFrom}
@@ -164,14 +201,20 @@ export default function Observability() {
                 selectedItemId={selectedTraceId}
                 onItemClick={handleOnListItem}
                 columns={listColumns}
-                isLoading={false}
+                isLoading={isLoadingAiTraces}
+                isLoadingNextPage={isFetchingNextPage}
+                hasMore={!!hasNextPage}
+                onLoadMore={fetchNextPage}
+                setEndOfListElement={setEndOfListElement}
               />
             )}
           </div>
         </div>
       </MainContentLayout>
       <TraceDialog
-        parentTraceId={selectedTraceId}
+        traceSpans={aiTrace?.spans}
+        traceId={selectedTraceId}
+        traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
         onNext={aiTraces.length > 1 ? toNextItem : undefined}
