@@ -46,10 +46,10 @@ export const mastra = new Mastra({
 After defining a dynamic route with `:agentId` you can use the `useChat()` hook like so:
 
 ```typescript
-type MyMessage = {}
-const { error, status, sendMessage, messages, regenerate, stop } =
-  useChat&lt;MyMessage&gt;({
-    transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/chat/weatherAgent',
-    })
-  });
+type MyMessage = {};
+const { error, status, sendMessage, messages, regenerate, stop } = useChat<MyMessage>({
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat/weatherAgent',
+  }),
+});
+```
