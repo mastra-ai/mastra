@@ -186,7 +186,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 Array.isArray(content) &&
                 content.length === 1 &&
                 content[0]?.type === `text`
-                  ? message?.content?.content || content
+                  ? content[0].text || message?.content?.content || content
                   : content,
             });
 

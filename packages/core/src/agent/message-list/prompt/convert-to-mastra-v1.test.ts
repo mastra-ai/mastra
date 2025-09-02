@@ -530,7 +530,7 @@ describe('convertToV1Messages', () => {
         id: testMessage.id,
         role: 'assistant',
         type: 'text',
-        content: 'Multiple tools test',
+        content: 'Let me gather some information for you.',
       }),
       expect.objectContaining({
         ...sharedFields,
@@ -1586,12 +1586,7 @@ describe('convertToV1Messages', () => {
           id: '17949558-8a2b-4841-990d-ce05d29a8afb__split-2',
           role: 'assistant',
           type: 'text',
-          content: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'text',
-              text: expect.stringContaining('The current weather in Los Angeles'),
-            }),
-          ]),
+          content: expect.stringContaining('The current weather in Los Angeles'),
         }),
         // 5. User asks about tool history
         expect.objectContaining({
