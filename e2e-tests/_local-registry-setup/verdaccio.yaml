@@ -29,12 +29,5 @@ packages:
 web:
   enable: true
 
-auth:
-  auth-memory:
-    users:
-      admin:
-        name: mastra
-        password: mastra-ai
-
 log:
   - { type: stdout, format: pretty, level: error }
