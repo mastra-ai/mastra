@@ -41,7 +41,7 @@ function validateBlogUrl(url: string): boolean {
 
     // Check if the hostname matches exactly
     return inputUrl.hostname === baseUrl.hostname;
-  } catch (error) {
+  } catch {
     // Invalid URL format
     return false;
   }
