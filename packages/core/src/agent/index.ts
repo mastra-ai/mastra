@@ -3081,7 +3081,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   runId,
                 });
               }
-              await options?.onFinish?.({ ...result, runId } as any);
+
+              await options?.onFinish?.({
+                ...result,
+                runId,
+                messages: messageList.get.response.aiV5.model(),
+              } as any);
             },
             onStepFinish: result.onStepFinish,
           },
