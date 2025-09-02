@@ -11,6 +11,8 @@ jobs:
   changeset:
     runs-on: ubuntu-latest
     if: startsWith(github.head_ref, 'renovate/') && github.repository == 'mastra-ai/mastra'
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
