@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { rollup, type OutputAsset, type OutputChunk, type Plugin } from 'rollup';
 import { esbuild } from './plugins/esbuild';
 import { isNodeBuiltin } from './isNodeBuiltin';
+import { aliasHono } from './plugins/hono-alias';
 import { removeDeployer } from './plugins/remove-deployer';
 import { join } from 'node:path';
 import { validate } from '../validator/validate';
