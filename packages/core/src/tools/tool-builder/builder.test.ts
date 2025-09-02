@@ -446,6 +446,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A test tool',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -469,6 +470,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A tool without ID',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -493,6 +495,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A provider-defined tool',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -551,7 +554,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Test tool that captures tracing context',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
     });
 
@@ -652,7 +655,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Vercel tool test',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
     });
 
@@ -713,7 +716,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Tool that throws an error',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
     });
 
@@ -764,7 +767,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Tool from a toolset',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
       logType: 'toolset', // Specify toolset type
     });
@@ -814,6 +817,7 @@ describe('Tool Input Validation', () => {
         tags: ['developer', 'typescript'],
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toEqual({
@@ -830,6 +834,7 @@ describe('Tool Input Validation', () => {
         age: 25,
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toEqual({
@@ -847,6 +852,7 @@ describe('Tool Input Validation', () => {
         age: 30,
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -864,6 +870,7 @@ describe('Tool Input Validation', () => {
         age: -5, // Negative age
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -882,6 +889,7 @@ describe('Tool Input Validation', () => {
         email: 'not-an-email', // Invalid email
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -918,6 +926,7 @@ describe('Tool Input Validation', () => {
         tags: [], // Empty array when min(1) required
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -937,6 +946,7 @@ describe('Tool Input Validation', () => {
         tags: [],
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
