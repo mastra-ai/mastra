@@ -16,11 +16,41 @@ Evaluation Guidelines:
 
 Score each dimension from 0.0 (completely misaligned) to 1.0 (perfectly aligned).`;
 
-export function createAnalyzePrompt({ userPrompt, agentResponse }: { userPrompt: string; agentResponse: string }) {
-  return `Analyze how well the agent's response aligns with the user's prompt across multiple dimensions.
+export function createAnalyzePrompt({
+  userPrompt,
+  systemPrompt,
+  agentResponse,
+  evaluationMode,
+}: {
+  userPrompt: string;
+  systemPrompt?: string;
+  agentResponse: string;
+  evaluationMode: 'user' | 'system' | 'both';
+}) {
+  // Build the prompt based on evaluation mode
+  let promptContext = '';
+  let evaluationTarget = '';
 
-User Prompt:
+  if (evaluationMode === 'user') {
+    promptContext = `User Prompt:
+${userPrompt}`;
+    evaluationTarget = "the user's prompt";
+  } else if (evaluationMode === 'system') {
+    promptContext = `System Prompt:
+${systemPrompt}`;
+    evaluationTarget = "the system's behavioral guidelines and constraints";
+  } else {
+    promptContext = `User Prompt:
 ${userPrompt}
+
+System Prompt:
+${systemPrompt}`;
+    evaluationTarget = "both the user's prompt and the system's behavioral guidelines";
+  }
+
+  return `Analyze how well the agent's response aligns with ${evaluationTarget} across multiple dimensions.
+
+${promptContext}
 
 Agent Response:
 ${agentResponse}
@@ -28,26 +58,62 @@ ${agentResponse}
 Evaluate the following aspects:
 
 1. **Intent Alignment**:
-   - Identify the primary intent of the user's prompt
+   ${
+     evaluationMode === 'system'
+       ? `- Identify the primary behavioral guidelines and constraints from the system prompt
+   - Assess whether the response follows these guidelines
+   - Score from 0.0 (violates system constraints) to 1.0 (perfectly follows system guidelines)`
+       : evaluationMode === 'user'
+         ? `- Identify the primary intent of the user's prompt
    - Assess whether the response addresses this intent
-   - Score from 0.0 (completely misses intent) to 1.0 (perfectly addresses intent)
+   - Score from 0.0 (completely misses intent) to 1.0 (perfectly addresses intent)`
+         : `- Identify both the user's intent AND system behavioral guidelines
+   - Assess whether the response addresses user intent while following system constraints
+   - Score from 0.0 (misses both) to 1.0 (perfectly addresses both)`
+   }
    - Provide reasoning for your assessment
 
 2. **Requirements Fulfillment**:
-   - List all explicit requirements from the prompt
+   ${
+     evaluationMode === 'system'
+       ? `- List all system constraints and rules from the system prompt
+   - Check if each constraint is respected
+   - Calculate an overall score based on respected vs. total constraints`
+       : evaluationMode === 'user'
+         ? `- List all explicit requirements from the user prompt
    - Check if each requirement is fulfilled
-   - Calculate an overall score based on fulfilled vs. total requirements
+   - Calculate an overall score based on fulfilled vs. total requirements`
+         : `- List requirements from BOTH user prompt and system constraints
+   - Check fulfillment of each requirement
+   - Calculate separate scores for user requirements and system constraints, then combine`
+   }
    - Provide reasoning for each requirement assessment
 
 3. **Completeness**:
-   - Evaluate if the response is comprehensive
-   - Identify any missing elements that should have been included
+   ${
+     evaluationMode === 'system'
+       ? `- Evaluate if the response fully adheres to all system guidelines
+   - Identify any system rules that were not followed`
+       : evaluationMode === 'user'
+         ? `- Evaluate if the response is comprehensive for the user's request
+   - Identify any missing elements that should have been included`
+         : `- Evaluate completeness for both user request AND system compliance
+   - Identify missing elements from either perspective`
+   }
    - Score from 0.0 (severely incomplete) to 1.0 (fully complete)
    - Provide reasoning for your assessment
 
 4. **Response Appropriateness**:
-   - Check if the format matches what was requested (e.g., list, paragraph, code)
-   - Evaluate if the tone is appropriate (e.g., formal, casual, technical)
+   ${
+     evaluationMode === 'system'
+       ? `- Check if the format/tone matches system specifications
+   - Evaluate consistency with defined agent behavior`
+       : evaluationMode === 'user'
+         ? `- Check if the format matches what was requested (e.g., list, paragraph, code)
+   - Evaluate if the tone is appropriate (e.g., formal, casual, technical)`
+         : `- Check format/tone for both user expectations AND system requirements
+   - Evaluate if response satisfies both perspectives`
+   }
    - Score from 0.0 (completely inappropriate) to 1.0 (perfectly appropriate)
    - Provide reasoning for your assessment
 
@@ -166,22 +232,39 @@ export type AnalysisResult = {
 
 export function createReasonPrompt({
   userPrompt,
+  systemPrompt,
   score,
   scale,
   analysis,
+  evaluationMode,
 }: {
   userPrompt: string;
+  systemPrompt?: string;
   score: number;
   scale: number;
   analysis: AnalysisResult;
+  evaluationMode: 'user' | 'system' | 'both';
 }) {
   const fulfilledCount = analysis.requirementsFulfillment.requirements.filter(r => r.isFulfilled).length;
   const totalRequirements = analysis.requirementsFulfillment.requirements.length;
 
-  return `Explain the prompt alignment score based on how well the agent's response addresses the user's prompt.
+  const promptContext =
+    evaluationMode === 'system'
+      ? `System Prompt:\n${systemPrompt}`
+      : evaluationMode === 'user'
+        ? `User Prompt:\n${userPrompt}`
+        : `User Prompt:\n${userPrompt}\n\nSystem Prompt:\n${systemPrompt}`;
 
-User Prompt:
-${userPrompt}
+  const alignmentDescription =
+    evaluationMode === 'system'
+      ? 'system behavioral guidelines and constraints'
+      : evaluationMode === 'user'
+        ? "user's prompt"
+        : "both user's prompt and system guidelines";
+
+  return `Explain the prompt alignment score based on how well the agent's response addresses the ${alignmentDescription}.
+
+${promptContext}
 
 Score: ${score} out of ${scale}
 

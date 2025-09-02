@@ -362,6 +362,180 @@ describe('Prompt Alignment Scorer', () => {
     });
   });
 
+  describe('Evaluation Modes', () => {
+    it('should default to "both" evaluation mode', () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+      });
+
+      expect(scorer.description).toContain('intent and requirements');
+      // The default mode is 'both' which evaluates both user and system prompts
+    });
+
+    it('should create scorer with user evaluation mode', () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+        options: {
+          evaluationMode: 'user',
+        },
+      });
+
+      expect(scorer.name).toBe('Prompt Alignment (LLM)');
+      expect(scorer.description).toContain('intent and requirements');
+    });
+
+    it('should create scorer with system evaluation mode', () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+        options: {
+          evaluationMode: 'system',
+        },
+      });
+
+      expect(scorer.name).toBe('Prompt Alignment (LLM)');
+      expect(scorer.description).toContain('intent and requirements');
+    });
+
+    it('should create scorer with both evaluation mode explicitly', () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+        options: {
+          evaluationMode: 'both',
+        },
+      });
+
+      expect(scorer.name).toBe('Prompt Alignment (LLM)');
+      expect(scorer.description).toContain('intent and requirements');
+    });
+
+    it('should handle user mode scoring', async () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+        options: {
+          evaluationMode: 'user',
+          scale: 1,
+        },
+      });
+
+      // Mock the run method for user mode
+      scorer.run = vi.fn().mockResolvedValue({
+        score: 0.9,
+        reason: 'Excellent user prompt alignment - all requirements met.',
+      });
+
+      const testRun = createAgentTestRun({
+        inputMessages: [
+          createUIMessage({
+            id: 'user-1',
+            role: 'user',
+            content: 'Write a Python function to calculate factorial',
+          }),
+        ],
+        output: [
+          createUIMessage({
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'def factorial(n): return 1 if n <= 1 else n * factorial(n-1)',
+          }),
+        ],
+      });
+
+      const result = await scorer.run(testRun);
+      expect(result.score).toBe(0.9);
+      expect(result.reason).toContain('user prompt alignment');
+    });
+
+    it('should handle system mode scoring', async () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+        options: {
+          evaluationMode: 'system',
+          scale: 1,
+        },
+      });
+
+      // Mock the run method for system mode
+      scorer.run = vi.fn().mockResolvedValue({
+        score: 0.85,
+        reason: 'Good system compliance - follows most behavioral guidelines.',
+      });
+
+      const testRun = createAgentTestRun({
+        systemMessages: [
+          {
+            role: 'system' as const,
+            content: 'You are a helpful assistant. Always be polite and concise.',
+          },
+        ],
+        inputMessages: [
+          createUIMessage({
+            id: 'user-1',
+            role: 'user',
+            content: 'Explain quantum computing',
+          }),
+        ],
+        output: [
+          createUIMessage({
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Quantum computing uses quantum bits that can be in superposition.',
+          }),
+        ],
+      });
+
+      const result = await scorer.run(testRun);
+      expect(result.score).toBe(0.85);
+      expect(result.reason).toContain('system compliance');
+    });
+
+    it('should handle both mode scoring', async () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+        options: {
+          evaluationMode: 'both',
+          scale: 1,
+        },
+      });
+
+      // Mock the run method for both mode
+      scorer.run = vi.fn().mockResolvedValue({
+        score: 0.88,
+        reason: 'Strong alignment - addresses user intent while following system guidelines.',
+      });
+
+      const testRun = createAgentTestRun({
+        systemMessages: [
+          {
+            role: 'system' as const,
+            content: 'Always provide code examples when explaining programming concepts.',
+          },
+        ],
+        inputMessages: [
+          createUIMessage({
+            id: 'user-1',
+            role: 'user',
+            content: 'Explain recursion',
+          }),
+        ],
+        output: [
+          createUIMessage({
+            id: 'assistant-1',
+            role: 'assistant',
+            content: `Recursion is when a function calls itself. Here's an example:
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n-1)`,
+          }),
+        ],
+      });
+
+      const result = await scorer.run(testRun);
+      expect(result.score).toBe(0.88);
+      expect(result.reason).toContain('addresses user intent while following system guidelines');
+    });
+  });
+
   describe('Integration Test Cases', () => {
     it('should handle code generation prompt alignment', async () => {
       const scorer = createPromptAlignmentScorerLLM({
