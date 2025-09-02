@@ -41,7 +41,6 @@ import type {
   StreamReturn,
 } from './base.types';
 import type { inferOutput } from './shared.types';
-import { parallel } from 'radash';
 
 export class MastraLLMV1 extends MastraBase {
   #model: LanguageModel;

@@ -3,10 +3,10 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
-import type { TracingContext } from '../../ai-tracing';
 
 /**
  * PII categories for detection and redaction

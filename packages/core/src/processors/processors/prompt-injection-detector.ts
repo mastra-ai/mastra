@@ -2,9 +2,9 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Processor } from '../index';
-import type { TracingContext } from '../../ai-tracing';
 
 /**
  * Confidence scores for each detection category (0-1)
