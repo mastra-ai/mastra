@@ -102,7 +102,7 @@ export const upstashAgent = new Agent({
 
 ## Usage example
 
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: false` to disable recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
 ```typescript filename="src/test-upstash-agent.ts" showLineNumbers copy
 import "dotenv/config";
