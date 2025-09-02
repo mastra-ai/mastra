@@ -222,7 +222,7 @@ export class MessageList {
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV5Type.ModelMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
@@ -292,7 +292,7 @@ export class MessageList {
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV5Type.ModelMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
@@ -320,7 +320,7 @@ export class MessageList {
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV4Type.CoreMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
@@ -341,7 +341,7 @@ export class MessageList {
         if (needsDefaultUserMessage) {
           const defaultMessage: AIV4Type.CoreMessage = {
             role: 'user',
-            content: ' ',
+            content: '.',
           };
           messages.unshift(defaultMessage);
         }
