@@ -18,11 +18,17 @@ class MockMastra {
 }
 
 class MockAgent {
+  #mastra = { id: 'mock-mastra' };
   generate = vi.fn();
   generateVNext = vi.fn();
   stream = vi.fn();
   streamVNext = vi.fn();
   otherMethod = vi.fn().mockReturnValue('agent-other-result');
+  getLLM() {
+    // This accesses the private field to simulate the real getLLM behavior
+    // Without proper binding, 'this' will be the proxy and #mastra access will fail
+    return { mastra: this.#mastra };
+  }
 }
 
 class MockWorkflow {
@@ -154,6 +160,15 @@ describe('AI Tracing Context Integration', () => {
       const wrapped = wrapAgent(mockAgent as any, noOpContext);
 
       expect(wrapped).toBe(mockAgent);
+    });
+
+    it('should preserve this context for private member access', () => {
+      const wrapped = wrapAgent(mockAgent as any, tracingContext);
+
+      // This should not throw because binding preserves 'this' context
+      const result = wrapped.getLLM();
+
+      expect(result).toEqual({ mastra: { id: 'mock-mastra' } });
     });
 
     it('should inject tracing context into generate method', async () => {
