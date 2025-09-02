@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-fix(workflow): ensure original stacktrace is preserved
+Ensure original stacktrace is preserved during workflow runs
