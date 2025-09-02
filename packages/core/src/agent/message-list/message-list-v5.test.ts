@@ -537,7 +537,7 @@ describe('MessageList V5 Support', () => {
         expect(prompt).toHaveLength(1);
         expect(prompt[0]).toMatchObject({
           role: 'user',
-          content: ' ', // Default message uses a space
+          content: '.', // Default message uses a period
         });
       });
 
