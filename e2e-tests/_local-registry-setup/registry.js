@@ -51,10 +51,10 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
 export function login(user, password, port) {
   // First login with npm-cli-login
   execSync(`npx npm-cli-login -u ${user} -p ${password} -e test@domain.test -r http://localhost:${port}`);
-  
+
   // Get the auth token that was set
   const authToken = execSync(`npm config get //localhost:${port}/:_authToken`, { encoding: 'utf8' }).trim();
-  
+
   // Set it for pnpm as well
   if (authToken && authToken !== 'undefined') {
     execSync(`pnpm config set //localhost:${port}/:_authToken ${authToken}`);
