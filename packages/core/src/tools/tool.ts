@@ -1,3 +1,4 @@
+import type { ToolCallOptions } from '@ai-sdk/provider-utils-v5';
 import type { ToolExecutionOptions } from 'ai';
 import type { z } from 'zod';
 
@@ -58,7 +59,7 @@ export function createTool<
   ? Tool<TSchemaIn, TSchemaOut, TContext> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
-      execute: (context: TContext) => Promise<any>;
+      execute: (context: TContext, options: ToolExecutionOptions | ToolCallOptions) => Promise<any>;
     }
   : Tool<TSchemaIn, TSchemaOut, TContext> {
   return new Tool(opts) as any;
