@@ -73,7 +73,6 @@ export async function getInputOptions(
           };
         },
       },
-      tsConfigPaths(),
       alias({
         entries: [
           {
@@ -94,6 +93,7 @@ export async function getInputOptions(
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
+      tsConfigPaths(),
       {
         name: 'tools-rewriter',
         resolveId(id: string) {

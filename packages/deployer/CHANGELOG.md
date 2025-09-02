@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.15.3-alpha.3
+
+### Patch Changes
+
+- [#7207](https://github.com/mastra-ai/mastra/pull/7207) [`71b657b`](https://github.com/mastra-ai/mastra/commit/71b657bffebbdcfdf1ce9c6d72003041bd6e200a) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Excluding hono from being external
+
+- [#7215](https://github.com/mastra-ai/mastra/pull/7215) [`6d98856`](https://github.com/mastra-ai/mastra/commit/6d98856ed7cf56cbd6c4e02b3254e3dfb1e455db) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Correct set the root span for telemetry traces
+
+- Updated dependencies [[`aedbbfa`](https://github.com/mastra-ai/mastra/commit/aedbbfa064124ddde039111f12629daebfea7e48), [`f643c65`](https://github.com/mastra-ai/mastra/commit/f643c651bdaf57c2343cf9dbfc499010495701fb), [`fef7375`](https://github.com/mastra-ai/mastra/commit/fef737534574f41b432a7361a285f776c3bac42b), [`e3d8fea`](https://github.com/mastra-ai/mastra/commit/e3d8feaacfb8b5c5c03c13604cc06ea2873d45fe), [`3412597`](https://github.com/mastra-ai/mastra/commit/3412597a6644c0b6bf3236d6e319ed1450c5bae8)]:
+  - @mastra/core@0.15.3-alpha.3
+  - @mastra/server@0.15.3-alpha.3
+
 ## 0.15.3-alpha.2
 
 ### Patch Changes

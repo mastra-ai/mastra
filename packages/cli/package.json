@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.11.3-alpha.0",
+  "version": "0.11.3-alpha.1",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -77,7 +77,7 @@
     "strip-json-comments": "^5.0.2",
     "tcp-port-used": "^1.0.2",
     "yocto-spinner": "^0.2.3",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

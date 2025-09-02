@@ -4,6 +4,7 @@ import {
   getToolByIdHandler as getOriginalToolByIdHandler,
   executeToolHandler as getOriginalExecuteToolHandler,
   executeAgentToolHandler as getOriginalExecuteAgentToolHandler,
+  getAgentToolHandler as getOriginalAgentToolHandler,
 } from '@mastra/server/handlers/tools';
 import type { Context } from 'hono';
 
@@ -62,6 +63,26 @@ export function executeToolHandler(tools: Record<string, any>) {
       return handleError(error, 'Error executing tool');
     }
   };
+}
+
+export async function getAgentToolHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
+    const agentId = c.req.param('agentId');
+    const toolId = c.req.param('toolId');
+
+    const result = await getOriginalAgentToolHandler({
+      mastra,
+      agentId,
+      toolId,
+      runtimeContext,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting agent tool');
+  }
 }
 
 export async function executeAgentToolHandler(c: Context) {

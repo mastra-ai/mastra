@@ -44,14 +44,14 @@ export const testTool = createTool({
   execute: async ({ context, writer }) => {
     const { value } = context;
 
-    writer?.write({
+   await writer?.write({
       type: "custom-event",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-    writer?.write({
+   await writer?.write({
       type: "custom-event",
       status: "success"
     });
