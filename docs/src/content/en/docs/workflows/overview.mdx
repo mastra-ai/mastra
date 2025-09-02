@@ -130,7 +130,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-### Register workflow
+## Register workflow
 
 Register a workflow using `workflows` in the main Mastra instance:
 
@@ -154,18 +154,18 @@ export const mastra = new Mastra({
 });
 ```
 
-### Testing workflows locally
+## Testing workflows locally
 There are two ways to run and test workflows.
 
 <Steps>
 
-#### Mastra Playground
+### Mastra Playground
 
 With the Mastra Dev Server running you can run the workflow from the Mastra Playground by visiting [http://localhost:4111/workflows](http://localhost:4111/workflows) in your browser.
 
 > For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
 
-#### Command line
+### Command line
 
 Create a workflow run instance using `createRunAsync` and `start`:
 
@@ -198,11 +198,11 @@ npx tsx src/test-workflow.ts
 
 </Steps>
 
-#### Run workflow results
+### Run workflow results
 
 The result of running a workflow using either `start()` or `resume()` will look like one of the following, depending on the outcome.
 
-##### Status success
+#### Status success
 
 ```json
 {
@@ -226,7 +226,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
 - **result**: Includes the final output of the workflow, typed according to the `outputSchema`
 
 
-##### Status suspended
+#### Status suspended
 
 ```json
 {
@@ -248,7 +248,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
 
 - **suspended**: An optional array listing any steps currently awaiting input before continuing
 
-##### Status failed
+#### Status failed
 
 ```json
 {
@@ -266,7 +266,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
 ```
 - **error**: An optional field that includes the error message if the workflow fails
 
-### Stream workflow
+## Stream workflow
 
 Similar to the run method shown above, workflows can also be streamed:
 
@@ -288,7 +288,7 @@ for await (const chunk of result.stream) {
 
 > See [stream](/reference/workflows/run-methods/stream) and [messages](/reference/workflows/run-methods/stream#messages) for more information.
 
-### Watch Workflow
+## Watch Workflow
 
 A workflow can also be watched, allowing you to inspect each event that is emitted.
 
