@@ -46,6 +46,8 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   maxSteps?: number;
   _internal?: StreamInternal;
   output?: OUTPUT;
+  downloadRetries?: number;
+  downloadConcurrency?: number;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = LoopOptions<

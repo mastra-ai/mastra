@@ -225,11 +225,14 @@ export class MastraLLMV1 extends MastraBase {
       }
     };
 
-    return {
-      ...model,
-      doGenerate: wrappedDoGenerate,
-      doStream: wrappedDoStream,
-    };
+    // Create a proper proxy to preserve all model properties including getters/setters
+    return new Proxy(model, {
+      get(target, prop) {
+        if (prop === 'doGenerate') return wrappedDoGenerate;
+        if (prop === 'doStream') return wrappedDoStream;
+        return target[prop as keyof typeof target];
+      },
+    });
   }
 
   async __text<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined>({
