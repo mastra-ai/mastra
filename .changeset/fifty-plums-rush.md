@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Create new ai-sdk abstraction to support useChat
+Create new `@mastra/ai-sdk` package to better support `useChat()`

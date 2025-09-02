@@ -1,6 +1,6 @@
 # @mastra/ai-sdk
 
-Setup custom API routes to support `useChat` from packages similar to @ai-sdk/react.
+`@mastra/ai-sdk` helps you setup custom API routes to more easily support [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat).
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm install @mastra/ai-sdk
 
 ## Usage
 
-If you want to use dynamic agents you can use a path with :agentId.
+If you want to use dynamic agents you can use a path with `:agentId`.
 
 ```typescript
 import { chatRoute } from '@mastra/ai-sdk';
@@ -26,7 +26,7 @@ export const mastra = new Mastra({
 });
 ```
 
-Or you can create a fixed one:
+Or you can create a fixed route (i.e. `/chat`):
 
 ```typescript
 import { chatRoute } from '@mastra/ai-sdk';
@@ -43,7 +43,7 @@ export const mastra = new Mastra({
 });
 ```
 
-In your application you can simply call the useChat hook.
+After defining a dynamic route with `:agentId` you can use the `useChat()` hook like so:
 
 ```typescript
 type MyMessage = {}

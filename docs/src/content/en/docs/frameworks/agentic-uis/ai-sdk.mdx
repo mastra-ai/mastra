@@ -432,7 +432,7 @@ This utility is helpful when you want to fetch messages directly from your stora
 
 ### Enabling stream compatibility
 
-To enable AI SDK v5 compatibility, use our new `@mastra/ai-sdk` package:
+To enable AI SDK v5 compatibility, use the `@mastra/ai-sdk` package:
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
@@ -470,7 +470,7 @@ export const mastra = new Mastra({
 });
 ```
 
-In your application you can simply call the useChat hook.
+In your application call the `useChat()` hook.
 ```typescript
 const { error, status, sendMessage, messages, regenerate, stop } =
   useChat({
