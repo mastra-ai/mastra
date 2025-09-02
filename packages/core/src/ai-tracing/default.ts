@@ -17,6 +17,7 @@ import type {
   AnyAISpan,
 } from './types';
 import { SamplingStrategyType } from './types';
+import { shallowClean } from './utils';
 
 // ============================================================================
 // Default AISpan Implementation
@@ -62,7 +63,6 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
   public type: TType;
   public attributes: AISpanTypeMap[TType];
   public parent?: AnyAISpan;
-  public trace: AnyAISpan;
   public traceId: string;
   public startTime: Date;
   public endTime?: Date;
@@ -84,13 +84,12 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     this.id = generateSpanId();
     this.name = options.name;
     this.type = options.type;
-    this.attributes = options.attributes || ({} as AISpanTypeMap[TType]);
-    this.metadata = options.metadata;
+    this.attributes = shallowClean(options.attributes) || ({} as AISpanTypeMap[TType]);
+    this.metadata = shallowClean(options.metadata);
     this.parent = options.parent;
-    this.trace = options.parent ? options.parent.trace : (this as any);
     this.startTime = new Date();
     this.aiTracing = aiTracing;
-    this.input = options.input;
+    this.input = shallowClean(options.input);
     this.isEvent = options.isEvent;
     this.logger = new ConsoleLogger({
       name: 'default-ai-span',
@@ -103,13 +102,13 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
       this.traceId = generateTraceId();
     } else {
       // Child span inherits trace ID from root span
-      this.traceId = options.parent.trace.traceId;
+      this.traceId = options.parent.traceId;
     }
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the base class via the end() event.
-      this.output = options.output;
+      this.output = shallowClean(options.output);
     }
   }
 
@@ -120,13 +119,13 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     }
     this.endTime = new Date();
     if (options?.output !== undefined) {
-      this.output = options.output;
+      this.output = shallowClean(options.output);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...options.attributes };
+      this.attributes = { ...this.attributes, ...shallowClean(options.attributes) };
     }
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...options.metadata };
+      this.metadata = { ...this.metadata, ...shallowClean(options.metadata) };
     }
     // Tracing events automatically handled by base class
   }
@@ -159,10 +158,10 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
 
     // Update attributes if provided
     if (attributes) {
-      this.attributes = { ...this.attributes, ...attributes };
+      this.attributes = { ...this.attributes, ...shallowClean(attributes) };
     }
     if (metadata) {
-      this.metadata = { ...this.metadata, ...metadata };
+      this.metadata = { ...this.metadata, ...shallowClean(metadata) };
     }
 
     if (endSpan) {
@@ -214,16 +213,16 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     }
 
     if (options?.input !== undefined) {
-      this.input = options.input;
+      this.input = shallowClean(options.input);
     }
     if (options?.output !== undefined) {
-      this.output = options.output;
+      this.output = shallowClean(options.output);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...options.attributes };
+      this.attributes = { ...this.attributes, ...shallowClean(options.attributes) };
     }
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...options.metadata };
+      this.metadata = { ...this.metadata, ...shallowClean(options.metadata) };
     }
     // Tracing events automatically handled by base class
   }
