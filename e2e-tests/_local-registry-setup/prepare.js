@@ -67,9 +67,13 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
       });
-      await execAsync('git commit -m "SAVEPOINT"', {
+      await execAsync('git commit -m "SAVEPOINT" --no-verify', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
+        env: {
+          ...process.env,
+          HUSKY: '0',
+        },
       });
       shelvedChanges = true;
     }
