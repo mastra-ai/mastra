@@ -24,7 +24,7 @@ export function runScorer({
   input: any;
   output: any;
   runtimeContext: Record<string, any>;
-  tracingContext: TracingContext;
+  tracingContext?: TracingContext;
   entity: Record<string, any>;
   structuredOutput: boolean;
   source: ScoringSource;

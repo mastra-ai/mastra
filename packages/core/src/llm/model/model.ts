@@ -113,14 +113,14 @@ export class MastraLLMV1 extends MastraBase {
     });
   }
 
-  private _startAISpan(parmams: {
+  private _startAISpan(params: {
     model: LanguageModel;
     tracingContext: TracingContext;
     name: string;
     streaming: boolean;
     options: any;
   }): AnyAISpan | undefined {
-    const { model, tracingContext, name, streaming, options } = parmams;
+    const { model, tracingContext, name, streaming, options } = params;
     return tracingContext.currentSpan?.createChildSpan({
       name,
       type: AISpanType.LLM_GENERATION,

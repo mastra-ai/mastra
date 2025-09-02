@@ -174,7 +174,7 @@ export class ProcessorRunner {
 
   async runOutputProcessorsForStream(
     streamResult: MastraModelOutput,
-    tracingContext: TracingContext,
+    tracingContext?: TracingContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
@@ -226,7 +226,7 @@ export class ProcessorRunner {
 
   async runInputProcessors(
     messageList: MessageList,
-    tracingContext: TracingContext,
+    tracingContext?: TracingContext,
     telemetry?: any,
   ): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
