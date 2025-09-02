@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.11.3-alpha.1
+
+### Patch Changes
+
+- [#7210](https://github.com/mastra-ai/mastra/pull/7210) [`87de958`](https://github.com/mastra-ai/mastra/commit/87de95832a7bdfa9ecb14473c84dc874331f1a7d) Thanks [@mfrachet](https://github.com/mfrachet)! - fix chat outline
+
 ## 0.11.3-alpha.0
 
 ### Patch Changes

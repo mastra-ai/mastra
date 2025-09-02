@@ -555,13 +555,13 @@ describe('MessageList V5 Support', () => {
         expect(prompt[1].role).toBe('assistant');
       });
 
-      it('llmPrompt() should return proper LanguageModelV2Prompt format', () => {
+      it('llmPrompt() should return proper LanguageModelV2Prompt format', async () => {
         const list = new MessageList({ threadId, resourceId });
         list.addSystem('System message');
         list.add('User input', 'input');
         list.add({ role: 'assistant', content: 'Response' }, 'response');
 
-        const llmPrompt = list.get.all.aiV5.llmPrompt();
+        const llmPrompt = await list.get.all.aiV5.llmPrompt();
 
         // llmPrompt returns messages array directly based on the implementation
         expect(Array.isArray(llmPrompt)).toBe(true);
