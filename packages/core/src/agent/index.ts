@@ -3049,7 +3049,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   runId,
                 });
               }
-              await options?.onFinish?.({ ...result, runId } as any);
+              // For aisdk format, include all messages including the assistant's response
+              const finalMessages = options.format === 'aisdk' ? messageList.get.all.ui() : undefined;
+
+              await options?.onFinish?.({
+                ...result,
+                runId,
+                ...(finalMessages ? { messages: finalMessages } : {}),
+              } as any);
             },
             onStepFinish: result.onStepFinish,
           },
