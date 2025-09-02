@@ -219,7 +219,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 "content": [
                   {
-                    "text": " ",
+                    "text": ".",
                     "type": "text",
                   },
                 ],
