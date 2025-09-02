@@ -7,15 +7,9 @@ uplinks:
 packages:
   '**':
     access: $all
-    publish: $anonymous
-    unpublish: $anonymous
+    publish: $all
+    unpublish: $all
     proxy: npmjs
-
-# Use htpasswd with no file to allow anonymous access
-auth:
-  htpasswd:
-    file: ./htpasswd
-    max_users: -1
 
 # Security settings to allow everything
 security:
