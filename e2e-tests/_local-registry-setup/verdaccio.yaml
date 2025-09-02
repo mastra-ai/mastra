@@ -5,26 +5,27 @@ uplinks:
     url: https://registry.npmjs.org/
 
 packages:
-  'mastra':
-    access: $all
-    publish: $all
-    unpublish: $all
-
-  '@mastra/*':
-    access: $all
-    publish: $all
-    unpublish: $all
-
-  'create-mastra':
-    access: $all
-    publish: $all
-    unpublish: $all
-
   '**':
     access: $all
-    publish: $all
-    unpublish: $all
+    publish: $anonymous
+    unpublish: $anonymous
     proxy: npmjs
+
+# Use htpasswd with no file to allow anonymous access
+auth:
+  htpasswd:
+    file: ./htpasswd
+    max_users: -1
+
+# Security settings to allow everything
+security:
+  api:
+    legacy: true
+
+# Disable audit
+middlewares:
+  audit:
+    enabled: false
 
 web:
   enable: true
