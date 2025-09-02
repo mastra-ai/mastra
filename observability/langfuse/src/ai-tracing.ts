@@ -7,10 +7,10 @@
  */
 
 import type { AITracingExporter, AITracingEvent, AnyAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
-import { AISpanType, sanitizeMetadata, omitKeys } from '@mastra/core/ai-tracing';
+import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { Langfuse } from 'langfuse';
-import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient } from 'langfuse';
+import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
 export interface LangfuseExporterConfig {
   /** Langfuse API key */
@@ -30,9 +30,10 @@ export interface LangfuseExporterConfig {
 type TraceData = {
   trace: LangfuseTraceClient; // Langfuse trace object
   spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
+  events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
 };
 
-type LangfuseSpan = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient;
+type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
 
 export class LangfuseExporter implements AITracingExporter {
   name = 'langfuse';
@@ -53,15 +54,20 @@ export class LangfuseExporter implements AITracingExporter {
   }
 
   async exportEvent(event: AITracingEvent): Promise<void> {
+    if (event.span.isEvent) {
+      await this.handleEventSpan(event.span);
+      return;
+    }
+
     switch (event.type) {
       case 'span_started':
         await this.handleSpanStarted(event.span);
         break;
       case 'span_updated':
-        await this.handleSpanUpdateOrEnd(event.span, true);
+        await this.handleSpanUpdateOrEnd(event.span, false);
         break;
       case 'span_ended':
-        await this.handleSpanUpdateOrEnd(event.span, false);
+        await this.handleSpanUpdateOrEnd(event.span, true);
         break;
     }
 
@@ -73,28 +79,19 @@ export class LangfuseExporter implements AITracingExporter {
 
   private async handleSpanStarted(span: AnyAISpan): Promise<void> {
     if (span.isRootSpan) {
-      const trace = this.client.trace(this.buildTracePayload(span));
-      this.traceMap.set(span.trace.id, { trace, spans: new Map() });
+      this.initTrace(span);
     }
+    const method = 'handleSpanStarted';
 
-    const traceData = this.traceMap.get(span.trace.id);
+    const traceData = this.getTraceData({ span, method });
     if (!traceData) {
-      this.logger.warn('Langfuse exporter: No trace data found for span', {
-        traceId: span.trace.id,
-        spanId: span.id,
-        spanName: span.name,
-        spanType: span.type,
-        isRootSpan: span.isRootSpan,
-        parentSpanId: span.parent?.id,
-        method: 'handleSpanStarted',
-      });
       return;
     }
 
-    const langfuseParent =
-      span.parent && traceData.spans.has(span.parent.id)
-        ? (traceData.spans.get(span.parent.id) as LangfuseSpan)
-        : traceData.trace;
+    const langfuseParent = this.getLangfuseParent({ traceData, span, method });
+    if (!langfuseParent) {
+      return;
+    }
 
     const payload = this.buildSpanPayload(span, true);
 
@@ -104,51 +101,120 @@ export class LangfuseExporter implements AITracingExporter {
     traceData.spans.set(span.id, langfuseSpan);
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyAISpan, isUpdate: boolean): Promise<void> {
-    const traceData = this.traceMap.get(span.trace.id);
+  private async handleSpanUpdateOrEnd(span: AnyAISpan, isEnd: boolean): Promise<void> {
+    const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
+
+    const traceData = this.getTraceData({ span, method });
     if (!traceData) {
-      this.logger.warn('Langfuse exporter: No trace data found for span', {
-        traceId: span.trace.id,
-        spanId: span.id,
-        spanName: span.name,
-        spanType: span.type,
-        isRootSpan: span.isRootSpan,
-        parentSpanId: span.parent?.id,
-        method: isUpdate ? 'handleSpanUpdate' : 'handleSpanEnd',
-      });
       return;
     }
 
     const langfuseSpan = traceData.spans.get(span.id);
     if (!langfuseSpan) {
       this.logger.warn('Langfuse exporter: No Langfuse span found for span update/end', {
-        traceId: span.trace.id,
+        traceId: span.traceId,
         spanId: span.id,
         spanName: span.name,
         spanType: span.type,
         isRootSpan: span.isRootSpan,
         parentSpanId: span.parent?.id,
         availableSpanIds: Array.from(traceData.spans.keys()),
-        method: isUpdate ? 'handleSpanUpdate' : 'handleSpanEnd',
+        method,
       });
       return;
     }
 
-    if (isUpdate) {
-      langfuseSpan.update(this.buildSpanPayload(span, false));
-    } else {
-      langfuseSpan.end(this.buildSpanPayload(span, false));
+    // use update for both update & end, so that we can use the
+    // end time we set when ending the span.
+    langfuseSpan.update(this.buildSpanPayload(span, false));
 
-      if (span.isRootSpan) {
-        traceData.trace.update({ output: span.output });
-        this.traceMap.delete(span.trace.id);
-      }
+    if (isEnd && span.isRootSpan) {
+      traceData.trace.update({ output: span.output });
+      this.traceMap.delete(span.traceId);
     }
+  }
+
+  private async handleEventSpan(span: AnyAISpan): Promise<void> {
+    if (span.isRootSpan) {
+      this.logger.debug('Langfuse exporter: Creating trace', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        method: 'handleEventSpan',
+      });
+      this.initTrace(span);
+    }
+    const method = 'handleEventSpan';
+
+    const traceData = this.getTraceData({ span, method });
+    if (!traceData) {
+      return;
+    }
+
+    const langfuseParent = this.getLangfuseParent({ traceData, span, method });
+    if (!langfuseParent) {
+      return;
+    }
+
+    const payload = this.buildSpanPayload(span, true);
+
+    const langfuseEvent = langfuseParent.event(payload);
+
+    traceData.events.set(span.id, langfuseEvent);
+  }
+
+  private initTrace(span: AnyAISpan): void {
+    const trace = this.client.trace(this.buildTracePayload(span));
+    this.traceMap.set(span.traceId, { trace, spans: new Map(), events: new Map() });
+  }
+
+  private getTraceData(options: { span: AnyAISpan; method: string }): TraceData | undefined {
+    const { span, method } = options;
+    if (this.traceMap.has(span.traceId)) {
+      return this.traceMap.get(span.traceId);
+    }
+    this.logger.warn('Langfuse exporter: No trace data found for span', {
+      traceId: span.traceId,
+      spanId: span.id,
+      spanName: span.name,
+      spanType: span.type,
+      isRootSpan: span.isRootSpan,
+      parentSpanId: span.parent?.id,
+      method,
+    });
+  }
+
+  private getLangfuseParent(options: {
+    traceData: TraceData;
+    span: AnyAISpan;
+    method: string;
+  }): LangfuseParent | undefined {
+    const { traceData, span, method } = options;
+
+    const parentId = span.parent?.id;
+    if (!parentId) {
+      return traceData.trace;
+    }
+    if (traceData.spans.has(parentId)) {
+      return traceData.spans.get(parentId);
+    }
+    if (traceData.events.has(parentId)) {
+      return traceData.events.get(parentId);
+    }
+    this.logger.warn('Langfuse exporter: No parent data found for span', {
+      traceId: span.traceId,
+      spanId: span.id,
+      spanName: span.name,
+      spanType: span.type,
+      isRootSpan: span.isRootSpan,
+      parentSpanId: span.parent?.id,
+      method,
+    });
   }
 
   private buildTracePayload(span: AnyAISpan): Record<string, any> {
     const payload: Record<string, any> = {
-      id: span.trace.id,
+      id: span.traceId,
       name: span.name,
     };
 
@@ -160,8 +226,8 @@ export class LangfuseExporter implements AITracingExporter {
 
     payload.metadata = {
       spanType: span.type,
-      ...sanitizeMetadata(span.attributes),
-      ...sanitizeMetadata(remainingMetadata),
+      ...span.attributes,
+      ...remainingMetadata,
     };
 
     return payload;
@@ -206,8 +272,8 @@ export class LangfuseExporter implements AITracingExporter {
 
     payload.metadata = {
       spanType: span.type,
-      ...sanitizeMetadata(omitKeys(attributes, attributesToOmit)),
-      ...sanitizeMetadata(span.metadata),
+      ...omitKeys(attributes, attributesToOmit),
+      ...span.metadata,
     };
 
     if (span.errorInfo) {

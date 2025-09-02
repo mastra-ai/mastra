@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { TracingContext } from '../ai-tracing';
-import { AISpanType, wrapMastra, getOrCreateSpan } from '../ai-tracing';
+import { AISpanType, wrapMastra, getOrCreateSpan, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
@@ -1536,7 +1536,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       const evalSpan = loopSpan?.createChildSpan({
         type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
         name: `condition: ${entry.loopType}`,
-        input: result.output,
+        input: selectFields(result.output, ['stepResult', 'output.text', 'output.object', 'messages']),
         attributes: {
           conditionIndex: iteration,
         },
