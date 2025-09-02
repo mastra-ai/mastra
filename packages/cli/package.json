@@ -20,7 +20,7 @@
   },
   "files": [
     "dist",
-    "src/scripts"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
