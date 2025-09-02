@@ -31,7 +31,7 @@ export default async function setup() {
   const packages = ['mastra', '@mastra/loggers', '@mastra/playground-ui'];
   const publishFilterArgs = packages.map(p => [`--filter="${p}^..."`, `--filter="${p}"`]).flat();
 
-  publishPackages(publishFilterArgs, tag, rootDir, registry);
+  await publishPackages(publishFilterArgs, tag, rootDir, registry);
 
   console.log('[Setup] Published packages', { publishFilterArgs, tag, rootDir });
 
