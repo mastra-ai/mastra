@@ -136,11 +136,11 @@ You can run a workflow by sending a `POST` request to your Mastra application's 
 
 ```bash
 
-curl -X POSThttp://localhost:4111/api/workflows/sequentialSteps/start-async \
+curl -X POST http://localhost:4111/api/workflows/sequentialSteps/start-async \
   -H "Content-Type: application/json" \
   -d '{
     "inputData": {
-      "value": "10"
+      "value": 10
     }
   }' | jq
 ```
