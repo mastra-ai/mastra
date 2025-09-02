@@ -380,7 +380,7 @@ export async function streamGenerateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\Stream method will switch to use streamVNext implementation September 9th. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 9th. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
   );
 
   return streamGenerateLegacyHandler({ mastra, ...args });
