@@ -11,7 +11,7 @@ interface AgentBuilderContext extends Context {
 }
 
 /**
- * Generic wrapper that converts template handlers to use workflow handlers
+ * Generic wrapper that converts agent-builder handlers to use workflow handlers
  * TWorkflowArgs - The argument type expected by the workflow handler
  * TResult - The return type of the workflow handler
  */
@@ -75,6 +75,7 @@ export const getAgentBuilderActionsHandler = createAgentBuilderWorkflowHandler(a
     return handleError(error, 'Error getting agent builder workflows');
   }
 }, 'Getting agent builder actions');
+
 export const getAgentBuilderActionByIdHandler = createAgentBuilderWorkflowHandler(
   workflows.getWorkflowByIdHandler,
   'Getting agent builder action by ID',

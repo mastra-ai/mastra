@@ -1,4 +1,3 @@
-import { agentBuilderWorkflows } from '@mastra/agent-builder';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
@@ -91,21 +90,18 @@ export class WorkflowRegistry {
     delete this.additionalWorkflows[workflowId];
   }
   /**
-   * Clean up all agent-builder workflows
+   * Clean up all registered workflows
    */
-
   static cleanup(): void {
-    const agentBuilderIds = Object.keys(agentBuilderWorkflows);
-    for (const id of agentBuilderIds) {
-      delete this.additionalWorkflows[id];
-    }
+    // Clear all workflows (since we register all agent-builder workflows each time)
+    this.additionalWorkflows = {};
   }
 
   /**
    * Check if a workflow ID is a valid agent-builder workflow
    */
   static isAgentBuilderWorkflow(workflowId: string): boolean {
-    return workflowId in agentBuilderWorkflows;
+    return workflowId in this.additionalWorkflows;
   }
 
   /**
