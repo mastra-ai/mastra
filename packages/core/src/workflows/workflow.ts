@@ -977,6 +977,7 @@ export class Workflow<
   }
 
   async execute({
+    runId,
     inputData,
     resumeData,
     suspend,
@@ -989,6 +990,7 @@ export class Workflow<
     runCount,
     currentSpan,
   }: {
+    runId?: string;
     inputData: z.infer<TInput>;
     resumeData?: any;
     getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
@@ -1013,7 +1015,7 @@ export class Workflow<
     this.__registerMastra(mastra);
 
     const isResume = !!(resume?.steps && resume.steps.length > 0);
-    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync();
+    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
       abort();
     };
@@ -1095,6 +1097,57 @@ export class Workflow<
     );
   }
 
+  private async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run steps. Mastra storage is not initialized');
+      return {};
+    }
+
+    const run = await storage.getWorkflowRunById({ runId, workflowName: workflowId });
+
+    let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+    if (!snapshot) {
+      return {};
+    }
+
+    if (typeof snapshot === 'string') {
+      // this occurs whenever the parsing of snapshot fails in storage
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', e);
+        return {};
+      }
+    }
+
+    const { serializedStepGraph, context } = snapshot as WorkflowRunState;
+    const { input, ...steps } = context;
+
+    let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
+
+    for (const step of Object.keys(steps)) {
+      const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
+      finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
+      if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
+        const nestedSteps = await this.getWorkflowRunSteps({ runId, workflowId: step });
+        if (nestedSteps) {
+          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
+            (acc, [key, value]) => {
+              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
+              return acc;
+            },
+            {} as Record<string, StepResult<any, any, any, any>>,
+          );
+          finalSteps = { ...finalSteps, ...updatedNestedSteps };
+        }
+      }
+    }
+
+    return finalSteps;
+  }
+
   async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
@@ -1120,12 +1173,14 @@ export class Workflow<
       }
     }
 
+    const fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+
     return {
       status: (snapshot as WorkflowRunState).status,
       result: (snapshot as WorkflowRunState).result,
       error: (snapshot as WorkflowRunState).error,
       payload: (snapshot as WorkflowRunState).context?.input,
-      steps: (snapshot as WorkflowRunState).context as any,
+      steps: fullSteps as any,
     };
   }
 }

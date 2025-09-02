@@ -231,11 +231,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    let run = Array.from(this.collection.values()).find((r: any) => r.run_id === runId);
-
-    if (run && workflowName && run.workflow_name !== workflowName) {
-      run = undefined; // Not found if workflowName doesn't match
-    }
+    const runs = Array.from(this.collection.values()).filter((r: any) => r.run_id === runId);
+    let run = runs.find((r: any) => r.workflow_name === workflowName);
 
     if (!run) return null;
 
