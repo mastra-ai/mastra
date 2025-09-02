@@ -39,10 +39,6 @@ const globalExternals = [
   'fastembed',
   'nodemailer',
   '#tools',
-  'hono',
-  'hono/streaming',
-  '@hono/node-server',
-  'hono-openapi',
 ];
 
 function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
@@ -326,7 +322,8 @@ export async function bundleExternals(
         preferBuiltins: true,
         exportConditions: ['node'],
       }),
-      // hono is now treated as an external dependency
+      // hono is imported from deployer, so we need to resolve from here instead of the project root
+      aliasHono(),
       json(),
     ].filter(Boolean),
   });
