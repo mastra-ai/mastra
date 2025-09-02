@@ -120,6 +120,7 @@ export async function watchAgentBuilderActionHandler(c: Context) {
     const logger = mastra.getLogger();
     const actionId = c.req.param('actionId');
     const runId = c.req.query('runId');
+    const eventType = c.req.query('eventType') as 'watch' | 'watch-v2' | undefined;
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to watch action' });
@@ -133,6 +134,7 @@ export async function watchAgentBuilderActionHandler(c: Context) {
           mastra,
           actionId,
           runId,
+          eventType,
         });
 
         const reader = result.getReader();

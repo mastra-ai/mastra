@@ -480,6 +480,12 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
           required: false,
           schema: { type: 'string' },
         },
+        {
+          name: 'eventType',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', enum: ['watch', 'watch-v2'] },
+        },
       ],
       tags: ['agent-builder'],
       responses: {
