@@ -62,7 +62,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       encoding: 'utf8',
     });
 
-    if (gitStatus.length > 0) {
+    if (gitStatus.stdout.length > 0) {
       await execAsync('git add -A', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
