@@ -41,7 +41,7 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "keywords": [
     "mastra",
