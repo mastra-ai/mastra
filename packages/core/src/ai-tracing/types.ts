@@ -278,8 +278,6 @@ export interface AISpan<TType extends AISpanType> {
   attributes?: AISpanTypeMap[TType];
   /** Parent span reference (undefined for root spans) */
   parent?: AnyAISpan;
-  /** The top-level span - can be any type */
-  trace: AnyAISpan;
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
   traceId: string;
   /** Pointer to the AITracing instance */

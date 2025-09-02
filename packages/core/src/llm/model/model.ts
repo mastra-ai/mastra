@@ -41,6 +41,7 @@ import type {
   StreamReturn,
 } from './base.types';
 import type { inferOutput } from './shared.types';
+import { parallel } from 'radash';
 
 export class MastraLLMV1 extends MastraBase {
   #model: LanguageModel;
@@ -113,14 +114,15 @@ export class MastraLLMV1 extends MastraBase {
     });
   }
 
-  private _startAISpan(
-    model: LanguageModel,
-    currentSpan: AnyAISpan,
-    name: string,
-    streaming: boolean,
-    options: any,
-  ): AnyAISpan {
-    return currentSpan.createChildSpan({
+  private _startAISpan(parmams: {
+    model: LanguageModel;
+    tracingContext: TracingContext;
+    name: string;
+    streaming: boolean;
+    options: any;
+  }): AnyAISpan | undefined {
+    const { model, tracingContext, name, streaming, options } = parmams;
+    return tracingContext.currentSpan?.createChildSpan({
       name,
       type: AISpanType.LLM_GENERATION,
       input: options.prompt,
@@ -146,18 +148,18 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     const wrappedDoGenerate = async (options: any) => {
-      const llmSpan = this._startAISpan(
+      const llmSpan = this._startAISpan({
         model,
-        tracingContext.currentSpan!,
-        `llm generate: '${model.modelId}'`,
-        false,
+        tracingContext,
+        name: `llm generate: '${model.modelId}'`,
+        streaming: false,
         options,
-      );
+      });
 
       try {
         const result = await model.doGenerate(options);
 
-        llmSpan.end({
+        llmSpan?.end({
           output: result.text,
           attributes: {
             usage: result.usage
@@ -170,19 +172,19 @@ export class MastraLLMV1 extends MastraBase {
         });
         return result;
       } catch (error) {
-        llmSpan.error({ error: error as Error });
+        llmSpan?.error({ error: error as Error });
         throw error;
       }
     };
 
     const wrappedDoStream = async (options: any) => {
-      const llmSpan = this._startAISpan(
+      const llmSpan = this._startAISpan({
         model,
-        tracingContext.currentSpan!,
-        `llm stream: '${model.modelId}'`,
-        true,
+        tracingContext,
+        name: `llm stream: '${model.modelId}'`,
+        streaming: true,
         options,
-      );
+      });
 
       try {
         const result = await model.doStream(options);
@@ -198,7 +200,7 @@ export class MastraLLMV1 extends MastraBase {
             transform(chunk, controller) {
               // Create event spans for text chunks
               if (chunk.type === 'text-delta') {
-                llmSpan.createEventSpan({
+                llmSpan?.createEventSpan({
                   type: AISpanType.LLM_CHUNK,
                   name: `llm chunk: ${chunk.type}`,
                   output: chunk.textDelta,
@@ -220,7 +222,7 @@ export class MastraLLMV1 extends MastraBase {
             },
             // this gets called at the end of the stream
             flush() {
-              llmSpan.end({
+              llmSpan?.end({
                 attributes: {
                   usage: finalUsage
                     ? {
@@ -243,7 +245,7 @@ export class MastraLLMV1 extends MastraBase {
           stream: wrappedStream,
         };
       } catch (error) {
-        llmSpan.error({ error: error as Error });
+        llmSpan?.error({ error: error as Error });
         throw error;
       }
     };

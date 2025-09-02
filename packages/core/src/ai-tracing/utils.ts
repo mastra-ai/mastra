@@ -8,32 +8,74 @@ import { getSelectedAITracing } from './registry';
 import type { AISpan, AISpanType, AISpanTypeMap, TracingContext } from './types';
 
 /**
- * Removes non-serializable values from a metadata object.
- * @param metadata - An object with arbitrary values
- * @returns A new object with only serializable entries
+ * Cleans an object by testing each key-value pair for circular references.
+ * Problematic values are replaced with error messages for debugging.
+ * @param obj - Object to clean
+ * @returns Cleaned object with circular references marked
  */
-export function sanitizeMetadata(metadata: Record<string, any> | undefined): Record<string, any> {
-  if (!metadata) return {};
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(metadata)) {
-    if (isSerializable(value)) {
-      sanitized[key] = value;
+export function shallowCleanObject(obj: Record<string, any>): Record<string, any> {
+  const cleaned: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    try {
+      JSON.stringify(value);
+      cleaned[key] = value;
+    } catch (error) {
+      // Use the actual error message for debugging
+      cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
     }
   }
-  return sanitized;
+
+  return cleaned;
 }
 
 /**
- * Checks if a value can be safely JSON-stringified.
- * @param value - Any value
- * @returns true if serializable, false otherwise
+ * Cleans an array by applying object cleaning to each item.
+ * @param arr - Array to clean
+ * @returns Cleaned array with problematic items marked
  */
-export function isSerializable(value: any): boolean {
+export function shallowCleanArray(arr: any[]): any[] {
+  return arr.map(item => {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      // Apply object cleaning to each array item
+      return shallowCleanObject(item);
+    }
+
+    // For primitives, nested arrays, etc. - test directly
+    try {
+      JSON.stringify(item);
+      return item;
+    } catch (error) {
+      return `[${error instanceof Error ? error.message : String(error)}]`;
+    }
+  });
+}
+
+/**
+ * Safely cleans any value by removing circular references and marking problematic data.
+ * Provides detailed error information to help identify issues in source code.
+ * @param value - Value to clean (object, array, primitive, etc.)
+ * @returns Cleaned value with circular references marked
+ */
+export function shallowClean(value: any): any {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return shallowCleanArray(value);
+  }
+
+  if (typeof value === 'object') {
+    return shallowCleanObject(value);
+  }
+
+  // Primitives, functions, etc. - test directly
   try {
     JSON.stringify(value);
-    return true;
-  } catch {
-    return false;
+    return value;
+  } catch (error) {
+    return `[${error instanceof Error ? error.message : String(error)}]`;
   }
 }
 

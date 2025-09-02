@@ -2811,8 +2811,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               if (!lastYmd || lastYmd !== ymd) {
                 result += `\nthe following messages are from ${ymd}\n`;
               }
-              result += `
-Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
+              result += `Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
 
               lastYmd = ymd;
             }
