@@ -1,4 +1,4 @@
-import { fork } from 'node:child_process';
+import { fork, execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 if (typeof require === 'undefined') {
@@ -35,7 +35,10 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
   const registry = await runRegistry(verdaccioPath, ['-c', './verdaccio.yaml', '-l', `${port}`], {
     cwd: location,
   });
-  // No login needed - verdaccio is configured to allow unauthenticated publishing
+  
+  // Set a dummy auth token for npm/pnpm (required by npm even if registry doesn't validate it)
+  execSync(`npm config set //localhost:${port}/:_authToken dummy-token`);
+  execSync(`pnpm config set //localhost:${port}/:_authToken dummy-token`);
 
   return new Proxy(registry, {
     get(target, prop) {
