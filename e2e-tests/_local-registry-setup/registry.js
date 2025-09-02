@@ -1,4 +1,4 @@
-import { fork, execSync } from 'node:child_process';
+import { fork } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 if (typeof require === 'undefined') {
@@ -35,7 +35,7 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
   const registry = await runRegistry(verdaccioPath, ['-c', './verdaccio.yaml', '-l', `${port}`], {
     cwd: location,
   });
-  login('mastra', 'mastra-ai', port);
+  // No login needed - verdaccio is configured to allow unauthenticated publishing
 
   return new Proxy(registry, {
     get(target, prop) {
@@ -46,17 +46,4 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
       return Reflect.get(target, prop);
     },
   });
-}
-
-export function login(user, password, port) {
-  // First login with npm-cli-login
-  execSync(`npx npm-cli-login -u ${user} -p ${password} -e test@domain.test -r http://localhost:${port}`);
-
-  // Get the auth token that was set
-  const authToken = execSync(`npm config get //localhost:${port}/:_authToken`, { encoding: 'utf8' }).trim();
-
-  // Set it for pnpm as well
-  if (authToken && authToken !== 'undefined') {
-    execSync(`pnpm config set //localhost:${port}/:_authToken ${authToken}`);
-  }
 }
