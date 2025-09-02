@@ -107,13 +107,16 @@ export const UserMessage = () => {
         <MessagePrimitive.Parts
           components={{
             File: p => {
+              const image = (p as any)?.image;
+              const isUrl = image?.startsWith('https://');
+
               return (
                 <InMessageAttachment
                   type="document"
                   contentType={p.mimeType}
                   nameSlot="Unknown filename"
-                  src={undefined}
-                  data={(p as any).image as string} // yeah, for some reasons
+                  src={isUrl ? image : undefined}
+                  data={image} // yeah, for some reasons
                 />
               );
             },
