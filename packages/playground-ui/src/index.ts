@@ -38,3 +38,6 @@ export * from './store/playground-store';
 export * from './lib/framework';
 export { MemorySearch } from './components/assistant-ui/memory-search';
 export * from './components/ui/alert-dialog';
+export * from './components/ui/searchbar';
+export * from './components/ui/kbd';
+export * from './components/ui/collapsible';

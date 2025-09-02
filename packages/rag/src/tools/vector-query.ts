@@ -1,6 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import type { MastraVector } from '@mastra/core/vector';
-import type { EmbeddingModel } from 'ai';
+import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { rerank, rerankWithScorer } from '../rerank';
@@ -31,7 +30,9 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
       const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
       const databaseConfig = runtimeContext.get('databaseConfig') ?? options.databaseConfig;
-      const model: EmbeddingModel<string> = runtimeContext.get('model') ?? options.model;
+      const model: MastraEmbeddingModel<string> = runtimeContext.get('model') ?? options.model;
+      const providerOptions: Record<string, Record<string, any>> | undefined =
+        runtimeContext.get('providerOptions') ?? options.providerOptions;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`); // won't fire
@@ -98,6 +99,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           topK: topKValue,
           includeVectors,
           databaseConfig,
+          providerOptions,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });

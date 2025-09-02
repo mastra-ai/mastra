@@ -138,7 +138,7 @@ describe('MessageList', () => {
       expect(list.get.all.aiV4.prompt()).toHaveLength(2); // system message + user message
       expect(list.get.all.aiV4.llmPrompt()).toHaveLength(2); // system message + user message
       expect(list.get.all.aiV5.prompt()).toHaveLength(2); // system message + user message
-      expect(list.get.all.aiV5.llmPrompt()).toHaveLength(2); // system message + user message
+      expect(await list.get.all.aiV5.llmPrompt()).toHaveLength(2); // system message + user message
     });
 
     it('should correctly convert and add a Vercel UIMessage', () => {

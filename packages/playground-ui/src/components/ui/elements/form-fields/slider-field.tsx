@@ -53,7 +53,7 @@ export function SliderField({
           <RadixSlider.Track className="relative h-[4px] w-full grow overflow-hidden rounded-full bg-gray-600">
             <RadixSlider.Range className="absolute h-full bg-gray-400" />
           </RadixSlider.Track>
-          <RadixSlider.Thumb className="block h-4 w-4 rounded-full bg-gray-400 shadow transition-colors focus:outline-none focus:bg-[#18fb6f] disabled:pointer-events-none disabled:opacity-50" />
+          <RadixSlider.Thumb className="block h-4 w-4 rounded-full bg-gray-400 shadow transition-colors disabled:pointer-events-none disabled:opacity-50" />
         </RadixSlider.Root>
         <span className="text-icon4 text-[0.875rem] flex justify-end">{value}</span>
       </div>

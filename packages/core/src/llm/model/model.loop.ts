@@ -121,6 +121,7 @@ export class MastraLLMVNext extends MastraBase {
   stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
     messages,
     stopWhen = stepCountIs(5),
+    maxSteps,
     tools = {} as Tools,
     runId,
     modelSettings,
@@ -131,8 +132,17 @@ export class MastraLLMVNext extends MastraBase {
     output,
     options,
     outputProcessors,
+    providerOptions,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
+    let stopWhenToUse;
+
+    if (maxSteps && typeof maxSteps === 'number') {
+      stopWhenToUse = stepCountIs(maxSteps);
+    } else {
+      stopWhenToUse = stopWhen;
+    }
+
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -157,9 +167,10 @@ export class MastraLLMVNext extends MastraBase {
         messageList,
         model: this.#model,
         tools: tools as Tools,
-        stopWhen,
+        stopWhen: stopWhenToUse,
         toolChoice,
         modelSettings,
+        providerOptions,
         telemetry_settings: {
           ...this.experimental_telemetry,
           ...telemetry_settings,

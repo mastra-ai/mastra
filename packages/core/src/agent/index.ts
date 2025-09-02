@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, StreamObjectResult, TextPart, Tool, ToolExecutionOptions, UIMessage } from 'ai';
+import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import type { ModelMessage } from 'ai-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
@@ -39,7 +39,13 @@ import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { StructuredOutputProcessor } from '../processors/processors/structured-output';
 import { ProcessorRunner } from '../processors/runner';
 import { RuntimeContext } from '../runtime-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
+import type {
+  ScorerRunInputForAgent,
+  ScorerRunOutputForAgent,
+  MastraScorers,
+  MastraScorer,
+  ScoringSamplingConfig,
+} from '../scores';
 import { runScorer } from '../scores/hooks';
 import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -1411,49 +1417,6 @@ export class Agent<
     return convertedWorkflowTools;
   }
 
-  private _wrapToolWithAITracing(tool: CoreTool, toolType: string, aiSpan?: AnyAISpan): CoreTool {
-    if (!aiSpan || !tool.execute) {
-      return tool;
-    }
-
-    const wrappedExecute = async (params: any, options: ToolExecutionOptions) => {
-      const toolSpan = aiSpan.createChildSpan({
-        type: AISpanType.TOOL_CALL,
-        name: `tool: ${tool.id}`,
-        input: params,
-        attributes: {
-          toolId: tool.id,
-          toolDescription: tool.description,
-          toolType,
-        },
-      });
-
-      try {
-        const result = await tool.execute?.(params, options);
-        toolSpan.end({ output: result });
-        return result;
-      } catch (error) {
-        toolSpan.error({ error: error as Error });
-        throw error;
-      }
-    };
-
-    return {
-      ...tool,
-      execute: wrappedExecute,
-    };
-  }
-
-  private _wrapToolsWithAITracing(
-    tools: Record<string, CoreTool>,
-    toolType: string,
-    agentAISpan?: AnyAISpan,
-  ): Record<string, CoreTool> {
-    return Object.fromEntries(
-      Object.entries(tools).map(([key, tool]) => [key, this._wrapToolWithAITracing(tool, toolType, agentAISpan)]),
-    );
-  }
-
   private async convertTools({
     toolsets,
     clientTools,
@@ -1528,11 +1491,11 @@ export class Agent<
     });
 
     return this.formatTools({
-      ...this._wrapToolsWithAITracing(assignedTools, 'assigned', agentAISpan),
-      ...this._wrapToolsWithAITracing(memoryTools, 'memory', agentAISpan),
-      ...this._wrapToolsWithAITracing(toolsetTools, 'toolset', agentAISpan),
-      ...this._wrapToolsWithAITracing(clientSideTools, 'client', agentAISpan),
-      ...workflowTools, //workflow tools are already wrapped with AI tracing
+      ...assignedTools,
+      ...memoryTools,
+      ...toolsetTools,
+      ...clientSideTools,
+      ...workflowTools,
     });
   }
 
@@ -2158,7 +2121,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     instructions: string;
     runtimeContext: RuntimeContext;
     structuredOutput?: boolean;
-    overrideScorers?: MastraScorers;
+    overrideScorers?:
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
   }) {
@@ -2182,7 +2147,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       }
     }
 
-    const scorers = overrideScorers ?? (await this.getScorers({ runtimeContext }));
+    let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    try {
+      scorers = overrideScorers
+        ? this.resolveOverrideScorerReferences(overrideScorers)
+        : await this.getScorers({ runtimeContext });
+    } catch (e) {
+      this.logger.warn(`[Agent:${this.name}] - Failed to get scorers: ${e}`);
+      return;
+    }
 
     const scorerInput: ScorerRunInputForAgent = {
       inputMessages: messageList.getPersisted.input.ui(),
@@ -2196,7 +2169,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     if (Object.keys(scorers || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorers)) {
         runScorer({
-          scorerId: id,
+          scorerId: overrideScorers ? scorerObject.scorer.name : id,
           scorerObject: scorerObject,
           runId,
           input: scorerInput,
@@ -2214,6 +2187,45 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         });
       }
     }
+  }
+
+  private resolveOverrideScorerReferences(
+    overrideScorers: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>,
+  ) {
+    const result: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    for (const [id, scorerObject] of Object.entries(overrideScorers)) {
+      // If the scorer is a string (scorer name), we need to get the scorer from the mastra instance
+      if (typeof scorerObject.scorer === 'string') {
+        try {
+          if (!this.#mastra) {
+            throw new MastraError({
+              id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `Mastra not found when fetching scorer. Make sure to fetch agent from mastra.getAgent()`,
+            });
+          }
+
+          const scorer = this.#mastra.getScorerByName(scorerObject.scorer);
+          result[id] = { scorer, sampling: scorerObject.sampling };
+        } catch (error) {
+          this.logger.warn(`[Agent:${this.name}] - Failed to get scorer ${scorerObject.scorer}: ${error}`);
+        }
+      } else {
+        result[id] = scorerObject;
+      }
+    }
+
+    if (Object.keys(result).length === 0) {
+      throw new MastraError({
+        id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `No scorers found in overrideScorers`,
+      });
+    }
+
+    return result;
   }
 
   private prepareLLMOptions<
@@ -2241,7 +2253,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
       agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-      overrideScorers?: MastraScorers;
+      overrideScorers?:
+        | MastraScorers
+        | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     }) => Promise<{
       scoringData: {
         input: Omit<ScorerRunInputForAgent, 'runId'>;
@@ -2275,7 +2289,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText: string;
       structuredOutput?: boolean;
       agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-      overrideScorers?: MastraScorers;
+      overrideScorers?:
+        | MastraScorers
+        | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     }) => Promise<{
       scoringData: {
         input: Omit<ScorerRunInputForAgent, 'runId'>;
@@ -2490,18 +2506,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         structuredOutput = false,
         agentAISpan,
+        overrideScorers,
       }:
         | {
             result: GenerateReturn<any, Output, ExperimentalOutput>;
             outputText: string;
             structuredOutput?: boolean;
             agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+            overrideScorers?: MastraScorers;
           }
         | {
             result: StreamReturn<any, Output, ExperimentalOutput>;
             outputText: string;
             structuredOutput?: boolean;
             agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+            overrideScorers?: MastraScorers;
           }) => {
         const afterResult = await after({
           result,
@@ -2514,6 +2533,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput,
           threadExists,
           agentAISpan,
+          overrideScorers,
         });
         return afterResult;
       },
@@ -2986,6 +3006,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           threadId: result.threadId,
           structuredOutput: result.structuredOutput,
           stopWhen: result.stopWhen,
+          maxSteps: result.maxSteps,
           options: {
             onFinish: async (payload: any) => {
               if (payload.finishReason === 'error') {
@@ -3020,6 +3041,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   threadExists: inputData['prepare-memory-step'].threadExists,
                   structuredOutput: !!options.output,
                   saveQueueManager,
+                  overrideScorers: options.scorers,
                 });
               } catch (e) {
                 this.logger.error('Error saving memory on finish', {
@@ -3063,6 +3085,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     threadExists,
     structuredOutput = false,
     saveQueueManager,
+    overrideScorers,
   }: {
     instructions: string;
     runId: string;
@@ -3077,6 +3100,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     threadExists: boolean;
     structuredOutput?: boolean;
     saveQueueManager: SaveQueueManager;
+    overrideScorers?:
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   }) {
     const resToLog = {
       text: result?.text,
@@ -3234,6 +3260,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       instructions,
       runtimeContext,
       structuredOutput,
+      overrideScorers,
     });
   }
 
@@ -3521,13 +3548,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
       }
 
+      const overrideScorers = mergedGenerateOptions.scorers;
       const afterResult = await after({
         result: result as unknown as OUTPUT extends undefined
           ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
           : GenerateObjectResult<OUTPUT>,
         outputText: newText,
         agentAISpan,
-        ...(generateOptions.scorers ? { overrideScorers: generateOptions.scorers } : {}),
+        ...(overrideScorers ? { overrideScorers } : {}),
       });
 
       if (generateOptions.returnScorerData) {
@@ -3758,6 +3786,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const { onFinish, runId, output, experimental_output, agentAISpan, ...llmOptions } = beforeResult;
 
+    const overrideScorers = mergedStreamOptions.scorers;
     if (!output || experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
@@ -3774,6 +3803,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               result,
               outputText,
               agentAISpan,
+              ...(overrideScorers ? { overrideScorers } : {}),
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -3806,6 +3836,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             outputText,
             structuredOutput: true,
             agentAISpan,
+            ...(overrideScorers ? { overrideScorers } : {}),
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
