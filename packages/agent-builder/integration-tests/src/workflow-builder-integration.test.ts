@@ -231,7 +231,7 @@ describe('Workflow Builder Integration Tests', () => {
     const indexFile = join(workflowsDir, 'index.ts');
     if (existsSync(indexFile)) {
       const indexContent = exec(`cat "${indexFile}"`);
-      expect(indexContent).toContain('send_email_workflow');
+      expect(indexContent).toContain('sendEmailWorkflow');
     }
 
     console.log('Workflow builder integration test completed successfully');
