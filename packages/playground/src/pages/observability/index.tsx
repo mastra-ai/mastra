@@ -193,21 +193,17 @@ export default function Observability() {
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
             />
-            {isLoadingAiTraces ? (
-              <div>Loading...</div>
-            ) : (
-              <EntryList
-                items={items}
-                selectedItemId={selectedTraceId}
-                onItemClick={handleOnListItem}
-                columns={listColumns}
-                isLoading={isLoadingAiTraces}
-                isLoadingNextPage={isFetchingNextPage}
-                hasMore={!!hasNextPage}
-                onLoadMore={fetchNextPage}
-                setEndOfListElement={setEndOfListElement}
-              />
-            )}
+            <EntryList
+              items={items}
+              selectedItemId={selectedTraceId}
+              onItemClick={handleOnListItem}
+              columns={listColumns}
+              isLoading={isLoadingAiTraces}
+              isLoadingNextPage={isFetchingNextPage}
+              hasMore={!!hasNextPage}
+              onLoadMore={fetchNextPage}
+              setEndOfListElement={setEndOfListElement}
+            />
           </div>
         </div>
       </MainContentLayout>

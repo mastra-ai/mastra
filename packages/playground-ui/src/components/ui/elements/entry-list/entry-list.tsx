@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { isValidElement } from 'react';
 
 export function EntryList({
-  items,
+  items: dataItems,
   selectedItemId,
   onItemClick,
   isLoading,
@@ -22,7 +22,7 @@ export function EntryList({
   searchTerm,
   setEndOfListElement,
 }: {
-  items: any[];
+  items: Record<string, any>[];
   selectedItemId?: string;
   onItemClick?: (item: string) => void;
   isLoading?: boolean;
@@ -38,13 +38,20 @@ export function EntryList({
   searchTerm?: string;
   setEndOfListElement: (element: HTMLDivElement | null) => void;
 }) {
-  if (isLoading) {
-    return (
-      <div className="flex border border-border1 w-full h-[3.5rem] items-center justify-center text-[0.875rem] text-icon3 rounded-lg">
-        Loading...
-      </div>
-    );
-  }
+  const loadingItems: Record<string, any>[] = Array.from({ length: 3 }).map((_, index) => {
+    return {
+      id: `loading-${index + 1}`,
+      ...(columns || []).reduce(
+        (acc, col) => {
+          acc[col.name] = `...`;
+          return acc;
+        },
+        {} as Record<string, any>,
+      ),
+    };
+  });
+
+  const items = isLoading ? loadingItems : dataItems;
 
   return (
     <div className="grid mb-[3rem]">
@@ -59,7 +66,7 @@ export function EntryList({
         </div>
       </div>
 
-      {items?.length === 0 && (
+      {!isLoading && items?.length === 0 && (
         <div className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none">
           <p className="text-icon3 text-[0.875rem] text-center h-[3.5rem] items-center flex justify-center">
             {searchTerm ? `No results found for "${searchTerm}"` : 'No entries found'}
@@ -76,8 +83,9 @@ export function EntryList({
                   key={item.id}
                   item={item}
                   selectedItemId={selectedItemId}
-                  onClick={onItemClick}
+                  onClick={isLoading ? undefined : onItemClick}
                   columns={columns}
+                  isLoading={isLoading}
                 >
                   {(columns || []).map(col => {
                     const isValidReactElement = isValidElement(item?.[col.name]);
@@ -85,7 +93,9 @@ export function EntryList({
                     return isValidReactElement ? (
                       item?.[col.name]
                     ) : (
-                      <EntryListTextCell key={col.name}>{item?.[col.name]}</EntryListTextCell>
+                      <EntryListTextCell key={col.name} isLoading={isLoading}>
+                        {item?.[col.name]}
+                      </EntryListTextCell>
                     );
                   })}
                 </EntryListItem>
@@ -99,7 +109,7 @@ export function EntryList({
               className="text-[0.875rem] text-icon3 opacity-50 flex mt-[2rem] justify-center"
             >
               {isLoadingNextPage && 'Loading...'}
-              {!hasMore && 'No more data to load'}
+              {!hasMore && !isLoadingNextPage && !isLoading && 'No more data to load'}
             </div>
           )}
 

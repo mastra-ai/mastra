@@ -7,12 +7,14 @@ export function EntryListItem({
   onClick,
   children,
   columns,
+  isLoading,
 }: {
   item: any;
   selectedItemId?: string;
   onClick?: (score: string) => void;
   children?: React.ReactNode;
   columns?: Column[];
+  isLoading?: boolean;
 }) {
   const isSelected = selectedItemId && selectedItemId === item.id;
 
@@ -28,8 +30,11 @@ export function EntryListItem({
     >
       <button
         onClick={handleClick}
-        className={cn('grid w-full px-[1.5rem] gap-[2rem] text-left items-center min-h-[3rem]', 'hover:bg-surface5')}
+        className={cn('grid w-full px-[1.5rem] gap-[2rem] text-left items-center min-h-[3rem]', {
+          'hover:bg-surface5': !isLoading,
+        })}
         style={{ gridTemplateColumns: getColumnTemplate(columns) }}
+        disabled={isLoading}
       >
         {children}
       </button>
