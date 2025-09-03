@@ -1,6 +1,6 @@
 // import { agentBuilderWorkflows } from '@mastra/agent-builder';
 import type { WorkflowInfo } from '@mastra/core/workflows';
-import { HTTPException } from '../http-exception';
+// import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
