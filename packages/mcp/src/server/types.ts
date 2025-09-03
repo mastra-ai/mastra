@@ -52,7 +52,7 @@ export type MCPTool<
   parameters: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any;
   outputSchema?: TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : any;
   execute: (
-    params: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any,
+    params: { context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any },
     options: Parameters<NonNullable<InternalCoreTool['execute']>>[1] & {
       elicitation: ElicitationActions;
       extra: MCPRequestHandlerExtra;
