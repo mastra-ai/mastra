@@ -2518,7 +2518,7 @@ importers:
         specifier: ^1.2.11
         version: 1.2.11(zod@4.1.5)
       '@assistant-ui/react':
-        specifier: ^0.10.44
+        specifier: ^0.10.45
         version: 0.10.45(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1))
       '@assistant-ui/react-markdown':
         specifier: ^0.10.9
