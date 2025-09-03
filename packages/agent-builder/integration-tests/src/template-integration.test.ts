@@ -2,11 +2,24 @@ import type { ChildProcess } from 'node:child_process';
 import { spawn, execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { createServer } from 'node:net';
+import path, { join, resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { fetchMastraTemplates } from '../../src/utils';
 import { agentBuilderTemplateWorkflow } from '../../src/workflows';
+
+// Helper to find an available port
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.listen(0, () => {
+      const { port } = server.address() as { port: number };
+      server.close(() => resolve(port));
+    });
+    server.on('error', reject);
+  });
+}
 
 function exec(cmd: string, cwd?: string): string {
   return execSync(cmd, { stdio: 'pipe', cwd, encoding: 'utf-8' });
@@ -30,10 +43,14 @@ describe('Template Workflow Integration Tests', () => {
   const fixtureProjectPath = resolve(__dirname, 'fixtures/minimal-mastra-project');
   const targetRepo = join(tempRoot, 'test-project');
   let mastraServer: ChildProcess;
-  let port = 4199;
+  let port: number;
   let mastraInstance: Mastra;
 
   beforeAll(async () => {
+    port = (await getAvailablePort()) || 4199;
+
+    // Set environment variable so fixture files can use the same port
+    process.env.MASTRA_TEST_PORT = port.toString();
     mastraInstance = new Mastra({
       workflows: {
         agentBuilderTemplateWorkflow,
@@ -153,10 +170,14 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Starting Mastra server...');
 
     // Start the Mastra server
-    mastraServer = spawn('pnpm', ['dev'], {
+    mastraServer = spawn('pnpm', ['dev', '--port', port.toString()], {
       stdio: 'pipe',
       cwd: targetRepo,
       detached: true,
+      env: {
+        ...process.env,
+        MASTRA_TEST_PORT: port.toString(),
+      },
     });
 
     // Wait for server to be ready
