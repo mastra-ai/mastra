@@ -11,7 +11,6 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
   public type: TType;
   public attributes: AISpanTypeMap[TType];
   public parent?: AnyAISpan;
-  public trace: AnyAISpan;
   public traceId: string;
   public startTime: Date;
   public endTime?: Date;
@@ -35,7 +34,6 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
     this.attributes = options.attributes || ({} as AISpanTypeMap[TType]);
     this.metadata = options.metadata;
     this.parent = options.parent;
-    this.trace = options.parent ? options.parent.trace : (this as any);
     this.traceId = 'no-op-trace';
     this.startTime = new Date();
     this.aiTracing = aiTracing;

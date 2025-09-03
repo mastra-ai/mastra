@@ -144,7 +144,6 @@ describe('AI Tracing', () => {
       expect(agentSpan.attributes?.agentId).toBe('agent-123');
       expect(agentSpan.startTime).toBeInstanceOf(Date);
       expect(agentSpan.endTime).toBeUndefined();
-      expect(agentSpan.trace).toBe(agentSpan); // Root span is its own trace
       expect(agentSpan.traceId).toBeValidTraceId();
     });
 
@@ -174,7 +173,6 @@ describe('AI Tracing', () => {
       expect(toolSpan.id).toBeValidSpanId();
       expect(toolSpan.type).toBe(AISpanType.TOOL_CALL);
       expect(toolSpan.attributes?.toolId).toBe('tool-456');
-      expect(toolSpan.trace).toBe(agentSpan); // Child inherits trace from parent
       expect(toolSpan.traceId).toBe(agentSpan.traceId); // Child spans inherit trace ID
     });
 
@@ -822,7 +820,6 @@ describe('AI Tracing', () => {
             type: options.type,
             attributes: options.attributes,
             parent: options.parent,
-            trace: options.parent?.trace || ({} as any),
             traceId: 'custom-trace-id',
             startTime: new Date(),
             aiTracing: this,
@@ -1360,7 +1357,6 @@ describe('AI Tracing', () => {
 
       // Event span should be properly linked to parent
       expect(eventSpan.parent).toBe(rootSpan);
-      expect(eventSpan.trace).toBe(rootSpan);
       expect(eventSpan.traceId).toBe(rootSpan.traceId);
 
       rootSpan.end();
@@ -1550,10 +1546,6 @@ describe('AI Tracing', () => {
       // Event spans should have llmSpan as parent
       expect(eventSpan1.parent).toBe(llmSpan);
       expect(eventSpan2.parent).toBe(llmSpan);
-
-      // Event spans should have rootSpan as trace
-      expect(eventSpan1.trace).toBe(rootSpan);
-      expect(eventSpan2.trace).toBe(rootSpan);
 
       // All spans should share the same traceId
       expect(eventSpan1.traceId).toBe(rootSpan.traceId);

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "0.15.3-alpha.3",
+  "version": "0.15.3-alpha.4",
   "description": "",
   "type": "module",
   "files": [
@@ -79,6 +79,7 @@
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/agent-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "eslint": "^9.30.1",
@@ -86,7 +87,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "@internal/types-builder": "workspace:*"
   }
 }

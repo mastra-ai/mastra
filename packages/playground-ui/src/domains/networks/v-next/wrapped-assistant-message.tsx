@@ -1,8 +1,8 @@
 import {
   ActionBarPrimitive,
   MessagePrimitive,
-  TextContentPart,
-  ToolCallContentPartComponent,
+  TextMessagePart,
+  ToolCallMessagePartComponent,
   useMessage,
 } from '@assistant-ui/react';
 import { CheckIcon, CopyIcon } from 'lucide-react';
@@ -13,7 +13,7 @@ import { MarkdownText } from '@/components/assistant-ui/messages/markdown-text';
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { StepDropdown } from './step-dropdown';
 
-export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
+export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallMessagePartComponent }> = ({
   ToolFallback: ToolFallbackCustom,
 }) => {
   const data = useMessage();
@@ -25,7 +25,7 @@ export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartCompon
     return null;
   }
 
-  const textContent = (content as TextContentPart).text;
+  const textContent = (content as TextMessagePart).text;
 
   if (textContent === 'start') {
     return <StepDropdown />;
@@ -34,14 +34,13 @@ export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartCompon
   return (
     <MessagePrimitive.Root className="max-w-full">
       <div className="text-icon6 text-ui-lg leading-ui-lg">
-        <MessagePrimitive.Content
+        <MessagePrimitive.Parts
           components={{
             Text: MarkdownText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
           }}
         />
       </div>
-
       <div className="h-6 pt-1">{!isSolelyToolCall && <AssistantActionBar />}</div>
     </MessagePrimitive.Root>
   );

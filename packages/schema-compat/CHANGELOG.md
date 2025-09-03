@@ -1,5 +1,12 @@
 # @mastra/schema-compat
 
+## 0.11.2-alpha.1
+
+### Patch Changes
+
+- [#5816](https://github.com/mastra-ai/mastra/pull/5816) [`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`zod-to-json-schema@^3.24.6` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.6) (from `^3.24.5`, in `dependencies`)
+
 ## 0.11.2-alpha.0
 
 ### Patch Changes
