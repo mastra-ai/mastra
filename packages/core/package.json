@@ -7,6 +7,7 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "CHANGELOG.md",
     "./**/*.d.ts"
   ],
   "exports": {
@@ -257,5 +258,14 @@
     "opentelemetry",
     "otel",
     "framework"
-  ]
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
 }

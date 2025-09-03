@@ -4,7 +4,8 @@
   "description": "Official Mastra Cloud integration package for telemetry",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,5 +46,14 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/cloud"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

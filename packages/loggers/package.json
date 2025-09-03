@@ -6,6 +6,15 @@
   "files": [
     "dist"
   ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/loggers"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "exports": {

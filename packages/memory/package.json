@@ -28,6 +28,15 @@
     },
     "./package.json": "./package.json"
   },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/memory"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "scripts": {
     "check": "tsc --noEmit",
     "build": "pnpm run check && tsup --silent --config tsup.config.ts",

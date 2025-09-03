@@ -18,6 +18,15 @@
     },
     "./package.json": "./package.json"
   },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",

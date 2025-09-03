@@ -7,7 +7,8 @@
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -135,5 +136,14 @@
     "vite": "^6.3.5",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/playground-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

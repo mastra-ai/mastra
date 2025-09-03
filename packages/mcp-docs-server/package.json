@@ -11,6 +11,15 @@
     ".docs",
     "README.md"
   ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/mcp-docs-server"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "exports": {
     ".": {
       "import": {

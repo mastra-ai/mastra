@@ -10,8 +10,7 @@
   },
   "files": [
     "dist",
-    "starter-files",
-    "templates"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "rollup -c",
@@ -62,5 +61,14 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/create-mastra"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }
