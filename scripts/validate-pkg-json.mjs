@@ -12,6 +12,11 @@ const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra'];
 
 const ROOT_DIR = process.cwd();
 
+/**
+ * Recursively finds all package.json files in a directory.
+ * @param {string} dir - Directory to search from
+ * @returns {Promise<string[]>} Array of absolute file paths
+ */
 async function findPackageJsonFiles(dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const files = await Promise.all(
@@ -28,6 +33,13 @@ async function findPackageJsonFiles(dir) {
   return files.flat();
 }
 
+/**
+ * Determines if a package should be checked based on its name and privacy.
+ * @param {object} pkg - The parsed package.json object
+ * @param {string} pkg.name
+ * @param {boolean} [pkg.private]
+ * @returns {boolean}
+ */
 function shouldCheckPackage(pkg) {
   if (pkg.private === true) return false;
   if (!pkg.name) return false;
@@ -35,10 +47,19 @@ function shouldCheckPackage(pkg) {
   return ALLOW_LIST.some(prefix => pkg.name.startsWith(prefix));
 }
 
+/**
+ * Gets the relative directory path from the repo root for a given file.
+ * @param {string} file - Absolute path to the file
+ * @returns {string}
+ */
 function getRelativeDirectory(file) {
   return path.relative(ROOT_DIR, path.dirname(file));
 }
 
+/**
+ * Main entry point for validation script.
+ * @returns {Promise<void>}
+ */
 async function main() {
   const pkgFiles = await findPackageJsonFiles(ROOT_DIR);
   const rootPkgJson = path.join(ROOT_DIR, 'package.json');
