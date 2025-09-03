@@ -6,7 +6,8 @@
   "typings": "dist/index.d.ts",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -55,5 +56,14 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "integrations/ragie"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }
