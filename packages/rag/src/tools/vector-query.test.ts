@@ -415,4 +415,63 @@ describe('createVectorQueryTool', () => {
       expect(result.relevantContext[0]).toEqual({ text: 'bar' });
     });
   });
+
+  describe('providerOptions', () => {
+    it('should pass providerOptions to vectorQuerySearch', async () => {
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStoreName: 'testStore',
+        providerOptions: { google: { outputDimensionality: 1536 } },
+      });
+
+      await tool.execute({
+        context: { queryText: 'foo', topK: 10 },
+        mastra: mockMastra as any,
+        runtimeContext: new RuntimeContext(),
+      });
+
+      expect(vectorQuerySearch).toHaveBeenCalledWith({
+        indexName: 'testIndex',
+        vectorStore: { testStore: {} },
+        queryText: 'foo',
+        model: mockModel,
+        queryFilter: undefined,
+        topK: 10,
+        includeVectors: false,
+        databaseConfig: undefined,
+        providerOptions: { google: { outputDimensionality: 1536 } },
+      });
+    });
+
+    it('should allow providerOptions override via runtimeContext', async () => {
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStoreName: 'testStore',
+        providerOptions: { google: { outputDimensionality: 1536 } },
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('providerOptions', { google: { outputDimensionality: 768 } });
+
+      await tool.execute({
+        context: { queryText: 'foo', topK: 10 },
+        mastra: mockMastra as any,
+        runtimeContext,
+      });
+
+      expect(vectorQuerySearch).toHaveBeenCalledWith({
+        indexName: 'testIndex',
+        vectorStore: { testStore: {} },
+        queryText: 'foo',
+        model: mockModel,
+        queryFilter: undefined,
+        topK: 10,
+        includeVectors: false,
+        databaseConfig: undefined,
+        providerOptions: { google: { outputDimensionality: 768 } },
+      });
+    });
+  });
 });

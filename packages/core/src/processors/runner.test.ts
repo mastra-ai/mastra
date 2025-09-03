@@ -258,7 +258,7 @@ describe('ProcessorRunner', () => {
     describe('telemetry integration', () => {
       it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
         const mockTelemetry = {
-          traceMethod: vi.fn(fn => {
+          traceMethod: vi.fn((fn, _options) => {
             return () => fn({ messageList });
           }),
         };
@@ -281,7 +281,7 @@ describe('ProcessorRunner', () => {
         });
 
         messageList.add([createMessage('original', 'user')], 'user');
-        await runner.runInputProcessors(messageList, mockTelemetry);
+        await runner.runInputProcessors(messageList, undefined, mockTelemetry);
 
         expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
           spanName: 'agent.inputProcessor.processor1',
@@ -437,7 +437,7 @@ describe('ProcessorRunner', () => {
     describe('telemetry integration', () => {
       it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
         const mockTelemetry = {
-          traceMethod: vi.fn(fn => {
+          traceMethod: vi.fn((fn, _options) => {
             return () => fn({ messageList });
           }),
         };
@@ -460,7 +460,7 @@ describe('ProcessorRunner', () => {
         });
 
         messageList.add([createMessage('original', 'assistant')], 'response');
-        await runner.runOutputProcessors(messageList, mockTelemetry);
+        await runner.runOutputProcessors(messageList, undefined, mockTelemetry);
 
         expect(mockTelemetry.traceMethod).toHaveBeenCalledWith(expect.any(Function), {
           spanName: 'agent.outputProcessor.processor1',

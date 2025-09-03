@@ -1,4 +1,4 @@
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { StorageResourceType } from '@mastra/core/storage';
 import { randomUUID } from 'crypto';

@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.10.8",
-  "description": "Mastra Sarvam AI voice integration",
+  "version": "0.11.3-alpha.0",
+  "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,11 +31,10 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "cloudflare": "^4.5.0",
-    "zod": "^3.25.67"
+    "cloudflare": "^4.5.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250821.0",
+    "@cloudflare/workers-types": "^4.20250823.0",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -43,7 +43,8 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "@internal/types-builder": "workspace:*",
+    "zod": "^3.25.76"
   },
   "keywords": [
     "mastra",
@@ -56,6 +57,16 @@
     "speech-recognition"
   ],
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
+    "@mastra/core": ">=0.15.2-0 <0.16.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "voice/cloudflare"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

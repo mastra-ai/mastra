@@ -1,8 +1,8 @@
+import type { ServerDetailInfo } from '@mastra/core/mcp';
+import type { ScoringEntityType, ScoringSource } from '@mastra/core/scores';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from './client';
 import type { McpServerListResponse } from './types';
-import type { ServerDetailInfo } from '@mastra/core/mcp';
-import { ScoringEntityType, ScoringSource } from '@mastra/core/scores';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -272,7 +272,7 @@ describe('MastraClient Resources', () => {
       });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/agents/test-agent/generate`,
+        `${clientOptions.baseUrl}/api/agents/test-agent/generate-legacy`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining(clientOptions.headers),
@@ -384,6 +384,7 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           output += new TextDecoder().decode(value);
         }
       }
@@ -391,7 +392,7 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
       expect(global.fetch).toHaveBeenCalledTimes(2);
 
       const [secondUrl, secondConfig] = (global.fetch as any).mock.calls[1];
-      expect(secondUrl).toBe(`${clientOptions.baseUrl}/api/agents/test-agent/stream`);
+      expect(secondUrl).toBe(`${clientOptions.baseUrl}/api/agents/test-agent/stream-legacy`);
 
       const secondRequestBody = JSON.parse(secondConfig.body);
       expect(secondRequestBody.messages).toHaveLength(2);
@@ -869,11 +870,19 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
         backoffMs: 100,
         maxBackoffMs: 1000,
         headers: { 'Custom-Header': 'value' },
+        credentials: 'same-origin',
       });
 
       (global.fetch as any)
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: {
+            get: () => 'application/json',
+          },
+          json: async () => ({ success: true }),
+        })
         .mockResolvedValueOnce({
           ok: true,
           headers: {
@@ -891,6 +900,24 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
           headers: expect.objectContaining({
             'Custom-Header': 'value',
           }),
+          credentials: 'same-origin',
+        }),
+      );
+
+      // ensure custom headers and credentials are overridable per request
+      const result2 = await customClient.request('/test', {
+        headers: { 'Custom-Header': 'new-value' },
+        credentials: 'include',
+      });
+      expect(result2).toEqual({ success: true });
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/test',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Custom-Header': 'new-value',
+          }),
+          credentials: 'include',
         }),
       );
     });

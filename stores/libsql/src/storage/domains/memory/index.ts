@@ -1,5 +1,4 @@
 import type { Client, InValue } from '@libsql/client';
-import { parseSqlIdentifier } from '@mastra/core';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -17,6 +16,7 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StoreOperationsLibSQL } from '../operations';
 
 export class MemoryLibSQL extends MemoryStorage {

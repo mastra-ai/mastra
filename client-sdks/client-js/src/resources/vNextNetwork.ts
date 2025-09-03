@@ -1,3 +1,4 @@
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { WatchEvent } from '@mastra/core/workflows';
 
 import type {
@@ -9,9 +10,8 @@ import type {
   LoopStreamVNextNetworkParams,
 } from '../types';
 
-import { BaseResource } from './base';
 import { parseClientRuntimeContext } from '../utils';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { BaseResource } from './base';
 
 const RECORD_SEPARATOR = '\x1E';
 

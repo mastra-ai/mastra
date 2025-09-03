@@ -98,6 +98,13 @@ const graphTool = createGraphRAGTool({
       isOptional: true,
       defaultValue: "Default graph options",
     },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, any>>",
+      description:
+        "Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
+      isOptional: true,
+    },
   ]}
 />
 

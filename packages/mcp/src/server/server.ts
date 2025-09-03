@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
-import type { InternalCoreTool } from '@mastra/core';
-import { createTool, makeCoreTool } from '@mastra/core';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
@@ -15,6 +13,9 @@ import type {
   MCPToolType,
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createTool } from '@mastra/core/tools';
+import type { InternalCoreTool } from '@mastra/core/tools';
+import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -608,12 +609,12 @@ export class MCPServer extends MCPServerBase {
         inputSchema: z.object({
           message: z.string().describe('The question or input for the agent.'),
         }),
-        execute: async ({ context, runtimeContext }) => {
+        execute: async ({ context, runtimeContext, tracingContext }) => {
           this.logger.debug(
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
           );
           try {
-            const response = await agent.generate(context.message, { runtimeContext });
+            const response = await agent.generate(context.message, { runtimeContext, tracingContext });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
@@ -627,6 +628,7 @@ export class MCPServer extends MCPServerBase {
         logger: this.logger,
         mastra: this.mastra,
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
         description: agentToolDefinition.description,
       };
       const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
@@ -680,7 +682,7 @@ export class MCPServer extends MCPServerBase {
         id: workflowToolName,
         description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
         inputSchema: workflow.inputSchema,
-        execute: async ({ context, runtimeContext }) => {
+        execute: async ({ context, runtimeContext, tracingContext }) => {
           this.logger.debug(
             `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
             context,
@@ -688,7 +690,7 @@ export class MCPServer extends MCPServerBase {
           try {
             const run = workflow.createRun({ runId: runtimeContext?.get('runId') });
 
-            const response = await run.start({ inputData: context, runtimeContext });
+            const response = await run.start({ inputData: context, runtimeContext, tracingContext });
 
             return response;
           } catch (error) {
@@ -706,6 +708,7 @@ export class MCPServer extends MCPServerBase {
         logger: this.logger,
         mastra: this.mastra,
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
         description: workflowToolDefinition.description,
       };
 
@@ -754,6 +757,7 @@ export class MCPServer extends MCPServerBase {
       const options = {
         name: toolName,
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
         mastra: this.mastra,
         logger: this.logger,
         description: toolInstance?.description,

@@ -55,6 +55,8 @@ This executes `step1` and `step2` concurrently, then continues to `step3` after 
 
 > See [Parallel Execution with Steps](/examples/workflows/parallel-steps) for more information.
 
+> 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/pTSOSWbreE0)
+
 ## Conditional logic with `.branch()`
 
 Execute steps conditionally using `.branch()`:
@@ -187,52 +189,6 @@ export const testWorkflow = createWorkflow({...})
   .then(clonedWorkflow)
   .commit();
 ```
-
-## Exiting early with `bail()`
-
-Use `bail()` in a step to exit early with a successful result. This returns the provided payload as the step output and ends workflow execution.
-
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const step1 = createStep({
-  id: 'step1',
-  execute: async ({ bail }) => {
-    return bail({ result: 'bailed' });
-  },
-  inputSchema: z.object({ value: z.string() }),
-  outputSchema: z.object({ result: z.string() }),
-});
-
-export const testWorkflow = createWorkflow({...})
-  .then(step1)
-  .commit();
-```
-
-## Exiting early with `Error()`
-
-Use `throw new Error()` in a step to exit with an error.
-
-```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const step1 = createStep({
-  id: 'step1',
-  execute: async () => {
-    throw new Error('bailed');
-  },
-  inputSchema: z.object({ value: z.string() }),
-  outputSchema: z.object({ result: z.string() }),
-});
-
-export const testWorkflow = createWorkflow({...})
-  .then(step1)
-  .commit();
-```
-
-This throws an error from the step and stops workflow execution, returning the error as the result.
 
 ## Example Run Instance
 

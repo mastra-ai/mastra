@@ -1,10 +1,11 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.11.15",
+  "version": "0.12.3-alpha.1",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,8 +36,7 @@
     "@rollup/plugin-virtual": "^3.0.2",
     "date-fns": "^4.1.0",
     "execa": "^9.6.0",
-    "fs-extra": "^11.3.0",
-    "zod": "^3.25.67"
+    "fs-extra": "^11.3.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -50,7 +50,17 @@
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
   },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "deployers/netlify"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.1-0 <0.15.0-0"
+    "@mastra/core": ">=0.15.2-0 <0.16.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
   }
 }

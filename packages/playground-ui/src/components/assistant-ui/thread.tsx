@@ -2,7 +2,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  ToolCallContentPartComponent,
+  ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
@@ -21,7 +21,7 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 
 export interface ThreadProps {
-  ToolFallback?: ToolCallContentPartComponent;
+  ToolFallback?: ToolCallMessagePartComponent;
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
@@ -111,10 +111,10 @@ const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4">
+        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
-              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
+              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus
               placeholder="Enter your message..."
               name=""

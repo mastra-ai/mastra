@@ -7,17 +7,25 @@ import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
+import { devLogger } from '../../utils/dev-logger.js';
 import { logger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
+let serverStartTime: number | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
 const startServer = async (
   dotMastraPath: string,
-  port: number,
+  {
+    port,
+    host,
+  }: {
+    port: number;
+    host: string;
+  },
   env: Map<string, string>,
   startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
   errorRestartCount = 0,
@@ -25,7 +33,8 @@ const startServer = async (
   let serverIsReady = false;
   try {
     // Restart server
-    logger.info('[Mastra Dev] - Starting server...');
+    serverStartTime = Date.now();
+    devLogger.starting();
 
     const commands = [];
 
@@ -60,7 +69,7 @@ const startServer = async (
         PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
-      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+      stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
     }) as any as ChildProcess;
 
@@ -73,13 +82,42 @@ const startServer = async (
       );
     }
 
+    // Filter server output to remove playground message
+    if (currentServerProcess.stdout) {
+      currentServerProcess.stdout.on('data', (data: Buffer) => {
+        const output = data.toString();
+        if (
+          !output.includes('Playground available') &&
+          !output.includes('👨‍💻') &&
+          !output.includes('Mastra API running on port')
+        ) {
+          process.stdout.write(output);
+        }
+      });
+    }
+
+    if (currentServerProcess.stderr) {
+      currentServerProcess.stderr.on('data', (data: Buffer) => {
+        const output = data.toString();
+        if (
+          !output.includes('Playground available') &&
+          !output.includes('👨‍💻') &&
+          !output.includes('Mastra API running on port')
+        ) {
+          process.stderr.write(output);
+        }
+      });
+    }
+
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
+        devLogger.ready(host, port, serverStartTime);
+        devLogger.watching();
 
         // Send refresh signal
         try {
-          await fetch(`http://localhost:${port}/__refresh`, {
+          await fetch(`http://${host}:${port}/__refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -89,7 +127,7 @@ const startServer = async (
           // Retry after another second
           await new Promise(resolve => setTimeout(resolve, 1500));
           try {
-            await fetch(`http://localhost:${port}/__refresh`, {
+            await fetch(`http://${host}:${port}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -103,8 +141,11 @@ const startServer = async (
     });
   } catch (err) {
     const execaError = err as { stderr?: string; stdout?: string };
-    if (execaError.stderr) logger.error('Server error output:', { stderr: execaError.stderr });
-    if (execaError.stdout) logger.debug('Server output:', { stdout: execaError.stdout });
+    if (execaError.stderr) {
+      devLogger.serverError(execaError.stderr);
+      devLogger.debug(`Server error output: ${execaError.stderr}`);
+    }
+    if (execaError.stdout) devLogger.debug(`Server output: ${execaError.stdout}`);
 
     if (!serverIsReady) {
       throw err;
@@ -115,14 +156,23 @@ const startServer = async (
       if (!isRestarting) {
         errorRestartCount++;
         if (errorRestartCount > ON_ERROR_MAX_RESTARTS) {
-          logger.error(`Server failed to start after ${ON_ERROR_MAX_RESTARTS} error attempts. Giving up.`);
+          devLogger.error(`Server failed to start after ${ON_ERROR_MAX_RESTARTS} error attempts. Giving up.`);
           process.exit(1);
         }
-        logger.error(
+        devLogger.warn(
           `Attempting to restart server after error... (Attempt ${errorRestartCount}/${ON_ERROR_MAX_RESTARTS})`,
         );
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        startServer(dotMastraPath, port, env, startOptions, errorRestartCount);
+        startServer(
+          dotMastraPath,
+          {
+            port,
+            host,
+          },
+          env,
+          startOptions,
+          errorRestartCount,
+        );
       }
     }, 1000);
   }
@@ -130,7 +180,13 @@ const startServer = async (
 
 async function rebundleAndRestart(
   dotMastraPath: string,
-  port: number,
+  {
+    port,
+    host,
+  }: {
+    port: number;
+    host: string;
+  },
   bundler: DevBundler,
   startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
 ) {
@@ -142,13 +198,27 @@ async function rebundleAndRestart(
   try {
     // If current server process is running, stop it
     if (currentServerProcess) {
-      logger.debug('Stopping current server...');
+      devLogger.restarting();
+      devLogger.debug('Stopping current server...');
       currentServerProcess.kill('SIGINT');
     }
 
     const env = await bundler.loadEnvVars();
 
-    await startServer(join(dotMastraPath, 'output'), port, env, startOptions);
+    // spread env into process.env
+    for (const [key, value] of env.entries()) {
+      process.env[key] = value;
+    }
+
+    await startServer(
+      join(dotMastraPath, 'output'),
+      {
+        port,
+        host,
+      },
+      env,
+      startOptions,
+    );
   } finally {
     isRestarting = false;
   }
@@ -192,11 +262,18 @@ export async function dev({
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
-  bundler.__setLogger(logger);
+  bundler.__setLogger(logger); // Keep Pino logger for internal bundler operations
 
-  // Get the port to use before prepare to set environment variables
+  const loadedEnv = await bundler.loadEnvVars();
+
+  // spread loadedEnv into process.env
+  for (const [key, value] of loadedEnv.entries()) {
+    process.env[key] = value;
+  }
+
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
   let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
     portToUse = String(
@@ -210,24 +287,39 @@ export async function dev({
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
-  const loadedEnv = await bundler.loadEnvVars();
+  await startServer(
+    join(dotMastraPath, 'output'),
+    {
+      port: Number(portToUse),
+      host: hostToUse,
+    },
+    loadedEnv,
+    startOptions,
+  );
 
-  // spread loadedEnv into process.env
-  for (const [key, value] of loadedEnv.entries()) {
-    process.env[key] = value;
-  }
-
-  await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
   watcher.on('event', (event: { code: string }) => {
+    if (event.code === 'BUNDLE_START') {
+      devLogger.bundling();
+    }
     if (event.code === 'BUNDLE_END') {
-      logger.info('[Mastra Dev] - Bundling finished, restarting server...');
+      devLogger.bundleComplete();
+      devLogger.info('Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
+      rebundleAndRestart(
+        dotMastraPath,
+        {
+          port: Number(portToUse),
+          host: hostToUse,
+        },
+        bundler,
+        startOptions,
+      );
     }
   });
 
   process.on('SIGINT', () => {
-    logger.info('[Mastra Dev] - Stopping server...');
+    devLogger.shutdown();
+
     if (currentServerProcess) {
       currentServerProcess.kill();
     }
@@ -235,8 +327,6 @@ export async function dev({
     watcher
       .close()
       .catch(() => {})
-      .finally(() => {
-        process.exit(0);
-      });
+      .finally(() => process.exit(0));
   });
 }

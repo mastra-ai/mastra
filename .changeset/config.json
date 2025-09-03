@@ -5,7 +5,7 @@
     { "repo": "mastra-ai/mastra" }
   ],
   "commit": false,
-  "fixed": [["@mastra/core", "@mastra/server", "@mastra/deployer"], ["mastra", "create-mastra"]],
+  "fixed": [["@mastra/core", "@mastra/server", "@mastra/deployer", "@mastra/deployer-cloud"], ["mastra", "create-mastra"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",
@@ -16,9 +16,7 @@
     "!mastra",
     "!create-mastra",
     "!@mastra/*",
-    "!docs",
     "@internal/*",
-    "@mastra/memory-integration-tests",
-    "@mastra/playground"
+    "@mastra/memory-integration-tests"
   ]
 }

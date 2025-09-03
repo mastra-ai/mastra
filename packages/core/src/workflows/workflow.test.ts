@@ -166,7 +166,6 @@ describe('Workflow', () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          console.log('suspend');
           await suspend();
           return undefined;
         })
@@ -426,6 +425,8 @@ describe('Workflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -444,6 +445,7 @@ describe('Workflow', () => {
         {
           payload: {
             id: 'start',
+            stepCallId: expect.any(String),
             metadata: {},
           },
           type: 'step-finish',
@@ -456,6 +458,8 @@ describe('Workflow', () => {
               prompt2: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -474,6 +478,7 @@ describe('Workflow', () => {
           payload: {
             id: 'mapping_mock-uuid-1',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -484,6 +489,8 @@ describe('Workflow', () => {
               prompt: 'Capital of France, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -517,6 +524,7 @@ describe('Workflow', () => {
           payload: {
             id: 'test-agent-1',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -527,6 +535,8 @@ describe('Workflow', () => {
               text: 'Paris',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -545,6 +555,7 @@ describe('Workflow', () => {
           payload: {
             id: 'mapping_mock-uuid-2',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -555,6 +566,8 @@ describe('Workflow', () => {
               prompt: 'Capital of UK, just the name',
             },
             startedAt: expect.any(Number),
+            stepCallId: expect.any(String),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -588,6 +601,7 @@ describe('Workflow', () => {
           payload: {
             id: 'test-agent-2',
             metadata: {},
+            stepCallId: expect.any(String),
           },
           type: 'step-finish',
         },
@@ -2914,11 +2928,120 @@ describe('Workflow', () => {
           setTimeout(async () => {
             const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
             expect(currentExecResult?.status).toBe('running');
+            expect(currentExecResult?.steps['final']?.status).toBe('running');
           }, 500);
         }
       }
       const finalResult = await getWorkflowState();
       expect(finalResult.status).toBe('success');
+    });
+
+    it('should return workflow run execution result with nested workflow steps information', async () => {
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const nestedIncrementWorkflowAgain = createWorkflow({
+        id: 'nested-increment-workflow-again',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .commit();
+
+      const nestedIncrementWorkflow = createWorkflow({
+        id: 'nested-increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(nestedIncrementWorkflowAgain)
+        .commit();
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(nestedIncrementWorkflow)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => {
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      await run.start({ inputData: { value: 0 } });
+      const result = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      expect(result?.status).toBe('success');
+      expect(result?.steps).toMatchObject({
+        'nested-increment-workflow': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        'nested-increment-workflow.nested-increment-workflow-again': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        'nested-increment-workflow.nested-increment-workflow-again.increment': {
+          payload: {
+            value: 0,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+        final: {
+          payload: {
+            value: 1,
+          },
+          startedAt: expect.any(Number),
+          status: 'success',
+          output: {
+            value: 1,
+          },
+          endedAt: expect.any(Number),
+        },
+      });
     });
   }, 10000); //we have a 5 second timeout for the final step in the workflow
 
@@ -4612,7 +4735,6 @@ describe('Workflow', () => {
 
       // @ts-ignore
       const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        console.log('tool call context', context);
         return { name: context.name };
       });
 
@@ -5089,8 +5211,7 @@ describe('Workflow', () => {
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
         })
-        .mockImplementationOnce(({ resumeData }) => {
-          console.log('resumeData', resumeData);
+        .mockImplementationOnce(() => {
           return { improvedOutput: 'human intervention output' };
         });
       const explainResponseAction = vi.fn().mockResolvedValue({
@@ -6071,8 +6192,6 @@ describe('Workflow', () => {
 
           value = value + 1;
           condition = value >= 10;
-
-          console.log(value);
 
           return {
             value,
@@ -7116,8 +7235,7 @@ describe('Workflow', () => {
         const otherVal = getStepResult(cloneStep(otherStep, { id: 'other-clone' }))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       });
-      const last = vi.fn().mockImplementation(async ({ inputData }) => {
-        console.log('inputData', inputData);
+      const last = vi.fn().mockImplementation(async () => {
         return { success: true };
       });
       const finalStep = createStep({
@@ -9368,6 +9486,24 @@ describe('Workflow', () => {
           'multi-resume-step-2': { result: 30 },
         });
       }
+    });
+  });
+
+  describe('AI Workflow Tracing', () => {
+    it('should provide full TypeScript support for tracingContext', () => {
+      const typedStep = createStep({
+        id: 'typed-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          expect(tracingContext).toBeDefined();
+          expect(typeof tracingContext.currentSpan).toBeDefined();
+
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      expect(typedStep).toBeDefined();
     });
   });
 });
