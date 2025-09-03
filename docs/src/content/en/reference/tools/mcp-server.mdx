@@ -18,8 +18,7 @@ To create a new `MCPServer`, you need to provide some basic information about yo
 ```typescript
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
-import { MCPServer } from "@mastra/mcp";
+import { MCPServer, createMCPTool } from "@mastra/mcp";
 import { z } from "zod";
 import { dataProcessingWorkflow } from "../workflows/dataProcessingWorkflow";
 
@@ -30,7 +29,7 @@ const myAgent = new Agent({
   model: openai("gpt-4o-mini"),
 });
 
-const weatherTool = createTool({
+const weatherTool = createMCPTool({
   id: "getWeather",
   description: "Gets the current weather for a location.",
   inputSchema: z.object({ location: z.string() }),
@@ -69,10 +68,10 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     },
     {
       name: "tools",
-      type: "ToolsInput",
+      type: "MCPToolsInput",
       isOptional: false,
       description:
-        "An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.",
+        "An object where keys are tool names and values are tool definitions. Supports Mastra tools (created with `createMCPTool` or `createTool`) or Vercel AI SDK tools. Tools created with `createMCPTool` have access to MCP-specific features like elicitation for user interaction.",
     },
     {
       name: "agents",
@@ -846,17 +845,18 @@ The `MCPServer` class automatically includes elicitation capabilities. Tools rec
 When tools are executed within an MCP server context, they receive an additional `options` parameter:
 
 ```typescript
-execute: async ({ context }, options) => {
-  // context contains the tool's input parameters
-  // options contains server capabilities like elicitation and authentication info
+execute: async (params, { elicitation, extra }) => {
+  // params contains the validated tool input parameters
+  // elicitation provides user interaction capabilities
+  // extra contains MCP-specific context (auth, session, etc.)
   
   // Access authentication information (when available)
-  if (options.extra?.authInfo) {
-    console.log('Authenticated request from:', options.extra.authInfo.clientId);
+  if (extra?.authInfo) {
+    console.log('Authenticated request from:', extra.authInfo.clientId);
   }
   
   // Use elicitation capabilities
-  const result = await options.elicitation.sendRequest({
+  const result = await elicitation.sendRequest({
     message: "Please provide information",
     requestedSchema: { /* schema */ }
   });
@@ -881,29 +881,28 @@ A common use case is during tool execution. When a tool needs user input, it can
 Here's an example of a tool that uses elicitation to collect user contact information:
 
 ```typescript
-import { MCPServer } from "@mastra/mcp";
-import { createTool } from "@mastra/core/tools";
+import { MCPServer, createMCPTool } from "@mastra/mcp";
 import { z } from "zod";
 
 const server = new MCPServer({
   name: "Interactive Server",
   version: "1.0.0",
   tools: {
-    collectContactInfo: createTool({
+    collectContactInfo: createMCPTool({
       id: "collectContactInfo",
       description: "Collects user contact information through elicitation",
       inputSchema: z.object({
         reason: z.string().optional().describe("Reason for collecting contact info"),
       }),
-      execute: async ({ context }, options) => {
-        const { reason } = context;
+      execute: async (params, { context, elicitation, extra }) => {
+        const { reason } = params;
         
         // Log session info if available
-        console.log('Request from session:', options.extra?.sessionId);
+        console.log('Request from session:', extra?.sessionId);
 
         try {
           // Request user input via elicitation
-          const result = await options.elicitation.sendRequest({
+          const result = await elicitation.sendRequest({
             message: reason 
               ? `Please provide your contact information. ${reason}`
               : 'Please provide your contact information',
@@ -1010,17 +1009,17 @@ Tools should handle all three response types appropriately.
 The elicitation functionality is available through the `options` parameter in tool execution:
 
 ```typescript
-// Within a tool's execute function
-execute: async ({ context }, options) => {
+// Within a tool's execute function (using createMCPTool)
+execute: async (params, { elicitation, extra }) => {
   // Use elicitation for user input
-  const result = await options.elicitation.sendRequest({
+  const result = await elicitation.sendRequest({
     message: string,           // Message to display to user
     requestedSchema: object    // JSON schema defining expected response structure
   }): Promise<ElicitResult>
   
   // Access authentication info if needed
-  if (options.extra?.authInfo) {
-    // Use options.extra.authInfo.token, etc.
+  if (extra?.authInfo) {
+    // Use extra.authInfo.token, etc.
   }
 }
 ```
@@ -1041,15 +1040,15 @@ type ElicitResult = {
 Tools can access request metadata via `options.extra` when using HTTP-based transports:
 
 ```typescript
-execute: async ({ context }, options) => {
-  if (!options.extra?.authInfo?.token) {
+execute: async (params, { elicitation, extra }) => {
+  if (!extra?.authInfo?.token) {
     return "Authentication required";
   }
   
   // Use the auth token
   const response = await fetch('/api/data', {
-    headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
-    signal: options.extra.signal,
+    headers: { Authorization: `Bearer ${extra.authInfo.token}` },
+    signal: extra.signal,
   });
   
   return response.json();
