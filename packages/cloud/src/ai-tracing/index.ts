@@ -254,8 +254,7 @@ export class CloudAITracingExporter implements AITracingExporter {
    * Uploads spans to cloud API using fetchWithRetry for all retry logic
    */
   private async batchUpload(spans: CloudSpanRecord[]): Promise<void> {
-    // TODO: Confirm route is correct
-    const url = `${this.config.endpoint}/ai-traces/batch`;
+    const url = `${this.config.endpoint}/aiTracing/publish`;
 
     const headers = {
       Authorization: `Bearer ${this.config.accessToken}`,
