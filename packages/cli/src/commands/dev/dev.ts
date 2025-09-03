@@ -259,6 +259,13 @@ export async function dev({
   const bundler = new DevBundler(env);
   bundler.__setLogger(logger); // Keep Pino logger for internal bundler operations
 
+  const loadedEnv = await bundler.loadEnvVars();
+
+  // spread loadedEnv into process.env
+  for (const [key, value] of loadedEnv.entries()) {
+    process.env[key] = value;
+  }
+
   // Get the port to use before prepare to set environment variables
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
   let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
@@ -275,13 +282,6 @@ export async function dev({
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
-
-  const loadedEnv = await bundler.loadEnvVars();
-
-  // spread loadedEnv into process.env
-  for (const [key, value] of loadedEnv.entries()) {
-    process.env[key] = value;
-  }
 
   await startServer(
     join(dotMastraPath, 'output'),
