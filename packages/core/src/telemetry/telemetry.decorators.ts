@@ -80,6 +80,8 @@ function enhanceStreamingArgumentsWithTelemetry(
       }
     };
 
+    (enhancedStreamOptions.onFinish as any).__hasOriginalOnFinish = !!originalOnFinish;
+
     enhancedArgs[1] = enhancedStreamOptions;
     span.__mastraStreamingSpan = true;
 

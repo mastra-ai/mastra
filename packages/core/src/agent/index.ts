@@ -3420,9 +3420,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runtimeContext: streamOptions?.runtimeContext,
     });
 
+    // Check if streamOptions.onFinish had an original callback
+    const isTelemetryWrapperWithoutOriginal =
+      streamOptions?.onFinish && !(streamOptions.onFinish as any).__hasOriginalOnFinish;
+
     const mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
+      onFinish: isTelemetryWrapperWithoutOriginal
+        ? defaultStreamOptions.onFinish
+        : streamOptions?.onFinish || defaultStreamOptions.onFinish,
     };
 
     const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });
@@ -3897,9 +3904,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   > {
     const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
 
+    // Check if streamOptions.onFinish had an original callback
+    const isTelemetryWrapperWithoutOriginal =
+      streamOptions?.onFinish && !(streamOptions.onFinish as any).__hasOriginalOnFinish;
+
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptions,
       ...streamOptions,
+      onFinish: isTelemetryWrapperWithoutOriginal
+        ? defaultStreamOptions.onFinish
+        : streamOptions.onFinish || defaultStreamOptions.onFinish,
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');

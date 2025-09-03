@@ -6528,6 +6528,160 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     });
   });
+
+  describe('defaultStreamOptions onFinish callback bug', () => {
+    it(`${version} - should call onFinish from defaultStreamOptions when no options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish',
+        name: 'Test Default onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream without passing any options - should use defaultStreamOptions
+      const result = version === 'v1' ? await agent.stream('How are you?') : await agent.streamVNext('How are you?');
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should call onFinish from defaultStreamOptions when empty options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish-empty',
+        name: 'Test Default onFinish Empty',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream with empty options - should still use defaultStreamOptions
+      const result =
+        version === 'v1' ? await agent.stream('How are you?', {}) : await agent.streamVNext('How are you?', {});
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should prioritize passed onFinish over defaultStreamOptions onFinish`, async () => {
+      let defaultOnFinishCalled = false;
+      let passedOnFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-override-onfinish',
+        name: 'Test Override onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }),
+      });
+
+      // Call stream with explicit onFinish - should override defaultStreamOptions
+      const result =
+        version === 'v1'
+          ? await agent.stream('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            })
+          : await agent.streamVNext('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            });
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(defaultOnFinishCalled).toBe(false);
+      expect(passedOnFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+  });
 }
 
 describe('Agent Tests', () => {
