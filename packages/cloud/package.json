@@ -21,6 +21,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./ai-tracing": {
+      "import": {
+        "types": "./dist/ai-tracing/index.d.ts",
+        "default": "./dist/ai-tracing/index.js"
+      },
+      "require": {
+        "types": "./dist/ai-tracing/index.d.ts",
+        "default": "./dist/ai-tracing/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
