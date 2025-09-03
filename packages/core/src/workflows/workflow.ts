@@ -180,6 +180,7 @@ export function createStep<
           type: 'workflow-agent-call-start',
           payload: toolData,
         });
+        // TODO: add support for format, if format is undefined use stream, else streamVNext
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,

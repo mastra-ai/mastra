@@ -1349,7 +1349,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     agentAISpan?: AnyAISpan;
     methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
-    format: 'mastra' | 'aisdk';
+    format?: 'mastra' | 'aisdk';
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
@@ -1411,7 +1411,7 @@ export class Agent<
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'streamVNext') {
-                // add support for format
+                // TODO: add support for format
                 const streamResult = run.streamVNext({
                   inputData: context,
                   runtimeContext,
@@ -1493,7 +1493,7 @@ export class Agent<
     writableStream?: WritableStream<ChunkType>;
     agentAISpan?: AnyAISpan;
     methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
-    format: 'mastra' | 'aisdk';
+    format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -1742,7 +1742,6 @@ export class Agent<
           writableStream,
           agentAISpan,
           methodType,
-          format: 'mastra',
         });
 
         const messageList = new MessageList({
