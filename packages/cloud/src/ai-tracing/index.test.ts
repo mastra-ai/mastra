@@ -34,7 +34,7 @@ describe('CloudAITracingExporter', () => {
 
     exporter = new CloudAITracingExporter({
       accessToken: testJWT,
-      endpoint: 'http://localhost:3000/api',
+      endpoint: 'http://localhost:3000',
     });
   });
 
@@ -305,7 +305,7 @@ describe('CloudAITracingExporter', () => {
     it('should trigger flush when maxBatchSize is reached', async () => {
       const smallBatchExporter = new CloudAITracingExporter({
         accessToken: createTestJWT({ teamId: 'test-team', projectId: 'test-project' }),
-        endpoint: 'http://localhost:3000/api',
+        endpoint: 'http://localhost:3000',
         maxBatchSize: 2, // Small batch size for testing
       });
 
@@ -611,7 +611,7 @@ describe('CloudAITracingExporter', () => {
       await (exporter as any).flush();
 
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'http://localhost:3000/api/aiTracing/publish',
+        'http://localhost:3000',
         {
           method: 'POST',
           headers: {
@@ -660,7 +660,7 @@ describe('CloudAITracingExporter', () => {
       const testJWT = createTestJWT({ teamId: 'auth-test', projectId: 'auth-project' });
       const authExporter = new CloudAITracingExporter({
         accessToken: testJWT,
-        endpoint: 'http://localhost:3000/api',
+        endpoint: 'http://localhost:3000',
       });
 
       await authExporter.exportEvent({
@@ -758,7 +758,7 @@ describe('CloudAITracingExporter', () => {
     it('should retry on API failures using fetchWithRetry', async () => {
       const retryExporter = new CloudAITracingExporter({
         accessToken: createTestJWT({ teamId: 'retry-team', projectId: 'retry-project' }),
-        endpoint: 'http://localhost:3000/api',
+        endpoint: 'http://localhost:3000',
         maxRetries: 3,
       });
 
@@ -777,7 +777,7 @@ describe('CloudAITracingExporter', () => {
 
       // fetchWithRetry should be called with maxRetries parameter
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'http://localhost:3000/api/aiTracing/publish',
+        'http://localhost:3000',
         expect.any(Object),
         3, // maxRetries passed to fetchWithRetry
       );
@@ -786,7 +786,7 @@ describe('CloudAITracingExporter', () => {
     it('should pass maxRetries to fetchWithRetry correctly', async () => {
       const customRetryExporter = new CloudAITracingExporter({
         accessToken: createTestJWT({ teamId: 'custom-team', projectId: 'custom-project' }),
-        endpoint: 'http://localhost:3000/api',
+        endpoint: 'http://localhost:3000',
         maxRetries: 5, // Custom retry count
       });
 
@@ -809,7 +809,7 @@ describe('CloudAITracingExporter', () => {
     it('should drop batch after fetchWithRetry exhausts all retries', async () => {
       const retryExporter = new CloudAITracingExporter({
         accessToken: createTestJWT({ teamId: 'fail-team', projectId: 'fail-project' }),
-        endpoint: 'http://localhost:3000/api',
+        endpoint: 'http://localhost:3000',
         maxRetries: 2,
       });
 

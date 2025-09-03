@@ -5,7 +5,7 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 
 import { fetchWithRetry } from '../utils/fetchWithRetry';
-import { parseAccessToken } from '../utils/parseAccessToken';
+import { parseCloudAccessToken } from '../utils/parseCloudAccessToken';
 
 export interface CloudAITracingExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -64,12 +64,7 @@ export class CloudAITracingExporter implements AITracingExporter {
       });
     }
 
-    const { teamId, projectId, cloudEndpoint } = this.parseAccessToken(accessToken);
-    this.teamId = teamId;
-    this.projectId = projectId;
-
-    // TODO: Once the token has cloudEndpoint, we can remove process.env.MASTRA_CLOUD_ENDPOINT
-    const endpoint = config.endpoint ?? cloudEndpoint ?? process.env.MASTRA_CLOUD_ENDPOINT;
+    const endpoint = config.endpoint ?? process.env.MASTRA_CLOUD_ENDPOINT;
     if (!endpoint) {
       throw new MastraError({
         id: `CLOUD_AI_TRACING_EXPORTER_ENDPOINT_REQUIRED`,
@@ -77,6 +72,10 @@ export class CloudAITracingExporter implements AITracingExporter {
         category: ErrorCategory.USER,
       });
     }
+
+    const { teamId, projectId } = this.parseAccessToken(accessToken);
+    this.teamId = teamId;
+    this.projectId = projectId;
 
     this.config = {
       maxBatchSize: config.maxBatchSize ?? 1000,
@@ -97,7 +96,7 @@ export class CloudAITracingExporter implements AITracingExporter {
 
   private parseAccessToken(accessToken: string): { teamId: string; projectId: string; cloudEndpoint?: string } {
     try {
-      return parseAccessToken(accessToken);
+      return parseCloudAccessToken(accessToken);
     } catch (error) {
       throw new MastraError(
         {
@@ -252,7 +251,7 @@ export class CloudAITracingExporter implements AITracingExporter {
    * Uploads spans to cloud API using fetchWithRetry for all retry logic
    */
   private async batchUpload(spans: CloudSpanRecord[]): Promise<void> {
-    const url = `${this.config.endpoint}/aiTracing/publish`;
+    const url = `${this.config.endpoint}`;
 
     const headers = {
       Authorization: `Bearer ${this.config.accessToken}`,

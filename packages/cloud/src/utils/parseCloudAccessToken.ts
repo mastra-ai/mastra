@@ -1,4 +1,8 @@
-export function parseAccessToken(accessToken: string): { teamId: string; projectId: string; cloudEndpoint?: string } {
+export function parseCloudAccessToken(accessToken: string): {
+  teamId: string;
+  projectId: string;
+  cloudEndpoint?: string;
+} {
   const parts = accessToken.split('.');
   if (parts.length !== 3) {
     throw new Error('Invalid JWT format');
@@ -13,6 +17,5 @@ export function parseAccessToken(accessToken: string): { teamId: string; project
     throw new Error('JWT missing teamId or projectId');
   }
 
-  const cloudEndpoint = payload.cloudEndpoint?.trim() ?? undefined;
-  return { teamId, projectId, cloudEndpoint };
+  return { teamId, projectId };
 }
