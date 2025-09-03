@@ -76,7 +76,7 @@ export const libsqlAgent = new Agent({
       url: "file:libsql-agent.db"
     }),
     vector: new LibSQLVector({
-      connectionUrl: "file:local.db"
+      connectionUrl: "file:libsql-agent.db"
     }),
     embedder: fastembed,
     options: {
