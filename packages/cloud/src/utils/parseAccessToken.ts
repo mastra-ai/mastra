@@ -6,12 +6,13 @@ export function parseAccessToken(accessToken: string): { teamId: string; project
 
   const payload = JSON.parse(Buffer.from(parts[1] ?? '', 'base64url').toString('utf8'));
 
-  const { teamId, projectId } = payload;
+  const teamId = payload.teamId?.trim();
+  const projectId = payload.projectId?.trim();
 
   if (!teamId || !projectId) {
     throw new Error('JWT missing teamId or projectId');
   }
 
-  const cloudEndpoint = payload.cloudEndpoint ?? undefined;
+  const cloudEndpoint = payload.cloudEndpoint?.trim() ?? undefined;
   return { teamId, projectId, cloudEndpoint };
 }
