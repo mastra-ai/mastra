@@ -2,7 +2,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  ToolCallContentPartComponent,
+  ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
@@ -24,7 +24,7 @@ import { NextAssistantMessage } from '@/domains/networks/v-next/wrapped-assistan
 import clsx from 'clsx';
 
 export interface ThreadProps {
-  ToolFallback?: ToolCallContentPartComponent;
+  ToolFallback?: ToolCallMessagePartComponent;
   networkName?: string;
   hasMemory?: boolean;
 }

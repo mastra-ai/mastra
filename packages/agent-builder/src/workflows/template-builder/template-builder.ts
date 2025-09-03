@@ -8,9 +8,9 @@ import type { MastraLanguageModel } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { AgentBuilder } from '..';
-import { AgentBuilderDefaults } from '../defaults';
-import type { TemplateUnit, UnitKind } from '../types';
+import { AgentBuilder } from '../..';
+import { AgentBuilderDefaults } from '../../defaults';
+import type { TemplateUnit, UnitKind } from '../../types';
 import {
   ApplyResultSchema,
   AgentBuilderInputSchema,
@@ -30,7 +30,7 @@ import {
   ValidationFixResultSchema,
   PrepareBranchInputSchema,
   PrepareBranchResultSchema,
-} from '../types';
+} from '../../types';
 import {
   getMastraTemplate,
   kindWeight,
@@ -43,7 +43,8 @@ import {
   gitCheckoutRef,
   gitRevParse,
   gitAddAndCommit,
-} from '../utils';
+  resolveTargetPath,
+} from '../../utils';
 
 // Helper function to resolve the model to use
 const resolveModel = (runtimeContext: any): MastraLanguageModel => {
@@ -340,7 +341,7 @@ const prepareBranchStep = createStep({
   inputSchema: PrepareBranchInputSchema,
   outputSchema: PrepareBranchResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     try {
       const branchName = `feat/install-template-${inputData.slug}`;
@@ -370,7 +371,7 @@ const packageMergeStep = createStep({
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Package merge step starting...');
     const { slug, packageInfo } = inputData;
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     try {
       const targetPkgPath = join(targetPath, 'package.json');
@@ -467,7 +468,7 @@ const installStep = createStep({
   outputSchema: InstallResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Running install step...');
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     try {
       // Run install using swpm (no specific packages)
@@ -505,7 +506,7 @@ const programmaticFileCopyStep = createStep({
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Programmatic file copy step starting...');
     const { orderedUnits, templateDir, commitSha, slug } = inputData;
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     try {
       const copiedFiles: Array<{
@@ -858,7 +859,7 @@ const intelligentMergeStep = createStep({
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Intelligent merge step starting...');
     const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
     try {
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
@@ -1163,7 +1164,7 @@ const validationAndFixStep = createStep({
   execute: async ({ inputData, runtimeContext }) => {
     console.log('Validation and fix step starting...');
     const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 5 } = inputData;
-    const targetPath = inputData.targetPath || runtimeContext.get('targetPath') || process.cwd();
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     // Skip validation if no changes were made
     const hasChanges = copiedFiles.length > 0 || (conflictsResolved && conflictsResolved.length > 0);
