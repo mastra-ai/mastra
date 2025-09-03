@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.15.3-alpha.7
+
+### Patch Changes
+
+- [#7392](https://github.com/mastra-ai/mastra/pull/7392) [`7149d8d`](https://github.com/mastra-ai/mastra/commit/7149d8d4bdc1edf0008e0ca9b7925eb0b8b60dbe) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - Add tripwire chunk to streamVNext full stream
+
 ## 0.15.3-alpha.6
 
 ### Patch Changes
