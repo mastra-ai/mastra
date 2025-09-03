@@ -17,7 +17,7 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
-import type { AISpan, AnyAISpan } from '../../ai-tracing';
+import type { AnyAISpan, TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -113,14 +113,15 @@ export class MastraLLMV1 extends MastraBase {
     });
   }
 
-  private _startAISpan(
-    model: LanguageModel,
-    agentAISpan: AISpan<AISpanType.AGENT_RUN>,
-    name: string,
-    streaming: boolean,
-    options: any,
-  ): AnyAISpan {
-    return agentAISpan?.createChildSpan({
+  private _startAISpan(params: {
+    model: LanguageModel;
+    tracingContext: TracingContext;
+    name: string;
+    streaming: boolean;
+    options: any;
+  }): AnyAISpan | undefined {
+    const { model, tracingContext, name, streaming, options } = params;
+    return tracingContext.currentSpan?.createChildSpan({
       name,
       type: AISpanType.LLM_GENERATION,
       input: options.prompt,
@@ -140,18 +141,24 @@ export class MastraLLMV1 extends MastraBase {
     });
   }
 
-  private _wrapModel(model: LanguageModel, agentAISpan?: AISpan<AISpanType.AGENT_RUN>): LanguageModel {
-    if (!agentAISpan) {
+  private _wrapModel(model: LanguageModel, tracingContext: TracingContext): LanguageModel {
+    if (!tracingContext.currentSpan) {
       return model;
     }
 
     const wrappedDoGenerate = async (options: any) => {
-      const llmSpan = this._startAISpan(model, agentAISpan, `llm generate: '${model.modelId}'`, false, options);
+      const llmSpan = this._startAISpan({
+        model,
+        tracingContext,
+        name: `llm generate: '${model.modelId}'`,
+        streaming: false,
+        options,
+      });
 
       try {
         const result = await model.doGenerate(options);
 
-        llmSpan.end({
+        llmSpan?.end({
           output: result.text,
           attributes: {
             usage: result.usage
@@ -164,13 +171,19 @@ export class MastraLLMV1 extends MastraBase {
         });
         return result;
       } catch (error) {
-        llmSpan.error({ error: error as Error });
+        llmSpan?.error({ error: error as Error });
         throw error;
       }
     };
 
     const wrappedDoStream = async (options: any) => {
-      const llmSpan = this._startAISpan(model, agentAISpan, `llm stream: '${model.modelId}'`, true, options);
+      const llmSpan = this._startAISpan({
+        model,
+        tracingContext,
+        name: `llm stream: '${model.modelId}'`,
+        streaming: true,
+        options,
+      });
 
       try {
         const result = await model.doStream(options);
@@ -184,7 +197,18 @@ export class MastraLLMV1 extends MastraBase {
           new TransformStream({
             // this gets called on each chunk output
             transform(chunk, controller) {
-              //TODO: Would be great to export chunks as events on the span
+              // Create event spans for text chunks
+              if (chunk.type === 'text-delta') {
+                llmSpan?.createEventSpan({
+                  type: AISpanType.LLM_CHUNK,
+                  name: `llm chunk: ${chunk.type}`,
+                  output: chunk.textDelta,
+                  attributes: {
+                    chunkType: chunk.type,
+                  },
+                });
+              }
+
               //TODO: Figure out how to get the final usage
               // if (chunk.type === 'response-metadata' && chunk.usage) {
               //   finalUsage = chunk.usage;
@@ -197,7 +221,7 @@ export class MastraLLMV1 extends MastraBase {
             },
             // this gets called at the end of the stream
             flush() {
-              llmSpan.end({
+              llmSpan?.end({
                 attributes: {
                   usage: finalUsage
                     ? {
@@ -220,16 +244,19 @@ export class MastraLLMV1 extends MastraBase {
           stream: wrappedStream,
         };
       } catch (error) {
-        llmSpan.error({ error: error as Error });
+        llmSpan?.error({ error: error as Error });
         throw error;
       }
     };
 
-    return {
-      ...model,
-      doGenerate: wrappedDoGenerate,
-      doStream: wrappedDoStream,
-    };
+    // Create a proper proxy to preserve all model properties including getters/setters
+    return new Proxy(model, {
+      get(target, prop) {
+        if (prop === 'doGenerate') return wrappedDoGenerate;
+        if (prop === 'doStream') return wrappedDoStream;
+        return target[prop as keyof typeof target];
+      },
+    });
   }
 
   async __text<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined>({
@@ -245,7 +272,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
@@ -274,8 +301,9 @@ export class MastraLLMV1 extends MastraBase {
 
         let jsonSchemaToUse;
         if ('toJSONSchema' in z) {
+          // Use dynamic property access to avoid import errors in Zod v3
           // @ts-ignore
-          jsonSchemaToUse = z.toJSONSchema(schema) as JSONSchema7;
+          jsonSchemaToUse = (z as any)['toJSONSchema'](schema) as JSONSchema7;
         } else {
           jsonSchemaToUse = zodToJsonSchema(schema, {
             $refStrategy: 'none',
@@ -292,7 +320,7 @@ export class MastraLLMV1 extends MastraBase {
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
       ...rest,
       messages,
-      model: this._wrapModel(model, agentAISpan),
+      model: this._wrapModel(model, tracingContext),
       temperature,
       tools: {
         ...(tools as Tools),
@@ -389,7 +417,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
     const model = this.#model;
@@ -408,7 +436,7 @@ export class MastraLLMV1 extends MastraBase {
       const argsForExecute: OriginalGenerateObjectOptions<Z> = {
         ...rest,
         messages,
-        model: this._wrapModel(model, agentAISpan),
+        model: this._wrapModel(model, tracingContext),
         // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
@@ -477,7 +505,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     runtimeContext,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
     const model = this.#model;
@@ -506,7 +534,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
-      model: this._wrapModel(model, agentAISpan),
+      model: this._wrapModel(model, tracingContext),
       temperature,
       tools: {
         ...(tools as Tools),
@@ -639,7 +667,7 @@ export class MastraLLMV1 extends MastraBase {
     onFinish,
     structuredOutput,
     telemetry,
-    agentAISpan,
+    tracingContext,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
     const model = this.#model;
@@ -659,7 +687,7 @@ export class MastraLLMV1 extends MastraBase {
 
       const argsForExecute: OriginalStreamObjectOptions<T> = {
         ...rest,
-        model: this._wrapModel(model, agentAISpan),
+        model: this._wrapModel(model, tracingContext),
         onFinish: async props => {
           try {
             // @ts-expect-error - onFinish is not inferred correctly

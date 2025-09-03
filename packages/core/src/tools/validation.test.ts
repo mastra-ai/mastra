@@ -251,6 +251,217 @@ describe('Tool Input Validation Integration Tests', () => {
     });
   });
 
+  describe('Schema with context and inputData fields', () => {
+    it('should handle schema with context field without unwrapping', async () => {
+      const tool = createTool({
+        id: 'context-field-tool',
+        description: 'Tool with context field in schema',
+        inputSchema: z.object({
+          context: z.string(),
+          otherField: z.number(),
+        }),
+        execute: async ({ context }) => {
+          return { received: context };
+        },
+      });
+
+      // This should NOT unwrap the context field since the schema expects it
+      const result: any = await tool?.execute?.({
+        context: {
+          context: 'my-context-value',
+          otherField: 42,
+        },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.received).toEqual({
+        context: 'my-context-value',
+        otherField: 42,
+      });
+    });
+
+    it('should handle schema with inputData field without unwrapping', async () => {
+      const tool = createTool({
+        id: 'inputdata-field-tool',
+        description: 'Tool with inputData field in schema',
+        inputSchema: z.object({
+          inputData: z.string(),
+          metadata: z.object({
+            timestamp: z.number(),
+          }),
+        }),
+        execute: async ({ context }) => {
+          return { received: context };
+        },
+      });
+
+      // This should NOT unwrap the inputData field since the schema expects it
+      const input = {
+        context: {
+          inputData: 'my-input-data',
+          metadata: { timestamp: 123456 },
+        },
+      };
+
+      const result: any = await tool?.execute?.(input as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.received).toEqual({
+        inputData: 'my-input-data',
+        metadata: { timestamp: 123456 },
+      });
+    });
+
+    it('should reproduce the original bug scenario and fix it', async () => {
+      // This test reproduces the original bug scenario described by the user
+      const tool = createTool({
+        id: 'context-field-bug',
+        description: 'Tool that demonstrates the original context field bug',
+        inputSchema: z.object({
+          context: z.string(), // Schema expects a 'context' field
+          otherValue: z.number(),
+        }),
+        execute: async ({ context }) => {
+          return { received: context };
+        },
+      });
+
+      // Input has ToolExecutionContext structure
+      const input = {
+        context: {
+          context: 'my-context-string-value', // This is the actual data for the context field
+          otherValue: 42,
+        },
+        runId: 'test-run',
+      };
+
+      const result: any = await tool?.execute?.(input as any);
+
+      // Before the fix, this would fail because the validation function would:
+      // 1. See 'context' in input and extract (input as any).context
+      // 2. Try to validate "my-context-string-value" against the schema
+      // 3. Fail because "my-context-string-value" is a string, not { context: string, otherValue: number }
+
+      // After the fix, it should work correctly
+      expect(result.error).toBeUndefined();
+      expect(result.received).toEqual({
+        context: 'my-context-string-value',
+        otherValue: 42,
+      });
+    });
+
+    it('should handle schema with both context and inputData fields', async () => {
+      const tool = createTool({
+        id: 'both-fields-tool',
+        description: 'Tool with both context and inputData fields in schema',
+        inputSchema: z.object({
+          context: z.string(),
+          inputData: z.number(),
+          regularField: z.boolean(),
+        }),
+        execute: async ({ context }) => {
+          return { received: context };
+        },
+      });
+
+      const result: any = await tool?.execute?.({
+        context: {
+          context: 'context-value',
+          inputData: 42,
+          regularField: true,
+        },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.received).toEqual({
+        context: 'context-value',
+        inputData: 42,
+        regularField: true,
+      });
+    });
+
+    it('should still unwrap context when schema does not expect it', async () => {
+      const tool = createTool({
+        id: 'no-context-field',
+        description: 'Tool without context field in schema',
+        inputSchema: z.object({
+          name: z.string(),
+          value: z.number(),
+        }),
+        execute: async ({ context }) => {
+          return { received: context };
+        },
+      });
+
+      // This should unwrap the context since schema doesn't expect a context field
+      const result: any = await tool?.execute?.({
+        context: {
+          name: 'test',
+          value: 123,
+        },
+        runId: 'some-run-id',
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.received).toEqual({
+        name: 'test',
+        value: 123,
+      });
+    });
+
+    it('should fail validation when schema expects context but input has wrong type', async () => {
+      const tool = createTool({
+        id: 'context-validation-fail',
+        description: 'Tool with context validation',
+        inputSchema: z.object({
+          context: z.string(),
+          other: z.number(),
+        }),
+        execute: async ({ context }) => {
+          return { received: context };
+        },
+      });
+
+      const result: any = await tool?.execute?.({
+        context: {
+          context: 123, // Wrong type - should be string
+          other: 456,
+        },
+      } as any);
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Expected string, received number');
+    });
+
+    it('should fail validation when schema expects inputData but input has wrong structure', async () => {
+      const tool = createTool({
+        id: 'inputdata-validation-fail',
+        description: 'Tool with inputData validation',
+        inputSchema: z.object({
+          inputData: z.object({
+            nested: z.string(),
+          }),
+          metadata: z.string(),
+        }),
+        execute: async ({ context }) => {
+          return { received: context };
+        },
+      });
+
+      const result: any = await tool?.execute?.({
+        context: {
+          inputData: 'should-be-object', // Wrong type - should be object
+          metadata: 'valid-string',
+        },
+      } as any);
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Expected object, received string');
+    });
+  });
+
   describe('Edge cases', () => {
     it('should handle tools without input schema', async () => {
       const tool = createTool({
@@ -312,6 +523,45 @@ describe('Tool Input Validation Integration Tests', () => {
       expect(result.data).toEqual({
         required: 'value',
         extra: 'preserved',
+      });
+    });
+
+    it('should handle complex nested schema with context field', async () => {
+      const tool = createTool({
+        id: 'complex-context-schema',
+        description: 'Tool with complex nested context schema',
+        inputSchema: z.object({
+          context: z.object({
+            user: z.object({
+              id: z.string(),
+              name: z.string(),
+            }),
+            settings: z.array(z.string()),
+          }),
+          action: z.enum(['create', 'update', 'delete']),
+        }),
+        execute: async ({ context }) => {
+          return { processed: context };
+        },
+      });
+
+      const result: any = await tool?.execute?.({
+        context: {
+          context: {
+            user: { id: '123', name: 'John' },
+            settings: ['dark-mode', 'notifications'],
+          },
+          action: 'create',
+        },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.processed).toEqual({
+        context: {
+          user: { id: '123', name: 'John' },
+          settings: ['dark-mode', 'notifications'],
+        },
+        action: 'create',
       });
     });
   });

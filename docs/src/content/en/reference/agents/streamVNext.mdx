@@ -3,13 +3,11 @@ title: "Reference: Agent.streamVNext() (Experimental) | Agents | Mastra Docs"
 description: "Documentation for the `Agent.streamVNext()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
 ---
 
-import { Callout } from "nextra/components";
+import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
 # Agent.streamVNext() (Experimental)
 
-<Callout type="warning">
-  **Experimental Feature**: This is a new streaming implementation with support for multiple output formats, including AI SDK v5 compatibility. It will replace the existing `stream()` method once battle-tested. The API may change as we refine the feature based on feedback.
-</Callout>
+<StreamVNextCallout />
 
 The `.streamVNext()` method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility. This method accepts messages and optional streaming options, providing a next-generation streaming experience with support for both Mastra's native format and AI SDK v5 compatibility.
 

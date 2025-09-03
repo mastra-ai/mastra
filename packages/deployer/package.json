@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.15.2",
+  "version": "0.15.3-alpha.4",
   "description": "",
   "type": "module",
   "files": [
@@ -115,7 +115,7 @@
     "hono": "^4.8.12",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
-    "rollup": "~4.47.1",
+    "rollup": "~4.49.0",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript-paths": "^1.5.1"
@@ -141,7 +141,7 @@
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.15.2-0 <0.16.0-0",

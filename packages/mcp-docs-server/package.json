@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "0.13.16",
+  "version": "0.13.17-alpha.4",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -39,8 +39,8 @@
     "jsdom": "^26.1.0",
     "turndown": "^7.2.0",
     "uuid": "^11.1.0",
-    "zod": "^3.25.67",
-    "zod-to-json-schema": "^3.24.5"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@hono/node-server": "^1.17.1",

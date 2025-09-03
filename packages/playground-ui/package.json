@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.2.4",
+  "version": "6.0.0-alpha.2",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -45,9 +45,10 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
-    "@assistant-ui/react": "^0.7.91",
-    "@assistant-ui/react-markdown": "^0.7.21",
-    "@assistant-ui/react-syntax-highlighter": "^0.7.10",
+    "@assistant-ui/react": "^0.10.44",
+    "@assistant-ui/react-markdown": "^0.10.9",
+    "@assistant-ui/react-syntax-highlighter": "^0.10.10",
+    "@assistant-ui/react-ui": "^0.1.8",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
     "@autoform/zod": "^4.0.0",
@@ -104,7 +105,7 @@
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "use-debounce": "^10.0.5",
-    "zod": "^4.0.15",
+    "zod": "^4.1.5",
     "zustand": "^5.0.7"
   },
   "peerDependencies": {

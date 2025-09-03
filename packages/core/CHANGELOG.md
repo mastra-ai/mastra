@@ -1,13 +1,92 @@
 # @mastra/core
 
+## 0.15.3-alpha.4
+
+### Patch Changes
+
+- [#5816](https://github.com/mastra-ai/mastra/pull/5816) [`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`zod-to-json-schema@^3.24.6` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.6) (from `^3.24.5`, in `dependencies`)
+
+- [#7269](https://github.com/mastra-ai/mastra/pull/7269) [`ff89505`](https://github.com/mastra-ai/mastra/commit/ff895057c8c7e91a5535faef46c5e5391085ddfa) Thanks [@wardpeet](https://github.com/wardpeet)! - Add deprecation warnings and add legacy routes
+
+- [#7317](https://github.com/mastra-ai/mastra/pull/7317) [`183dc95`](https://github.com/mastra-ai/mastra/commit/183dc95596f391b977bd1a2c050b8498dac74891) Thanks [@TylerBarnes](https://github.com/TylerBarnes)! - Added a fix to prevent filtering out injected initial default user messages. Related to issue 7231
+
+- [#7327](https://github.com/mastra-ai/mastra/pull/7327) [`a1111e2`](https://github.com/mastra-ai/mastra/commit/a1111e24e705488adfe5e0a6f20c53bddf26cb22) Thanks [@TylerBarnes](https://github.com/TylerBarnes)! - Fixes #7254 where the onFinish callback wasn't returning assistant messages when using format: 'aisdk' in streamVNext. The messageList was being updated with response messages but these weren't being passed to the user's onFinish callback.
+
+- [#7267](https://github.com/mastra-ai/mastra/pull/7267) [`61debef`](https://github.com/mastra-ai/mastra/commit/61debefd80ad3a7ed5737e19df6a23d40091689a) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Fix - add missing tool options to createTool
+
+- [#7263](https://github.com/mastra-ai/mastra/pull/7263) [`9beaeff`](https://github.com/mastra-ai/mastra/commit/9beaeffa4a97b1d5fd01a7f8af8708b16067f67c) Thanks [@wardpeet](https://github.com/wardpeet)! - Create new `@mastra/ai-sdk` package to better support `useChat()`
+
+- [#7323](https://github.com/mastra-ai/mastra/pull/7323) [`9eee594`](https://github.com/mastra-ai/mastra/commit/9eee594e35e0ca2a650fcc33fa82009a142b9ed0) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Fix passing providerOptions through in streamVNext, enabling reasoning-delta chunks to be receiving.
+
+- [#7266](https://github.com/mastra-ai/mastra/pull/7266) [`979912c`](https://github.com/mastra-ai/mastra/commit/979912cfd180aad53287cda08af771df26454e2c) Thanks [@epinzur](https://github.com/epinzur)! - "Updated langfuse exporter to handle Event spans"
+
+- [#6966](https://github.com/mastra-ai/mastra/pull/6966) [`7dcf4c0`](https://github.com/mastra-ai/mastra/commit/7dcf4c04f44d9345b1f8bc5d41eae3f11ac61611) Thanks [@kaorukobo](https://github.com/kaorukobo)! - Ensure original stacktrace is preserved during workflow runs
+
+- [#7274](https://github.com/mastra-ai/mastra/pull/7274) [`ad78bfc`](https://github.com/mastra-ai/mastra/commit/ad78bfc4ea6a1fff140432bf4f638e01af7af668) Thanks [@epinzur](https://github.com/epinzur)! - "pipes tracingContext through all ai items: agents, workflows, tools, processors, scorers, etc.."
+
+- [#7219](https://github.com/mastra-ai/mastra/pull/7219) [`0ce418a`](https://github.com/mastra-ai/mastra/commit/0ce418a1ccaa5e125d4483a9651b635046152569) Thanks [@NikAiyer](https://github.com/NikAiyer)! - upgrade ai v5 versions to latest for core and memory
+
+- [#7039](https://github.com/mastra-ai/mastra/pull/7039) [`8387952`](https://github.com/mastra-ai/mastra/commit/838795227b4edf758c84a2adf6f7fba206c27719) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Register scorers on mastra instance to override per agent generate call
+
+- [#7246](https://github.com/mastra-ai/mastra/pull/7246) [`5eca5d2`](https://github.com/mastra-ai/mastra/commit/5eca5d2655788863ea0442a46c9ef5d3c6dbe0a8) Thanks [@epinzur](https://github.com/epinzur)! - Fixed wrapped mastra class inside workflow steps.
+
+- Updated dependencies [[`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715)]:
+  - @mastra/schema-compat@0.11.2-alpha.1
+
+## 0.15.3-alpha.3
+
+### Patch Changes
+
+- [#7203](https://github.com/mastra-ai/mastra/pull/7203) [`aedbbfa`](https://github.com/mastra-ai/mastra/commit/aedbbfa064124ddde039111f12629daebfea7e48) Thanks [@epinzur](https://github.com/epinzur)! - Fixed wrapping of models with AI Tracing when used with structured output.
+
+- [#7127](https://github.com/mastra-ai/mastra/pull/7127) [`f643c65`](https://github.com/mastra-ai/mastra/commit/f643c651bdaf57c2343cf9dbfc499010495701fb) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - Support file download
+
+- [#7216](https://github.com/mastra-ai/mastra/pull/7216) [`fef7375`](https://github.com/mastra-ai/mastra/commit/fef737534574f41b432a7361a285f776c3bac42b) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Fix tool validation when schema uses context or inputData reserved keys
+
+- [#7090](https://github.com/mastra-ai/mastra/pull/7090) [`e3d8fea`](https://github.com/mastra-ai/mastra/commit/e3d8feaacfb8b5c5c03c13604cc06ea2873d45fe) Thanks [@K-Mistele](https://github.com/K-Mistele)! - Support Inngest flow control features for Mastra Inngest workflows
+
+- [#7217](https://github.com/mastra-ai/mastra/pull/7217) [`3412597`](https://github.com/mastra-ai/mastra/commit/3412597a6644c0b6bf3236d6e319ed1450c5bae8) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - Pass provider options
+
+## 0.15.3-alpha.2
+
+### Patch Changes
+
+- [#7129](https://github.com/mastra-ai/mastra/pull/7129) [`822c2e8`](https://github.com/mastra-ai/mastra/commit/822c2e88a3ecbffb7c680e6227976006ccefe6a8) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix custom output (tool-output) in ai-sdk stream output
+
+## 0.15.3-alpha.1
+
+### Patch Changes
+
+- [#7121](https://github.com/mastra-ai/mastra/pull/7121) [`637f323`](https://github.com/mastra-ai/mastra/commit/637f32371d79a8f78c52c0d53411af0915fcec67) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Fix issue with some compilers and calling zod v4's toJSONSchema function
+
+- [#7124](https://github.com/mastra-ai/mastra/pull/7124) [`29de0e1`](https://github.com/mastra-ai/mastra/commit/29de0e1b0a7173317ae7d1ab0c0993167c659f2b) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - MastraEmbeddingModel and ts hack
+
+- [#7125](https://github.com/mastra-ai/mastra/pull/7125) [`6ac697e`](https://github.com/mastra-ai/mastra/commit/6ac697edcc2435482c247cba615277ec4765dcc4) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - improveEmbeddingModelStuff
+
+- Updated dependencies [[`637f323`](https://github.com/mastra-ai/mastra/commit/637f32371d79a8f78c52c0d53411af0915fcec67)]:
+  - @mastra/schema-compat@0.11.2-alpha.0
+
+## 0.15.3-alpha.0
+
+### Patch Changes
+
+- [#7085](https://github.com/mastra-ai/mastra/pull/7085) [`00c74e7`](https://github.com/mastra-ai/mastra/commit/00c74e73b1926be0d475693bb886fb67a22ff352) Thanks [@epinzur](https://github.com/epinzur)! - Added a DefaultExporter for AI Tracing.
+
+- [#7030](https://github.com/mastra-ai/mastra/pull/7030) [`af90672`](https://github.com/mastra-ai/mastra/commit/af906722d8da28688882193b1e531026f9e2e81e) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - Add maxSteps
+
+- [#7116](https://github.com/mastra-ai/mastra/pull/7116) [`56041d0`](https://github.com/mastra-ai/mastra/commit/56041d018863a3da6b98c512e47348647c075fb3) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Don't set supportsStructuredOutputs for every v2 model
+
+- [#7109](https://github.com/mastra-ai/mastra/pull/7109) [`5de1555`](https://github.com/mastra-ai/mastra/commit/5de15554d3d6695211945a36928f6657e76cddc9) Thanks [@epinzur](https://github.com/epinzur)! - Fixed tracingContext on tool executions in AI tracing
+
+- [#7025](https://github.com/mastra-ai/mastra/pull/7025) [`1ed5a3e`](https://github.com/mastra-ai/mastra/commit/1ed5a3e19330374c4347a4237cd2f4b9ffb60376) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Support workflows for run experiments
+
 ## 0.15.2
 
 ### Patch Changes
 
 - Updated dependencies [[`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430)]:
   - @mastra/schema-compat@0.11.1
-
-## 0.15.1
 
 ## 0.15.0
 

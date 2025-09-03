@@ -53,18 +53,13 @@ export class DevLogger {
     console.log(`${prefix} ${pc.blue('Starting Mastra dev server...')}`);
   }
 
-  ready(port: number, startTime?: number): void {
+  ready(host: string, port: number, startTime?: number): void {
     console.log('');
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
     console.log(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.log('');
-    console.log(`${pc.dim('│')} ${pc.bold('Local:')}   ${pc.cyan(`http://localhost:${port}/`)}`);
-    console.log(`${pc.dim('│')} ${pc.bold('API:')}     ${`http://localhost:${port}/api`}`);
-    console.log('');
-    console.log(`${pc.dim('│')} ${pc.bold('Hotkeys:')}`);
-    console.log(`${pc.dim('│')}   ${pc.bold('r')} ${pc.dim('restart server')}`);
-    console.log(`${pc.dim('│')}   ${pc.bold('o')} ${pc.dim('open in browser')}`);
-    console.log(`${pc.dim('│')}   ${pc.bold('q')} ${pc.dim('quit')}`);
+    console.log(`${pc.dim('│')} ${pc.bold('Local:')}   ${pc.cyan(`http://${host}:${port}/`)}`);
+    console.log(`${pc.dim('│')} ${pc.bold('API:')}     ${`http://${host}:${port}/api`}`);
     console.log('');
   }
 

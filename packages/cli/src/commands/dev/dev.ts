@@ -8,20 +8,24 @@ import { execa } from 'execa';
 import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
-import { HotkeyHandler, openInBrowser } from '../../utils/hotkeys.js';
 import { logger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
-let hotkeyHandler: HotkeyHandler | undefined;
 let serverStartTime: number | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
 const startServer = async (
   dotMastraPath: string,
-  port: number,
+  {
+    port,
+    host,
+  }: {
+    port: number;
+    host: string;
+  },
   env: Map<string, string>,
   startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
   errorRestartCount = 0,
@@ -108,12 +112,12 @@ const startServer = async (
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-        devLogger.ready(port, serverStartTime);
+        devLogger.ready(host, port, serverStartTime);
         devLogger.watching();
 
         // Send refresh signal
         try {
-          await fetch(`http://localhost:${port}/__refresh`, {
+          await fetch(`http://${host}:${port}/__refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -123,7 +127,7 @@ const startServer = async (
           // Retry after another second
           await new Promise(resolve => setTimeout(resolve, 1500));
           try {
-            await fetch(`http://localhost:${port}/__refresh`, {
+            await fetch(`http://${host}:${port}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -159,7 +163,16 @@ const startServer = async (
           `Attempting to restart server after error... (Attempt ${errorRestartCount}/${ON_ERROR_MAX_RESTARTS})`,
         );
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        startServer(dotMastraPath, port, env, startOptions, errorRestartCount);
+        startServer(
+          dotMastraPath,
+          {
+            port,
+            host,
+          },
+          env,
+          startOptions,
+          errorRestartCount,
+        );
       }
     }, 1000);
   }
@@ -167,7 +180,13 @@ const startServer = async (
 
 async function rebundleAndRestart(
   dotMastraPath: string,
-  port: number,
+  {
+    port,
+    host,
+  }: {
+    port: number;
+    host: string;
+  },
   bundler: DevBundler,
   startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
 ) {
@@ -186,7 +205,15 @@ async function rebundleAndRestart(
 
     const env = await bundler.loadEnvVars();
 
-    await startServer(join(dotMastraPath, 'output'), port, env, startOptions);
+    await startServer(
+      join(dotMastraPath, 'output'),
+      {
+        port,
+        host,
+      },
+      env,
+      startOptions,
+    );
   } finally {
     isRestarting = false;
   }
@@ -235,6 +262,7 @@ export async function dev({
   // Get the port to use before prepare to set environment variables
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
   let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
     portToUse = String(
@@ -255,20 +283,15 @@ export async function dev({
     process.env[key] = value;
   }
 
-  await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
-
-  hotkeyHandler = new HotkeyHandler({
-    restart: async () => {
-      await rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
+  await startServer(
+    join(dotMastraPath, 'output'),
+    {
+      port: Number(portToUse),
+      host: hostToUse,
     },
-    openBrowser: async (url?: string) => {
-      await openInBrowser(url || `http://localhost:${portToUse}`);
-    },
-    quit: () => {
-      process.emit('SIGINT');
-    },
-  });
-  hotkeyHandler.start();
+    loadedEnv,
+    startOptions,
+  );
 
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_START') {
@@ -278,21 +301,28 @@ export async function dev({
       devLogger.bundleComplete();
       devLogger.info('Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
+      rebundleAndRestart(
+        dotMastraPath,
+        {
+          port: Number(portToUse),
+          host: hostToUse,
+        },
+        bundler,
+        startOptions,
+      );
     }
   });
 
-  process.on('SIGINT', async () => {
-    hotkeyHandler?.stop();
-
+  process.on('SIGINT', () => {
     devLogger.shutdown();
 
     if (currentServerProcess) {
-      currentServerProcess.kill('SIGINT');
-      await new Promise(resolve => currentServerProcess?.once('exit', resolve));
+      currentServerProcess.kill();
     }
 
-    await watcher.close().catch(() => {});
-    process.exit(0);
+    watcher
+      .close()
+      .catch(() => {})
+      .finally(() => process.exit(0));
   });
 }

@@ -782,6 +782,16 @@ export default withGT(
         destination: "/examples/agents/supervisor-agent",
         permanent: true,
       },
+      {
+        source: "/docs/agents/streaming",
+        destination: "/docs/streaming/overview",
+        permanent: true,
+      },
+      {
+        source: "/docs/workflows/streaming",
+        destination: "/docs/streaming/overview",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

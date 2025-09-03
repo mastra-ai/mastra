@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "0.10.11",
+  "version": "0.10.12-alpha.0",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
@@ -32,8 +32,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.3",
     "uuid": "^11.1.0",
-    "zod": "^3.25.67",
-    "zod-to-json-schema": "^3.24.5"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@hono/node-server": "^1.17.1",

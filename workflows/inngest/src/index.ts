@@ -33,6 +33,30 @@ import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
 
+// Extract Inngest's native flow control configuration types
+type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
+
+// Extract specific flow control properties (excluding batching)
+export type InngestFlowControlConfig = Pick<
+  InngestCreateFunctionConfig,
+  'concurrency' | 'rateLimit' | 'throttle' | 'debounce' | 'priority'
+>;
+
+// Union type for Inngest workflows with flow control
+export type InngestWorkflowConfig<
+  TWorkflowId extends string = string,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
+> = WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps> & InngestFlowControlConfig;
+
+// Compile-time compatibility assertion
+type _AssertInngestCompatibility =
+  InngestFlowControlConfig extends Pick<Parameters<Inngest['createFunction']>[0], keyof InngestFlowControlConfig>
+    ? true
+    : never;
+const _compatibilityCheck: _AssertInngestCompatibility = true;
+
 export type InngestEngineType = {
   step: any;
 };
@@ -342,9 +366,19 @@ export class InngestWorkflow<
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
+  private readonly flowControlConfig?: InngestFlowControlConfig;
 
-  constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
-    super(params);
+  constructor(params: InngestWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
+    const { concurrency, rateLimit, throttle, debounce, priority, ...workflowParams } = params;
+
+    super(workflowParams as WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>);
+
+    const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
+      ([_, value]) => value !== undefined,
+    );
+
+    this.flowControlConfig = flowControlEntries.length > 0 ? Object.fromEntries(flowControlEntries) : undefined;
+
     this.#mastra = params.mastra!;
     this.inngest = inngest;
   }
@@ -513,6 +547,8 @@ export class InngestWorkflow<
         // @ts-ignore
         retries: this.retryConfig?.attempts ?? 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        // Spread flow control configuration
+        ...this.flowControlConfig,
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
@@ -801,7 +837,7 @@ export function init(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
+    >(params: InngestWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
       return new InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(params, inngest);
     },
     createStep,
@@ -1229,9 +1265,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    tracingContext,
     writableStream,
     disableScorers,
-    tracingContext,
   }: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1245,9 +1281,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
-    tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
@@ -1641,7 +1677,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (disableScorers !== false) {
       await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}.score`, async () => {
         if (step.scorers) {
-          this.runScorers({
+          await this.runScorers({
             scorers: step.scorers,
             runId: executionContext.runId,
             input: prevOutput,
@@ -1649,6 +1685,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId: executionContext.workflowId,
             stepId: step.id,
             runtimeContext,
+            tracingContext: { currentSpan: stepAISpan },
             disableScorers,
           });
         }

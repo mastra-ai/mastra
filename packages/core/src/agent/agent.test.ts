@@ -18,6 +18,8 @@ import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import { createScorer } from '../scores';
+import { runScorer } from '../scores/hooks';
 import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
@@ -42,6 +44,10 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   return userInfo;
 });
 
+vi.mock('../scores/hooks', () => ({
+  runScorer: vi.fn(),
+}));
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -60,6 +66,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           finishReason: 'stop',
           usage: { promptTokens: 10, completionTokens: 20 },
           text: `Dummy response`,
+        }),
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
         }),
       });
 
@@ -676,6 +688,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         defaultGenerateOptions: {
           maxSteps: 7,
         },
+        defaultVNextStreamOptions: {
+          maxSteps: 7,
+        },
       });
 
       let response;
@@ -683,6 +698,30 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         response = await agent.generate('Call testTool 10 times.', {
           toolChoice: 'required',
+        });
+      } else {
+        response = await agent.generateVNext('Call testTool 10 times.', {
+          toolChoice: 'required',
+        });
+      }
+
+      expect(response.steps.length).toBe(7);
+    }, 500000);
+
+    it('should reach default max steps / stopWhen', async () => {
+      const agent = new Agent({
+        name: 'Test agent',
+        instructions: 'Test agent',
+        model: openaiModel,
+        tools: integration.getStaticTools(),
+      });
+
+      let response;
+
+      if (version === 'v1') {
+        response = await agent.generate('Call testTool 10 times.', {
+          toolChoice: 'required',
+          maxSteps: 7,
         });
       } else {
         response = await agent.generateVNext('Call testTool 10 times.', {
@@ -2663,6 +2702,56 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
+  describe(`${version} - agent llmPrompt`, () => {
+    it('should download assets from messages', async () => {
+      const agent = new Agent({
+        name: 'llmPrompt-agent',
+        instructions: 'test agent',
+        model: openaiModel,
+      });
+
+      let result;
+
+      if (version === 'v1') {
+        result = await agent.generate([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      } else {
+        result = await agent.generateVNext([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      }
+
+      expect(result.text.toLowerCase()).toContain('google');
+    });
+  });
+
   describe(`${version} - agent tool handling`, () => {
     it('should handle tool name collisions caused by formatting', async () => {
       // Create two tool names that will collide after truncation to 63 chars
@@ -2742,7 +2831,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
+      await expect(
+        userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} }),
+      ).rejects.toThrow(/same name/i);
     });
 
     it('should sanitize tool names with invalid characters', async () => {
@@ -2814,7 +2905,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools)).toContain('bad___tool_name');
       expect(Object.keys(tools)).not.toContain(badName);
     });
@@ -2888,7 +2979,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
@@ -2962,7 +3053,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
@@ -4851,6 +4942,78 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
       }, 30_000);
+
+      it('should include assistant messages in onFinish callback with aisdk format', async () => {
+        const mockModel = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            stream: convertArrayToReadableStream([
+              { type: 'text-delta', id: '1', delta: 'Hello! ' },
+              { type: 'text-delta', id: '2', delta: 'Nice to meet you!' },
+              {
+                type: 'finish',
+                id: '3',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            warnings: [],
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-aisdk-onfinish',
+          name: 'Test AISDK onFinish',
+          model: mockModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let messagesInOnFinish: any[] | undefined;
+        let hasUserMessage = false;
+        let hasAssistantMessage = false;
+
+        const result = await agent.streamVNext('Hello, please respond with a greeting.', {
+          format: 'aisdk',
+          onFinish: props => {
+            // Store the messages from onFinish
+            messagesInOnFinish = props.messages;
+
+            if (props.messages) {
+              props.messages.forEach((msg: any) => {
+                if (msg.role === 'user') hasUserMessage = true;
+                if (msg.role === 'assistant') hasAssistantMessage = true;
+              });
+            }
+          },
+        });
+
+        // Consume the stream
+        await result.consumeStream();
+
+        // Verify that messages were provided in onFinish
+        expect(messagesInOnFinish).toBeDefined();
+        expect(messagesInOnFinish).toBeInstanceOf(Array);
+
+        // response messages should not be user messages
+        expect(hasUserMessage).toBe(false);
+        // Verify that we have assistant messages
+        expect(hasAssistantMessage).toBe(true);
+
+        // Verify the assistant message content
+        const assistantMessage = messagesInOnFinish?.find((m: any) => m.role === 'assistant');
+        expect(assistantMessage).toBeDefined();
+        expect(assistantMessage?.content).toBeDefined();
+
+        // For the v2 model, the assistant message should contain the streamed text
+        if (typeof assistantMessage?.content === 'string') {
+          expect(assistantMessage.content).toContain('Hello!');
+        } else if (Array.isArray(assistantMessage?.content)) {
+          const textContent = assistantMessage.content.find((c: any) => c.type === 'text');
+          expect(textContent?.text).toContain('Hello!');
+        }
+      });
     });
   });
 
@@ -6073,6 +6236,184 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(result.toolCalls.length).toBeGreaterThan(0);
     }
   }, 10000);
+
+  describe('scorer override functionality', () => {
+    let agent: Agent;
+    let mastra: Mastra;
+    let scorerTest: any;
+    let scorer1: any;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      scorerTest = createScorer({
+        name: 'scorerTest',
+        description: 'Test Scorer',
+      }).generateScore(() => 0.95);
+
+      scorer1 = createScorer({
+        name: 'scorer1',
+        description: 'Test Scorer 1',
+      }).generateScore(() => 0.95);
+
+      agent = new Agent({
+        name: 'Test Agent',
+        instructions: 'You are a test agent.',
+        model: dummyModel,
+        scorers: {
+          scorerTest: {
+            scorer: scorerTest,
+          },
+        },
+      });
+
+      mastra = new Mastra({
+        agents: { agent },
+        logger: false,
+        scorers: { scorer1 },
+      });
+    });
+
+    it(`${version} - should call scorerTest when no override is provided`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world');
+      } else {
+        await agent.generateVNext('Hello world');
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorerTest',
+          scorerObject: expect.objectContaining({
+            scorer: scorerTest,
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - should use override scorers when provided in generate options`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: expect.any(Object),
+          }),
+        }),
+      );
+
+      expect(runScorer).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorerTest',
+          scorerObject: expect.objectContaining({
+            scorer: scorerTest,
+          }),
+        }),
+      );
+
+      expect(runScorer).toHaveBeenCalledTimes(1);
+    });
+
+    it(`${version} - should call scorers when provided in stream options`, async () => {
+      let result: any;
+      if (version === 'v1') {
+        result = await agent.stream('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      } else {
+        result = await agent.streamVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      }
+      await result.consumeStream();
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: expect.any(Object),
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - can use scorer name for scorer config for generate`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: scorer1,
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - should call runScorer with correct parameters`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      }
+
+      // Verify the exact call parameters
+      expect(runScorer).toHaveBeenCalledWith({
+        scorerId: 'scorer1',
+        scorerObject: { scorer: scorer1 },
+        runId: expect.any(String),
+        input: expect.any(Object),
+        output: expect.any(Object),
+        runtimeContext: expect.any(Object),
+        tracingContext: expect.any(Object),
+        entity: expect.objectContaining({
+          id: 'Test Agent',
+          name: 'Test Agent',
+        }),
+        source: 'LIVE',
+        entityType: 'AGENT',
+        structuredOutput: false,
+        threadId: undefined,
+        resourceId: undefined,
+      });
+    });
+  });
 }
 
 describe('Agent Tests', () => {
