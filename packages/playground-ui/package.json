@@ -46,7 +46,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
-    "@assistant-ui/react": "^0.10.44",
+    "@assistant-ui/react": "^0.10.45",
     "@assistant-ui/react-markdown": "^0.10.9",
     "@assistant-ui/react-syntax-highlighter": "^0.10.10",
     "@assistant-ui/react-ui": "^0.1.8",
