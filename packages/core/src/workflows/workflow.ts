@@ -1097,7 +1097,7 @@ export class Workflow<
     );
   }
 
-  private async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
+  protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run steps. Mastra storage is not initialized');
