@@ -26,7 +26,7 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@upstash/redis": "^1.35.3",
     "@upstash/vector": "^1.2.2"

@@ -28,7 +28,7 @@
     "posttest:watch": "docker compose down -v",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "mssql": "^11.0.1"
   },

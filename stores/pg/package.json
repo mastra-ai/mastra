@@ -32,7 +32,7 @@
     "posttest:watch": "docker compose down -v",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "async-mutex": "^0.5.0",
     "pg": "^8.16.3",

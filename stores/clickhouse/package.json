@@ -29,7 +29,7 @@
     "posttest:watch": "docker compose down -v",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@clickhouse/client": "^1.12.1"
   },

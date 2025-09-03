@@ -24,7 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@pinecone-database/pinecone": "^3.0.3"
   },
