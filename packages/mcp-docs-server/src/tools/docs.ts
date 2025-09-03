@@ -36,7 +36,11 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
 
 // Helper function to read MDX files from a path
 async function readMdxContent(docPath: string, queryKeywords: string[]): Promise<ReadMdxResult> {
-  const fullPath = path.join(docsBaseDir, docPath);
+  const fullPath = path.resolve(path.join(docsBaseDir, docPath));
+  if (!fullPath.startsWith(path.resolve(docsBaseDir))) {
+    void logger.error(`Path traversal attempt detected`);
+    return { found: false };
+  }
   void logger.debug(`Reading MDX content from: ${fullPath}`);
 
   // Check if path exists

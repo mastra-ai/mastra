@@ -1,6 +1,7 @@
 import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
+import type { TracingContext } from '../ai-tracing';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
@@ -19,6 +20,7 @@ export type ScoringInput = {
   output: Record<string, any>;
   additionalContext?: Record<string, any>;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
 };
 
 export type ScoringHookInput = {
@@ -32,6 +34,7 @@ export type ScoringHookInput = {
   entity: Record<string, any>;
   entityType: ScoringEntityType;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
   resourceId?: string;
