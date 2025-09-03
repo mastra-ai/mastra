@@ -1,5 +1,5 @@
 import { useMastraClient } from '@/contexts/mastra-client-context';
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { useEffect, useRef, useState } from 'react';
 import { recordMicrophoneToFile } from '../utils/record-mic-to-file';
 

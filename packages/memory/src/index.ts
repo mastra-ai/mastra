@@ -4,18 +4,25 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import type { RequireOnly, Resolve } from '@mastra/core/base';
 import { MastraMemory } from '@mastra/core/memory';
-import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
+import type {
+  MastraMessageV1,
+  MemoryConfig,
+  SharedMemoryConfig,
+  StorageThreadType,
+  WorkingMemoryTemplate,
+} from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
+import type { ToolAction } from '@mastra/core/tools';
+import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
 import type { CoreMessage, DeepPartial, TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
-
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
 // Type for flexible message deletion input
@@ -777,9 +784,7 @@ export class Memory extends MastraMemory {
 
         if (isZodObject(schema as ZodTypeAny)) {
           // Convert ZodObject to JSON Schema
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny, {
-            $refStrategy: 'none',
-          }) as JSONSchema7;
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny) as JSONSchema7;
         } else {
           // Already a JSON Schema
           convertedSchema = schema as any as JSONSchema7;

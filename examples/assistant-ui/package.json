@@ -9,15 +9,15 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@assistant-ui/react": "0.7.85",
-    "@assistant-ui/react-markdown": "^0.7.21",
+    "@assistant-ui/react": "0.10.45",
+    "@assistant-ui/react-markdown": "^0.10.9",
     "@assistant-ui/react-ui": "^0.1.8",
     "@mastra/client-js": "latest",
     "next": "^15.3.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "overrides": {

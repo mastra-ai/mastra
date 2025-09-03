@@ -85,7 +85,20 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
     }
 
     // Streaming
-    if (chunk.type !== 'text-delta' && chunk.type !== 'tool-call' && runState.state.isStreaming) {
+    if (
+      chunk.type !== 'text-delta' &&
+      chunk.type !== 'tool-call' &&
+      // not 100% sure about this being the right fix.
+      // basically for some llm providers they add response-metadata after each text-delta
+      // we then flush the chunks by calling messageList.add (a few lines down)
+      // this results in a bunch of weird separated text chunks on the message instead of combined chunks
+      // easiest solution here is to just not flush for response-metadata
+      // BUT does this cause other issues?
+      // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
+      // simple solution for now is to not flush text deltas on response-metadata
+      chunk.type !== 'response-metadata' &&
+      runState.state.isStreaming
+    ) {
       if (runState.state.textDeltas.length) {
         const textStartPayload = chunk.payload as TextStartPayload;
         const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
@@ -363,6 +376,8 @@ export function createLLMExecutionStep<
   controller,
   output,
   headers,
+  downloadRetries,
+  downloadConcurrency,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
@@ -381,11 +396,17 @@ export function createLLMExecutionStep<
 
       switch (model.specificationVersion) {
         case 'v2': {
+          const inputMessages = await messageList.get.all.aiV5.llmPrompt({
+            downloadRetries,
+            downloadConcurrency,
+            supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
+          });
+
           modelResult = execute({
             runId,
             model,
             providerOptions,
-            inputMessages: messageList.get.all.aiV5.llmPrompt(),
+            inputMessages,
             tools,
             toolChoice,
             options,

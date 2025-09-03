@@ -2,6 +2,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
@@ -129,9 +130,10 @@ export class ModerationProcessor implements Processor {
   async processInput(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     try {
-      const { messages, abort } = args;
+      const { messages, abort, tracingContext } = args;
 
       if (messages.length === 0) {
         return messages;
@@ -149,7 +151,7 @@ export class ModerationProcessor implements Processor {
           continue;
         }
 
-        const moderationResult = await this.moderateContent(textContent);
+        const moderationResult = await this.moderateContent(textContent, false, tracingContext);
         results.push(moderationResult);
 
         if (this.isModerationFlagged(moderationResult)) {
@@ -176,6 +178,7 @@ export class ModerationProcessor implements Processor {
   async processOutputResult(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     return this.processInput(args);
   }
@@ -185,9 +188,10 @@ export class ModerationProcessor implements Processor {
     streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<ChunkType | null | undefined> {
     try {
-      const { part, streamParts, abort } = args;
+      const { part, streamParts, abort, tracingContext } = args;
 
       // Only process text-delta chunks for moderation
       if (part.type !== 'text-delta') {
@@ -197,7 +201,7 @@ export class ModerationProcessor implements Processor {
       // Build context from chunks based on chunkWindow (streamParts includes the current part)
       const contentToModerate = this.buildContextFromChunks(streamParts);
 
-      const moderationResult = await this.moderateContent(contentToModerate, true);
+      const moderationResult = await this.moderateContent(contentToModerate, true, tracingContext);
 
       if (this.isModerationFlagged(moderationResult)) {
         this.handleFlaggedContent(moderationResult, this.strategy, abort);
@@ -222,7 +226,11 @@ export class ModerationProcessor implements Processor {
   /**
    * Moderate content using the internal agent
    */
-  private async moderateContent(content: string, isStream = false): Promise<ModerationResult> {
+  private async moderateContent(
+    content: string,
+    isStream = false,
+    tracingContext?: TracingContext,
+  ): Promise<ModerationResult> {
     const prompt = this.createModerationPrompt(content, isStream);
 
     try {
@@ -248,11 +256,13 @@ export class ModerationProcessor implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          tracingContext,
         });
       } else {
         response = await this.moderationAgent.generate(prompt, {
           output: schema,
           temperature: 0,
+          tracingContext,
         });
       }
 

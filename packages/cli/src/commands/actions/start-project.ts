@@ -9,6 +9,7 @@ export const startProject = async (args: any) => {
       await start({
         dir: args.dir,
         telemetry: !args.noTelemetry,
+        env: args.env,
       });
     },
     origin,

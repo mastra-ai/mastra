@@ -39,6 +39,8 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
       const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
       const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
       const queryText = context.queryText;
+      const providerOptions: Record<string, Record<string, any>> | undefined =
+        runtimeContext.get('providerOptions') ?? options.providerOptions;
 
       const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
 
@@ -92,6 +94,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
           includeVectors: true,
+          providerOptions,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });

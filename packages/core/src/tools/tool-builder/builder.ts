@@ -11,6 +11,7 @@ import {
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
+import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
@@ -120,33 +121,56 @@ export class CoreToolBuilder extends MastraBase {
     });
 
     const execFunction = async (args: unknown, execOptions: ToolExecutionOptions | ToolCallOptions) => {
-      if (isVercelTool(tool)) {
-        return tool?.execute?.(args, execOptions as ToolExecutionOptions) ?? undefined;
-      }
+      // Create tool span if we have an current span available
+      const toolSpan = options.tracingContext.currentSpan?.createChildSpan({
+        type: AISpanType.TOOL_CALL,
+        name: `tool: ${options.name}`,
+        input: args,
+        attributes: {
+          toolId: options.name,
+          toolDescription: options.description,
+          toolType: logType || 'tool',
+        },
+      });
 
-      return (
-        tool?.execute?.(
-          {
-            context: args,
-            threadId: options.threadId,
-            resourceId: options.resourceId,
-            mastra: options.mastra,
-            memory: options.memory,
-            runId: options.runId,
-            runtimeContext: options.runtimeContext ?? new RuntimeContext(),
-            writer: new ToolStream(
-              {
-                prefix: 'tool',
-                callId: execOptions.toolCallId,
-                name: options.name,
-                runId: options.runId!,
-              },
-              options.writableStream || (execOptions as any).writableStream,
-            ),
-          },
-          execOptions as ToolExecutionOptions & ToolCallOptions,
-        ) ?? undefined
-      );
+      try {
+        let result;
+
+        if (isVercelTool(tool)) {
+          // Handle Vercel tools (AI SDK tools)
+          result = await tool?.execute?.(args, execOptions as ToolExecutionOptions);
+        } else {
+          // Handle Mastra tools
+          result = await tool?.execute?.(
+            {
+              context: args,
+              threadId: options.threadId,
+              resourceId: options.resourceId,
+              mastra: options.mastra,
+              memory: options.memory,
+              runId: options.runId,
+              runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+              writer: new ToolStream(
+                {
+                  prefix: 'tool',
+                  callId: execOptions.toolCallId,
+                  name: options.name,
+                  runId: options.runId!,
+                },
+                options.writableStream || (execOptions as any).writableStream,
+              ),
+              tracingContext: { currentSpan: toolSpan },
+            },
+            execOptions as ToolExecutionOptions & ToolCallOptions,
+          );
+        }
+
+        toolSpan?.end({ output: result });
+        return result ?? undefined;
+      } catch (error) {
+        toolSpan?.error({ error: error as Error });
+        throw error;
+      }
     };
 
     return async (args: unknown, execOptions?: ToolExecutionOptions | ToolCallOptions) => {
@@ -241,18 +265,15 @@ export class CoreToolBuilder extends MastraBase {
     const schemaCompatLayers = [];
 
     if (model) {
-      let supportsStructuredOutputs = false;
-      if (model.specificationVersion === 'v2') {
-        supportsStructuredOutputs = true;
-      } else {
-        supportsStructuredOutputs = model.supportsStructuredOutputs ?? false;
-      }
+      const supportsStructuredOutputs =
+        model.specificationVersion !== 'v2' ? (model.supportsStructuredOutputs ?? false) : false;
 
       const modelInfo = {
         modelId: model.modelId,
         supportsStructuredOutputs,
         provider: model.provider,
       };
+
       schemaCompatLayers.push(
         new OpenAIReasoningSchemaCompatLayer(modelInfo),
         new OpenAISchemaCompatLayer(modelInfo),

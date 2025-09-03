@@ -1,6 +1,6 @@
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
 
 function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
   return Object.entries(steps).reduce<any>((acc, [key, step]) => {
@@ -44,4 +44,70 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
   };
+}
+
+/**
+ * Workflow Registry for temporarily registering additional workflows
+ * that are not part of the user's Mastra instance (e.g., internal template workflows)
+ */
+export class WorkflowRegistry {
+  private static additionalWorkflows: Record<string, Workflow> = {};
+
+  /**
+   * Register a workflow temporarily
+   */
+  static registerTemporaryWorkflow(id: string, workflow: Workflow): void {
+    this.additionalWorkflows[id] = workflow;
+  }
+
+  /**
+   * Register all workflows from map
+   */
+  static registerTemporaryWorkflows(workflows: Record<string, Workflow>): void {
+    for (const [id, workflow] of Object.entries(workflows)) {
+      this.additionalWorkflows[id] = workflow;
+    }
+  }
+
+  /**
+   * Get a workflow by ID from the registry (returns undefined if not found)
+   */
+  static getWorkflow(workflowId: string): Workflow | undefined {
+    return this.additionalWorkflows[workflowId];
+  }
+
+  /**
+   * Get all workflows from the registry
+   */
+  static getAllWorkflows(): Record<string, Workflow> {
+    return { ...this.additionalWorkflows };
+  }
+
+  /**
+   * Clean up a temporary workflow
+   */
+  static cleanupTemporaryWorkflow(workflowId: string): void {
+    delete this.additionalWorkflows[workflowId];
+  }
+  /**
+   * Clean up all registered workflows
+   */
+  static cleanup(): void {
+    // Clear all workflows (since we register all agent-builder workflows each time)
+    this.additionalWorkflows = {};
+  }
+
+  /**
+   * Check if a workflow ID is a valid agent-builder workflow
+   */
+  static isAgentBuilderWorkflow(workflowId: string): boolean {
+    return workflowId in this.additionalWorkflows;
+  }
+
+  /**
+   * Get all registered temporary workflow IDs (for debugging)
+   */
+  static getRegisteredWorkflowIds(): string[] {
+    return Object.keys(this.additionalWorkflows);
+  }
 }

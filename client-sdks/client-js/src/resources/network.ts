@@ -1,5 +1,5 @@
 import { processDataStream } from '@ai-sdk/ui-utils';
-import type { GenerateReturn } from '@mastra/core';
+import type { GenerateReturn } from '@mastra/core/llm';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { GenerateParams, ClientOptions, StreamParams, GetNetworkResponse } from '../types';

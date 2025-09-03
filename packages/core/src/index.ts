@@ -1,6 +1,4 @@
 export * from './agent/index.warning';
-export { convertMessages } from './agent/message-list';
-export type { OutputFormat as MessageOutputFormat } from './agent/message-list';
 export * from './base.warning';
 export * from './deployer/index.warning';
 export * from './storage/index.warning';
@@ -18,6 +16,3 @@ export * from './utils';
 export * from './vector/index.warning';
 export * from './workflows/index.warning';
 export * from './hooks';
-export type { MastraModelOutput } from './stream/base/output';
-export type { AISDKV5OutputStream } from './stream/aisdk/v5/output';
-export type { OutputSchema } from './stream/base/schema';

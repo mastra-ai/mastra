@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import type { TracingContext } from '../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createWorkflow, createStep } from '../workflows';
@@ -32,6 +33,7 @@ interface ScorerRun<TInput = any, TOutput = any> {
   output: TOutput;
   groundTruth?: any;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
 }
 
 // Prompt object definition with conditional typing
@@ -330,6 +332,8 @@ class MastraScorer<
       });
     }
 
+    const { tracingContext } = input;
+
     let runId = input.runId;
     if (!runId) {
       runId = randomUUID();
@@ -343,6 +347,7 @@ class MastraScorer<
       inputData: {
         run,
       },
+      tracingContext,
     });
 
     if (workflowResult.status === 'failed') {
@@ -395,7 +400,7 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData }) => {
+        execute: async ({ inputData, getInitData, tracingContext }) => {
           const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
           const { run } = getInitData();
 
@@ -404,7 +409,7 @@ class MastraScorer<
           let stepResult;
           let newGeneratedPrompts = generatedPrompts;
           if (scorerStep.isPromptObject) {
-            const { result, prompt } = await this.executePromptStep(scorerStep, context);
+            const { result, prompt } = await this.executePromptStep(scorerStep, tracingContext, context);
             stepResult = result;
             newGeneratedPrompts = {
               ...generatedPrompts,
@@ -473,7 +478,7 @@ class MastraScorer<
     return await scorerStep.definition(context);
   }
 
-  private async executePromptStep(scorerStep: ScorerStepDefinition, context: any) {
+  private async executePromptStep(scorerStep: ScorerStepDefinition, tracingContext: TracingContext, context: any) {
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
     if (!originalStep) {
       throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
@@ -504,10 +509,12 @@ class MastraScorer<
       if (model.specificationVersion === 'v2') {
         result = await judge.generateVNext(prompt, {
           output: z.object({ score: z.number() }),
+          tracingContext,
         });
       } else {
         result = await judge.generate(prompt, {
           output: z.object({ score: z.number() }),
+          tracingContext,
         });
       }
       return { result: result.object.score, prompt };
@@ -516,9 +523,9 @@ class MastraScorer<
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (model.specificationVersion === 'v2') {
-        result = await judge.generateVNext(prompt);
+        result = await judge.generateVNext(prompt, { tracingContext });
       } else {
-        result = await judge.generate(prompt);
+        result = await judge.generate(prompt, { tracingContext });
       }
       return { result: result.text, prompt };
     } else {
@@ -527,10 +534,12 @@ class MastraScorer<
       if (model.specificationVersion === 'v2') {
         result = await judge.generateVNext(prompt, {
           output: promptStep.outputSchema,
+          tracingContext,
         });
       } else {
         result = await judge.generate(prompt, {
           output: promptStep.outputSchema,
+          tracingContext,
         });
       }
       return { result: result.object, prompt };

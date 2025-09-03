@@ -16,7 +16,7 @@ export async function getInputOptions(
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
   platform: 'node' | 'browser',
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
-  { sourcemap = false }: { sourcemap?: boolean } = {},
+  { sourcemap = false, enableEsmShim = true }: { sourcemap?: boolean; enableEsmShim?: boolean } = {},
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -73,7 +73,6 @@ export async function getInputOptions(
           };
         },
       },
-      tsConfigPaths(),
       alias({
         entries: [
           {
@@ -94,6 +93,7 @@ export async function getInputOptions(
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
+      tsConfigPaths(),
       {
         name: 'tools-rewriter',
         resolveId(id: string) {
@@ -117,7 +117,7 @@ export async function getInputOptions(
           return externals.includes(id);
         },
       }),
-      esmShim(),
+      enableEsmShim ? esmShim() : undefined,
       nodeResolvePlugin,
       // for debugging
       // {

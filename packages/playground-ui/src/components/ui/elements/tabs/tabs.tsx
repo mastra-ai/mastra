@@ -90,13 +90,7 @@ const Tab = ({ children, value, onClick, className }: TabProps) => {
 
 const TabContent = ({ children, value, className }: TabContentProps) => {
   return (
-    <RadixTabs.Content
-      value={value}
-      className={cn(
-        'grid gap-[1.75rem] mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        className,
-      )}
-    >
+    <RadixTabs.Content value={value} className={cn('grid gap-[1.75rem] mt-2', className)}>
       {children}
     </RadixTabs.Content>
   );

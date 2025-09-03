@@ -4,6 +4,9 @@ import type { AITracingConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSub } from '../events/pubsub';
+import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -11,6 +14,7 @@ import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
+import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -20,6 +24,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
+import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
 
@@ -33,6 +38,7 @@ export interface Config<
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   agents?: TAgents;
   networks?: TNetworks;
@@ -50,6 +56,8 @@ export interface Config<
   server?: ServerConfig;
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
+  pubsub?: PubSub;
+  scorers?: TScorers;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -63,6 +71,13 @@ export interface Config<
 
   // @deprecated add memory to your Agent directly instead
   memory?: never;
+
+  events?: {
+    [topic: string]: (
+      event: Event,
+      cb?: () => Promise<void>,
+    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  };
 }
 
 @InstrumentClass({
@@ -79,6 +94,7 @@ export class Mastra<
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
+  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -96,10 +112,15 @@ export class Mastra<
   #memory?: MastraMemory;
   #networks?: TNetworks;
   #vnext_networks?: TVNextNetworks;
+  #scorers?: TScorers;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
+  #pubsub: PubSub;
+  #events: {
+    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+  } = {};
 
   /**
    * @deprecated use getTelemetry() instead
@@ -120,6 +141,10 @@ export class Mastra<
    */
   get memory() {
     return this.#memory;
+  }
+
+  get pubsub() {
+    return this.#pubsub;
   }
 
   public getIdGenerator() {
@@ -162,7 +187,8 @@ export class Mastra<
       TLogger,
       TNetworks,
       TVNextNetworks,
-      TMCPServers
+      TMCPServers,
+      TScorers
     >,
   ) {
     // Store server middleware with default path
@@ -171,6 +197,38 @@ export class Mastra<
         handler: m.handler,
         path: m.path || '/api/*',
       }));
+    }
+
+    /*
+    Events
+    */
+    if (config?.pubsub) {
+      this.#pubsub = config.pubsub;
+    } else {
+      this.#pubsub = new EventEmitterPubSub();
+    }
+
+    this.#events = {};
+    for (const topic in config?.events ?? {}) {
+      if (!Array.isArray(config?.events?.[topic])) {
+        this.#events[topic] = [config?.events?.[topic] as any];
+      } else {
+        this.#events[topic] = config?.events?.[topic] ?? [];
+      }
+    }
+
+    const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
+    const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
+      try {
+        await workflowEventProcessor.process(event, cb);
+      } catch (e) {
+        console.error('Error processing event', e);
+      }
+    };
+    if (this.#events.workflows) {
+      this.#events.workflows.push(workflowEventCb);
+    } else {
+      this.#events.workflows = [workflowEventCb];
     }
 
     /*
@@ -373,6 +431,18 @@ do:
       });
     }
 
+    /**
+     * Scorers
+     */
+
+    const scorers = {} as Record<string, MastraScorer<any, any, any, any>>;
+    if (config?.scorers) {
+      Object.entries(config.scorers).forEach(([key, scorer]) => {
+        scorers[key] = scorer;
+      });
+    }
+    this.#scorers = scorers as TScorers;
+
     /*
     Legacy Workflows
     */
@@ -427,7 +497,55 @@ do:
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
+    /*
+      Register Mastra instance with AI tracing exporters and initialize them
+    */
+    if (config?.observability) {
+      this.registerAITracingExporters();
+      this.initAITracingExporters();
+    }
+
     this.setLogger({ logger });
+  }
+
+  /**
+   * Register this Mastra instance with AI tracing exporters that need it
+   */
+  private registerAITracingExporters(): void {
+    const allTracingInstances = getAllAITracing();
+    allTracingInstances.forEach(tracing => {
+      const exporters = tracing.getExporters();
+      exporters.forEach(exporter => {
+        // Check if exporter has __registerMastra method
+        if ('__registerMastra' in exporter && typeof (exporter as any).__registerMastra === 'function') {
+          (exporter as any).__registerMastra(this);
+        }
+      });
+    });
+  }
+
+  /**
+   * Initialize all AI tracing exporters after registration is complete
+   */
+  private initAITracingExporters(): void {
+    const allTracingInstances = getAllAITracing();
+
+    allTracingInstances.forEach(tracing => {
+      const exporters = tracing.getExporters();
+      exporters.forEach(exporter => {
+        // Initialize exporter if it has an init method
+        if ('init' in exporter && typeof exporter.init === 'function') {
+          try {
+            exporter.init();
+          } catch (error) {
+            this.#logger?.warn('Failed to initialize AI tracing exporter', {
+              exporterName: exporter.name,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      });
+    });
   }
 
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
@@ -608,6 +726,42 @@ do:
       }, {});
     }
     return this.#legacy_workflows;
+  }
+
+  public getScorers() {
+    return this.#scorers;
+  }
+
+  public getScorer<TScorerKey extends keyof TScorers>(key: TScorerKey): TScorers[TScorerKey] {
+    const scorer = this.#scorers?.[key];
+    if (!scorer) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_SCORER_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Scorer with ${String(key)} not found`,
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return scorer;
+  }
+
+  public getScorerByName(name: string): MastraScorer<any, any, any, any> {
+    for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
+      if (value.name === name) {
+        return value;
+      }
+    }
+
+    const error = new MastraError({
+      id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Scorer with name ${String(name)} not found`,
+    });
+    this.#logger?.trackException(error);
+    throw error;
   }
 
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
@@ -1001,12 +1155,49 @@ do:
     }
   }
 
+  public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.subscribe(topic, listener);
+  }
+
+  public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
+    await this.#pubsub.unsubscribe(topic, listener);
+  }
+
+  public async startEventEngine() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.subscribe(topic, listener);
+      }
+    }
+  }
+
+  public async stopEventEngine() {
+    for (const topic in this.#events) {
+      if (!this.#events[topic]) {
+        continue;
+      }
+
+      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+      for (const listener of listeners) {
+        await this.#pubsub.unsubscribe(topic, listener);
+      }
+    }
+
+    await this.#pubsub.flush();
+  }
+
   /**
    * Shutdown Mastra and clean up all resources
    */
   async shutdown(): Promise<void> {
     // Shutdown AI tracing registry and all instances
     await shutdownAITracingRegistry();
+    await this.stopEventEngine();
 
     this.#logger?.info('Mastra shutdown completed');
   }
