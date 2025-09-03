@@ -19,7 +19,7 @@
     "@inner/hello-world": "workspace:*",
     "date-fns": "^2.30.0",
     "lodash": "^4.17.21",
-    "hono": "^4.9.4",
+    "hono": "^4.9.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
