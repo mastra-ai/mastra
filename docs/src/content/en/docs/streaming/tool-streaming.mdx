@@ -3,6 +3,8 @@ title: "Tool Streaming | Streaming | Mastra"
 description: "Learn how to use tool streaming in Mastra, including handling tool calls, tool results, and tool execution events during streaming."
 ---
 
+import { Callout } from "nextra/components";
+
 # Tool streaming
 
 Tool streaming in Mastra enables tools to send incremental results while they run, rather than waiting until execution finishes. This allows you to surface partial progress, intermediate states, or progressive data directly to users or upstream agents and workflows.
@@ -35,6 +37,10 @@ export const testAgent = new Agent({
 ### Using the `writer` argument
 
 The `writer` argument is passed to a tool’s `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+
+<Callout type="warning">
+You must `await` the call to `writer.write(...)` or else you will lock the stream and get a `WritableStream is locked` error.
+</Callout>
 
 ```typescript {5,8,15} showLineNumbers copy
 import { createTool } from "@mastra/core/tools";

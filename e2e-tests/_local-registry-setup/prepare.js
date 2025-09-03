@@ -62,14 +62,18 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       encoding: 'utf8',
     });
 
-    if (gitStatus.length > 0) {
+    if (gitStatus.stdout.length > 0) {
       await execAsync('git add -A', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
       });
-      await execAsync('git commit -m "SAVEPOINT"', {
+      await execAsync('git commit -m "SAVEPOINT" --no-verify', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
+        env: {
+          ...process.env,
+          HUSKY: '0',
+        },
       });
       shelvedChanges = true;
     }
@@ -88,6 +92,19 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
         const parsed = JSON.parse(content);
         if (parsed?.peerDependencies?.['@mastra/core']) {
           parsed.peerDependencies['@mastra/core'] = 'workspace:*';
+        }
+
+        // convert all workspace dependencies to *
+        for (const dependency of Object.keys(parsed.dependencies || {})) {
+          if (parsed.dependencies[dependency]?.startsWith('workspace:')) {
+            parsed.dependencies[dependency] = 'workspace:*';
+          }
+        }
+        // convert all workspace devDependencies to *
+        for (const dependency of Object.keys(parsed.devDependencies || {})) {
+          if (parsed.devDependencies[dependency]?.startsWith('workspace:')) {
+            parsed.devDependencies[dependency] = 'workspace:*';
+          }
         }
 
         writeFileSync(join(monorepoDir, file), JSON.stringify(parsed, null, 2));
