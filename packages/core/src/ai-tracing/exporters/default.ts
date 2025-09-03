@@ -241,6 +241,17 @@ export class DefaultExporter implements AITracingExporter {
               },
               sequenceNumber: this.getNextSequence(spanKey),
             });
+          } else if (event.span.isEvent) {
+            // Event-type spans only emit SPAN_ENDED (no prior SPAN_STARTED)
+            const createRecord = {
+              traceId: event.span.traceId,
+              spanId: event.span.id,
+              ...this.buildCreateRecord(event.span),
+              createdAt: new Date(),
+              updatedAt: null,
+            };
+            this.buffer.creates.push(createRecord);
+            this.buffer.seenSpans.add(spanKey);
           } else {
             // Out-of-order case: log and skip
             this.handleOutOfOrderUpdate(event);
