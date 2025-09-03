@@ -1,5 +1,14 @@
 # @mastra/libsql
 
+## 0.13.8-alpha.2
+
+### Patch Changes
+
+- [#7380](https://github.com/mastra-ai/mastra/pull/7380) [`8429e4c`](https://github.com/mastra-ai/mastra/commit/8429e4c0d2041d072826c4382c09187116573a77) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.14` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.14) (from `^0.15.12`, in `dependencies`)
+- Updated dependencies [[`c19bcf7`](https://github.com/mastra-ai/mastra/commit/c19bcf7b43542b02157b5e17303e519933a153ab), [`b42a961`](https://github.com/mastra-ai/mastra/commit/b42a961a5aefd19d6e938a7705fc0ecc90e8f756), [`45e4d39`](https://github.com/mastra-ai/mastra/commit/45e4d391a2a09fc70c48e4d60f505586ada1ba0e), [`0302f50`](https://github.com/mastra-ai/mastra/commit/0302f50861a53c66ff28801fc371b37c5f97e41e), [`74db265`](https://github.com/mastra-ai/mastra/commit/74db265b96aa01a72ffd91dcae0bc3b346cca0f2), [`7f3b8da`](https://github.com/mastra-ai/mastra/commit/7f3b8da6dd21c35d3672e44b4f5dd3502b8f8f92), [`905352b`](https://github.com/mastra-ai/mastra/commit/905352bcda134552400eb252bca1cb05a7975c14), [`f2cda47`](https://github.com/mastra-ai/mastra/commit/f2cda47ae911038c5d5489f54c36517d6f15bdcc), [`cfd377a`](https://github.com/mastra-ai/mastra/commit/cfd377a3a33a9c88b644f6540feed9cd9832db47)]:
+  - @mastra/core@0.15.3-alpha.6
+
 ## 0.13.8-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # @mastra/mcp
 
+## 0.11.3-alpha.3
+
+### Patch Changes
+
+- [#7383](https://github.com/mastra-ai/mastra/pull/7383) [`b42a961`](https://github.com/mastra-ai/mastra/commit/b42a961a5aefd19d6e938a7705fc0ecc90e8f756) Thanks [@DanielSLew](https://github.com/DanielSLew)! - New createMCPTool helper for correct types for MCP Server tools
+
+- [#7389](https://github.com/mastra-ai/mastra/pull/7389) [`3b8972b`](https://github.com/mastra-ai/mastra/commit/3b8972bab8161d9fd96f6a41f57181443636cd43) Thanks [@DanielSLew](https://github.com/DanielSLew)! - Turn MCPTool into a generic to get parameter typing
+
+- [#7349](https://github.com/mastra-ai/mastra/pull/7349) [`6cffb99`](https://github.com/mastra-ai/mastra/commit/6cffb99030dc46256e4c3c0e6730565a2825d7a4) Thanks [@adeleke5140](https://github.com/adeleke5140)! - Fix log level not being handled by server
+
+- Updated dependencies [[`c19bcf7`](https://github.com/mastra-ai/mastra/commit/c19bcf7b43542b02157b5e17303e519933a153ab), [`b42a961`](https://github.com/mastra-ai/mastra/commit/b42a961a5aefd19d6e938a7705fc0ecc90e8f756), [`45e4d39`](https://github.com/mastra-ai/mastra/commit/45e4d391a2a09fc70c48e4d60f505586ada1ba0e), [`0302f50`](https://github.com/mastra-ai/mastra/commit/0302f50861a53c66ff28801fc371b37c5f97e41e), [`74db265`](https://github.com/mastra-ai/mastra/commit/74db265b96aa01a72ffd91dcae0bc3b346cca0f2), [`7f3b8da`](https://github.com/mastra-ai/mastra/commit/7f3b8da6dd21c35d3672e44b4f5dd3502b8f8f92), [`905352b`](https://github.com/mastra-ai/mastra/commit/905352bcda134552400eb252bca1cb05a7975c14), [`f2cda47`](https://github.com/mastra-ai/mastra/commit/f2cda47ae911038c5d5489f54c36517d6f15bdcc), [`cfd377a`](https://github.com/mastra-ai/mastra/commit/cfd377a3a33a9c88b644f6540feed9cd9832db47)]:
+  - @mastra/core@0.15.3-alpha.6
+
 ## 0.11.3-alpha.2
 
 ### Patch Changes

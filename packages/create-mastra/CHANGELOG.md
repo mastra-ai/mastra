@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.11.3-alpha.4
+
+### Patch Changes
+
+- [#7357](https://github.com/mastra-ai/mastra/pull/7357) [`01264f1`](https://github.com/mastra-ai/mastra/commit/01264f1280db040d1bd1ac9b8d29cfcaac3d6cbc) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Mastra dev- load env vars before watch
+
 ## 0.11.3-alpha.3
 
 ### Patch Changes
