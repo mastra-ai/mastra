@@ -922,7 +922,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -1148,7 +1148,10 @@ export class Workflow<
     return finalSteps;
   }
 
-  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
+  async getWorkflowRunExecutionResult(
+    runId: string,
+    withNestedWorkflows: boolean = true,
+  ): Promise<WatchEvent['payload']['workflowState'] | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
@@ -1173,7 +1176,9 @@ export class Workflow<
       }
     }
 
-    const fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+    const fullSteps = withNestedWorkflows
+      ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
+      : (snapshot as WorkflowRunState).context;
 
     return {
       status: (snapshot as WorkflowRunState).status,
