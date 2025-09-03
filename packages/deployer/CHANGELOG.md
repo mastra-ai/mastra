@@ -1,5 +1,18 @@
 # @mastra/deployer
 
+## 0.15.3-alpha.5
+
+### Patch Changes
+
+- [#7333](https://github.com/mastra-ai/mastra/pull/7333) [`2b64943`](https://github.com/mastra-ai/mastra/commit/2b64943a282c99988c2e5b6e1269bfaca60e6fe3) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.50.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.50.0) (from `~4.49.0`, in `dependencies`)
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`85ef90b`](https://github.com/mastra-ai/mastra/commit/85ef90bb2cd4ae4df855c7ac175f7d392c55c1bf), [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/core@0.15.3-alpha.5
+  - @mastra/server@0.15.3-alpha.5
+
 ## 0.15.3-alpha.4
 
 ### Patch Changes
