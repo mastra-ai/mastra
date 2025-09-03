@@ -12,6 +12,10 @@ const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra'];
 
 const ROOT_DIR = process.cwd();
 
+const REPOSITORY_URL = 'git+https://github.com/mastra-ai/mastra.git';
+const HOMEPAGE = 'https://mastra.ai';
+const ISSUES_URL = 'https://github.com/mastra-ai/mastra/issues';
+
 /**
  * Recursively finds all package.json files in a directory.
  * @param {string} dir - Directory to search from
@@ -98,8 +102,8 @@ async function main() {
         console.log(`❌ ${file}: repository.type should be "git"`);
         hasError = true;
       }
-      if (pkg.repository.url !== 'git+https://github.com/mastra-ai/mastra.git') {
-        console.log(`❌ ${file}: repository.url should be "git+https://github.com/mastra-ai/mastra.git"`);
+      if (pkg.repository.url !== REPOSITORY_URL) {
+        console.log(`❌ ${file}: repository.url should be "${REPOSITORY_URL}"`);
         hasError = true;
       }
       if (pkg.repository.directory !== relDir) {
@@ -112,8 +116,8 @@ async function main() {
     if (!pkg.homepage) {
       console.log(`❌ ${file}: missing homepage field`);
       hasError = true;
-    } else if (pkg.homepage !== 'https://mastra.ai') {
-      console.log(`❌ ${file}: homepage should be "https://mastra.ai"`);
+    } else if (pkg.homepage !== HOMEPAGE) {
+      console.log(`❌ ${file}: homepage should be "${HOMEPAGE}"`);
       hasError = true;
     }
 
@@ -121,8 +125,8 @@ async function main() {
     if (!pkg.bugs) {
       console.log(`❌ ${file}: missing bugs field`);
       hasError = true;
-    } else if (pkg.bugs.url !== 'https://github.com/mastra-ai/mastra/issues') {
-      console.log(`❌ ${file}: bugs.url should be "https://github.com/mastra-ai/mastra/issues"`);
+    } else if (pkg.bugs.url !== ISSUES_URL) {
+      console.log(`❌ ${file}: bugs.url should be "${ISSUES_URL}"`);
       hasError = true;
     }
 

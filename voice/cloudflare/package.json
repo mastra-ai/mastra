@@ -1,7 +1,7 @@
 {
   "name": "@mastra/voice-cloudflare",
   "version": "0.11.2",
-  "description": "Mastra Sarvam AI voice integration",
+  "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
     "dist",

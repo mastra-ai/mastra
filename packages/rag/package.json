@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "buld:watch": "pnpm build --watch",
+    "build:watch": "pnpm build --watch",
     "vitest": "vitest",
     "test": "vitest run",
     "lint": "eslint ."
