@@ -180,8 +180,6 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
               role: 'assistant',
               ...fields,
               type: content.some(c => c.type === `tool-call`) ? 'tool-call' : 'text',
-              // For messages with parts that were split from tool invocations,
-              // extract text from single TextPart arrays to avoid duplication
               content:
                 typeof content !== `string` &&
                 Array.isArray(content) &&
