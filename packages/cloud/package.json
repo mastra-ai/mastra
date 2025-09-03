@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "test": "vitest run",
     "lint": "eslint ."
   },
   "dependencies": {
