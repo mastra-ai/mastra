@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AITracingEventType } from '@mastra/core/ai-tracing';
 import type { AITracingEvent, AnyAISpan } from '@mastra/core/ai-tracing';
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AITracingEventType, AISpanType } from '@mastra/core/ai-tracing';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { CloudAITracingExporter } from '.';
 import { fetchWithRetry } from '../utils/fetchWithRetry';
+import { CloudAITracingExporter } from '.';
 
 // Mock fetchWithRetry
 vi.mock('../utils/fetchWithRetry', () => ({
