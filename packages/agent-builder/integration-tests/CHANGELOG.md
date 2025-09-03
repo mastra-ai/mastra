@@ -1,5 +1,13 @@
 # @mastra/agent-builder-integration-tests
 
+## 0.1.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`85ef90b`](https://github.com/mastra-ai/mastra/commit/85ef90bb2cd4ae4df855c7ac175f7d392c55c1bf), [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/core@0.15.3-alpha.5
+  - @mastra/agent-builder@0.0.1-alpha.3
+
 ## 0.1.1-alpha.1
 
 ### Patch Changes
