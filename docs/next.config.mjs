@@ -807,6 +807,11 @@ export default withGT(
         destination: "/examples/memory/working-memory-schema",
         permanent: true,
       },
+      {
+        source: "/examples/memory/use-chat",
+        destination: "/examples/agents/ai-sdk-v5-integration",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),
