@@ -92,7 +92,7 @@ export function TraceDialog({
             'grid-rows-[auto_1fr]': !combinedView,
           })}
         >
-          <SideDialogHeader className="flex  gap-[1rem] items-baseline pr-[2.5rem]">
+          <SideDialogHeader className="flex  gap-[1rem] items-baseline pr-[3.5rem]">
             <SideDialogHeading>
               <EyeIcon /> {traceDetails?.name}
             </SideDialogHeading>
