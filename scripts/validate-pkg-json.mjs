@@ -28,10 +28,11 @@ async function findPackageJsonFiles(dir) {
   return files.flat();
 }
 
-function shouldCheckPackage(name) {
-  if (!name) return false;
-  if (IGNORE_LIST.some(prefix => name.startsWith(prefix))) return false;
-  return ALLOW_LIST.some(prefix => name.startsWith(prefix));
+function shouldCheckPackage(pkg) {
+  if (pkg.private === true) return false;
+  if (!pkg.name) return false;
+  if (IGNORE_LIST.some(prefix => pkg.name.startsWith(prefix))) return false;
+  return ALLOW_LIST.some(prefix => pkg.name.startsWith(prefix));
 }
 
 function getRelativeDirectory(file) {
@@ -56,8 +57,7 @@ async function main() {
       hasError = true;
       continue;
     }
-    if (pkg.private === true) continue;
-    if (!shouldCheckPackage(pkg.name)) continue;
+    if (!shouldCheckPackage(pkg)) continue;
 
     // Check files array
     const filesArr = pkg.files || [];
@@ -85,6 +85,24 @@ async function main() {
         console.log(`❌ ${file}: repository.directory should be "${relDir}"`);
         hasError = true;
       }
+    }
+
+    // Check homepage
+    if (!pkg.homepage) {
+      console.log(`❌ ${file}: missing homepage field`);
+      hasError = true;
+    } else if (pkg.homepage !== 'https://mastra.ai') {
+      console.log(`❌ ${file}: homepage should be "https://mastra.ai"`);
+      hasError = true;
+    }
+
+    // Check bugs
+    if (!pkg.bugs) {
+      console.log(`❌ ${file}: missing bugs field`);
+      hasError = true;
+    } else if (pkg.bugs.url !== 'https://github.com/mastra-ai/mastra/issues') {
+      console.log(`❌ ${file}: bugs.url should be "https://github.com/mastra-ai/mastra/issues"`);
+      hasError = true;
     }
 
     checkedFiles.add(file);
