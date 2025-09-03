@@ -254,7 +254,7 @@ describe('Template Workflow Integration Tests', () => {
     // Check git log for template commits
     const gitLog = exec('git log --oneline', targetRepo);
     expect(gitLog).toContain('feat(template): register components from csv-to-questions@');
-    expect(gitLog).toContain('feat(template): copy 6 files from csv-to-questions@');
+    expect(gitLog).toContain('feat(template): copy 7 files from csv-to-questions@');
     expect(gitLog).toContain('fix(template): resolve validation errors for csv-to-questions@');
 
     // Verify we're on the template branch
