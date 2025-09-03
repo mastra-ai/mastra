@@ -10,7 +10,6 @@ overrides:
   '@mastra/github': link:../../integrations/github
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/rag': link:../../packages/rag
-  mastra: link:../../packages/cli
 
 importers:
 
