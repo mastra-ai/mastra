@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.11.3-alpha.2
+
+### Patch Changes
+
+- [#7218](https://github.com/mastra-ai/mastra/pull/7218) [`f539199`](https://github.com/mastra-ai/mastra/commit/f53919950a9320b292732e0cfcdf61cdae6c8742) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - mastra start - load env files, custom env. Deperecate --env flag for mastra build
+
 ## 0.11.3-alpha.1
 
 ### Patch Changes
