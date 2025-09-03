@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import type { MCPServer } from '@mastra/mcp';
+import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 
 // Logger interface for type safety
 export interface Logger {
