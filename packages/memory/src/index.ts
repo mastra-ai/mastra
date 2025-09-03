@@ -584,18 +584,7 @@ export class Memory extends MastraMemory {
     let embeddingTextsAndVectorIds: ReturnType<typeof this.getEmbeddingTextAndVectorIds> = [];
     const promises: Promise<any>[] = [];
 
-    const dimensionPromise = (() => {
-      let resolve!: (dimension: number) => void;
-      let reject!: (reason?: any) => void;
-
-      const promise = new Promise<number>((res, rej) => {
-        resolve = res;
-        reject = rej;
-      });
-
-      return { promise, resolve, reject };
-    })();
-
+    const dimensionPromise = this.getReverseDimensionPromise();
     let indexName: string;
     if (this.vector && config.semanticRecall) {
       const vector = this.vector; // for TS to recognize vector is defined
@@ -612,7 +601,7 @@ export class Memory extends MastraMemory {
               throw new Error(`Failed to get vector dimension for message content`);
             }
 
-            if (typeof dimensionPromise.promise !== 'number') dimensionPromise.resolve(dimension);
+            if (!dimensionPromise.isResolved) dimensionPromise.resolve(dimension);
             indexName ||= (await this.createEmbeddingIndex(dimension)).indexName;
 
             await vector.upsert({
@@ -989,37 +978,72 @@ ${
     try {
       let embeddingTextsAndVectorIds: ReturnType<typeof this.getEmbeddingTextAndVectorIds> = [];
 
-      let storedMessagesById: Record<string, DeepPartial<MastraMessageV2>> = {};
+      let storedMessagesById: Record<string, MastraMessageV2> = {};
+      const promises: Promise<void | string[]>[] = [];
+      const dimensionPromise = this.getReverseDimensionPromise();
 
       if (config.semanticRecall) {
         if (!this.vector) {
           throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
         }
+        const vector = this.vector;
         // fetch all passed messages to get stored vector chunk count
-        const storedMessages = (
-          await this.storage.getMessagesById({
-            messageIds: messages.map(msg => msg.id),
-            format: 'v2',
-          })
-        ).flat(1);
+        const storedMessages = await this.storage.getMessagesById({
+          messageIds: messages.map(msg => msg.id),
+          format: 'v2',
+        });
 
-        storedMessagesById = storedMessages.reduce(
-          (acc: Record<string, (typeof messages)[number]>, msg) => Object.assign(acc, { [msg.id]: msg }),
-          {},
-        );
+        storedMessagesById = storedMessages.reduce((acc, msg) => Object.assign(acc, { [msg.id]: msg }), {});
 
         embeddingTextsAndVectorIds = this.getEmbeddingTextAndVectorIds(messages);
-      }
 
-      const { textForEmbedding: firstEmbeddingText } =
-        embeddingTextsAndVectorIds.find(textAndId => typeof textAndId?.textForEmbedding === 'string') ?? {};
-      if (firstEmbeddingText && !this.dimension) {
-        await this.embedMessageContent(firstEmbeddingText);
-        if (!this.dimension) {
-          throw new Error(`Failed to get vector dimension for message content`);
+        let indexName: string;
+        for (const { message, textForEmbedding, vectorIds } of embeddingTextsAndVectorIds) {
+          message.content.metadata ||= {};
+          message.content.metadata.vectorIds = vectorIds;
+
+          promises.push(
+            (async () => {
+              const { dimension, chunks, embeddings } = await this.embedMessageContent(textForEmbedding);
+              if (!dimension) {
+                throw new Error(`Failed to get vector dimension for message content`);
+              }
+
+              if (!dimensionPromise.isResolved) dimensionPromise.resolve(dimension);
+              indexName ||= (await this.createEmbeddingIndex(dimension)).indexName;
+
+              const storedMessage = storedMessagesById[message.id];
+              if (!storedMessage) {
+                throw new Error(`Message with id ${message.id} not retrieved from storage`);
+              }
+
+              // delete embeddings that won't be replaced in the upsert
+              const { vectorDimension: previousDimension, vectorIds: storedVectorIds } =
+                storedMessage.content?.metadata ?? {};
+
+              if (typeof previousDimension === 'number' && Array.isArray(storedVectorIds)) {
+                const { indexName: previousIndexName } = await this.createEmbeddingIndex(previousDimension);
+                for (const vectorId of storedVectorIds) {
+                  promises.push(vector.deleteVector({ indexName: previousIndexName, id: vectorId }));
+                }
+              }
+
+              await vector.upsert({
+                indexName,
+                vectors: embeddings,
+                ids: vectorIds,
+                metadata: chunks.map(() => ({
+                  message_id: message.id,
+                  thread_id: message.threadId,
+                  resource_id: message.resourceId,
+                })),
+              });
+            })(),
+          );
         }
       }
 
+      const dimension = this.dimension ?? (await dimensionPromise.promise);
       const updatedMessages = messages.map((message, i) => {
         // remove createdAt so that storage.updateMessages doesn't invalidate stored dates
         const { createdAt, ...rest } = message;
@@ -1028,57 +1052,14 @@ ${
           content: {
             metadata: {
               vectorIds: embeddingTextsAndVectorIds[i].vectorIds,
-              vectorDimension: this.dimension, // must be a number
+              vectorDimension: dimension,
             },
           },
         });
       });
+
       const result = this.storage.updateMessages({ messages: updatedMessages });
-
-      if (embeddingTextsAndVectorIds.length && this.vector) {
-        const vector = this.vector;
-        const promises: Promise<void | string[]>[] = [];
-        // update embeddings
-        for (const [embeddingIndex, textAndVectorId] of embeddingTextsAndVectorIds.entries()) {
-          const message = messages[embeddingIndex];
-          if (!textAndVectorId || !message?.content) continue;
-
-          const storedMessage = storedMessagesById[message.id];
-          if (!storedMessage) {
-            throw new Error(`Message with id ${message.id} not retrieved from storage`);
-          }
-
-          // delete embeddings that won't be replaced in the upsert
-          const { vectorDimension: previousDimension, vectorIds: storedVectorIds } =
-            storedMessage.content?.metadata ?? {};
-
-          if (typeof previousDimension === 'number' && Array.isArray(storedVectorIds)) {
-            const { indexName: previousIndexName } = await this.createEmbeddingIndex(previousDimension);
-            for (const vectorId of storedVectorIds) {
-              promises.push(vector.deleteVector({ indexName: previousIndexName, id: vectorId }));
-            }
-          }
-
-          const { textForEmbedding, vectorIds } = textAndVectorId;
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
-          const { indexName } = await this.createEmbeddingIndex(dimension);
-
-          promises.push(
-            vector.upsert({
-              indexName,
-              vectors: embeddings,
-              ids: vectorIds,
-              metadata: chunks.map(() => ({
-                message_id: message.id,
-                thread_id: message.threadId,
-                resource_id: storedMessage.resourceId,
-              })),
-            }),
-          );
-        }
-
-        await Promise.all(promises);
-      }
+      await Promise.all(promises);
       return result;
     } catch (error) {
       throw error; // TODO: handle error
@@ -1124,6 +1105,27 @@ ${
     }
 
     return textForEmbedding;
+  }
+
+  protected getReverseDimensionPromise<R extends Function>(resolve?: R) {
+    const dimensionPromise = (() => {
+      let resolve!: (dimension: number) => void;
+      let reject!: (reason?: any) => void;
+      let isResolved: boolean = false;
+
+      const promise = new Promise<number>((res, rej) => {
+        resolve = (dimension: number) => {
+          res(dimension);
+          this.dimension = dimension;
+          isResolved = true;
+        };
+        reject = rej;
+      });
+
+      return { promise, resolve, reject, isResolved };
+    })();
+
+    return dimensionPromise;
   }
 
   /**
