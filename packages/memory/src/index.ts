@@ -2,6 +2,7 @@ import { deepMerge, generateEmptyFromSchema } from '@mastra/core';
 import type { MastraMessageV1, ToolAction } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { RequireOnly, Resolve } from '@mastra/core/base';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
@@ -16,7 +17,6 @@ import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
-import type { RequireOnly, Resolve } from '@mastra/core/base';
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -1107,7 +1107,7 @@ ${
     return textForEmbedding;
   }
 
-  protected getReverseDimensionPromise<R extends Function>(resolve?: R) {
+  protected getReverseDimensionPromise() {
     const dimensionPromise = (() => {
       let resolve!: (dimension: number) => void;
       let reject!: (reason?: any) => void;
