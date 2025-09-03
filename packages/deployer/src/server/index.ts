@@ -418,7 +418,7 @@ export async function createHonoServer(
   // Scores routes
   app.route('/api/scores', scoresRouter(bodyLimitOptions));
   // Agent builder routes
-  app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
+  // app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
   // Tool routes
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
