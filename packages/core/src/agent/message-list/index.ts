@@ -9,8 +9,8 @@ import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
-import { imageContentToString, imageContentToDataUri, getImageCacheKey } from './prompt/image-utils';
 import { downloadAssetsFromMessages } from './prompt/download-assets';
+import { imageContentToString, imageContentToDataUri, getImageCacheKey } from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
