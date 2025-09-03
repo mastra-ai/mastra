@@ -205,6 +205,11 @@ async function rebundleAndRestart(
 
     const env = await bundler.loadEnvVars();
 
+    // spread env into process.env
+    for (const [key, value] of env.entries()) {
+      process.env[key] = value;
+    }
+
     await startServer(
       join(dotMastraPath, 'output'),
       {
