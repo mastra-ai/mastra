@@ -18,7 +18,12 @@
   "major": {
     "dependencyDashboardApproval": true
   },
-  "ignorePaths": ["docs/**", "packages/memory/integration-tests/**", "explorations/**", ".github/scripts"],
+  "ignorePaths": [
+    "docs/**",
+    "packages/memory/integration-tests/**",
+    "explorations/**",
+    ".github/scripts"
+  ],
   "packageRules": [
     {
       "matchDepTypes": ["engines"],
@@ -71,7 +76,12 @@
     },
     {
       "groupName": "React",
-      "matchPackageNames": ["@types/react", "@types/react-dom", "react", "react-dom"],
+      "matchPackageNames": [
+        "@types/react",
+        "@types/react-dom",
+        "react",
+        "react-dom"
+      ],
       "automerge": true
     },
     {
@@ -96,8 +106,17 @@
     },
     {
       "groupName": "typescript",
-      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
-      "matchPackageNames": ["typescript", "/^@typescript-eslint\//", "typescript-eslint"],
+      "matchFileNames": [
+        "+(package.json)",
+        "**/package.json",
+        "!./examples/**",
+        "!./docs/**"
+      ],
+      "matchPackageNames": [
+        "typescript",
+        "/^@typescript-eslint//",
+        "typescript-eslint"
+      ],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -107,8 +126,13 @@
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "prettier", "/^eslint-/", "@vitest/eslint-plugin"],
-      "excludePackageNames": ["@typescript-eslint/"],
+      "matchPackageNames": [
+        "eslint",
+        "prettier",
+        "/^eslint-/",
+        "@vitest/eslint-plugin",
+        "!@typescript-eslint/"
+      ],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -145,7 +169,11 @@
       "groupName": "Cloudflare",
       "commitMessageTopic": "Cloudflare",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["cloudflare", "miniflare", "@cloudflare/workers-types"],
+      "matchPackageNames": [
+        "cloudflare",
+        "miniflare",
+        "@cloudflare/workers-types"
+      ],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
