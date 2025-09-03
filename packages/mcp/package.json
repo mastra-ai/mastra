@@ -5,6 +5,10 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -17,15 +21,6 @@
       }
     },
     "./package.json": "./package.json"
-  },
-  "homepage": "https://mastra.ai",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "packages/mcp"
-  },
-  "bugs": {
-    "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
@@ -71,5 +66,14 @@
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6",
     "@internal/types-builder": "workspace:*"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }
