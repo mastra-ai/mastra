@@ -8,13 +8,12 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
-
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
 import type { AnyAISpan, TracingContext } from '../../ai-tracing';
@@ -300,16 +299,7 @@ export class MastraLLMV1 extends MastraBase {
         }
 
         let jsonSchemaToUse;
-        if ('toJSONSchema' in z) {
-          // Use dynamic property access to avoid import errors in Zod v3
-          // @ts-ignore
-          jsonSchemaToUse = (z as any)['toJSONSchema'](schema) as JSONSchema7;
-        } else {
-          jsonSchemaToUse = zodToJsonSchema(schema, {
-            $refStrategy: 'none',
-            target: 'jsonSchema7',
-          }) as JSONSchema7;
-        }
+        jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7') as JSONSchema7;
 
         schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
       } else {
@@ -688,9 +678,8 @@ export class MastraLLMV1 extends MastraBase {
       const argsForExecute: OriginalStreamObjectOptions<T> = {
         ...rest,
         model: this._wrapModel(model, tracingContext),
-        onFinish: async props => {
+        onFinish: async (props: any) => {
           try {
-            // @ts-expect-error - onFinish is not inferred correctly
             await onFinish?.({ ...props, runId: runId! });
           } catch (e: unknown) {
             const mastraError = new MastraError(

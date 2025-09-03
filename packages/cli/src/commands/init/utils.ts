@@ -20,7 +20,7 @@ import {
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras';
+export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'mistral';
 export type Components = 'agents' | 'workflows' | 'tools';
 
 export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
@@ -43,6 +43,8 @@ export const getAISDKPackage = (llmProvider: LLMProvider) => {
       return '@ai-sdk/google';
     case 'cerebras':
       return '@ai-sdk/cerebras';
+    case 'mistral':
+      return '@ai-sdk/mistral';
     default:
       return '@ai-sdk/openai';
   }
@@ -67,6 +69,9 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
   } else if (llmProvider === 'cerebras') {
     providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `cerebras('llama-3.3-70b')`;
+  } else if (llmProvider === 'mistral') {
+    providerImport = `import { mistral } from '${getAISDKPackage(llmProvider)}';`;
+    modelItem = `mistral('mistral-medium-2508')`;
   }
   return { providerImport, modelItem };
 };
@@ -469,6 +474,9 @@ export const getAPIKey = async (provider: LLMProvider) => {
     case 'cerebras':
       key = 'CEREBRAS_API_KEY';
       return key;
+    case 'mistral':
+      key = 'MISTRAL_API_KEY';
+      return key;
     default:
       return key;
   }
@@ -537,7 +545,8 @@ export const interactivePrompt = async () => {
             { value: 'groq', label: 'Groq' },
             { value: 'google', label: 'Google' },
             { value: 'cerebras', label: 'Cerebras' },
-          ],
+            { value: 'mistral', label: 'Mistral' },
+          ] satisfies { value: LLMProvider; label: string; hint?: string }[],
         }),
       llmApiKey: async ({ results: { llmProvider } }) => {
         const keyChoice = await p.select({

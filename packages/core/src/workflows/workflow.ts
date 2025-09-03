@@ -177,9 +177,10 @@ export function createStep<
           args: inputData,
         };
         await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
-          ...toolData,
+          type: 'workflow-agent-call-start',
+          payload: toolData,
         });
+        // TODO: add support for format, if format is undefined use stream, else streamVNext
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
@@ -195,31 +196,13 @@ export function createStep<
         }
 
         for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
-
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-              break;
-
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
-          }
+          await emitter.emit('watch-v2', chunk);
         }
+
+        await emitter.emit('watch-v2', {
+          type: 'workflow-agent-call-finish',
+          payload: toolData,
+        });
 
         return {
           text: await streamPromise.promise,
@@ -1362,17 +1345,49 @@ export class Run<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
+    let currentToolData: { name: string; args: any } | undefined = undefined;
+
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
+      if ((event as any).type === 'workflow-agent-call-start') {
+        currentToolData = {
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
+        };
+        await writer.write({
+          ...event.payload,
+          type: 'tool-call-streaming-start',
+        } as any);
+
+        return;
+      }
+
       try {
+        if ((event as any).type === 'workflow-agent-call-finish') {
+          return;
+        } else if (!(event as any).type.startsWith('workflow-')) {
+          if ((event as any).type === 'text-delta') {
+            await writer.write({
+              type: 'tool-call-delta',
+              ...(currentToolData ?? {}),
+              argsTextDelta: (event as any).textDelta,
+            } as any);
+          }
+          return;
+        }
+
+        const e: any = {
+          ...event,
+          type: event.type.replace('workflow-', ''),
+        };
         // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
+        await writer.write(e as any);
       } catch {}
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
       this.emitter.emit('watch-v2', {
-        type: 'finish',
+        type: 'workflow-finish',
         payload: { runId: this.runId },
       });
       unwatch();
@@ -1387,7 +1402,7 @@ export class Run<
     };
 
     this.emitter.emit('watch-v2', {
-      type: 'start',
+      type: 'workflow-start',
       payload: { runId: this.runId },
     });
     this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
@@ -1456,31 +1471,13 @@ export class Run<
         };
 
         const unwatch = this.watch(async ({ type, payload }) => {
-          let newPayload: Record<string, any> = payload;
-
-          //@ts-ignore
-          if (type === 'step-start') {
-            const { payload: args, id, ...rest } = newPayload;
-            newPayload = {
-              args,
-              ...rest,
-            };
-            //@ts-ignore
-          } else if (type === 'step-result') {
-            const { output, id, ...rest } = newPayload;
-            newPayload = {
-              result: output,
-              ...rest,
-            };
-          }
-
           buffer.push({
             type,
             runId: this.runId,
             from: ChunkFrom.WORKFLOW,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
-              ...newPayload,
+              ...payload,
             },
           });
 

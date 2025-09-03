@@ -25,7 +25,7 @@
     "@ai-sdk/react": "^2.0.15",
     "@faker-js/faker": "^9.6.0",
     "@mastra/core": "workspace:*",
-    "@testing-library/react": "^16.2.0",
+    "@testing-library/react": "^16.3.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",
     "ai": "^5.0.15",
