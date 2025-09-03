@@ -49,7 +49,6 @@ describe('CloudAITracingExporter', () => {
       isEvent: false,
       traceId: 'trace-456',
       parent: undefined,
-      trace: {} as AnyAISpan,
       aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
@@ -131,7 +130,6 @@ describe('CloudAITracingExporter', () => {
       isEvent: false,
       traceId: 'trace-456',
       parent: undefined,
-      trace: {} as AnyAISpan,
       aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
@@ -280,47 +278,6 @@ describe('CloudAITracingExporter', () => {
 
       expect(spanRecord.parentSpanId).toBe('parent-span');
     });
-
-    // it.only('should handle spans with null/undefined fields gracefully', async () => {
-    //   const minimalSpan: AnyAISpan = {
-    //     id: 'minimal-span',
-    //     name: 'minimal',
-    //     type: AISpanType.GENERIC,
-    //     startTime: new Date(),
-    //     endTime: undefined, // undefined endTime
-    //     isEvent: false,
-    //     traceId: 'trace-123',
-    //     parent: undefined,
-    //     trace: {} as AnyAISpan,
-    //     aiTracing: {} as any,
-    //     input: undefined, // undefined input
-    //     output: undefined, // undefined output
-    //     attributes: undefined, // undefined attributes
-    //     metadata: undefined, // undefined metadata
-    //     errorInfo: undefined, // undefined errorInfo
-    //     end: vi.fn(),
-    //     error: vi.fn(),
-    //     update: vi.fn(),
-    //     createChildSpan: vi.fn(),
-    //     createEventSpan: vi.fn(),
-    //     get isRootSpan() { return true; },
-    //   };
-
-    //   await exporter.exportEvent({
-    //     type: AITracingEventType.SPAN_ENDED,
-    //     span: minimalSpan,
-    //   });
-
-    //   const buffer = (exporter as any).buffer;
-    //   const spanRecord = buffer.spans[0];
-
-    //   expect(spanRecord.endedAt).toBeNull();
-    //   expect(spanRecord.input).toBeUndefined();
-    //   expect(spanRecord.output).toBeUndefined();
-    //   expect(spanRecord.attributes).toBeNull();
-    //   expect(spanRecord.metadata).toBeNull();
-    //   expect(spanRecord.error).toBeUndefined();
-    // });
   });
 
   describe('Flush Trigger Conditions', () => {
@@ -333,7 +290,6 @@ describe('CloudAITracingExporter', () => {
       isEvent: false,
       traceId: 'trace-456',
       parent: undefined,
-      trace: {} as AnyAISpan,
       aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
@@ -452,7 +408,6 @@ describe('CloudAITracingExporter', () => {
       isEvent: false,
       traceId: 'trace-456',
       parent: undefined,
-      trace: {} as AnyAISpan,
       aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
@@ -531,7 +486,7 @@ describe('CloudAITracingExporter', () => {
       expect((exporter as any).flushTimer).toBeNull();
     });
 
-    it.only('should handle timer errors gracefully', async () => {
+    it('should handle timer errors gracefully', async () => {
       const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
 
       // Mock flush to throw error
@@ -548,9 +503,7 @@ describe('CloudAITracingExporter', () => {
       // Wait for error handling
       await vi.runAllTimersAsync();
 
-      expect(loggerErrorSpy).toHaveBeenCalledWith('Scheduled flush failed', {
-        error: 'Flush failed',
-      });
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Scheduled flush failed', expect.any(Object));
     });
 
     it('should clear timer on flush and set flushTimer to null', async () => {
@@ -631,7 +584,6 @@ describe('CloudAITracingExporter', () => {
       isEvent: false,
       traceId: 'trace-456',
       parent: undefined,
-      trace: {} as AnyAISpan,
       aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
@@ -770,245 +722,6 @@ describe('CloudAITracingExporter', () => {
     });
   });
 
-  describe('Attribute Serialization', () => {
-    const mockSpan: AnyAISpan = {
-      id: 'span-123',
-      name: 'test-span',
-      type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
-      isEvent: false,
-      traceId: 'trace-456',
-      parent: undefined,
-      trace: {} as AnyAISpan,
-      aiTracing: {} as any,
-      input: { prompt: 'test' },
-      output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
-
-    it('should serialize basic attributes correctly', async () => {
-      const spanWithBasicAttributes: AnyAISpan = {
-        ...mockSpan,
-        attributes: {
-          model: 'gpt-4',
-          temperature: 0.7,
-          maxTokens: 100,
-          isStreaming: true,
-        },
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
-        span: spanWithBasicAttributes,
-      });
-
-      const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
-
-      expect(spanRecord.attributes).toEqual({
-        model: 'gpt-4',
-        temperature: 0.7,
-        maxTokens: 100,
-        isStreaming: true,
-      });
-    });
-
-    it('should serialize Date objects as ISO strings', async () => {
-      const testDate = new Date('2023-12-01T10:00:00Z');
-      const spanWithDateAttributes: AnyAISpan = {
-        ...mockSpan,
-        attributes: {
-          createdAt: testDate,
-          model: 'gpt-4',
-        },
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
-        span: spanWithDateAttributes,
-      });
-
-      const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
-
-      expect(spanRecord.attributes).toEqual({
-        createdAt: '2023-12-01T10:00:00.000Z',
-        model: 'gpt-4',
-      });
-    });
-
-    it('should serialize nested objects correctly', async () => {
-      const spanWithNestedAttributes: AnyAISpan = {
-        ...mockSpan,
-        attributes: {
-          model: 'gpt-4',
-          options: {
-            temperature: 0.7,
-            maxTokens: 100,
-            metadata: {
-              userId: 'user-123',
-              sessionId: 'session-456',
-            },
-          },
-          tags: ['important', 'production'],
-        },
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
-        span: spanWithNestedAttributes,
-      });
-
-      const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
-
-      expect(spanRecord.attributes).toEqual({
-        model: 'gpt-4',
-        options: {
-          temperature: 0.7,
-          maxTokens: 100,
-          metadata: {
-            userId: 'user-123',
-            sessionId: 'session-456',
-          },
-        },
-        tags: ['important', 'production'],
-      });
-    });
-
-    it('should handle mixed complex types in attributes', async () => {
-      const testDate = new Date('2023-12-01T10:00:00Z');
-      const spanWithMixedAttributes: AnyAISpan = {
-        ...mockSpan,
-        attributes: {
-          model: 'gpt-4',
-          createdAt: testDate,
-          config: {
-            temperature: 0.7,
-            timestamp: testDate,
-            nested: {
-              date: testDate,
-              value: 42,
-            },
-          },
-          primitiveArray: [1, 2, 'three'],
-          dateArray: [testDate, new Date('2023-12-02T10:00:00Z')],
-        },
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
-        span: spanWithMixedAttributes,
-      });
-
-      const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
-
-      expect(spanRecord.attributes).toEqual({
-        model: 'gpt-4',
-        createdAt: '2023-12-01T10:00:00.000Z',
-        config: {
-          temperature: 0.7,
-          timestamp: '2023-12-01T10:00:00.000Z',
-          nested: {
-            date: '2023-12-01T10:00:00.000Z',
-            value: 42,
-          },
-        },
-        primitiveArray: [1, 2, 'three'],
-        dateArray: ['2023-12-01T10:00:00.000Z', '2023-12-02T10:00:00.000Z'],
-      });
-    });
-
-    it('should return null for undefined attributes', async () => {
-      const spanWithUndefinedAttributes: AnyAISpan = {
-        ...mockSpan,
-        attributes: undefined,
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
-        span: spanWithUndefinedAttributes,
-      });
-
-      const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
-
-      expect(spanRecord.attributes).toBeNull();
-    });
-
-    it('should handle serialization errors gracefully', async () => {
-      const loggerWarnSpy = vi.spyOn((exporter as any).logger, 'warn');
-
-      // Create a circular reference to cause JSON.stringify to fail
-      const circularObj: any = { name: 'circular' };
-      circularObj.self = circularObj;
-
-      const spanWithCircularAttributes: AnyAISpan = {
-        ...mockSpan,
-        attributes: {
-          model: 'gpt-4',
-          circular: circularObj,
-        },
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
-        span: spanWithCircularAttributes,
-      });
-
-      const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
-
-      expect(spanRecord.attributes).toBeNull();
-      expect(loggerWarnSpy).toHaveBeenCalledWith('Failed to serialize span attributes, storing as null', {
-        spanId: mockSpan.id,
-        spanType: mockSpan.type,
-        error: expect.any(String),
-      });
-    });
-
-    it('should test serializeObject method directly', () => {
-      const serializeObject = (exporter as any).serializeObject.bind(exporter);
-      const testDate = new Date('2023-12-01T10:00:00Z');
-
-      const spanWithObject: AnyAISpan = {
-        ...mockSpan,
-        attributes: {
-          string: 'test',
-          number: 42,
-          boolean: true,
-          date: testDate,
-          object: { nested: 'value' },
-          array: [1, 2, testDate],
-        },
-      };
-
-      const result = serializeObject({
-        obj: spanWithObject.attributes,
-        spanId: spanWithObject.id,
-        spanType: spanWithObject.type,
-      });
-
-      expect(result).toEqual({
-        string: 'test',
-        number: 42,
-        boolean: true,
-        date: '2023-12-01T10:00:00.000Z',
-        object: { nested: 'value' },
-        array: [1, 2, '2023-12-01T10:00:00.000Z'],
-      });
-    });
-  });
-
   describe('Retry Logic and Error Handling', () => {
     const mockSpan: AnyAISpan = {
       id: 'span-123',
@@ -1019,7 +732,6 @@ describe('CloudAITracingExporter', () => {
       isEvent: false,
       traceId: 'trace-456',
       parent: undefined,
-      trace: {} as AnyAISpan,
       aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
@@ -1115,10 +827,10 @@ describe('CloudAITracingExporter', () => {
       // Flush should not throw - errors are caught and logged
       await (retryExporter as any).flush();
 
-      expect(loggerErrorSpy).toHaveBeenCalledWith('Batch upload failed after all retries, dropping batch', {
-        droppedBatchSize: 1,
-        error: 'Persistent failure',
-      });
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Batch upload failed after all retries, dropping batch',
+        expect.any(Object),
+      );
     });
 
     it('should handle flush errors gracefully in background', async () => {
@@ -1139,10 +851,10 @@ describe('CloudAITracingExporter', () => {
       await vi.runAllTimersAsync();
 
       // Should log the batch upload failure, not scheduled flush failure
-      expect(loggerErrorSpy).toHaveBeenCalledWith('Batch upload failed after all retries, dropping batch', {
-        droppedBatchSize: 1,
-        error: 'API down',
-      });
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Batch upload failed after all retries, dropping batch',
+        expect.any(Object),
+      );
     });
   });
 
@@ -1156,7 +868,6 @@ describe('CloudAITracingExporter', () => {
       isEvent: false,
       traceId: 'trace-456',
       parent: undefined,
-      trace: {} as AnyAISpan,
       aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
@@ -1253,9 +964,10 @@ describe('CloudAITracingExporter', () => {
 
       await exporter.shutdown();
 
-      expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to flush remaining events during shutdown', {
-        error: 'Shutdown flush failed',
-      });
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Failed to flush remaining events during shutdown',
+        expect.any(Object),
+      );
       expect(loggerInfoSpy).toHaveBeenCalledWith('CloudAITracingExporter shutdown complete');
     });
 

@@ -1,5 +1,3 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-
 export function parseAccessToken(accessToken: string): { teamId: string; projectId: string; cloudEndpoint?: string } {
   const parts = accessToken.split('.');
   if (parts.length !== 3) {
