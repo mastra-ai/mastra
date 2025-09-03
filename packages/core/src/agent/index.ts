@@ -50,7 +50,7 @@ import { runScorer } from '../scores/hooks';
 import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
+import { ChunkFrom, type ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
 import { createTool } from '../tools';
@@ -3068,6 +3068,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             })(),
             fullStream: new (globalThis as any).ReadableStream({
               start(controller: any) {
+                controller.enqueue({
+                  type: 'tripwire',
+                  runId: result.runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    tripwireReason: result.tripwireReason,
+                  },
+                });
                 controller.close();
               },
             }),

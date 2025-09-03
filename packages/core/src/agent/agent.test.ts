@@ -5763,6 +5763,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           stream = await agentWithStreamAbort.stream('Stream abort test');
         } else {
           stream = await agentWithStreamAbort.streamVNext('Stream abort test');
+
+          for await (const chunk of stream.fullStream) {
+            expect(chunk.type).toBe('tripwire');
+            expect(chunk.payload.tripwireReason).toBe('Stream aborted');
+          }
         }
 
         expect(stream.tripwire).toBe(true);
