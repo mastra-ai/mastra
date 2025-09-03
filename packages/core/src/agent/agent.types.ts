@@ -1,7 +1,9 @@
 import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
-import type { z, ZodSchema } from 'zod';
+import type { z } from 'zod';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodAny } from 'zod/v4';
 import type { TracingContext } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { LoopConfig, LoopOptions } from '../loop/types';
@@ -15,7 +17,7 @@ import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOpti
 
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  STRUCTURED_OUTPUT extends ZodSchemaV3 | ZodAny | JSONSchema7 | undefined = undefined,
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
   /**

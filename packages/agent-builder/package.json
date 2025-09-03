@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "0.0.1-alpha.1",
+  "version": "0.0.1-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -18,11 +18,14 @@
     },
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "check": "tsc --noEmit",
     "lint": "eslint .",
-    "build": "pnpm run check && tsup --silent src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting --external typescript",
-    "build:watch": "pnpm build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -37,6 +40,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "^20.19.0",
     "@types/semver": "^7.7.0",
@@ -47,7 +51,8 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.14.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.14.0-0",
+    "typescript": ">=5.7.0"
   },
   "peerDependenciesMeta": {
     "typescript": {
