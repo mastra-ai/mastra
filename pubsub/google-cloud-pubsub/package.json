@@ -49,7 +49,7 @@
     "tsup": "^8.4.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.11-0 <0.16.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {
