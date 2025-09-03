@@ -794,12 +794,17 @@ export default withGT(
       },
       {
         source: "/examples/memory/streaming-working-memory",
-        destination: "/examples/memory/working-memory",
+        destination: "/examples/memory/working-memory-basic",
         permanent: true,
       },
       {
         source: "/examples/memory/streaming-working-memory-advanced",
-        destination: "/examples/memory/working-memory-templates",
+        destination: "/examples/memory/working-memory-template",
+        permanent: true,
+      },
+      {
+        source: "/examples/memory/streaming-working-memory-structured",
+        destination: "/examples/memory/working-memory-schema",
         permanent: true,
       },
     ],

@@ -1,9 +1,9 @@
 ---
-title: "Example: Streaming working memory | Memory | Mastra Docs"
-description: Example showing how to use working memory with an agent to maintain conversational context.
+title: "Example: Basic Working Memory | Memory | Mastra Docs"
+description: Example showing how to enable basic working memory for agents to maintain conversational context.
 ---
 
-# Working memory
+# Basic Working Memory
 
 Use working memory to help agents remember key facts, track user details, and maintain context across conversations.
 
@@ -29,7 +29,7 @@ npm install @mastra/libsql
 
 To add LibSQL memory to an agent, use the `Memory` class and pass a `storage` instance using `LibSQLStore`. The `url` can point to a remote location or local file.
 
-### Enable working memory
+### Working memory configuration
 
 Enable working memory by setting `workingMemory.enabled` to `true`. This allows the agent to remember information from earlier conversations and persist structured data between sessions.
 
@@ -136,6 +136,24 @@ The output demonstrates the agent has used it's memory to recall information.
 ```text
 I know that your first name is Mastra.
 If there's anything else you'd like to share or update, feel free to let me know!
+```
+
+## Example storage object
+
+Working memory stores data in `.json` format, which would look similar to the below:
+
+```json
+{
+  // ...
+  "toolInvocations": [
+    {
+      // ...
+      "args": {
+        "memory": "# User Information\n- **First Name**: Mastra\n-"
+      },
+    }
+  ],
+}
 ```
 
 ## Related

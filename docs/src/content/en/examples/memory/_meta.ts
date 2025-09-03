@@ -1,7 +1,7 @@
 const meta = {
-  "working-memory": "Working Memory",
-  "working-memory-templates": "Working Memory Templates",
-  "streaming-working-memory-structured": "Streaming Structured Working Memory",
+  "working-memory-basic": "Basic Working Memory",
+  "working-memory-template": "Memory with Template",
+  "working-memory-schema": "Memory with Schema",
   "memory-with-libsql": "Memory with LibSQL",
   "memory-with-pg": "Memory with PostgreSQL",
   "memory-with-upstash": "Memory with Upstash",
