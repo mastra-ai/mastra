@@ -1,0 +1,59 @@
+{
+  "name": "@mastra/ai-sdk",
+  "version": "0.0.1-alpha.1",
+  "description": "Adds custom API routes to be compatible with the AI SDK UI parts",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "peerDependencies": {
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/json-schema": "^7.0.15",
+    "eslint": "^9.34.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "zod": "^3.25.67"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsup --config tsup.config.ts",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "mastra",
+    "ai-sdk",
+    "ai"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "client-sdks/ai-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
+}

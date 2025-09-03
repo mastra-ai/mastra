@@ -300,7 +300,7 @@ export class EventedWorkflow<
 
     this.runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
