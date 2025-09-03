@@ -1,5 +1,38 @@
 # @mastra/playground-ui
 
+## 6.0.0-alpha.3
+
+### Patch Changes
+
+- [#6969](https://github.com/mastra-ai/mastra/pull/6969) [`0fe56ce`](https://github.com/mastra-ai/mastra/commit/0fe56ce24e1317d545ca24d7f2ec341af9f2085f) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.4` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.4) (from `^12.8.2`, in `dependencies`)
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`85ef90b`](https://github.com/mastra-ai/mastra/commit/85ef90bb2cd4ae4df855c7ac175f7d392c55c1bf), [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/core@0.15.3-alpha.5
+  - @mastra/client-js@0.11.3-alpha.5
+
+## 6.0.0-alpha.2
+
+### Major Changes
+
+- [#7265](https://github.com/mastra-ai/mastra/pull/7265) [`0c2a95f`](https://github.com/mastra-ai/mastra/commit/0c2a95ffc0f5a8fcaa3012793f62fcf820690317) Thanks [@HichamELBSI](https://github.com/HichamELBSI)! - Fix submit button visibility in DynamicForm of ToolExecutor by ensuring extra bottom spacing.
+
+### Patch Changes
+
+- [#5816](https://github.com/mastra-ai/mastra/pull/5816) [`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`zod@^4.1.5` ↗︎](https://www.npmjs.com/package/zod/v/4.1.5) (from `^4.0.15`, in `dependencies`)
+
+- [#5817](https://github.com/mastra-ai/mastra/pull/5817) [`dbdc91f`](https://github.com/mastra-ai/mastra/commit/dbdc91fdedba01bf2fa2e62086a89d2b8101cf8c) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@assistant-ui/react@^0.10.44` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.10.44) (from `^0.7.91`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.10.9` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.10.9) (from `^0.7.21`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.10.10` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.10.10) (from `^0.7.10`, in `dependencies`)
+  - Added dependency [`@assistant-ui/react-ui@^0.1.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-ui/v/0.1.8) (to `dependencies`)
+- Updated dependencies [[`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715), [`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715), [`ff89505`](https://github.com/mastra-ai/mastra/commit/ff895057c8c7e91a5535faef46c5e5391085ddfa), [`26b0d7c`](https://github.com/mastra-ai/mastra/commit/26b0d7c7cba46469351d453714e119ac7aae9da2), [`183dc95`](https://github.com/mastra-ai/mastra/commit/183dc95596f391b977bd1a2c050b8498dac74891), [`a1111e2`](https://github.com/mastra-ai/mastra/commit/a1111e24e705488adfe5e0a6f20c53bddf26cb22), [`61debef`](https://github.com/mastra-ai/mastra/commit/61debefd80ad3a7ed5737e19df6a23d40091689a), [`9beaeff`](https://github.com/mastra-ai/mastra/commit/9beaeffa4a97b1d5fd01a7f8af8708b16067f67c), [`9eee594`](https://github.com/mastra-ai/mastra/commit/9eee594e35e0ca2a650fcc33fa82009a142b9ed0), [`979912c`](https://github.com/mastra-ai/mastra/commit/979912cfd180aad53287cda08af771df26454e2c), [`7dcf4c0`](https://github.com/mastra-ai/mastra/commit/7dcf4c04f44d9345b1f8bc5d41eae3f11ac61611), [`ad78bfc`](https://github.com/mastra-ai/mastra/commit/ad78bfc4ea6a1fff140432bf4f638e01af7af668), [`48f0742`](https://github.com/mastra-ai/mastra/commit/48f0742662414610dc9a7a99d45902d059ee123d), [`0ce418a`](https://github.com/mastra-ai/mastra/commit/0ce418a1ccaa5e125d4483a9651b635046152569), [`8387952`](https://github.com/mastra-ai/mastra/commit/838795227b4edf758c84a2adf6f7fba206c27719), [`5eca5d2`](https://github.com/mastra-ai/mastra/commit/5eca5d2655788863ea0442a46c9ef5d3c6dbe0a8)]:
+  - @mastra/client-js@0.11.3-alpha.4
+  - @mastra/core@0.15.3-alpha.4
+
 ## 5.2.5-alpha.1
 
 ### Patch Changes

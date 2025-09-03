@@ -1,12 +1,13 @@
 {
   "name": "@mastra/core",
-  "version": "0.15.3-alpha.3",
+  "version": "0.15.3-alpha.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "CHANGELOG.md",
     "./**/*.d.ts"
   ],
   "exports": {
@@ -209,7 +210,7 @@
     "sift": "^17.1.3",
     "js-tiktoken": "^1.0.20",
     "xstate": "^5.20.1",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.6"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -235,7 +236,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "engines": {
     "node": ">=20"
@@ -257,5 +258,14 @@
     "opentelemetry",
     "otel",
     "framework"
-  ]
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
 }

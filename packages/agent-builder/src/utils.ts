@@ -433,3 +433,34 @@ export const isValidMastraLanguageModel = (model: any): model is MastraLanguageM
     model && typeof model === 'object' && typeof model.modelId === 'string' && typeof model.generate === 'function'
   );
 };
+
+// Helper function to resolve target path with smart defaults
+export const resolveTargetPath = (inputData: any, runtimeContext: any): string => {
+  // If explicitly provided, use it
+  if (inputData.targetPath) {
+    return inputData.targetPath;
+  }
+
+  // Check runtime context
+  const contextPath = runtimeContext.get('targetPath');
+  if (contextPath) {
+    return contextPath;
+  }
+
+  // Smart resolution logic from prepareAgentBuilderWorkflowInstallation
+  const envRoot = process.env.MASTRA_PROJECT_ROOT?.trim();
+  if (envRoot) {
+    return envRoot;
+  }
+
+  const cwd = process.cwd();
+  const parent = dirname(cwd);
+  const grand = dirname(parent);
+
+  // Detect when running under `<project>/.mastra/output` and resolve back to project root
+  if (basename(cwd) === 'output' && basename(parent) === '.mastra') {
+    return grand;
+  }
+
+  return cwd;
+};

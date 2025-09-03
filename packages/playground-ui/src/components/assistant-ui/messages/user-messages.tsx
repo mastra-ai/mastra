@@ -1,6 +1,6 @@
 'use client';
 
-import { AttachmentPrimitive, MessagePrimitive, TextContentPart, useAttachment, useMessage } from '@assistant-ui/react';
+import { AttachmentPrimitive, MessagePrimitive, TextMessagePart, useAttachment, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -35,7 +35,7 @@ const InMessageAttachmentWrapper = () => {
   }
 
   if (attachment.contentType === 'application/pdf') {
-    const pdfText = (attachment.content as TextContentPart[])?.[0]?.text;
+    const pdfText = (attachment.content as TextMessagePart[])?.[0]?.text;
     return (
       <InMessageAttachment
         type="document"
@@ -53,7 +53,7 @@ const InMessageAttachmentWrapper = () => {
       contentType={attachment.contentType}
       nameSlot={<AttachmentPrimitive.Name />}
       src={src}
-      data={(attachment.content as TextContentPart[])?.[0]?.text}
+      data={(attachment.content as TextMessagePart[])?.[0]?.text}
     />
   );
 };
@@ -99,9 +99,8 @@ export const UserMessage = () => {
   return (
     <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col" data-message-id={messageId}>
       {/* <UserActionBar /> */}
-
       <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
-        <MessagePrimitive.Content
+        <MessagePrimitive.Parts
           components={{
             File: p => {
               return (
@@ -135,9 +134,7 @@ export const UserMessage = () => {
           }}
         />
       </div>
-
       <UserMessageAttachments />
-
       {/* <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" /> */}
     </MessagePrimitive.Root>
   );

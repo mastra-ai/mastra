@@ -448,32 +448,6 @@ export class InngestWorkflow<
     );
   }
 
-  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
-      return null;
-    }
-
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
-
-    if (!run?.snapshot) {
-      return null;
-    }
-
-    if (typeof run.snapshot === 'string') {
-      return null;
-    }
-
-    return {
-      status: run.snapshot.status,
-      result: run.snapshot.result,
-      error: run.snapshot.error,
-      payload: run.snapshot.context?.input,
-      steps: run.snapshot.context as any,
-    };
-  }
-
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
@@ -543,7 +517,7 @@ export class InngestWorkflow<
 
     this.runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -1279,9 +1253,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    tracingContext,
     writableStream,
     disableScorers,
-    tracingContext,
   }: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1295,9 +1269,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
-    tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
@@ -1699,6 +1673,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId: executionContext.workflowId,
             stepId: step.id,
             runtimeContext,
+            tracingContext: { currentSpan: stepAISpan },
             disableScorers,
           });
         }
