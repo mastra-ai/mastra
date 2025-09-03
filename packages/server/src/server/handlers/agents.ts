@@ -250,7 +250,27 @@ export async function getLiveEvalsByAgentIdHandler({
   }
 }
 
-export async function generateHandler({
+export function generateHandler({
+  mastra,
+  ...args
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'generate'> & {
+    // @deprecated use resourceId
+    resourceid?: string;
+    runtimeContext?: Record<string, unknown>;
+  };
+  abortSignal?: AbortSignal;
+}) {
+  const logger = mastra.getLogger();
+  logger?.warn(
+    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 16th. Please use generateLegacyHandler if you don't want to upgrade just yet.",
+  );
+  return generateLegacyHandler({ mastra, ...args });
+}
+
+export async function generateLegacyHandler({
   mastra,
   runtimeContext,
   agentId,
@@ -286,10 +306,10 @@ export async function generateHandler({
 
     const result = await agent.generate(messages, {
       ...rest,
+      abortSignal,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
-      signal: abortSignal,
     });
 
     return result;
@@ -347,6 +367,26 @@ export async function generateVNextHandler({
 
 export async function streamGenerateHandler({
   mastra,
+  ...args
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'stream'> & {
+    // @deprecated use resourceId
+    resourceid?: string;
+    runtimeContext?: string;
+  };
+  abortSignal?: AbortSignal;
+}) {
+  const logger = mastra.getLogger();
+  logger?.warn(
+    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 16th. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
+  );
+
+  return streamGenerateLegacyHandler({ mastra, ...args });
+}
+export async function streamGenerateLegacyHandler({
+  mastra,
   runtimeContext,
   agentId,
   body,
@@ -381,10 +421,10 @@ export async function streamGenerateHandler({
 
     const streamResult = await agent.stream(messages, {
       ...rest,
+      abortSignal,
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
-      signal: abortSignal,
     });
 
     const streamResponse = rest.output

@@ -1,0 +1,36 @@
+{
+  "name": "template-meeting-scheduler",
+  "version": "1.0.0",
+  "description": "Intelligent email-to-calendar agent that analyzes Gmail messages for meeting requests and automatically creates Google Calendar events with all email thread participants",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.2.12",
+    "@ai-sdk/openai": "^1.3.24",
+    "@arcadeai/arcadejs": "^1.9.1",
+    "@mastra/core": "^0.15.2",
+    "@mastra/fastembed": "^0.10.4",
+    "@mastra/libsql": "^0.13.7",
+    "@mastra/loggers": "^0.10.9",
+    "@mastra/memory": "^0.14.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "mastra": "^0.11.2",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}

@@ -21,6 +21,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   mode = 'stream',
   outputProcessors,
   returnScorerData,
+  llmAISpan,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -86,6 +87,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     telemetry_settings,
     modelSettings,
     outputProcessors,
+    llmAISpan,
     ...rest,
   };
 

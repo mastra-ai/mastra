@@ -1,5 +1,23 @@
 # @mastra/auth-workos
 
+## 0.10.5-alpha.1
+
+### Patch Changes
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/auth@0.1.3-alpha.0
+
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- [#7220](https://github.com/mastra-ai/mastra/pull/7220) [`cb9aa8c`](https://github.com/mastra-ai/mastra/commit/cb9aa8c8564bafa1b6e5321cca5a1bc4d3170590) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - Cookie vuln
+
+- Updated dependencies []:
+  - @mastra/auth@0.1.2
+
 ## 0.10.4
 
 ### Patch Changes

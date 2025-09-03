@@ -20,7 +20,8 @@ mastra start [options]
 | Option | Description |
 |--------|-------------|
 | `-d, --dir <path>` | Path to your built Mastra output directory (default: .mastra/output) |
-| `-nt, --no-telemetry` | Enable OpenTelemetry instrumentation for observability |
+| `-e, --env <env>` | Custom env file to include in the start (default: .env.production, .env) |
+| `-nt, --no-telemetry` | Disable telemetry on start |
 
 ## Examples
 
@@ -34,6 +35,12 @@ Start from a custom output directory:
 
 ```bash
 mastra start --dir ./my-output
+```
+
+Start with a custom environment file:
+
+```bash
+mastra start --env .env.staging
 ```
 
 Start with telemetry disabled:

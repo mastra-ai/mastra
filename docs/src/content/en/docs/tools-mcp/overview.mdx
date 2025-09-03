@@ -3,6 +3,8 @@ title: "Tools Overview | Tools & MCP | Mastra Docs"
 description: Understand what tools are in Mastra, how to add them to agents, and best practices for designing effective tools.
 ---
 
+import { Steps } from "nextra/components";
+
 # Tools Overview
 
 Tools are functions that agents can execute to perform specific tasks or access external information. They extend an agent's capabilities beyond simple text generation, allowing interaction with APIs, databases, or other systems.
@@ -65,3 +67,45 @@ Some providers that we include this layer for:
 - **DeepSeek & Meta:** Apply similar compatibility logic to ensure schema alignment and tool usability.
 
 This approach makes tool usage more reliable and model-agnostic for both custom and MCP tools.
+
+
+## Testing tools locally
+There are two ways to run and test tools.
+
+<Steps>
+
+### Mastra Playground
+
+With the Mastra Dev Server running you can test a tool from the Mastra Playground by visiting [http://localhost:4111/tools](http://localhost:4111/tools) in your browser.
+
+> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
+
+### Command line
+
+Invoke a tool using `.execute()`.
+
+```typescript filename="src/test-tool.ts" showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { testTool } from "./mastra/tools/test-tool";
+
+const runtimeContext = new RuntimeContext();
+
+const result = await testTool.execute({
+  context: {
+    value: "foo"
+  },
+  runtimeContext
+});
+
+console.log(result);
+```
+
+> See [createTool()](../../reference/tools/create-tool.mdx) for more information.
+
+To test this tool, run the following:
+
+```bash copy
+npx tsx src/test-tool.ts
+```
+
+</Steps>

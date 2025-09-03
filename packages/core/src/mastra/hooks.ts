@@ -12,20 +12,8 @@ export function createOnScorerHook(mastra: Mastra) {
     const entityId = hookData.entity.id;
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
-
-    let scorerToUse;
     try {
-      if (entityType === 'AGENT') {
-        const agent = mastra.getAgentById(entityId);
-        const scorers = await agent.getScorers();
-        scorerToUse = scorers[scorer.id];
-      } else if (entityType === 'WORKFLOW') {
-        const workflow = mastra.getWorkflowById(entityId);
-        const scorers = await workflow.getScorers();
-        scorerToUse = scorers[scorer.id];
-      } else {
-        return;
-      }
+      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.id);
 
       if (!scorerToUse) {
         throw new MastraError({
@@ -42,7 +30,8 @@ export function createOnScorerHook(mastra: Mastra) {
       if (entityType !== 'AGENT') {
         output = { object: hookData.output };
       }
-      const { structuredOutput, ...rest } = hookData as any; // temporary fix;
+
+      const { structuredOutput, ...rest } = hookData;
 
       const runResult = await scorerToUse.scorer.run({
         ...rest,
@@ -79,4 +68,23 @@ export function createOnScorerHook(mastra: Mastra) {
       mastra.getLogger()?.error(mastraError.toString());
     }
   };
+}
+
+async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
+  let scorerToUse;
+  if (entityType === 'AGENT') {
+    const scorers = await mastra.getAgentById(entityId).getScorers();
+    scorerToUse = scorers[scorerId];
+  } else if (entityType === 'WORKFLOW') {
+    const scorers = await mastra.getWorkflowById(entityId).getScorers();
+    scorerToUse = scorers[scorerId];
+  }
+
+  // Fallback to mastra-registered scorer
+  if (!scorerToUse) {
+    const mastraRegisteredScorer = mastra.getScorerByName(scorerId);
+    scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
+  }
+
+  return scorerToUse;
 }

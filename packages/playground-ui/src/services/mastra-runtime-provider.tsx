@@ -31,7 +31,7 @@ const handleFinishReason = (finishReason: string) => {
 };
 
 const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
-  const promises = attachments
+  const promises = (attachments ?? [])
     .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
     .map(async attachment => {
       if (attachment.type === 'document') {
