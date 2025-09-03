@@ -10,7 +10,13 @@ import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
 import { downloadAssetsFromMessages } from './prompt/download-assets';
-import { imageContentToString, imageContentToDataUri, getImageCacheKey } from './prompt/image-utils';
+import {
+  imageContentToString,
+  imageContentToDataUri,
+  getImageCacheKey,
+  parseDataUri,
+  createDataUri,
+} from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
@@ -2158,27 +2164,14 @@ export class MessageList {
             let filePartData: string;
             let extractedMimeType = part.mimeType;
 
-            // Check if part.data is a data URI and extract base64 content and MIME type
-            if (typeof part.data === 'string' && part.data.startsWith('data:')) {
-              // Extract MIME type and base64 content from data URI
-              // Format: data:image/png;base64,iVBORw0...
-              const base64Index = part.data.indexOf(',');
-              if (base64Index !== -1) {
-                const header = part.data.substring(5, base64Index); // Skip 'data:' prefix
-                filePartData = part.data.substring(base64Index + 1);
-
-                // Extract MIME type from header (before ';base64' or ';')
-                const semicolonIndex = header.indexOf(';');
-                if (semicolonIndex !== -1) {
-                  extractedMimeType = extractedMimeType || header.substring(0, semicolonIndex);
-                } else {
-                  extractedMimeType = extractedMimeType || header;
-                }
-              } else {
-                filePartData = part.data; // fallback to full string if malformed
+            // Parse data URI if present to extract base64 content and MIME type
+            if (typeof part.data === 'string') {
+              const parsed = parseDataUri(part.data);
+              filePartData = parsed.base64Content;
+              if (parsed.isDataUri && parsed.mimeType) {
+                extractedMimeType = extractedMimeType || parsed.mimeType;
               }
             } else {
-              // Not a data URI, treat as raw base64 data
               filePartData = part.data;
             }
 
@@ -2186,9 +2179,7 @@ export class MessageList {
             const finalMimeType = extractedMimeType || 'image/png';
 
             // Create a data URI from the base64 data
-            const dataUri = filePartData.startsWith('data:')
-              ? filePartData // Already a data URI
-              : `data:${finalMimeType};base64,${filePartData}`; // Create data URI
+            const dataUri = createDataUri(filePartData, finalMimeType);
 
             parts.push({
               type: 'file',
@@ -2438,20 +2429,12 @@ export class MessageList {
             // Convert image to data URI if it's binary, or string otherwise
             const imageStr = imageContentToDataUri(part.image, extractedMimeType || 'image/png');
 
-            // Check if it's a data URI and extract base64 content and MIME type
-            if (imageStr.startsWith('data:')) {
-              const base64Index = imageStr.indexOf(',');
-              if (base64Index !== -1) {
-                const header = imageStr.substring(5, base64Index); // Skip 'data:' prefix
-                imageData = imageStr.substring(base64Index + 1);
-
-                // Extract MIME type from header if not already provided
-                if (!extractedMimeType) {
-                  const semicolonIndex = header.indexOf(';');
-                  extractedMimeType = semicolonIndex !== -1 ? header.substring(0, semicolonIndex) : header;
-                }
-              } else {
-                imageData = imageStr; // fallback to full string if malformed
+            // Parse the image string to extract base64 content and MIME type
+            const parsed = parseDataUri(imageStr);
+            if (parsed.isDataUri) {
+              imageData = parsed.base64Content;
+              if (!extractedMimeType && parsed.mimeType) {
+                extractedMimeType = parsed.mimeType;
               }
             } else if (imageStr.startsWith('http://') || imageStr.startsWith('https://')) {
               // For external URLs, use url field instead
@@ -2482,25 +2465,23 @@ export class MessageList {
               const urlStr = part.data.toString();
               let extractedMimeType = part.mediaType;
 
-              // Check if it's a data URI
-              if (urlStr.startsWith('data:')) {
-                const base64Index = urlStr.indexOf(',');
-                if (base64Index !== -1) {
-                  const header = urlStr.substring(5, base64Index); // Skip 'data:' prefix
+              // Parse data URI if present
+              const parsed = parseDataUri(urlStr);
+              if (parsed.isDataUri) {
+                if (!extractedMimeType && parsed.mimeType) {
+                  extractedMimeType = parsed.mimeType;
+                }
 
-                  // Extract MIME type from header if not already provided
-                  if (!extractedMimeType) {
-                    const semicolonIndex = header.indexOf(';');
-                    extractedMimeType = semicolonIndex !== -1 ? header.substring(0, semicolonIndex) : header;
-                  }
-
+                if (parsed.base64Content !== urlStr) {
+                  // Valid data URI with base64 content
                   parts.push({
                     type: 'file',
-                    data: urlStr.substring(base64Index + 1),
+                    data: parsed.base64Content,
                     mediaType: extractedMimeType || 'image/png',
                     providerMetadata: part.providerOptions,
                   } as any);
                 } else {
+                  // Malformed data URI, use as URL
                   parts.push({
                     type: 'file',
                     url: urlStr,
@@ -2522,32 +2503,19 @@ export class MessageList {
                 const base64Data = convertDataContentToBase64String(part.data);
                 let extractedMimeType = part.mediaType;
 
-                // Check if it's a data URI and extract base64 content and MIME type
-                if (base64Data.startsWith('data:')) {
-                  const base64Index = base64Data.indexOf(',');
-                  if (base64Index !== -1) {
-                    const header = base64Data.substring(5, base64Index); // Skip 'data:' prefix
-
-                    // Extract MIME type from header if not already provided
-                    if (!extractedMimeType) {
-                      const semicolonIndex = header.indexOf(';');
-                      extractedMimeType = semicolonIndex !== -1 ? header.substring(0, semicolonIndex) : header;
-                    }
-
-                    parts.push({
-                      type: 'file',
-                      data: base64Data.substring(base64Index + 1),
-                      mediaType: extractedMimeType || 'image/png',
-                      providerMetadata: part.providerOptions,
-                    } as any);
-                  } else {
-                    parts.push({
-                      type: 'file',
-                      data: base64Data,
-                      mediaType: part.mediaType || 'image/png',
-                      providerMetadata: part.providerOptions,
-                    } as any);
+                // Parse data URI if present to extract base64 and MIME type
+                const parsed = parseDataUri(base64Data);
+                if (parsed.isDataUri) {
+                  if (!extractedMimeType && parsed.mimeType) {
+                    extractedMimeType = parsed.mimeType;
                   }
+
+                  parts.push({
+                    type: 'file',
+                    data: parsed.base64Content,
+                    mediaType: extractedMimeType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  } as any);
                 } else {
                   parts.push({
                     type: 'file',

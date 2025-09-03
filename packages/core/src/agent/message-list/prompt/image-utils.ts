@@ -6,6 +6,68 @@ import { convertDataContentToBase64String } from './data-content';
 export type ImageContent = string | URL | Uint8Array | ArrayBuffer | Buffer;
 
 /**
+ * Represents the parsed components of a data URI
+ */
+export interface DataUriParts {
+  mimeType?: string;
+  base64Content: string;
+  isDataUri: boolean;
+}
+
+/**
+ * Parses a data URI string into its components.
+ * Format: data:[<mediatype>][;base64],<data>
+ *
+ * @param dataUri - The data URI string to parse
+ * @returns Parsed components including MIME type and base64 content
+ */
+export function parseDataUri(dataUri: string): DataUriParts {
+  if (!dataUri.startsWith('data:')) {
+    return {
+      isDataUri: false,
+      base64Content: dataUri,
+    };
+  }
+
+  const base64Index = dataUri.indexOf(',');
+  if (base64Index === -1) {
+    // Malformed data URI, return as-is
+    return {
+      isDataUri: true,
+      base64Content: dataUri,
+    };
+  }
+
+  const header = dataUri.substring(5, base64Index); // Skip 'data:' prefix
+  const base64Content = dataUri.substring(base64Index + 1);
+
+  // Extract MIME type from header (before ';base64' or ';')
+  const semicolonIndex = header.indexOf(';');
+  const mimeType = semicolonIndex !== -1 ? header.substring(0, semicolonIndex) : header;
+
+  return {
+    isDataUri: true,
+    mimeType: mimeType || undefined,
+    base64Content,
+  };
+}
+
+/**
+ * Creates a data URI from base64 content and MIME type.
+ *
+ * @param base64Content - The base64 encoded content
+ * @param mimeType - The MIME type (defaults to 'application/octet-stream')
+ * @returns A properly formatted data URI
+ */
+export function createDataUri(base64Content: string, mimeType: string = 'application/octet-stream'): string {
+  // If it's already a data URI, return as-is
+  if (base64Content.startsWith('data:')) {
+    return base64Content;
+  }
+  return `data:${mimeType};base64,${base64Content}`;
+}
+
+/**
  * Converts various image data formats to a string representation.
  * - Strings are returned as-is (could be URLs or data URIs)
  * - URL objects are converted to strings
@@ -90,6 +152,8 @@ export function getImageCacheKey(image: ImageContent): string | number {
     return (image as Buffer).byteLength;
   }
 
-  // Fallback for unknown types
-  return JSON.stringify(image).length;
+  // For unknown types, use a consistent placeholder
+  // This avoids expensive JSON.stringify and provides predictable behavior
+  console.warn('Unknown image type for cache key generation:', typeof image);
+  return 0;
 }
