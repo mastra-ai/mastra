@@ -1,4 +1,4 @@
-import type { LanguageModelV1FinishReason } from '@ai-sdk/provider';
+import type { LanguageModelV1FinishReason, LanguageModelV1StreamPart } from '@ai-sdk/provider';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -191,30 +191,21 @@ export class MastraLLMV1 extends MastraBase {
         const originalStream = result.stream;
         let finishReason: LanguageModelV1FinishReason;
         let finalUsage: any = null;
+        let textOutput: string = '';
 
         const wrappedStream = originalStream.pipeThrough(
           new TransformStream({
             // this gets called on each chunk output
-            transform(chunk, controller) {
-              // Create event spans for text chunks
-              if (chunk.type === 'text-delta') {
-                llmSpan?.createEventSpan({
-                  type: AISpanType.LLM_CHUNK,
-                  name: `llm chunk: ${chunk.type}`,
-                  output: chunk.textDelta,
-                  attributes: {
-                    chunkType: chunk.type,
-                  },
-                });
-              }
-
-              //TODO: Figure out how to get the final usage
-              // if (chunk.type === 'response-metadata' && chunk.usage) {
-              //   finalUsage = chunk.usage;
-              // }
-              if (chunk.type === 'finish') {
-                finishReason = chunk.finishReason;
-                finalUsage = chunk.usage;
+            transform(chunk: LanguageModelV1StreamPart, controller) {
+              //TODO: for tracing, do we want to do anything with the other chunk types?
+              switch (chunk.type) {
+                case 'text-delta':
+                  textOutput += chunk.textDelta;
+                  break;
+                case 'finish':
+                  finishReason = chunk.finishReason;
+                  finalUsage = chunk.usage;
+                  break;
               }
               controller.enqueue(chunk);
             },
@@ -222,6 +213,7 @@ export class MastraLLMV1 extends MastraBase {
             flush() {
               llmSpan?.end({
                 attributes: {
+                  output: textOutput,
                   usage: finalUsage
                     ? {
                         promptTokens: finalUsage.promptTokens,
