@@ -1,5 +1,5 @@
 const meta = {
-  "streaming-working-memory": "Streaming Working Memory",
+  "working-memory": "Working Memory",
   "streaming-working-memory-advanced": "Streaming Working Memory (Advanced)",
   "streaming-working-memory-structured": "Streaming Structured Working Memory",
   "memory-with-libsql": "Memory with LibSQL",

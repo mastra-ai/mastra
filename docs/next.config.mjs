@@ -792,6 +792,11 @@ export default withGT(
         destination: "/docs/streaming/overview",
         permanent: true,
       },
+      {
+        source: "/examples/memory/streaming-working-memory",
+        destination: "/examples/memory/working-memory",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),
