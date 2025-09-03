@@ -11,7 +11,6 @@ export interface CloudAITracingExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 3
-  retryDelayMs?: number; // Default: 500ms (base delay for exponential backoff)
 
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
@@ -83,7 +82,6 @@ export class CloudAITracingExporter implements AITracingExporter {
       maxBatchSize: config.maxBatchSize ?? 1000,
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
-      retryDelayMs: config.retryDelayMs ?? 500,
       accessToken: accessToken,
       endpoint,
       logger: config.logger ?? new ConsoleLogger({ level: LogLevel.INFO }),

@@ -29,8 +29,8 @@ describe('CloudAITracingExporter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset mock implementation to default success
-    mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
     mockFetchWithRetry.mockReset();
+    mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
 
     exporter = new CloudAITracingExporter({
       accessToken: testJWT,
@@ -620,7 +620,7 @@ describe('CloudAITracingExporter', () => {
           },
           body: expect.any(String),
         },
-        3, // Single attempt at HTTP level
+        3,
       );
     });
 
