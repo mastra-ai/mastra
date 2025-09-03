@@ -19,11 +19,11 @@
     "@mastra/pg": "0.0.0-ai-v5-20250625173645",
     "@mastra/rag": "0.0.0-ai-v5-20250625173645",
     "@mastra/server": "0.0.0-ai-v5-20250625173645",
-    "next": "15.2.4",
+    "next": "15.4.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "swr": "^2.3.3",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

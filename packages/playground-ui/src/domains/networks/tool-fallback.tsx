@@ -1,5 +1,5 @@
 import { MarkdownRenderer } from '../../components/ui/markdown-renderer';
-import { ToolCallContentPartComponent } from '@assistant-ui/react';
+import { ToolCallMessagePartComponent } from '@assistant-ui/react';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, LoaderCircle, ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ const purpleClasses = {
 };
 
 // Use a more generic type for the component to avoid TypeScript errors
-export const ToolFallback: ToolCallContentPartComponent = props => {
+export const ToolFallback: ToolCallMessagePartComponent = props => {
   const { toolCallId, toolName, args, argsText, result, status } = props;
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
 

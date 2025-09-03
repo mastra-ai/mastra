@@ -42,7 +42,7 @@ const ToolExecutor = ({
             onSubmit={data => {
               handleExecuteTool(data);
             }}
-            className="h-auto"
+            className="h-auto pb-7"
           />
         </div>
       </div>

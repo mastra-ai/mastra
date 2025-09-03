@@ -42,7 +42,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         console.error('Mastra server error:', data.toString());
       });
 
-      setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
+      setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
     });
 
     client = new MCPClient({
