@@ -1110,7 +1110,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           abortSignal: abortController?.signal,
           writer: new ToolStream(
             {
-              prefix: 'step',
+              prefix: 'workflow-step',
               callId: stepCallId,
               name: 'sleep',
               runId,
@@ -1224,7 +1224,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           abortSignal: abortController?.signal,
           writer: new ToolStream(
             {
-              prefix: 'step',
+              prefix: 'workflow-step',
               callId: stepCallId,
               name: 'sleep',
               runId,
@@ -1862,7 +1862,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 abortSignal: abortController.signal,
                 writer: new ToolStream(
                   {
-                    prefix: 'step',
+                    prefix: 'workflow-step',
                     callId: randomUUID(),
                     name: 'conditional',
                     runId,

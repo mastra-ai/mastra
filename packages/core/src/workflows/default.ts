@@ -501,7 +501,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortSignal: abortController?.signal,
         writer: new ToolStream(
           {
-            prefix: 'step',
+            prefix: 'workflow-step',
             callId: stepCallId,
             name: 'sleep',
             runId,
@@ -612,7 +612,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortSignal: abortController?.signal,
         writer: new ToolStream(
           {
-            prefix: 'step',
+            prefix: 'workflow-step',
             callId: stepCallId,
             name: 'sleepUntil',
             runId,
@@ -878,7 +878,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortSignal: abortController?.signal,
           writer: new ToolStream(
             {
-              prefix: 'step',
+              prefix: 'workflow-step',
               callId: stepCallId,
               name: step.id,
               runId,
@@ -1288,7 +1288,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               abortSignal: abortController?.signal,
               writer: new ToolStream(
                 {
-                  prefix: 'step',
+                  prefix: 'workflow-step',
                   callId: randomUUID(),
                   name: 'conditional',
                   runId,
@@ -1575,7 +1575,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortSignal: abortController?.signal,
         writer: new ToolStream(
           {
-            prefix: 'step',
+            prefix: 'workflow-step',
             callId: randomUUID(),
             name: 'loop',
             runId,

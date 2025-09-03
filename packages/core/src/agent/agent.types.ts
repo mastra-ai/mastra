@@ -101,4 +101,5 @@ export type InnerAgentExecutionOptions<
 > = AgentExecutionOptions<OUTPUT, any, FORMAT> & {
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
+  methodType: 'generate' | 'stream' | 'streamVNext';
 };

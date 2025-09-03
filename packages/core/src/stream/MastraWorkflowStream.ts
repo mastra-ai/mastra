@@ -68,7 +68,7 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
         });
 
         controller.enqueue({
-          type: 'start',
+          type: 'workflow-start',
           runId: run.runId,
           from: ChunkFrom.WORKFLOW,
           payload: {},
@@ -86,7 +86,7 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
         }
 
         controller.enqueue({
-          type: 'finish',
+          type: 'workflow-finish',
           runId: run.runId,
           from: ChunkFrom.WORKFLOW,
           payload: {

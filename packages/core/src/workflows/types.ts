@@ -120,6 +120,14 @@ export type VariableReference<
 export type StreamEvent = TextStreamPart<any> | WorkflowStreamEvent;
 export type WorkflowStreamEvent =
   | {
+      type: 'workflow-start';
+      payload: {};
+    }
+  | {
+      type: 'workflow-finish';
+      payload: {};
+    }
+  | {
       type: 'workflow-step-start';
       id: string;
       payload: {
