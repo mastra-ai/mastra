@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "dist",
+    "CHANGELOG.md",
     "templates"
   ],
   "main": "dist/index.js",
@@ -29,7 +30,6 @@
     "lint": "eslint ."
   },
   "keywords": [],
-  "author": "",
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
@@ -51,5 +51,14 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.1-0 <0.16.0-0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "deployers/cloud"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai"
 }
