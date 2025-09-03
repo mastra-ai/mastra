@@ -18,6 +18,8 @@ import {
   vNextBodyOptions,
   deprecatedStreamVNextHandler,
   streamVNextUIMessageHandler,
+  streamGenerateLegacyHandler,
+  generateLegacyHandler,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -105,6 +107,58 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getLiveEvalsByAgentIdHandler,
+  );
+
+  router.post(
+    '/:agentId/generate-legacy',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
+                runId: { type: 'string' },
+                output: { type: 'object' },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    generateLegacyHandler,
   );
 
   router.post(
@@ -233,6 +287,58 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     streamVNextGenerateHandler,
+  );
+
+  router.post(
+    '/:agentId/stream-legacy',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                threadId: { type: 'string' },
+                resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                resourceid: {
+                  type: 'string',
+                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
+                  deprecated: true,
+                },
+                runId: { type: 'string' },
+                output: { type: 'object' },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamGenerateLegacyHandler,
   );
 
   router.post(

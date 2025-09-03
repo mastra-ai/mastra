@@ -1,4 +1,4 @@
-import type { LanguageModelV1FinishReason } from '@ai-sdk/provider';
+import type { LanguageModelV1FinishReason, LanguageModelV1StreamPart } from '@ai-sdk/provider';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -8,13 +8,12 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
-
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
 import type { AnyAISpan, TracingContext } from '../../ai-tracing';
@@ -192,30 +191,21 @@ export class MastraLLMV1 extends MastraBase {
         const originalStream = result.stream;
         let finishReason: LanguageModelV1FinishReason;
         let finalUsage: any = null;
+        let textOutput: string = '';
 
         const wrappedStream = originalStream.pipeThrough(
           new TransformStream({
             // this gets called on each chunk output
-            transform(chunk, controller) {
-              // Create event spans for text chunks
-              if (chunk.type === 'text-delta') {
-                llmSpan?.createEventSpan({
-                  type: AISpanType.LLM_CHUNK,
-                  name: `llm chunk: ${chunk.type}`,
-                  output: chunk.textDelta,
-                  attributes: {
-                    chunkType: chunk.type,
-                  },
-                });
-              }
-
-              //TODO: Figure out how to get the final usage
-              // if (chunk.type === 'response-metadata' && chunk.usage) {
-              //   finalUsage = chunk.usage;
-              // }
-              if (chunk.type === 'finish') {
-                finishReason = chunk.finishReason;
-                finalUsage = chunk.usage;
+            transform(chunk: LanguageModelV1StreamPart, controller) {
+              //TODO: for tracing, do we want to do anything with the other chunk types?
+              switch (chunk.type) {
+                case 'text-delta':
+                  textOutput += chunk.textDelta;
+                  break;
+                case 'finish':
+                  finishReason = chunk.finishReason;
+                  finalUsage = chunk.usage;
+                  break;
               }
               controller.enqueue(chunk);
             },
@@ -223,6 +213,7 @@ export class MastraLLMV1 extends MastraBase {
             flush() {
               llmSpan?.end({
                 attributes: {
+                  output: textOutput,
                   usage: finalUsage
                     ? {
                         promptTokens: finalUsage.promptTokens,
@@ -300,16 +291,7 @@ export class MastraLLMV1 extends MastraBase {
         }
 
         let jsonSchemaToUse;
-        if ('toJSONSchema' in z) {
-          // Use dynamic property access to avoid import errors in Zod v3
-          // @ts-ignore
-          jsonSchemaToUse = (z as any)['toJSONSchema'](schema) as JSONSchema7;
-        } else {
-          jsonSchemaToUse = zodToJsonSchema(schema, {
-            $refStrategy: 'none',
-            target: 'jsonSchema7',
-          }) as JSONSchema7;
-        }
+        jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7') as JSONSchema7;
 
         schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
       } else {
@@ -688,9 +670,8 @@ export class MastraLLMV1 extends MastraBase {
       const argsForExecute: OriginalStreamObjectOptions<T> = {
         ...rest,
         model: this._wrapModel(model, tracingContext),
-        onFinish: async props => {
+        onFinish: async (props: any) => {
           try {
-            // @ts-expect-error - onFinish is not inferred correctly
             await onFinish?.({ ...props, runId: runId! });
           } catch (e: unknown) {
             const mastraError = new MastraError(

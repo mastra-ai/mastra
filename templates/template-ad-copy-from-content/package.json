@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "A Mastra template that generates compelling ad copy and promotional images from content provided as plain text or PDF links. Features AI-powered copywriting with image generation capabilities.",
   "type": "module",
   "engines": {
