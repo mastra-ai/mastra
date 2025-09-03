@@ -2614,6 +2614,32 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
   }
 
+  /**
+   * Merges telemetry wrapper with default onFinish callback when needed
+   */
+  #mergeOnFinishWithTelemetry(streamOptions: any, defaultStreamOptions: any) {
+    let finalOnFinish = streamOptions?.onFinish || defaultStreamOptions.onFinish;
+
+    if (
+      streamOptions?.onFinish &&
+      (streamOptions.onFinish as any).__hasOriginalOnFinish === false &&
+      defaultStreamOptions.onFinish
+    ) {
+      // Create composite callback: telemetry wrapper + default callback
+      const telemetryWrapper = streamOptions.onFinish;
+      const defaultCallback = defaultStreamOptions.onFinish;
+
+      finalOnFinish = async (data: any) => {
+        // Call telemetry wrapper first (for span attributes, etc.)
+        await telemetryWrapper(data);
+        // Then call the default callback
+        await defaultCallback(data);
+      };
+    }
+
+    return finalOnFinish;
+  }
+
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
@@ -3424,6 +3450,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
+      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });
@@ -3901,6 +3928,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptions,
       ...streamOptions,
+      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
