@@ -266,7 +266,6 @@ export async function dev({
     process.env[key] = value;
   }
 
-  // Get the port to use before prepare to set environment variables
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
   let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
