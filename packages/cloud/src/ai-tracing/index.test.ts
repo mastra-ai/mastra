@@ -611,7 +611,7 @@ describe('CloudAITracingExporter', () => {
       await (exporter as any).flush();
 
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'http://localhost:3000/api/ai-traces/batch',
+        'http://localhost:3000/api/aiTracing/publish',
         {
           method: 'POST',
           headers: {
@@ -777,7 +777,7 @@ describe('CloudAITracingExporter', () => {
 
       // fetchWithRetry should be called with maxRetries parameter
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
-        'http://localhost:3000/api/ai-traces/batch',
+        'http://localhost:3000/api/aiTracing/publish',
         expect.any(Object),
         3, // maxRetries passed to fetchWithRetry
       );
