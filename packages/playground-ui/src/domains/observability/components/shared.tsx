@@ -1,4 +1,4 @@
-import { AgentIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { AgentIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { BrainIcon } from 'lucide-react';
 
 export const spanTypePrefixes = ['agent', 'workflow', 'llm', 'tool'];

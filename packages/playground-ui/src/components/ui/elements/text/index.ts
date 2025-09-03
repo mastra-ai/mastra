@@ -1,2 +1,2 @@
 export * from './text-and-icon';
-export * from './helpers/get-short-id';
+export * from './formatters/get-short-id';

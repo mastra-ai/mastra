@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import { TraceTreeSpan } from './trace-tree-span';
-import { formatHierarchicalSpans, SideDialogHeading, UISpan } from '@mastra/playground-ui';
+import { type UISpan } from '../types';
+import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
+import { SideDialogHeading } from '@/components/ui/elements';
 import { useMemo } from 'react';
 import { ListTreeIcon } from 'lucide-react';
 import { TraceTreeLegend } from './trace-tree-legend';
@@ -31,7 +33,7 @@ export function TraceTree({ spans = [], onSpanClick, selectedSpanId }: TraceTree
       <div
         className={cn(
           'overflow-y-auto pr-[1.5rem] grid items-start content-start gap-y-[2px] xl:py-[1rem] ',
-          'xl:grid-cols-2 xl:gap-x-[1rem]',
+          'xl:grid-cols-[3fr_2fr] xl:gap-x-[1rem]',
         )}
       >
         {hierarchicalSpans?.map((span: UISpan) => (

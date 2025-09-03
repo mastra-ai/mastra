@@ -8,11 +8,12 @@ import {
   TimerIcon,
 } from 'lucide-react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { KeyValueList, UISpan } from '@mastra/playground-ui';
-import { Link } from 'react-router';
+import { KeyValueList } from '@/components/ui/elements';
+import { type UISpan } from '../types';
 import { format } from 'date-fns/format';
 import { useState } from 'react';
 import { getSpanTypeUi } from './shared';
+import { useLinkComponent } from '@/lib/framework';
 
 type TraceTreeSpanProps = {
   span: UISpan;
@@ -37,6 +38,7 @@ export function TraceTreeSpan({
   overallLatency,
   overallStartTime,
 }: TraceTreeSpanProps) {
+  const { Link } = useLinkComponent();
   const [isHovered, setIsHovered] = useState(false);
   const hasChildren = span.spans && span.spans.length > 0;
   const isRootSpan = depth === 0;
@@ -75,7 +77,7 @@ export function TraceTreeSpan({
               hasChildren={Boolean(hasChildren)}
             />
           )}
-          <div className={cn('text-[0.875rem] flex items-center gap-[0.5rem] text-[#fff]  w-full')}>
+          <div className={cn('text-[0.875rem] flex items-center text-left break-all gap-[0.5rem] text-[#fff]  w-full')}>
             {spanUI?.icon && (
               <span className="[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0" style={{ color: spanUI?.color }}>
                 {spanUI?.icon}
@@ -104,11 +106,21 @@ export function TraceTreeSpan({
             <span
               className={cn(
                 'absolute flex pt-[0.1rem]  items-center gap-[0.5rem] text-icon5',
-                '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
+                '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50 mb-[0.1em] [&>svg]:mb-[0.1rem]',
               )}
               style={{ width: `${percentageSpanLatency}%`, left: `${percentageSpanStartTime}%` }}
             >
-              <ChevronsLeftRight /> {(span.latency / 1000).toFixed(2)}&nbsp;s
+              <ChevronsLeftRight />
+              <span
+                style={{
+                  transform:
+                    percentageSpanStartTime && percentageSpanStartTime > 70
+                      ? 'translateX(calc((100% + 2rem) * -1)'
+                      : 'none',
+                }}
+              >
+                {(span.latency / 1000).toFixed(2)}&nbsp;s
+              </span>
             </span>
           </div>
           <div className="relative w-full bg-surface5  h-[3px] ">

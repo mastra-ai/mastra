@@ -9,11 +9,11 @@ import {
   EntityOptions,
   getShortId,
   EntryListStatusCell,
+  TraceDialog,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { EyeIcon } from 'lucide-react';
-import { TraceDialog } from './TraceDialog';
 import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
 import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 import { format, isToday } from 'date-fns';

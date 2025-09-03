@@ -4,18 +4,17 @@ import {
   SideDialogTop,
   SideDialogCodeSection,
   KeyValueList,
-  UISpan,
   TextAndIcon,
   getShortId,
   SideDialogHeader,
   SideDialogHeading,
-} from '@mastra/playground-ui';
+} from '@/components/ui/elements';
+import { type UISpan } from '../types';
 import { format } from 'date-fns/format';
 import {
   PanelLeftIcon,
   PanelTopIcon,
   SquareSplitVerticalIcon,
-  ListTreeIcon,
   ChevronsLeftRightEllipsisIcon,
   CoinsIcon,
   ArrowRightIcon,
@@ -24,9 +23,8 @@ import {
   EyeIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
 import { TraceTree } from './trace-tree';
-import { trace } from 'console';
+import { useLinkComponent } from '@/lib/framework';
 
 type TraceDialogProps = {
   traceSpans?: any[];
@@ -47,14 +45,13 @@ export function TraceDialog({
   onNext,
   onPrevious,
 }: TraceDialogProps) {
+  const { Link } = useLinkComponent();
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const [combinedViewProportion, setCombinedViewProportion] = useState<'1/1' | '1/2' | '1/3'>('1/1');
 
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId) ?? traceSpans[0];
-
-  console.log({ selectedSpan, traceDetails });
 
   // Handler to toggle combined view proportion
   const toggleCombinedViewProportion = () => {
@@ -333,7 +330,9 @@ function Usage({ traceUsage, traceSpans = [], spanUsage, className }: UsageProps
     tokensByProvider[provider] = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
   });
 
-  const traceTokensBasedOnSpans = Object.keys(tokensByProvider).reduce(
+  const traceTokensBasedOnSpans: { promptTokens: number; completionTokens: number; totalTokens: number } = Object.keys(
+    tokensByProvider,
+  ).reduce(
     (acc, provider) => {
       const { promptTokens, completionTokens, totalTokens } = tokensByProvider[provider];
       acc.promptTokens += promptTokens;
@@ -403,7 +402,7 @@ function Usage({ traceUsage, traceSpans = [], spanUsage, className }: UsageProps
                   className="grid grid-cols-[1fr_auto] gap-x-[1rem] gap-y-[.25rem]  justify-between text-icon3"
                 >
                   <dt>{provider}</dt>
-                  <dd>{providerTokens?.[key]}</dd>
+                  <dd>{providerTokens?.[key as keyof typeof providerTokens]}</dd>
                 </dl>
               ))}
             </div>
