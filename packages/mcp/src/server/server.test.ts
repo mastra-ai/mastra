@@ -5,6 +5,7 @@ import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo, ConvertedTool } from '@mastra/core/mcp';
+import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
@@ -25,6 +26,7 @@ import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
 import type { MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
+import { createMCPTool } from './types';
 
 const PORT = 9100 + Math.floor(Math.random() * 1000);
 let server: MCPServer;
@@ -2138,5 +2140,147 @@ describe('MCPServer - Tool Input Validation', () => {
     expect(invalidResult.error).toBe(true);
     expect(invalidResult.message).toContain('Tool validation failed');
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
+  });
+});
+
+describe('createMCPTool', () => {
+  it('should create an MCP tool with proper typing', () => {
+    const mcpTool = createMCPTool({
+      id: 'test-weather',
+      description: 'Get weather information for a city',
+      inputSchema: z.object({
+        city: z.string(),
+        units: z.enum(['celsius', 'fahrenheit']).optional(),
+      }),
+      outputSchema: z.object({
+        temperature: z.number(),
+        condition: z.string(),
+        humidity: z.number(),
+      }),
+      execute: async () => {
+        // Simulate weather data
+        return {
+          temperature: 22,
+          condition: 'sunny',
+          humidity: 65,
+        };
+      },
+    });
+
+    // Verify the tool structure
+    expect(mcpTool.id).toBe('test-weather');
+    expect(mcpTool.description).toBe('Get weather information for a city');
+    expect(mcpTool.parameters).toBeDefined();
+    expect(mcpTool.outputSchema).toBeDefined();
+    expect(mcpTool.execute).toBeInstanceOf(Function);
+  });
+
+  it('should create an MCP tool without schemas', () => {
+    const mcpTool = createMCPTool({
+      id: 'simple-tool',
+      description: 'A simple tool without schemas',
+      execute: async () => {
+        return 'Hello from simple tool!';
+      },
+    });
+
+    expect(mcpTool.id).toBe('simple-tool');
+    expect(mcpTool.description).toBe('A simple tool without schemas');
+    expect(mcpTool.parameters).toBeUndefined();
+    expect(mcpTool.outputSchema).toBeUndefined();
+    expect(mcpTool.execute).toBeInstanceOf(Function);
+  });
+
+  it('should execute the tool with proper options', async () => {
+    const executeMock = vi.fn().mockResolvedValue({ result: 'success' });
+
+    const mcpTool = createMCPTool({
+      id: 'mock-tool',
+      description: 'Mock tool for testing',
+      inputSchema: z.object({ input: z.string() }),
+      execute: executeMock,
+    });
+
+    const mockOptions = {
+      messages: [],
+      toolCallId: 'test-call-id',
+      elicitation: {
+        sendRequest: vi.fn(),
+      },
+      extra: {} as MCPRequestHandlerExtra,
+    };
+
+    const result = await mcpTool.execute!({ input: 'test' }, mockOptions);
+
+    expect(executeMock).toHaveBeenCalledWith(
+      { input: 'test' },
+      {
+        context: { input: 'test' },
+        elicitation: mockOptions.elicitation,
+        extra: mockOptions.extra,
+      },
+    );
+    expect(result).toEqual({ result: 'success' });
+  });
+});
+
+describe('MCPServer with enhanced tool types', () => {
+  it('should accept MCPToolAction in server configuration', () => {
+    const mcpToolAction = createMCPTool({
+      id: 'enhanced-weather',
+      description: 'Get enhanced weather information',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      outputSchema: z.object({
+        temperature: z.number(),
+        condition: z.string(),
+      }),
+      execute: async () => {
+        return { temperature: 75, condition: 'sunny' };
+      },
+    });
+
+    // This should compile without errors - testing the type compatibility
+    expect(() => {
+      const server = new MCPServer({
+        name: 'Enhanced Test Server',
+        version: '1.0.0',
+        tools: {
+          enhancedWeather: mcpToolAction,
+        },
+      });
+      expect(server).toBeDefined();
+      expect(server.name).toBe('Enhanced Test Server');
+    }).not.toThrow();
+  });
+
+  it('should accept mixed tool types in server configuration', () => {
+    const regularTool = createTool({
+      id: 'regular-tool',
+      description: 'A regular tool',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async ({ context }) => context.input,
+    });
+
+    const mcpToolAction = createMCPTool({
+      id: 'mcp-tool',
+      description: 'An MCP tool',
+      inputSchema: z.object({ data: z.string() }),
+      execute: async params => params.data,
+    });
+
+    // This should compile without errors - testing mixed tool types
+    expect(() => {
+      const server = new MCPServer({
+        name: 'Mixed Tools Server',
+        version: '1.0.0',
+        tools: {
+          regular: regularTool,
+          mcp: mcpToolAction,
+        },
+      });
+      expect(server).toBeDefined();
+    }).not.toThrow();
   });
 });

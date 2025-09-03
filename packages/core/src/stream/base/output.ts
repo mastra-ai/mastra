@@ -11,6 +11,7 @@ import { MastraBase } from '../../base';
 import type { OutputProcessor } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
@@ -43,6 +44,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   includeRawChunks?: boolean;
   output?: OUTPUT;
   outputProcessors?: OutputProcessor[];
+  returnScorerData?: boolean;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
@@ -110,6 +112,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   };
 
   #streamConsumed = false;
+  #returnScorerData = false;
 
   /**
    * Unique identifier for this execution run.
@@ -142,7 +145,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
-
+    this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
 
     // Create processor runner if outputProcessors are provided
@@ -733,6 +736,25 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       },
     });
 
+    let scoringData:
+      | {
+          input: Omit<ScorerRunInputForAgent, 'runId'>;
+          output: ScorerRunOutputForAgent;
+        }
+      | undefined;
+
+    if (this.#returnScorerData) {
+      scoringData = {
+        input: {
+          inputMessages: this.messageList.getPersisted.input.ui(),
+          rememberedMessages: this.messageList.getPersisted.remembered.ui(),
+          systemMessages: this.messageList.getSystemMessages(),
+          taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
+        },
+        output: this.messageList.getPersisted.response.ui(),
+      };
+    }
+
     const fullOutput = {
       text: await this.text,
       usage: await this.usage,
@@ -753,6 +775,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       error: this.error,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
+      ...(scoringData ? { scoringData } : {}),
     };
 
     fullOutput.response.messages = this.messageList.get.response.aiV5.model();
