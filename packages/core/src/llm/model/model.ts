@@ -277,6 +277,13 @@ export class MastraLLMV1 extends MastraBase {
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
 
+    let toJSONSchema: undefined | ((schema: any) => any) = undefined;
+
+    try {
+      // @ts-expect-error: toJSONSchema does not exist in Zod v3
+      toJSONSchema = (await import('zod')).toJSONSchema;
+    } catch {}
+
     this.logger.debug(`[LLM] - Generating text`, {
       runId,
       messages,
@@ -300,10 +307,8 @@ export class MastraLLMV1 extends MastraBase {
         }
 
         let jsonSchemaToUse;
-        if ('toJSONSchema' in z) {
-          // Use dynamic property access to avoid import errors in Zod v3
-          // @ts-ignore
-          jsonSchemaToUse = (z as any)['toJSONSchema'](schema) as JSONSchema7;
+        if (typeof toJSONSchema === 'function') {
+          jsonSchemaToUse = toJSONSchema(schema) as JSONSchema7;
         } else {
           jsonSchemaToUse = zodToJsonSchema(schema, {
             $refStrategy: 'none',
@@ -688,9 +693,8 @@ export class MastraLLMV1 extends MastraBase {
       const argsForExecute: OriginalStreamObjectOptions<T> = {
         ...rest,
         model: this._wrapModel(model, tracingContext),
-        onFinish: async props => {
+        onFinish: async (props: any) => {
           try {
-            // @ts-expect-error - onFinish is not inferred correctly
             await onFinish?.({ ...props, runId: runId! });
           } catch (e: unknown) {
             const mastraError = new MastraError(
