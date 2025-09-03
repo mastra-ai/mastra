@@ -6,9 +6,11 @@ import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
 export function zodToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7') {
-  if ('toJSONSchema' in z) {
+  const fn = 'toJSONSchema';
+
+  if (fn in z) {
     // Use dynamic property access to avoid import errors in Zod v3
-    return (z as any)['toJSONSchema'](zodSchema, {
+    return (z as any)[fn](zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
         // Safe access to handle cases where _zod might be undefined

@@ -1,13 +1,13 @@
-import type { CoreMessage } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type { AiMessageType, AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/llm';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
 import { WriteToDiskProcessor } from '../processors/write-file';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
-import { agentBuilderTemplateWorkflow } from '../workflows';
+import { agentBuilderWorkflows } from '../workflows';
 
 // =============================================================================
 // Template Merge Workflow Implementation
@@ -60,9 +60,7 @@ export class AgentBuilder extends Agent {
           ...(config.tools || {}),
         };
       },
-      workflows: {
-        'merge-template': agentBuilderTemplateWorkflow,
-      },
+      workflows: agentBuilderWorkflows,
       memory: new Memory({
         options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
         processors: [
