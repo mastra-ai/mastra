@@ -160,13 +160,13 @@ export function TraceTreeSpan({
                 {
                   key: 'startTime',
                   label: 'Started at',
-                  value: span.startTime ? format(new Date(span.startTime), 'hh:mm:ss:SSS a') : 'N/A',
+                  value: span.startTime ? format(new Date(span.startTime), 'hh:mm:ss:SSS a') : '-',
                   icon: <ChevronFirstIcon />,
                 },
                 {
                   key: 'endTime',
                   label: 'Ended at',
-                  value: span.endTime ? format(new Date(span.endTime), 'hh:mm:ss:SSS a') : 'N/A',
+                  value: span.endTime ? format(new Date(span.endTime), 'hh:mm:ss:SSS a') : '-',
                   icon: <ChevronLastIcon />,
                 },
                 {

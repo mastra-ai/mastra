@@ -4,11 +4,11 @@ import {
   Header,
   MainContentLayout,
   EntryList,
-  ObservabilityTracesTools,
   PageHeader,
   EntityOptions,
   getShortId,
   EntryListStatusCell,
+  TracesTools,
   TraceDialog,
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
@@ -184,7 +184,7 @@ export default function Observability() {
               description="Explore observability traces for your entities"
               icon={<EyeIcon />}
             />
-            <ObservabilityTracesTools
+            <TracesTools
               onEntityChange={handleSelectedEntityChange}
               onReset={handleReset}
               selectedEntity={selectedEntityOption}

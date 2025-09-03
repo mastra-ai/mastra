@@ -2,8 +2,6 @@ import { AISpanRecord } from '@mastra/core';
 import { UISpan } from '../types';
 
 export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
-  console.log({ spans });
-
   if (!spans || spans.length === 0) {
     return [];
   }
