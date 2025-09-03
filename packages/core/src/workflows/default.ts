@@ -899,7 +899,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowId,
             stepId: step.id,
             runtimeContext,
-            tracingContext: innerTracingContext,
             disableScorers,
           });
         }
@@ -1016,7 +1015,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId,
     stepId,
     runtimeContext,
-    tracingContext,
     disableScorers,
   }: {
     scorers: DynamicArgument<MastraScorers>;
@@ -1024,7 +1022,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     input: any;
     output: any;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
     workflowId: string;
     stepId: string;
     disableScorers?: boolean;
@@ -1062,7 +1059,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           input: [input],
           output: output,
           runtimeContext,
-          tracingContext,
           entity: {
             id: workflowId,
             stepId: stepId,
