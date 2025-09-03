@@ -17,7 +17,7 @@
     "mastra": "latest",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "dependencies": {
     "@mastra/core": "latest"

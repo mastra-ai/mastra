@@ -130,7 +130,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-### Register workflow
+## Register workflow
 
 Register a workflow using `workflows` in the main Mastra instance:
 
@@ -154,20 +154,24 @@ export const mastra = new Mastra({
 });
 ```
 
-### Run workflow
+## Testing workflows locally
 There are two ways to run and test workflows.
 
 <Steps>
 
-#### Mastra Playground
+### Mastra Playground
 
 With the Mastra Dev Server running you can run the workflow from the Mastra Playground by visiting [http://localhost:4111/workflows](http://localhost:4111/workflows) in your browser.
 
-#### Command line
+> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
 
-Create a run instance of any Mastra workflow using `createRunAsync` and `start`:
+### Command line
+
+Create a workflow run instance using `createRunAsync` and `start`:
 
 ```typescript {3,5} filename="src/test-workflow.ts" showLineNumbers copy
+import "dotenv/config";
+
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
@@ -178,15 +182,13 @@ const result = await run.start({
   }
 });
 
-// Dump the complete workflow result (includes status, steps and result)
-console.log(JSON.stringify(result, null, 2));
+console.log(result);
 
-// Get the workflow output value
 if (result.status === 'success') {
-  console.log(`output value: ${result.result.output}`);
+  console.log(result.result.output);
 }
 ```
-> see [createRunAsync](/reference/workflows/create-run) and [start](/reference/workflows/run-methods/start) for more information.
+> see [createRunAsync](../../reference/workflows/create-run.mdx) and [start](../../reference/workflows/run-methods/start.mdx) for more information.
 
 To trigger this workflow, run the following:
 
@@ -196,11 +198,11 @@ npx tsx src/test-workflow.ts
 
 </Steps>
 
-#### Run workflow results
+### Run workflow results
 
 The result of running a workflow using either `start()` or `resume()` will look like one of the following, depending on the outcome.
 
-##### Status success
+#### Status success
 
 ```json
 {
@@ -224,7 +226,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
 - **result**: Includes the final output of the workflow, typed according to the `outputSchema`
 
 
-##### Status suspended
+#### Status suspended
 
 ```json
 {
@@ -246,7 +248,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
 
 - **suspended**: An optional array listing any steps currently awaiting input before continuing
 
-##### Status failed
+#### Status failed
 
 ```json
 {
@@ -264,7 +266,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
 ```
 - **error**: An optional field that includes the error message if the workflow fails
 
-### Stream workflow
+## Stream workflow
 
 Similar to the run method shown above, workflows can also be streamed:
 
@@ -286,7 +288,7 @@ for await (const chunk of result.stream) {
 
 > See [stream](/reference/workflows/run-methods/stream) and [messages](/reference/workflows/run-methods/stream#messages) for more information.
 
-### Watch Workflow
+## Watch Workflow
 
 A workflow can also be watched, allowing you to inspect each event that is emitted.
 
@@ -308,7 +310,7 @@ const result = await run.start({
 
 > See [watch](/reference/workflows/run-methods/watch) for more information.
 
-## More resources
+## Related
 
 - The [Workflow Guide](../../guides/guide/ai-recruiter.mdx) in the Guides section is a tutorial that covers the main concepts.
 - [Parallel Steps workflow example](../../examples/workflows/parallel-steps.mdx)
