@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import { writer } from 'repl';
 import type { WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import type { ModelMessage } from 'ai-v5';
@@ -1340,7 +1339,6 @@ export class Agent<
     resourceId,
     runtimeContext,
     agentAISpan,
-    format,
     methodType,
   }: {
     runId?: string;
