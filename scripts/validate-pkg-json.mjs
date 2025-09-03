@@ -34,10 +34,15 @@ function shouldCheckPackage(name) {
   return ALLOW_LIST.some(prefix => name.startsWith(prefix));
 }
 
+function getRelativeDirectory(file) {
+  return path.relative(ROOT_DIR, path.dirname(file));
+}
+
 async function main() {
   const pkgFiles = await findPackageJsonFiles(ROOT_DIR);
   const rootPkgJson = path.join(ROOT_DIR, 'package.json');
   let hasError = false;
+  const checkedFiles = new Set();
 
   for (const file of pkgFiles) {
     if (file === rootPkgJson) continue;
@@ -54,16 +59,40 @@ async function main() {
     if (pkg.private === true) continue;
     if (!shouldCheckPackage(pkg.name)) continue;
 
+    // Check files array
     const filesArr = pkg.files || [];
     const missing = ['dist', 'CHANGELOG.md'].filter(f => !filesArr.includes(f));
     if (missing.length > 0) {
       console.log(`❌ ${file}: missing ${missing.join(', ')}`);
       hasError = true;
     }
+
+    // Check repository
+    const relDir = getRelativeDirectory(file);
+    if (!pkg.repository) {
+      console.log(`❌ ${file}: missing repository field`);
+      hasError = true;
+    } else {
+      if (pkg.repository.type !== 'git') {
+        console.log(`❌ ${file}: repository.type should be "git"`);
+        hasError = true;
+      }
+      if (pkg.repository.url !== 'git+https://github.com/mastra-ai/mastra.git') {
+        console.log(`❌ ${file}: repository.url should be "git+https://github.com/mastra-ai/mastra.git"`);
+        hasError = true;
+      }
+      if (pkg.repository.directory !== relDir) {
+        console.log(`❌ ${file}: repository.directory should be "${relDir}"`);
+        hasError = true;
+      }
+    }
+
+    checkedFiles.add(file);
   }
 
   if (!hasError) {
-    console.log('✅ All checked package.json files contain "dist" and "CHANGELOG.md" in files array.');
+    console.log(`✅ All checked package.json files passed validation.
+Total: ${checkedFiles.size} files`);
   } else {
     process.exit(1);
   }
