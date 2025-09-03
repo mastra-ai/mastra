@@ -67,7 +67,7 @@ describe('convertFullStreamChunkToUIMessageStream', () => {
     });
   });
 
-  it('should not convert typed tool-output part into UI message if type does no begin with tool-', () => {
+  it('should not convert typed tool-output part into UI message if type does not begin with tool-', () => {
     // Arrange: Create a tool-output part with sample data
     const toolOutput = {
       type: 'tool-output',

@@ -171,7 +171,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'tool-output': {
       if ('type' in part.output) {
-        if (!part.output.type.includes('tool-')) return
+        if (!part.output.type.startsWith('tool-')) return
 
         return convertFullStreamChunkToUIMessageStream({
           part: {
