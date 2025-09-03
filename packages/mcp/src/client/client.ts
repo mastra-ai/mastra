@@ -481,11 +481,11 @@ export class InternalMastraMCPClient extends MastraBase {
     try {
       await $RefParser.dereference(inputSchema);
       const jsonSchemaToConvert = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema;
-      if('toJSONSchema' in z){
+      if ('toJSONSchema' in z) {
         //@ts-expect-error - zod type issue
         return convertJsonSchemaToZod(jsonSchemaToConvert);
-      }else{
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert)
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
       }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
@@ -524,10 +524,10 @@ export class InternalMastraMCPClient extends MastraBase {
     try {
       await $RefParser.dereference(outputSchema);
       const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
-      if('toJSONSchema' in z){
+      if ('toJSONSchema' in z) {
         //@ts-expect-error - zod type issue
         return convertJsonSchemaToZod(jsonSchemaToConvert);
-      }else{
+      } else {
         return convertJsonSchemaToZodV3(jsonSchemaToConvert);
       }
     } catch (error: unknown) {

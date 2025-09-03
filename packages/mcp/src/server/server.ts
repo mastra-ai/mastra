@@ -363,7 +363,7 @@ export class MCPServer extends MCPServerBase {
     });
 
     // Set logging level handler
-    serverInstance.setRequestHandler(SetLevelRequestSchema, async (request) => {
+    serverInstance.setRequestHandler(SetLevelRequestSchema, async request => {
       this.currentLoggingLevel = request.params.level;
       this.logger.debug(`Logging level set to: ${request.params.level}`);
       return {};
