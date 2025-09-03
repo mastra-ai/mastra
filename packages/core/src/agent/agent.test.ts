@@ -6351,6 +6351,74 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
   }, 10000);
 
+  describe('scorer output data', () => {
+    it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green', {
+          returnScorerData: true,
+        });
+      } else {
+        result = await agent.generateVNext('Make it green', {
+          returnScorerData: true,
+        });
+      }
+
+      expect(result.scoringData).toBeDefined();
+      expect(result.scoringData.input).toMatchObject({
+        inputMessages: expect.any(Array),
+        rememberedMessages: expect.any(Array),
+        systemMessages: expect.any(Array),
+        taggedSystemMessages: expect.any(Object),
+      });
+      expect(result.scoringData.output).toBeInstanceOf(Array);
+    });
+
+    it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green', {
+          returnScorerData: false,
+        });
+      } else {
+        result = await agent.generateVNext('Make it green', {
+          returnScorerData: false,
+        });
+      }
+
+      expect(result.scoringData).toBeUndefined();
+    });
+
+    it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green');
+      } else {
+        result = await agent.generateVNext('Make it green');
+      }
+
+      expect(result.scoringData).toBeUndefined();
+    });
+  });
+
   describe('scorer override functionality', () => {
     let agent: Agent;
     let mastra: Mastra;

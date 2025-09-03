@@ -20,6 +20,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   _internal,
   mode = 'stream',
   outputProcessors,
+  returnScorerData,
   llmAISpan,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
@@ -110,6 +111,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       includeRawChunks: !!includeRawChunks,
       output: rest.output,
       outputProcessors,
+      returnScorerData,
     },
   });
 }
