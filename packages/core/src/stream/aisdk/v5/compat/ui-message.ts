@@ -32,7 +32,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   sendFinish,
   responseMessageId,
 }: {
-  part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; output: any };
+  part: TextStreamPart<ToolSet> | { type: 'tool-output'; toolCallId: string; toolName: string; output: any };
   messageMetadataValue?: any;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -170,6 +170,25 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-output': {
+      if ('type' in part.output) {
+        if (!part.output.type.includes('tool-')) return
+
+        return convertFullStreamChunkToUIMessageStream({
+          part: {
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            ...part.output
+          },
+          onError,
+          messageMetadataValue,
+          responseMessageId,
+          sendFinish,
+          sendReasoning,
+          sendSources,
+          sendStart,
+        });
+      }
+
       return {
         id: part.toolCallId,
         ...part.output,
