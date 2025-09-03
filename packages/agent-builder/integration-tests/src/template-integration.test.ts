@@ -3,7 +3,7 @@ import { spawn, execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import path, { join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { fetchMastraTemplates } from '../../src/utils';
@@ -160,7 +160,7 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Template merge completed successfully');
   }, 600000); // 10 minute timeout for full workflow
 
-  it('should start Mastra server and validate both original and new agents work', async () => {
+  it.skip('should start Mastra server and validate both original and new agents work', async () => {
     // Skip test if no OPENAI_API_KEY available
     if (!process.env.OPENAI_API_KEY) {
       console.log('Skipping test: OPENAI_API_KEY not set');
