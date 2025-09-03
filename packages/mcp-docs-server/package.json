@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "0.13.17-alpha.4",
+  "version": "0.13.17-alpha.5",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -9,7 +9,8 @@
   "files": [
     "dist",
     ".docs",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -57,5 +58,14 @@
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/mcp-docs-server"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

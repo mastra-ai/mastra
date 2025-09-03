@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.11.3-alpha.4",
+  "version": "0.11.3-alpha.5",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -25,10 +25,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mastra-ai/mastra.git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
     "directory": "client-sdks/client-js"
   },
-  "homepage": "https://github.com/mastra-ai/mastra/tree/main/client-sdks/client-js#readme",
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
   "license": "Apache-2.0",
   "scripts": {
     "lint": "eslint .",

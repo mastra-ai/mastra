@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "0.0.1-alpha.2",
+  "version": "0.0.1-alpha.3",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.14.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0",
     "typescript": ">=5.7.0"
   },
   "peerDependenciesMeta": {
@@ -70,5 +70,14 @@
     "mastra",
     "builder",
     "typescript"
-  ]
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/agent-builder"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
 }

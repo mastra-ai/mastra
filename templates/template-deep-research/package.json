@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "Advanced AI deep research assistant using Mastra's workflows and agent capabilities. Creates an interactive, human-in-the-loop research system that allows users to explore topics, evaluate results, and generate comprehensive reports.",
   "type": "module",
   "engines": {
