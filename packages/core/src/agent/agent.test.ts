@@ -4472,6 +4472,120 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         ).toBe(true);
       });
 
+      it('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
+        // This test reproduces the bug where real LLM providers (like OpenRouter)
+        // send multiple response-metadata chunks (after each text-delta)
+        // which causes the message to have multiple text parts, one for each chunks
+        // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
+        // instead of properly formatted messages like:
+        // [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
+        const mockModel =
+          version === 'v1'
+            ? new MockLanguageModelV1({
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+                  stream: convertArrayToReadableStream([
+                    { type: 'text-delta', textDelta: 'Hello' },
+                    { type: 'text-delta', textDelta: ' world' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+                    },
+                  ]),
+                }),
+              })
+            : new MockLanguageModelV2({
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello' },
+                    // add response-metadata in the middle to trigger bug where response metadata is added after each text-delta, splitting text into multiple parts, one per text delta chunk
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-delta', id: '1', delta: ' world' },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                      // Real providers DON'T include formatted messages here
+                    },
+                  ]),
+                }),
+              });
+
+        const agent = new Agent({
+          name: 'test-agent-7050',
+          instructions: 'test',
+          model: mockModel,
+        });
+
+        let capturedStep: any = null;
+
+        if (version === 'v1') {
+          const stream = await agent.stream('test message', {
+            threadId: 'test-thread-7050',
+            resourceId: 'test-resource-7050',
+            savePerStep: true,
+            onStepFinish: async (step: any) => {
+              capturedStep = step;
+            },
+          });
+
+          // Consume the v1 stream (StreamTextResult has textStream property)
+          for await (const _chunk of stream.textStream) {
+            // Just consume the stream
+          }
+        } else {
+          const result = await agent.streamVNext('test message', {
+            format: 'aisdk',
+            memory: {
+              thread: 'test-thread-7050',
+              resource: 'test-resource-7050',
+            },
+            onStepFinish: async (step: any) => {
+              capturedStep = step;
+            },
+          });
+
+          // Consume the v2 stream
+          const reader = result.textStream.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+
+        // Verify that onStepFinish was called with properly formatted messages
+        expect(capturedStep).toBeDefined();
+        expect(capturedStep.response).toBeDefined();
+        expect(capturedStep.response.messages).toBeDefined();
+        expect(Array.isArray(capturedStep.response.messages)).toBe(true);
+        expect(capturedStep.response.messages.length).toBeGreaterThan(0);
+
+        // Check that messages have the correct CoreMessage structure
+        const firstMessage = capturedStep.response.messages[0];
+        expect(firstMessage).toHaveProperty('role');
+        expect(firstMessage).toHaveProperty('content');
+        expect(typeof firstMessage.role).toBe('string');
+        expect(['assistant', 'system', 'user'].includes(firstMessage.role)).toBe(true);
+
+        if (version === `v2`) {
+          // The bug would cause messages to be multiple text parts for each chunk like;
+          // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
+          // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
+          // should only have a single text part of combined text delta chunks
+          expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
+        }
+      });
+
       it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
         const mockMemory = new MockMemory();
         let saveCallCount = 0;
