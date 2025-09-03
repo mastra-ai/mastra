@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "A Mastra workflow system for database introspection and natural language to SQL conversion. Features PostgreSQL schema analysis, AI-powered query generation, safe SQL execution, and interactive workflows for database operations.",
   "type": "module",
   "engines": {

@@ -1,4 +1,5 @@
-import { createWorkflow, createStep, Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { resolveModel } from '../../utils';
 import { PlanningIterationResultSchema } from '../shared/schema';
 import { taskPlanningPrompts } from './prompts';

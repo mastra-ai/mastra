@@ -11,7 +11,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "A Mastra template that processes PDF files and generates comprehensive questions from their content using OpenAI GPT-4o. Features pure JavaScript PDF parsing with no system dependencies and multiple usage patterns including workflows, agents, and individual tools.",
   "type": "module",
   "engines": {

@@ -177,9 +177,10 @@ export function createStep<
           args: inputData,
         };
         await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
-          ...toolData,
+          type: 'workflow-agent-call-start',
+          payload: toolData,
         });
+        // TODO: add support for format, if format is undefined use stream, else streamVNext
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
@@ -195,31 +196,13 @@ export function createStep<
         }
 
         for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
-
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-              break;
-
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
-          }
+          await emitter.emit('watch-v2', chunk);
         }
+
+        await emitter.emit('watch-v2', {
+          type: 'workflow-agent-call-finish',
+          payload: toolData,
+        });
 
         return {
           text: await streamPromise.promise,
@@ -881,7 +864,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    this.mastra?.getLogger().warn('createRun() is deprecated. Use createRunAsync() instead.');
+    this.mastra?.getLogger().warn('createRun() will be removed on September 16th. Use createRunAsync() instead.');
 
     return run;
   }
@@ -922,7 +905,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -977,6 +960,7 @@ export class Workflow<
   }
 
   async execute({
+    runId,
     inputData,
     resumeData,
     suspend,
@@ -989,6 +973,7 @@ export class Workflow<
     runCount,
     tracingContext,
   }: {
+    runId?: string;
     inputData: z.infer<TInput>;
     resumeData?: any;
     getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
@@ -1013,7 +998,7 @@ export class Workflow<
     this.__registerMastra(mastra);
 
     const isResume = !!(resume?.steps && resume.steps.length > 0);
-    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync();
+    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
       abort();
     };
@@ -1095,7 +1080,61 @@ export class Workflow<
     );
   }
 
-  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
+  protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run steps. Mastra storage is not initialized');
+      return {};
+    }
+
+    const run = await storage.getWorkflowRunById({ runId, workflowName: workflowId });
+
+    let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+    if (!snapshot) {
+      return {};
+    }
+
+    if (typeof snapshot === 'string') {
+      // this occurs whenever the parsing of snapshot fails in storage
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', e);
+        return {};
+      }
+    }
+
+    const { serializedStepGraph, context } = snapshot as WorkflowRunState;
+    const { input, ...steps } = context;
+
+    let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
+
+    for (const step of Object.keys(steps)) {
+      const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
+      finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
+      if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
+        const nestedSteps = await this.getWorkflowRunSteps({ runId, workflowId: step });
+        if (nestedSteps) {
+          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
+            (acc, [key, value]) => {
+              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
+              return acc;
+            },
+            {} as Record<string, StepResult<any, any, any, any>>,
+          );
+          finalSteps = { ...finalSteps, ...updatedNestedSteps };
+        }
+      }
+    }
+
+    return finalSteps;
+  }
+
+  async getWorkflowRunExecutionResult(
+    runId: string,
+    withNestedWorkflows: boolean = true,
+  ): Promise<WatchEvent['payload']['workflowState'] | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
@@ -1120,12 +1159,16 @@ export class Workflow<
       }
     }
 
+    const fullSteps = withNestedWorkflows
+      ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
+      : (snapshot as WorkflowRunState).context;
+
     return {
       status: (snapshot as WorkflowRunState).status,
       result: (snapshot as WorkflowRunState).result,
       error: (snapshot as WorkflowRunState).error,
       payload: (snapshot as WorkflowRunState).context?.input,
-      steps: (snapshot as WorkflowRunState).context as any,
+      steps: fullSteps as any,
     };
   }
 }
@@ -1302,17 +1345,49 @@ export class Run<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
+    let currentToolData: { name: string; args: any } | undefined = undefined;
+
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
+      if ((event as any).type === 'workflow-agent-call-start') {
+        currentToolData = {
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
+        };
+        await writer.write({
+          ...event.payload,
+          type: 'tool-call-streaming-start',
+        } as any);
+
+        return;
+      }
+
       try {
+        if ((event as any).type === 'workflow-agent-call-finish') {
+          return;
+        } else if (!(event as any).type.startsWith('workflow-')) {
+          if ((event as any).type === 'text-delta') {
+            await writer.write({
+              type: 'tool-call-delta',
+              ...(currentToolData ?? {}),
+              argsTextDelta: (event as any).textDelta,
+            } as any);
+          }
+          return;
+        }
+
+        const e: any = {
+          ...event,
+          type: event.type.replace('workflow-', ''),
+        };
         // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
+        await writer.write(e as any);
       } catch {}
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
       this.emitter.emit('watch-v2', {
-        type: 'finish',
+        type: 'workflow-finish',
         payload: { runId: this.runId },
       });
       unwatch();
@@ -1327,7 +1402,7 @@ export class Run<
     };
 
     this.emitter.emit('watch-v2', {
-      type: 'start',
+      type: 'workflow-start',
       payload: { runId: this.runId },
     });
     this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
@@ -1396,31 +1471,13 @@ export class Run<
         };
 
         const unwatch = this.watch(async ({ type, payload }) => {
-          let newPayload: Record<string, any> = payload;
-
-          //@ts-ignore
-          if (type === 'step-start') {
-            const { payload: args, id, ...rest } = newPayload;
-            newPayload = {
-              args,
-              ...rest,
-            };
-            //@ts-ignore
-          } else if (type === 'step-result') {
-            const { output, id, ...rest } = newPayload;
-            newPayload = {
-              result: output,
-              ...rest,
-            };
-          }
-
           buffer.push({
             type,
             runId: this.runId,
             from: ChunkFrom.WORKFLOW,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
-              ...newPayload,
+              ...payload,
             },
           });
 

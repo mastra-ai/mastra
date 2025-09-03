@@ -193,7 +193,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       type: 'watch',
       runId,
       data: {
-        type: 'finish',
+        type: 'workflow-finish',
         payload: {
           runId,
         },
@@ -499,7 +499,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: 'watch',
         runId,
         data: {
-          type: 'step-waiting',
+          type: 'workflow-step-waiting',
           payload: {
             id: step.step.id,
             status: 'waiting',
@@ -672,7 +672,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: 'watch',
         runId,
         data: {
-          type: 'step-start',
+          type: 'workflow-step-start',
           payload: {
             id: step.step.id,
             startedAt: Date.now(),
@@ -984,7 +984,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: 'watch',
         runId,
         data: {
-          type: 'step-suspended',
+          type: 'workflow-step-suspended',
           payload: {
             id: (step as any)?.step?.id,
             ...prevResult,
@@ -1020,7 +1020,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: 'watch',
         runId,
         data: {
-          type: 'step-result',
+          type: 'workflow-step-result',
           payload: {
             id: step.step.id,
             ...prevResult,
@@ -1033,7 +1033,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'watch',
           runId,
           data: {
-            type: 'step-finish',
+            type: 'workflow-step-finish',
             payload: {
               id: step.step.id,
               metadata: {},
@@ -1197,7 +1197,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: 'watch',
         runId,
         data: {
-          type: 'start',
+          type: 'workflow-start',
           payload: {
             runId,
           },

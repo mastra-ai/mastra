@@ -15,7 +15,7 @@
     "mcp"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "A Mastra agent that consumes tools from an MCP server for documentation assistance",
   "type": "module",
   "engines": {
