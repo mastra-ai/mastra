@@ -331,6 +331,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                   self.#delayedPromises.text.resolve(outputText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
+
+                  // Update response with processed messages after output processors have run
+                  if (chunk.payload.metadata) {
+                    const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
+                    response = {
+                      ...otherMetadata,
+                      messages: messageList.get.response.aiV5.model(),
+                    };
+                  }
                 } else {
                   self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
