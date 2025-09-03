@@ -220,8 +220,6 @@ describe('CloudAITracingExporter', () => {
       const spanRecord = buffer.spans[0];
 
       expect(spanRecord).toMatchObject({
-        teamId: 'team-123',
-        projectId: 'project-456',
         traceId: mockSpan.traceId,
         spanId: mockSpan.id,
         parentSpanId: null,
@@ -639,8 +637,6 @@ describe('CloudAITracingExporter', () => {
       expect(requestBody).toMatchObject({
         spans: [
           {
-            teamId: 'team-123',
-            projectId: 'project-456',
             traceId: mockSpan.traceId,
             spanId: mockSpan.id,
             name: mockSpan.name,

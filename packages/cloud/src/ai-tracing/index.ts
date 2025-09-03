@@ -5,7 +5,6 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 
 import { fetchWithRetry } from '../utils/fetchWithRetry';
-import { parseCloudAccessToken } from '../utils/parseCloudAccessToken';
 
 export interface CloudAITracingExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -25,8 +24,6 @@ interface CloudBuffer {
 }
 
 interface CloudSpanRecord {
-  teamId: string;
-  projectId: string;
   traceId: string;
   spanId: string;
   parentSpanId: string | null;
@@ -51,8 +48,6 @@ export class CloudAITracingExporter implements AITracingExporter {
   private buffer: CloudBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private logger: IMastraLogger;
-  private teamId: string;
-  private projectId: string;
 
   constructor(config: CloudAITracingExporterConfig = {}) {
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
@@ -73,10 +68,6 @@ export class CloudAITracingExporter implements AITracingExporter {
       });
     }
 
-    const { teamId, projectId } = this.parseAccessToken(accessToken);
-    this.teamId = teamId;
-    this.projectId = projectId;
-
     this.config = {
       maxBatchSize: config.maxBatchSize ?? 1000,
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
@@ -92,21 +83,6 @@ export class CloudAITracingExporter implements AITracingExporter {
       spans: [],
       totalSize: 0,
     };
-  }
-
-  private parseAccessToken(accessToken: string): { teamId: string; projectId: string; cloudEndpoint?: string } {
-    try {
-      return parseCloudAccessToken(accessToken);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: `CLOUD_AI_TRACING_FAILED_TO_PARSE_ACCESS_TOKEN`,
-          domain: ErrorDomain.MASTRA_OBSERVABILITY,
-          category: ErrorCategory.USER,
-        },
-        error,
-      );
-    }
   }
 
   async exportEvent(event: AITracingEvent): Promise<void> {
@@ -142,8 +118,6 @@ export class CloudAITracingExporter implements AITracingExporter {
 
   private formatSpan(span: AnyAISpan): CloudSpanRecord {
     const spanRecord: CloudSpanRecord = {
-      teamId: this.teamId,
-      projectId: this.projectId,
       traceId: span.traceId,
       spanId: span.id,
       parentSpanId: span.parent?.id ?? null,
