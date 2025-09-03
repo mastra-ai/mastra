@@ -4470,12 +4470,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         ).toBe(true);
       });
 
-      it('should format messages correctly in onStepFinish when provider doesnt include them (Issue #7050)', async () => {
+      it('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
         // This test reproduces the bug where real LLM providers (like OpenRouter)
-        // don't include properly formatted messages in their finish chunks.
-        // The bug was that chunk.payload.messages.nonUser was undefined, causing errors.
-
-        // We'll inject undefined messages in the finish chunk to simulate real provider behavior
+        // send multiple response-metadata chunks (after each text-delta)
+        // which causes the message to have multiple text parts, one for each chunks
+        // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
+        // instead of properly formatted messages like:
+        // [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
         const mockModel =
           version === 'v1'
             ? new MockLanguageModelV1({
@@ -4490,7 +4491,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                       type: 'finish',
                       finishReason: 'stop',
                       usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-                      // Real providers DON'T include formatted messages here
                     },
                   ]),
                 }),
@@ -4505,6 +4505,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                     { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
                     { type: 'text-start', id: '1' },
                     { type: 'text-delta', id: '1', delta: 'Hello' },
+                    // add response-metadata in the middle to trigger bug where response metadata is added after each text-delta, splitting text into multiple parts, one per text delta chunk
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
                     { type: 'text-delta', id: '1', delta: ' world' },
                     { type: 'text-end', id: '1' },
                     {
@@ -4546,7 +4548,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
               thread: 'test-thread-7050',
               resource: 'test-resource-7050',
             },
-            savePerStep: true,
             onStepFinish: async (step: any) => {
               capturedStep = step;
             },
@@ -4574,11 +4575,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(typeof firstMessage.role).toBe('string');
         expect(['assistant', 'system', 'user'].includes(firstMessage.role)).toBe(true);
 
-        // The bug would cause messages to be raw chunks like:
-        // [{ type: 'text-delta', delta: 'Hello' }, { type: 'text-delta', delta: ' world' }]
-        // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
-        expect(firstMessage).not.toHaveProperty('type', 'text-delta');
-        expect(firstMessage).not.toHaveProperty('delta');
+        if (version === `v2`) {
+          // The bug would cause messages to be multiple text parts for each chunk like;
+          // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
+          // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
+          // should only have a single text part of combined text delta chunks
+          expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
+        }
       });
 
       it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
