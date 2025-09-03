@@ -96,7 +96,7 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
       // BUT does this cause other issues?
       // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
       // simple solution for now is to not flush text deltas on response-metadata
-      chunk.type !== `response-metadata` &&
+      chunk.type !== 'response-metadata' &&
       runState.state.isStreaming
     ) {
       if (runState.state.textDeltas.length) {
