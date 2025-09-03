@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.15.3-alpha.5
+
+### Patch Changes
+
+- [#7272](https://github.com/mastra-ai/mastra/pull/7272) [`85ef90b`](https://github.com/mastra-ai/mastra/commit/85ef90bb2cd4ae4df855c7ac175f7d392c55c1bf) Thanks [@taofeeq-deru](https://github.com/taofeeq-deru)! - Return nested workflow steps information in getWorkflowRunExecutionResult
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/schema-compat@0.11.2-alpha.2
+
 ## 0.15.3-alpha.4
 
 ### Patch Changes
