@@ -50,7 +50,11 @@ async function installMastraDependency(
   let installCommand = getPackageManagerAddCommand(pm);
 
   if (isDev) {
-    installCommand = `${installCommand} --save-dev`;
+    /**
+     * All our package managers support -D for devDependencies. We can't use --save-dev across the board because yarn and bun don't alias it.
+     * npm: -D, --save-dev. pnpm: -D, --save-dev. yarn: -D, --dev. bun: -D, --dev
+     */
+    installCommand = `${installCommand} -D`;
   }
 
   try {
