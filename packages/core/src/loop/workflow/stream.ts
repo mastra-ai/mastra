@@ -27,18 +27,6 @@ export function workflowLoopStream<
     start: async controller => {
       const writer = new WritableStream<ChunkType>({
         write: chunk => {
-          // Create event spans for streaming chunks on the LLM span (not agent span)
-          if (llmAISpan && chunk.type === 'text-delta') {
-            llmAISpan.createEventSpan({
-              type: AISpanType.LLM_CHUNK,
-              name: `llm chunk: ${chunk.type}`,
-              output: chunk.payload.text,
-              attributes: {
-                chunkType: chunk.type,
-              },
-            });
-          }
-
           controller.enqueue(chunk);
         },
       });
