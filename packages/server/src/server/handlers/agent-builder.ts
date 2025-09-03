@@ -25,12 +25,12 @@ function createAgentBuilderWorkflowHandler<TWorkflowArgs, TResult>(
     const logger = mastra.getLogger();
 
     try {
-      WorkflowRegistry.registerTemporaryWorkflows({});
+      // WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows);
 
       // Validate actionId if it's provided
       // if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
       //   throw new HTTPException(400, {
-      //     message: `Invalid agent-builder action: ${actionId}. Valid actions are: ${Object.keys({}).join(', ')}`,
+      //     message: `Invalid agent-builder action: ${actionId}. Valid actions are: ${Object.keys(agentBuilderWorkflows).join(', ')}`,
       //   });
       // }
 
