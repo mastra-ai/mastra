@@ -337,11 +337,11 @@ export default function Template() {
                 />
               )}
 
-              {template && success && (
+              {success && (
                 <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
               )}
 
-              {template && failure && <TemplateFailure errorMsg={failure} />}
+              {failure && <TemplateFailure errorMsg={failure} />}
 
               {!isStreaming && !isWatching && !success && !failure && (
                 <TemplateForm

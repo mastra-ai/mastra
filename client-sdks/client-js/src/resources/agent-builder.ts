@@ -392,7 +392,7 @@ export class AgentBuilder extends BaseResource {
     { runId, eventType }: { runId: string; eventType?: 'watch' | 'watch-v2' },
     onRecord: (record: { type: string; payload: any }) => void,
   ) {
-    const url = `/api/agent-builder/${this.actionId}/watch?runId=${runId}&eventType=${eventType}`;
+    const url = `/api/agent-builder/${this.actionId}/watch?runId=${runId}${eventType ? `&eventType=${eventType}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'GET',
       stream: true,
