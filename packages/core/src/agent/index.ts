@@ -7,8 +7,8 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import { AISpanType, getSelectedAITracing } from '../ai-tracing';
-import type { AISpan, AnyAISpan } from '../ai-tracing';
+import { AISpanType, getOrCreateSpan } from '../ai-tracing';
+import type { AISpan, TracingContext } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
@@ -53,6 +53,7 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
+import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
@@ -74,7 +75,6 @@ import type {
   ToolsetsInput,
   ToolsInput,
   AgentMemoryOption,
-  AgentAISpanProperties,
 } from './types';
 export * from './input-processor';
 export { TripWire };
@@ -750,11 +750,13 @@ export class Agent<
   async generateTitleFromUserMessage({
     message,
     runtimeContext = new RuntimeContext(),
+    tracingContext,
     model,
     instructions,
   }: {
     message: string | MessageInput;
     runtimeContext?: RuntimeContext;
+    tracingContext: TracingContext;
     model?: DynamicArgument<MastraLanguageModel>;
     instructions?: DynamicArgument<string>;
   }) {
@@ -791,6 +793,7 @@ export class Agent<
     if (llm.getModel().specificationVersion === 'v2') {
       const result = (llm as MastraLLMVNext).stream({
         runtimeContext,
+        tracingContext,
         messages: [
           {
             role: 'system',
@@ -807,6 +810,7 @@ export class Agent<
     } else {
       const result = await (llm as MastraLLMV1).__text({
         runtimeContext,
+        tracingContext,
         messages: [
           {
             role: 'system',
@@ -835,6 +839,7 @@ export class Agent<
   async genTitle(
     userMessage: string | MessageInput | undefined,
     runtimeContext: RuntimeContext,
+    tracingContext: TracingContext,
     model?: DynamicArgument<MastraLanguageModel>,
     instructions?: DynamicArgument<string>,
   ) {
@@ -845,6 +850,7 @@ export class Agent<
           return await this.generateTitleFromUserMessage({
             message: normMessage,
             runtimeContext,
+            tracingContext,
             model,
             instructions,
           });
@@ -963,15 +969,15 @@ export class Agent<
     resourceId,
     threadId,
     runtimeContext,
+    tracingContext,
     mastraProxy,
-    agentAISpan,
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     mastraProxy?: MastraUnion;
-    agentAISpan?: AnyAISpan;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
     // Get memory tools if available
@@ -997,8 +1003,8 @@ export class Agent<
           memory,
           agentName: this.name,
           runtimeContext,
+          tracingContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
-          agentAISpan,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -1009,10 +1015,12 @@ export class Agent<
 
   private async __runInputProcessors({
     runtimeContext,
+    tracingContext,
     messageList,
     inputProcessorOverrides,
   }: {
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessor[];
   }): Promise<{
@@ -1029,15 +1037,15 @@ export class Agent<
         inputProcessorOverrides,
       });
       // Create traced version of runInputProcessors similar to workflow _runStep pattern
-      const tracedRunInputProcessors = (messageList: MessageList) => {
+      const tracedRunInputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
         const telemetry = this.#mastra?.getTelemetry();
         if (!telemetry) {
-          return runner.runInputProcessors(messageList, undefined);
+          return runner.runInputProcessors(messageList, tracingContext, undefined);
         }
 
         return telemetry.traceMethod(
           async (data: { messageList: MessageList }) => {
-            return runner.runInputProcessors(data.messageList, telemetry);
+            return runner.runInputProcessors(data.messageList, tracingContext, telemetry);
           },
           {
             spanName: `agent.${this.name}.inputProcessors`,
@@ -1051,7 +1059,7 @@ export class Agent<
       };
 
       try {
-        messageList = await tracedRunInputProcessors(messageList);
+        messageList = await tracedRunInputProcessors(messageList, tracingContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1079,10 +1087,12 @@ export class Agent<
 
   private async __runOutputProcessors({
     runtimeContext,
+    tracingContext,
     messageList,
     outputProcessorOverrides,
   }: {
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessor[];
   }): Promise<{
@@ -1100,15 +1110,15 @@ export class Agent<
       });
 
       // Create traced version of runOutputProcessors similar to workflow _runStep pattern
-      const tracedRunOutputProcessors = (messageList: MessageList) => {
+      const tracedRunOutputProcessors = (messageList: MessageList, tracingContext: TracingContext) => {
         const telemetry = this.#mastra?.getTelemetry();
         if (!telemetry) {
-          return runner.runOutputProcessors(messageList, undefined);
+          return runner.runOutputProcessors(messageList, tracingContext, undefined);
         }
 
         return telemetry.traceMethod(
           async (data: { messageList: MessageList }) => {
-            return runner.runOutputProcessors(data.messageList, telemetry);
+            return runner.runOutputProcessors(data.messageList, tracingContext, telemetry);
           },
           {
             spanName: `agent.${this.name}.outputProcessors`,
@@ -1122,7 +1132,7 @@ export class Agent<
       };
 
       try {
-        messageList = await tracedRunOutputProcessors(messageList);
+        messageList = await tracedRunOutputProcessors(messageList, tracingContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;
@@ -1170,21 +1180,21 @@ export class Agent<
   }
 
   private async getAssignedTools({
-    runtimeContext,
     runId,
     resourceId,
     threadId,
+    runtimeContext,
+    tracingContext,
     mastraProxy,
     writableStream,
-    agentAISpan,
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     mastraProxy?: MastraUnion;
     writableStream?: WritableStream<ChunkType>;
-    agentAISpan?: AnyAISpan;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1214,9 +1224,9 @@ export class Agent<
           memory,
           agentName: this.name,
           runtimeContext,
+          tracingContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
           writableStream,
-          agentAISpan,
         };
         return [k, makeCoreTool(tool, options)];
       }),
@@ -1239,16 +1249,16 @@ export class Agent<
     resourceId,
     toolsets,
     runtimeContext,
+    tracingContext,
     mastraProxy,
-    agentAISpan,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     toolsets: ToolsetsInput;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     mastraProxy?: MastraUnion;
-    agentAISpan?: AnyAISpan;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1272,8 +1282,8 @@ export class Agent<
             memory,
             agentName: this.name,
             runtimeContext,
+            tracingContext,
             model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
-            agentAISpan,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -1289,17 +1299,17 @@ export class Agent<
     threadId,
     resourceId,
     runtimeContext,
+    tracingContext,
     mastraProxy,
     clientTools,
-    agentAISpan,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
-    agentAISpan?: AnyAISpan;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
     const memory = await this.getMemory({ runtimeContext });
@@ -1321,8 +1331,8 @@ export class Agent<
           memory,
           agentName: this.name,
           runtimeContext,
+          tracingContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
-          agentAISpan,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
@@ -1337,81 +1347,133 @@ export class Agent<
     threadId,
     resourceId,
     runtimeContext,
-    agentAISpan,
+    methodType,
+    tracingContext,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
-    agentAISpan?: AnyAISpan;
+    methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+    format?: 'mastra' | 'aisdk';
+    tracingContext: TracingContext;
   }) {
-    let convertedWorkflowTools: Record<string, CoreTool> = {};
+    const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
     if (Object.keys(workflows).length > 0) {
-      convertedWorkflowTools = Object.entries(workflows).reduce(
-        (memo, [workflowName, workflow]) => {
-          memo[workflowName] = {
-            description: workflow.description || `Workflow: ${workflowName}`,
-            parameters: workflow.inputSchema || { type: 'object', properties: {} },
-            // manually wrap workflow tools with ai tracing, so that we can pass the
-            // current tool span onto the workflow to maintain continuity of the trace
-            execute: async (args: any) => {
-              const toolAISpan = agentAISpan?.createChildSpan({
-                type: AISpanType.TOOL_CALL,
-                name: `tool: '${workflowName}'`,
-                input: args,
-                attributes: {
-                  toolId: workflowName,
-                  toolType: 'workflow',
-                },
+      for (const [workflowName, workflow] of Object.entries(workflows)) {
+        const toolObj = createTool({
+          id: workflowName,
+          description: workflow.description || `Workflow: ${workflowName}`,
+          inputSchema: workflow.inputSchema,
+          outputSchema: workflow.outputSchema,
+          mastra: this.#mastra,
+          // manually wrap workflow tools with ai tracing, so that we can pass the
+          // current tool span onto the workflow to maintain continuity of the trace
+          execute: async ({ context, writer }) => {
+            const toolAISpan = tracingContext.currentSpan?.createChildSpan({
+              type: AISpanType.TOOL_CALL,
+              name: `tool: '${workflowName}'`,
+              input: context,
+              attributes: {
+                toolId: workflowName,
+                toolType: 'workflow',
+              },
+            });
+
+            try {
+              this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
+                name: workflowName,
+                description: workflow.description,
+                args: context,
+                runId,
+                threadId,
+                resourceId,
               });
 
-              try {
-                this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
-                  name: workflowName,
-                  description: workflow.description,
-                  args,
-                  runId,
-                  threadId,
-                  resourceId,
-                });
+              const run = workflow.createRun();
 
-                const run = workflow.createRun();
-
-                const result = await run.start({
-                  inputData: args,
+              let result: any;
+              if (methodType === 'generate') {
+                result = await run.start({
+                  inputData: context,
                   runtimeContext,
-                  currentSpan: toolAISpan,
+                  tracingContext: { currentSpan: toolAISpan },
                 });
-                toolAISpan?.end({ output: result });
-                return result;
-              } catch (err) {
-                const mastraError = new MastraError(
-                  {
-                    id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
-                    domain: ErrorDomain.AGENT,
-                    category: ErrorCategory.USER,
-                    details: {
-                      agentName: this.name,
-                      runId: runId || '',
-                      threadId: threadId || '',
-                      resourceId: resourceId || '',
-                    },
-                    text: `[Agent:${this.name}] - Failed workflow tool execution`,
-                  },
-                  err,
-                );
-                this.logger.trackException(mastraError);
-                this.logger.error(mastraError.toString());
-                toolAISpan?.error({ error: mastraError });
-                throw mastraError;
+              } else if (methodType === 'stream') {
+                const streamResult = await run.stream({
+                  inputData: context,
+                  runtimeContext,
+                  // TODO: is this forgottn?
+                  //currentSpan: toolAISpan,
+                });
+
+                if (writer) {
+                  await streamResult.stream.pipeTo(writer);
+                } else {
+                  for await (const _chunk of streamResult.stream) {
+                    // complete the stream
+                  }
+                }
+
+                result = await streamResult.getWorkflowState();
+              } else if (methodType === 'streamVNext') {
+                // TODO: add support for format
+                const streamResult = run.streamVNext({
+                  inputData: context,
+                  runtimeContext,
+                  //format,
+                });
+
+                if (writer) {
+                  await streamResult.pipeTo(writer);
+                }
+
+                result = await streamResult.result;
               }
-            },
-          };
-          return memo;
-        },
-        {} as Record<string, CoreTool>,
-      );
+
+              toolAISpan?.end({ output: result });
+              return result;
+            } catch (err) {
+              const mastraError = new MastraError(
+                {
+                  id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.USER,
+                  details: {
+                    agentName: this.name,
+                    runId: runId || '',
+                    threadId: threadId || '',
+                    resourceId: resourceId || '',
+                  },
+                  text: `[Agent:${this.name}] - Failed workflow tool execution`,
+                },
+                err,
+              );
+              this.logger.trackException(mastraError);
+              this.logger.error(mastraError.toString());
+              toolAISpan?.error({ error: mastraError });
+              throw mastraError;
+            }
+          },
+        });
+
+        const options: ToolOptions = {
+          name: workflowName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: this.#mastra,
+          memory: await this.getMemory({ runtimeContext }),
+          agentName: this.name,
+          runtimeContext,
+          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          tracingContext,
+        };
+
+        convertedWorkflowTools[workflowName] = makeCoreTool(toolObj, options);
+      }
     }
 
     return convertedWorkflowTools;
@@ -1424,8 +1486,10 @@ export class Agent<
     resourceId,
     runId,
     runtimeContext,
+    tracingContext,
     writableStream,
-    agentAISpan,
+    methodType,
+    format,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -1433,8 +1497,10 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     writableStream?: WritableStream<ChunkType>;
-    agentAISpan?: AnyAISpan;
+    methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+    format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -1448,9 +1514,9 @@ export class Agent<
       resourceId,
       threadId,
       runtimeContext,
+      tracingContext,
       mastraProxy,
       writableStream,
-      agentAISpan,
     });
 
     const memoryTools = await this.getMemoryTools({
@@ -1458,8 +1524,8 @@ export class Agent<
       resourceId,
       threadId,
       runtimeContext,
+      tracingContext,
       mastraProxy,
-      agentAISpan,
     });
 
     const toolsetTools = await this.getToolsets({
@@ -1467,9 +1533,9 @@ export class Agent<
       resourceId,
       threadId,
       runtimeContext,
+      tracingContext,
       mastraProxy,
       toolsets: toolsets!,
-      agentAISpan,
     });
 
     const clientSideTools = await this.getClientTools({
@@ -1477,9 +1543,9 @@ export class Agent<
       resourceId,
       threadId,
       runtimeContext,
+      tracingContext,
       mastraProxy,
       clientTools: clientTools!,
-      agentAISpan,
     });
 
     const workflowTools = await this.getWorkflowTools({
@@ -1487,7 +1553,9 @@ export class Agent<
       resourceId,
       threadId,
       runtimeContext,
-      agentAISpan,
+      methodType,
+      format,
+      tracingContext,
     });
 
     return this.formatTools({
@@ -1587,7 +1655,8 @@ export class Agent<
     runtimeContext,
     saveQueueManager,
     writableStream,
-    currentSpan,
+    methodType,
+    tracingContext,
   }: {
     instructions: string;
     toolsets?: ToolsetsInput;
@@ -1601,7 +1670,8 @@ export class Agent<
     runtimeContext: RuntimeContext;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
-    currentSpan?: AnyAISpan;
+    methodType: 'generate' | 'stream';
+    tracingContext?: TracingContext;
   }) {
     return {
       before: async () => {
@@ -1609,8 +1679,10 @@ export class Agent<
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 
-        const spanArgs = {
+        const agentAISpan = getOrCreateSpan({
+          type: AISpanType.AGENT_RUN,
           name: `agent run: '${this.id}'`,
+          input: messages,
           attributes: {
             agentId: this.id,
             instructions,
@@ -1624,27 +1696,11 @@ export class Agent<
             resourceId,
             threadId: thread ? thread.id : undefined,
           },
-        };
+          tracingContext,
+          runtimeContext,
+        });
 
-        // if currentSpan passed, use it to build agentSpan
-        // otherwise, attempt to create new trace
-        let agentAISpan: AISpan<AISpanType.AGENT_RUN> | undefined;
-        if (currentSpan) {
-          agentAISpan = currentSpan.createChildSpan({ type: AISpanType.AGENT_RUN, ...spanArgs });
-        } else {
-          const aiTracing = getSelectedAITracing({
-            runtimeContext: runtimeContext,
-          });
-          if (aiTracing) {
-            agentAISpan = aiTracing.startSpan({
-              type: AISpanType.AGENT_RUN,
-              ...spanArgs,
-              startOptions: {
-                runtimeContext,
-              },
-            });
-          }
-        }
+        const innerTracingContext: TracingContext = { currentSpan: agentAISpan };
 
         const memory = await this.getMemory({ runtimeContext });
 
@@ -1676,8 +1732,9 @@ export class Agent<
           resourceId,
           runId,
           runtimeContext,
+          tracingContext: innerTracingContext,
           writableStream,
-          agentAISpan,
+          methodType,
         });
 
         const messageList = new MessageList({
@@ -1697,6 +1754,7 @@ export class Agent<
           messageList.add(messages, 'user');
           const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
             runtimeContext,
+            tracingContext: innerTracingContext,
             messageList,
           });
           return {
@@ -1835,6 +1893,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
           runtimeContext,
+          tracingContext: innerTracingContext,
           messageList,
         });
 
@@ -1923,17 +1982,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             };
           }),
         };
-        agentAISpan?.end({
-          output: {
-            text: result?.text,
-            object: result?.object,
-          },
-          metadata: {
-            usage: result?.usage,
-            toolResults: result?.toolResults,
-            toolCalls: result?.toolCalls,
-          },
-        });
+
         this.logger.debug(`[Agent:${this.name}] - Post processing LLM response`, {
           runId,
           result: resToLog,
@@ -2013,7 +2062,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
               if (shouldGenerate && userMessage) {
                 promises.push(
-                  this.genTitle(userMessage, runtimeContext, titleModel, titleInstructions).then(title => {
+                  this.genTitle(
+                    userMessage,
+                    runtimeContext,
+                    { currentSpan: agentAISpan },
+                    titleModel,
+                    titleInstructions,
+                  ).then(title => {
                     if (title) {
                       return memory.createThread({
                         threadId: thread.id,
@@ -2032,6 +2087,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           } catch (e) {
             await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             if (e instanceof MastraError) {
+              agentAISpan?.error({ error: e });
               throw e;
             }
             const mastraError = new MastraError(
@@ -2050,6 +2106,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             );
             this.logger.trackException(mastraError);
             this.logger.error(mastraError.toString());
+            agentAISpan?.error({ error: mastraError });
             throw mastraError;
           }
         } else {
@@ -2078,6 +2135,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           outputText,
           instructions,
           runtimeContext,
+          tracingContext: { currentSpan: agentAISpan },
           structuredOutput,
           overrideScorers,
           threadId,
@@ -2097,6 +2155,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           output: messageList.getPersisted.response.ui(),
         };
 
+        agentAISpan?.end({
+          output: {
+            text: result?.text,
+            object: result?.object,
+          },
+          metadata: {
+            usage: result?.usage,
+            toolResults: result?.toolResults,
+            toolCalls: result?.toolCalls,
+          },
+        });
+
         return {
           scoringData,
         };
@@ -2110,6 +2180,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     outputText,
     instructions,
     runtimeContext,
+    tracingContext,
     structuredOutput,
     overrideScorers,
     threadId,
@@ -2120,6 +2191,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     outputText: string;
     instructions: string;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     structuredOutput?: boolean;
     overrideScorers?:
       | MastraScorers
@@ -2175,6 +2247,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           input: scorerInput,
           output: scorerOutput,
           runtimeContext,
+          tracingContext,
           entity: {
             id: this.id,
             name: this.name,
@@ -2235,6 +2308,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     options: AgentGenerateOptions<Output, ExperimentalOutput>,
+    methodType: 'generate' | 'stream',
   ): Promise<{
     before: () => Promise<
       Omit<
@@ -2245,8 +2319,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string } & TripwireProperties &
-        AgentAISpanProperties
+      > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
     >;
     after: (args: {
       result: GenerateReturn<any, Output, ExperimentalOutput>;
@@ -2271,6 +2344,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     options: AgentStreamOptions<Output, ExperimentalOutput>,
+    methodType: 'generate' | 'stream',
   ): Promise<{
     before: () => Promise<
       Omit<
@@ -2281,8 +2355,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string } & TripwireProperties &
-        AgentAISpanProperties
+      > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
     >;
     after: (args: {
       result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
@@ -2309,6 +2382,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
     },
+    methodType: 'generate' | 'stream',
   ): Promise<{
     before:
       | (() => Promise<
@@ -2320,8 +2394,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   experimental_output?: never;
                 },
             'runId'
-          > & { runId: string } & TripwireProperties &
-            AgentAISpanProperties
+          > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
         >)
       | (() => Promise<
           Omit<
@@ -2332,8 +2405,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   experimental_output?: never;
                 },
             'runId'
-          > & { runId: string } & TripwireProperties &
-            AgentAISpanProperties
+          > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
         >);
     after:
       | ((args: {
@@ -2372,6 +2444,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       temperature,
       toolChoice = 'auto',
       runtimeContext = new RuntimeContext(),
+      tracingContext,
       savePerStep,
       writableStream,
       ...args
@@ -2437,7 +2510,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runtimeContext,
       saveQueueManager,
       writableStream,
-      currentSpan: args.tracingContext?.currentSpan,
+      methodType,
+      tracingContext,
     });
 
     let messageList: MessageList;
@@ -2543,7 +2617,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >(options: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  >({ methodType, format = 'mastra', ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -2560,6 +2634,24 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ runtimeContext }));
+
+    // Set AI Tracing context
+    const agentAISpan = getOrCreateSpan({
+      type: AISpanType.AGENT_RUN,
+      name: `agent run: '${this.id}'`,
+      input: options.messages,
+      attributes: {
+        agentId: this.id,
+        instructions,
+      },
+      metadata: {
+        runId,
+        resourceId,
+        threadId: threadFromArgs ? threadFromArgs.id : undefined,
+      },
+      tracingContext: options.tracingContext,
+      runtimeContext,
+    });
 
     // Set Telemetry context
     // Set thread ID and resource ID context for telemetry
@@ -2632,6 +2724,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runId,
           runtimeContext,
           writableStream: options.writableStream,
+          methodType,
+          format,
+          tracingContext: { currentSpan: agentAISpan },
         });
 
         return {
@@ -2651,7 +2746,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tripwire: z.boolean().optional(),
         tripwireReason: z.string().optional(),
       }),
-      execute: async () => {
+      execute: async ({ tracingContext }) => {
         const thread = threadFromArgs;
         const messageList = new MessageList({
           threadId: thread?.id,
@@ -2670,6 +2765,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList.add(options.messages, 'user');
           const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
             runtimeContext,
+            tracingContext,
             messageList,
           });
           return {
@@ -2783,8 +2879,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               if (!lastYmd || lastYmd !== ymd) {
                 result += `\nthe following messages are from ${ymd}\n`;
               }
-              result += `
-Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
+              result += `Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
 
               lastYmd = ymd;
             }
@@ -2806,6 +2901,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
           runtimeContext,
+          tracingContext,
           messageList,
         });
 
@@ -2856,7 +2952,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       id: 'stream-text-step',
       inputSchema: z.any(),
       outputSchema: z.any(),
-      execute: async ({ inputData }) => {
+      execute: async ({ inputData, tracingContext }) => {
         this.logger.debug(`Starting agent ${this.name} llm stream call`, {
           runId,
         });
@@ -2874,9 +2970,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const streamResult = llm.stream({
           ...inputData,
           outputProcessors,
+          tracingContext,
         });
 
-        if (options.format === 'aisdk') {
+        if (format === 'aisdk') {
           return streamResult.aisdk.v5;
         }
 
@@ -2891,7 +2988,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       steps: [prepareToolsStep, prepareMemory],
     })
       .parallel([prepareToolsStep, prepareMemory])
-      .map(async ({ inputData, bail }) => {
+      .map(async ({ inputData, bail, tracingContext }) => {
         const result = {
           ...options,
           messages: inputData['prepare-memory-step'].messageObjects,
@@ -2999,6 +3096,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
           messages: result.messages as ModelMessage[],
           runtimeContext: result.runtimeContext!,
+          tracingContext: { currentSpan: agentAISpan },
           runId,
           toolChoice: result.toolChoice,
           tools: result.tools,
@@ -3007,6 +3105,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput: result.structuredOutput,
           stopWhen: result.stopWhen,
           maxSteps: result.maxSteps,
+          providerOptions: result.providerOptions,
           options: {
             onFinish: async (payload: any) => {
               if (payload.finishReason === 'error') {
@@ -3036,6 +3135,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   resourceId,
                   memoryConfig,
                   runtimeContext,
+                  tracingContext,
                   runId,
                   messageList,
                   threadExists: inputData['prepare-memory-step'].threadExists,
@@ -3049,7 +3149,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   runId,
                 });
               }
-              await options?.onFinish?.({ ...result, runId } as any);
+
+              await options?.onFinish?.({
+                ...result,
+                runId,
+                messages: messageList.get.response.aiV5.model(),
+              } as any);
             },
             onStepFinish: result.onStepFinish,
           },
@@ -3067,8 +3172,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
+    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
-    return await run.start({});
+    agentAISpan?.end({ output: result });
+
+    return result;
   }
 
   async #executeOnFinish({
@@ -3080,6 +3188,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     memoryConfig,
     outputText,
     runtimeContext,
+    tracingContext,
     runId,
     messageList,
     threadExists,
@@ -3094,6 +3203,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
+    tracingContext: TracingContext;
     memoryConfig: MemoryConfig | undefined;
     outputText: string;
     messageList: MessageList;
@@ -3194,7 +3304,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
           if (shouldGenerate && userMessage) {
             promises.push(
-              this.genTitle(userMessage, runtimeContext, titleModel, titleInstructions).then(title => {
+              this.genTitle(userMessage, runtimeContext, tracingContext, titleModel, titleInstructions).then(title => {
                 if (title) {
                   return memory.createThread({
                     threadId: thread.id,
@@ -3259,6 +3369,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText,
       instructions,
       runtimeContext,
+      tracingContext,
       structuredOutput,
       overrideScorers,
     });
@@ -3328,6 +3439,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const result = await this.#execute({
       ...mergedStreamOptions,
       messages,
+      methodType: 'streamVNext',
     });
 
     if (result.status !== 'success') {
@@ -3375,6 +3487,35 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
+    this.logger.warn(
+      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 16th. Please use generateLegacy if you don't want to upgrade just yet.",
+    );
+    // @ts-expect-error - generic type issues
+    return this.generateLegacy(messages, generateOptions);
+  }
+
+  async generateLegacy(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateTextResult<any, undefined>>;
+  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<GenerateObjectResult<OUTPUT>>;
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
+  ): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
+  async generateLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+  ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
       runtimeContext: generateOptions.runtimeContext,
     });
@@ -3383,7 +3524,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...generateOptions,
     };
 
-    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions);
+    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions, 'generate');
 
     if (llm.getModel().specificationVersion !== 'v1') {
       this.logger.error(
@@ -3442,6 +3583,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const { experimental_output, output, agentAISpan, ...llmOptions } = beforeResult;
 
+    const tracingContext: TracingContext = { currentSpan: agentAISpan };
+
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     let finalOutputProcessors = mergedGenerateOptions.outputProcessors;
     if (mergedGenerateOptions.structuredOutput) {
@@ -3454,12 +3597,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     if (!output || experimental_output) {
       const result = await llmToUse.__text<any, EXPERIMENTAL_OUTPUT>({
         ...llmOptions,
-        agentAISpan,
+        tracingContext,
         experimental_output,
       });
 
       const outputProcessorResult = await this.__runOutputProcessors({
         runtimeContext: mergedGenerateOptions.runtimeContext || new RuntimeContext(),
+        tracingContext,
         outputProcessorOverrides: finalOutputProcessors,
         messageList: new MessageList({
           threadId: llmOptions.threadId || '',
@@ -3569,7 +3713,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const result = await llmToUse.__textObject<NonNullable<OUTPUT>>({
       ...llmOptions,
-      agentAISpan,
+      tracingContext,
       structuredOutput: output as NonNullable<OUTPUT>,
     });
 
@@ -3577,6 +3721,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const outputProcessorResult = await this.__runOutputProcessors({
       runtimeContext: mergedGenerateOptions.runtimeContext || new RuntimeContext(),
+      tracingContext,
       messageList: new MessageList({
         threadId: llmOptions.threadId || '',
         resourceId: llmOptions.resourceId || '',
@@ -3652,6 +3797,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
       : GenerateObjectResult<OUTPUT>;
   }
+
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -3697,6 +3843,58 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
+    this.logger.warn(
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 16th. Please use streamLegacy if you don't want to upgrade just yet.",
+    );
+    // @ts-expect-error - generic type issues
+    return this.streamLegacy(messages, streamOptions);
+  }
+
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
+  ): Promise<
+    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
+      partialObjectStream: StreamTextResult<
+        any,
+        OUTPUT extends ZodSchema
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
+      >['experimental_partialOutputStream'];
+    }
+  >;
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+  ): Promise<
+    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
+  > {
     const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
 
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
@@ -3704,7 +3902,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...streamOptions,
     };
 
-    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
 
     if (llm.getModel().specificationVersion !== 'v1') {
       this.logger.error('V2 models are not supported for stream. Please use streamVNext instead.', {
@@ -3787,6 +3985,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const { onFinish, runId, output, experimental_output, agentAISpan, ...llmOptions } = beforeResult;
 
     const overrideScorers = mergedStreamOptions.scorers;
+    const tracingContext: TracingContext = { currentSpan: agentAISpan };
+
     if (!output || experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
@@ -3795,7 +3995,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       const streamResult = llm.__stream({
         ...llmOptions,
         experimental_output,
-        agentAISpan,
+        tracingContext,
         onFinish: async result => {
           try {
             const outputText = result.text;
@@ -3827,7 +4027,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     return llm.__streamObject({
       ...llmOptions,
-      agentAISpan,
+      tracingContext,
       onFinish: async result => {
         try {
           const outputText = JSON.stringify(result.object);

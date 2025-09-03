@@ -1,5 +1,6 @@
 import type { CoreMessage } from 'ai';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
+import type { TracingContext } from '../../ai-tracing';
 import { MastraError } from '../../error';
 import type { RuntimeContext } from '../../runtime-context';
 import { Workflow } from '../../workflows';
@@ -15,6 +16,7 @@ type RunExperimentDataItem<TTarget = unknown> = {
       : unknown;
   groundTruth?: any;
   runtimeContext?: RuntimeContext;
+  tracingContext?: TracingContext;
 };
 
 type WorkflowScorerConfig = {
@@ -254,6 +256,7 @@ async function runScorers(
           output: targetResult.scoringData?.output,
           groundTruth: item.groundTruth,
           runtimeContext: item.runtimeContext,
+          tracingContext: item.tracingContext,
         });
 
         scorerResults[scorer.name] = score;
@@ -283,6 +286,7 @@ async function runScorers(
           output: targetResult.scoringData.output,
           groundTruth: item.groundTruth,
           runtimeContext: item.runtimeContext,
+          tracingContext: item.tracingContext,
         });
         workflowScorerResults[scorer.name] = score;
       }
@@ -304,6 +308,7 @@ async function runScorers(
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
                 runtimeContext: item.runtimeContext,
+                tracingContext: item.tracingContext,
               });
               stepResults[scorer.name] = score;
             } catch (error) {
