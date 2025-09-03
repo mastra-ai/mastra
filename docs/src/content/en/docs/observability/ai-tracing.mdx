@@ -3,7 +3,7 @@ title: "AI Tracing | Mastra Observability Documentation"
 description: "Set up AI tracing for Mastra applications"
 ---
 
-import Image from "next/image";
+import { Callout } from "nextra/components";
 
 # AI Tracing
 
@@ -19,7 +19,11 @@ You create AI traces by:
 
 This provides full visibility into your AI operations with minimal setup, helping you build more reliable and observable AI applications.
 
-> **⚠️ Experimental Feature**: AI Tracing is available as of `@mastra/core 0.14.0` and is currently experimental. The API may change in future releases.
+<Callout type="warning">
+  **Experimental Feature**
+  
+  AI Tracing is available as of `@mastra/core 0.14.0` and is currently experimental. The API may change in future releases.
+</Callout>
 
 ## How It Differs from Standard Tracing
 
@@ -45,11 +49,11 @@ AI Tracing complements Mastra's existing [OpenTelemetry-based tracing](./tracing
 
 For the latest updates, see [GitHub issue #6773](https://github.com/mastra-ai/mastra/issues/6773).
 
-### Basic Configuration
+## Basic Configuration
 
 Here's a simple example of enabling AI Tracing:
 
-```ts filename="mastra.config.ts" showLineNumbers copy
+```ts filename="src/mastra/index.ts" showLineNumbers copy
 import { LangfuseExporter } from '@mastra/langfuse';
 
 export const mastra = new Mastra({
@@ -57,7 +61,7 @@ export const mastra = new Mastra({
   observability: {
     instances: {
       langfuse: {
-        serviceName: 'service',
+        serviceName: 'my-service',
         exporters: [
           new LangfuseExporter({
             publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -72,7 +76,7 @@ export const mastra = new Mastra({
 });
 ```
 
-### Configuration Options
+## Configuration Options
 
 The AI tracing config accepts these properties:
 
@@ -93,7 +97,7 @@ type AITracingInstanceConfig = {
   sampling?: {
     type: "always" | "never" | "ratio" | "custom";
     probability?: number; // For ratio sampling (0.0 to 1.0)
-    sampler?: (context: AITraceContext) => boolean; // For custom sampling
+    sampler?: (context: TraceContext) => boolean; // For custom sampling
   };
   
   // Array of exporters to send trace data to
@@ -104,11 +108,11 @@ type AITracingInstanceConfig = {
 };
 ```
 
-#### Sampling Configuration
+### Sampling Configuration
 
 Control which traces are collected and exported:
 
-```ts filename="mastra.config.ts" showLineNumbers copy
+```ts filename="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
     instances: {
@@ -146,7 +150,7 @@ export const mastra = new Mastra({
 });
 ```
 
-#### Langfuse Exporter Configuration
+### Langfuse Exporter Configuration
 
 The Langfuse exporter accepts these options:
 
@@ -190,13 +194,25 @@ export const mastra = new Mastra({
 });
 ```
 
-#### Environment Variables
+#### Real-time vs Batch Mode
 
-```env filename=".env" copy
-LANGFUSE_PUBLIC_KEY=pk_lf_...
-LANGFUSE_SECRET_KEY=sk_lf_...
-LANGFUSE_BASE_URL=https://cloud.langfuse.com
-SERVICE_NAME=my-mastra-app
+The Langfuse exporter supports two modes:
+
+**Batch Mode (default)**
+- Traces are buffered and sent periodically
+- Better performance for production
+- Traces may appear with slight delay
+
+**Real-time Mode**
+- Each trace event is immediately flushed
+- Ideal for development and debugging
+- Immediate visibility in Langfuse dashboard
+
+```ts
+new LangfuseExporter({
+  // ... other config
+  realtime: process.env.NODE_ENV === 'development',
+})
 ```
 
 #### Multi-Instance Configuration
@@ -229,110 +245,194 @@ export const mastra = new Mastra({
 });
 ```
 
-### Span Types and Attributes
+## Span Types and Attributes
 
-AI Tracing automatically creates spans for different AI operations:
+AI Tracing automatically creates spans for different AI operations. Mastra supports the following span types:
 
-#### Agent Runs
-- **Type**: `AGENT_RUN`
-- **Attributes**: Agent ID, instructions, available tools, max steps
-- **Captures**: Agent execution from start to finish
+### Agent Operation Types
+- **`AGENT_RUN`** - Agent execution from start to finish
+- **`LLM_GENERATION`** - Individual model calls with prompts and completions  
+- **`TOOL_CALL`** - Function/tool executions with inputs and outputs
+- **`MCP_TOOL_CALL`** - Model Context Protocol tool executions
+- **`GENERIC`** - Custom operations
 
-#### LLM Generations  
-- **Type**: `LLM_GENERATION`
-- **Attributes**: Model name, provider, token usage, parameters
-- **Captures**: Individual model calls with prompts and completions
+### Workflow Operation Types  
+- **`WORKFLOW_RUN`** - Workflow execution from start to finish
+- **`WORKFLOW_STEP`** - Individual step processing
+- **`WORKFLOW_CONDITIONAL`** - Conditional execution blocks
+- **`WORKFLOW_CONDITIONAL_EVAL`** - Individual condition evaluations
+- **`WORKFLOW_PARALLEL`** - Parallel execution blocks
+- **`WORKFLOW_LOOP`** - Loop execution blocks
+- **`WORKFLOW_SLEEP`** - Sleep/delay operations
+- **`WORKFLOW_WAIT_EVENT`** - Event waiting operations
 
-#### Tool Calls
-- **Type**: `TOOL_CALL`
-- **Attributes**: Tool ID, tool type, success status
-- **Captures**: Function/tool executions with inputs and outputs
+### Key Attributes
+Each span type includes relevant attributes:
+- **Agent spans**: Agent ID, instructions, available tools, max steps
+- **LLM spans**: Model name, provider, token usage, parameters, finish reason
+- **Tool spans**: Tool ID, tool type, success status
+- **Workflow spans**: Step/workflow IDs, status information
 
-#### Workflow Operations
-- **Type**: `WORKFLOW_RUN` and `WORKFLOW_STEP`
-- **Attributes**: Workflow/step IDs, status information
-- **Captures**: Workflow execution and individual step processing
+## Adding Custom Metadata to Spans
 
-#### MCP Tool Calls
-- **Type**: `MCP_TOOL_CALL`
-- **Attributes**: MCP server info, tool ID, success status
-- **Captures**: Model Context Protocol tool executions
+You can add custom metadata to spans using the `tracingContext.currentSpan` available in workflow steps and tool calls. This is useful for tracking additional context like API status codes, user IDs, or performance metrics.
 
-### Real-time vs Batch Mode
+```ts showLineNumbers copy
+execute: async ({ inputData, tracingContext }) => {
+  const response = await fetch(inputData.endpoint, {
+    method: 'POST',
+    body: JSON.stringify(inputData.payload),
+  });
 
-The Langfuse exporter supports two modes:
-
-**Batch Mode (default)**
-- Traces are buffered and sent periodically
-- Better performance for production
-- Traces may appear with slight delay
-
-**Real-time Mode**
-- Each trace event is immediately flushed
-- Ideal for development and debugging
-- Immediate visibility in Langfuse dashboard
-
-```ts
-new LangfuseExporter({
-  // ... other config
-  realtime: process.env.NODE_ENV === 'development',
-})
+  // Add custom metadata to the current span
+  tracingContext.currentSpan?.update({
+    metadata: {
+      apiStatusCode: response.status,
+      responseHeaders: Object.fromEntries(response.headers.entries()),
+      endpoint: inputData.endpoint,
+    }
+  });
+  
+  const data = await response.json();
+  return { data, statusCode: response.status };
+}
 ```
 
-### Maintaining Trace Continuity in Workflows
+## Creating Child Spans
 
-When calling agents from within workflow steps, you can maintain trace continuity by passing the `aiTracingContext` that's automatically provided to each step. This ensures that agent operations appear as child spans under the workflow step.
+You can create child spans to track specific operations within your workflow steps or tools. This provides more granular visibility into what's happening during execution.
 
-```ts filename="src/mastra/workflows/support-workflow.ts" showLineNumbers copy
-import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-import type { AITracingContext } from '@mastra/core/ai-tracing';
+```ts showLineNumbers copy
+execute: async ({ input, tracingContext }) => {
+  // Create a child span for the database query
+  const querySpan = tracingContext.currentSpan?.createChildSpan({
+    type: 'generic',
+    name: 'database-query',
+    input: {
+      query: input.query,
+      params: input.params,
+    }
+  });
 
-const processCustomerQuery = createStep({
-  id: 'process-query',
-  description: 'Process customer support query with AI agent',
-  inputSchema: z.object({
-    query: z.string(),
-    customerId: z.string(),
-  }),
-  outputSchema: z.object({
-    response: z.string(),
-    resolved: z.boolean(),
-  }),
-  execute: async ({ inputData, mastra, ...context }) => {
-    // Extract aiTracingContext from the execution context
-    // Note: TypeScript types don't include this yet, so we cast
-    const { aiTracingContext } = context as { aiTracingContext: AITracingContext };
+  try {
+    const results = await db.query(input.query, input.params);
     
-    const agent = mastra.getAgent('support-agent');
-    
-    // Pass aiTracingContext to maintain span hierarchy
-    const response = await agent.generate(
-      `Help customer ${inputData.customerId}: ${inputData.query}`,
-      {
-        aiTracingContext, // This creates child spans under the step
-        maxSteps: 3,
+    // Update child span with results and end it
+    querySpan?.end({
+      output: results.data,
+      metadata: {
+        rowsReturned: results.length,
+        success: true,
       }
-    );
-    
-    return {
-      response: response.text,
-      resolved: response.finishReason === 'stop',
-    };
+    });
+
+    return { results, rowCount: results.length };
+  } catch (error) {
+    // Record error on child span
+    querySpan?.error({error});
+    throw error;
+  }
+}
+```
+
+## Span Processors and Data Filtering
+
+Span processors allow you to modify or filter span data before it's exported to observability platforms. This is useful for adding computed fields, redacting sensitive information, or transforming data formats.
+
+### Built-in SensitiveDataFilter
+
+Mastra includes a `SensitiveDataFilter` processor that automatically redacts sensitive fields from span data. It's enabled by default and scans for common sensitive field names:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { LangfuseExporter } from '@mastra/langfuse';
+import { SensitiveDataFilter } from '@mastra/core/ai-tracing';
+
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      langfuse: {
+        serviceName: 'my-service',
+        exporters: [new LangfuseExporter({ /* config */ })],
+        // SensitiveDataFilter is included by default, but you can customize it
+        processors: [
+          new SensitiveDataFilter([
+            'password', 'token', 'secret', 'key', 'apiKey', 
+            'auth', 'authorization', 'bearer', 'jwt', 
+            'credential', 'sessionId',
+            // Add your custom sensitive fields
+            'ssn', 'creditCard', 'bankAccount'
+          ])
+        ],
+      },
+    },
   },
 });
 ```
 
-This creates a trace hierarchy like:
+The `SensitiveDataFilter` automatically redacts matching fields in:
+- Span attributes
+- Span metadata  
+- Input/output data
+- Error information
 
+Fields are matched case-insensitively, and nested objects are processed recursively.
+
+### Custom Processors
+
+You can create custom processors to implement your own span transformation logic:
+
+```ts showLineNumbers copy
+import type { AISpanProcessor, AnyAISpan } from '@mastra/core/ai-tracing';
+
+export class PerformanceEnrichmentProcessor implements AISpanProcessor {
+  name = 'performance-enrichment';
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    const modifiedSpan = { ...span };
+    
+    // Add computed performance metrics
+    if (span.startTime && span.endTime) {
+      const duration = span.endTime.getTime() - span.startTime.getTime();
+      
+      modifiedSpan.metadata = {
+        ...span.metadata,
+        durationMs: duration,
+        performanceCategory: duration < 100 ? 'fast' : duration < 1000 ? 'medium' : 'slow',
+      };
+    }
+
+    // Add environment context
+    modifiedSpan.metadata = {
+      ...modifiedSpan.metadata,
+      environment: process.env.NODE_ENV || 'unknown',
+      region: process.env.AWS_REGION || 'unknown',
+    };
+
+    return modifiedSpan;
+  }
+
+  async shutdown(): Promise<void> {
+    // Cleanup if needed
+  }
+}
+
+// Use in your Mastra configuration
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      langfuse: {
+        serviceName: 'my-service',
+        exporters: [new LangfuseExporter({ /* config */ })],
+        processors: [
+          new SensitiveDataFilter(),
+          new PerformanceEnrichmentProcessor(),
+        ],
+      },
+    },
+  },
+});
 ```
-Workflow Run: support-workflow
-└── Step: process-query
-    └── Agent Run: support-agent
-        ├── LLM Generation: gpt-4-call-1
-        └── Tool Call: knowledge-base-search
-```
 
-Without passing `aiTracingContext`, the agent operations would create separate trace trees instead of appearing as children of the workflow step.
+Processors are executed in the order they're defined, and each processor receives the output of the previous one.
 
-> **⚠️ Known Issue**: The TypeScript types for workflow step execution parameters don't currently include `aiTracingContext`, requiring the type assertion shown above. This will be fixed in the next release. Additionally, we're working on automatically maintaining trace continuity without requiring manual context passing.
+
