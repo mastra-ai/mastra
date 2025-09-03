@@ -7,61 +7,7 @@ description: Example for how to run workflows.
 
 Workflows can be run from different environments. These examples demonstrate how to execute a workflow using a command line script or by calling the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) from a client-side component.
 
-## From the command line
-
-In this example, a run script has been added to the `src` directory. The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps.mdx) example.
-
-```typescript filename="src/test-run-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("sequentialSteps").createRunAsync();
-
-const result = await run.start({
-  inputData: {
-    value: 10,
-  },
-});
-
-console.log(result);
-```
-
-### Run the script
-
-Run the workflow using the following command:
-
-```bash
-npx tsx src/test-run-workflow.ts
-```
-
-### Command line output
-
-The output from this workflow run will look similar to the below:
-
-```typescript
-{
-  status: 'success',
-  steps: {
-    input: { value: 10 },
-    'step-1': {
-      payload: [Object],
-      startedAt: 1753814259885,
-      status: 'success',
-      output: [Object],
-      endedAt: 1753814259885
-    },
-    'step-2': {
-      payload: [Object],
-      startedAt: 1753814259885,
-      status: 'success',
-      output: [Object],
-      endedAt: 1753814259885
-    }
-  },
-  result: { value: 10 }
-}
-```
-
-## Using Mastra Client
+## From Mastra Client
 
 In this example, a client-side request is made using the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx). The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps.mdx) example.
 
@@ -88,8 +34,49 @@ export const TestWorkflow = () => {
 };
 ```
 
+> See [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) for more information.
 
-### Mastra Client output
+## From the command line
+
+In this example, a run script has been added to the `src` directory. The `inputData` matches the `inputSchema` for the [sequentialSteps](./sequential-steps.mdx) example.
+
+```typescript filename="src/test-run-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("sequentialSteps").createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: 10,
+  },
+});
+
+console.log(result);
+```
+
+### Run the script
+
+Run the workflow using the following command:
+
+```bash
+npx tsx src/test-run-workflow.ts
+```
+
+## From curl
+
+You can run a workflow by sending a `POST` request to your Mastra application's `/start-async` endpoint. Include `inputData` that matches the workflow's `inputSchema`.
+
+```bash
+curl -X POST http://localhost:4111/api/workflows/sequentialSteps/start-async \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputData": {
+      "value": 10
+    }
+  }' | jq
+```
+
+## Example output
 
 The output from this workflow run will look similar to the below:
 
@@ -104,23 +91,23 @@ The output from this workflow run will look similar to the below:
       "payload": {
         "value": 10
       },
-      "startedAt": 1753816719202,
+      "startedAt": 1756823641918,
       "status": "success",
       "output": {
         "value": 10
       },
-      "endedAt": 1753816719203
+      "endedAt": 1756823641918
     },
     "step-2": {
       "payload": {
         "value": 10
       },
-      "startedAt": 1753816719203,
+      "startedAt": 1756823641918,
       "status": "success",
       "output": {
         "value": 10
       },
-      "endedAt": 1753816719203
+      "endedAt": 1756823641918
     }
   },
   "result": {

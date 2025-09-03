@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 
 const clients = new Set<ReadableStreamDefaultController>();
-let isTemplateInstallationActive = false;
+let hotReloadDisabled = false;
 
 export function handleClientsRefresh(c: Context): Response {
   const stream = new ReadableStream({
@@ -38,15 +38,15 @@ export function handleTriggerClientsRefresh(c: Context) {
 
 // Functions to control hot reload during template installation
 export function disableHotReload() {
-  isTemplateInstallationActive = true;
+  hotReloadDisabled = true;
   console.log('🔒 Hot reload disabled for template installation');
 }
 
 export function enableHotReload() {
-  isTemplateInstallationActive = false;
+  hotReloadDisabled = false;
   console.log('🔓 Hot reload re-enabled after template installation');
 }
 
 export function isHotReloadDisabled(): boolean {
-  return isTemplateInstallationActive;
+  return hotReloadDisabled;
 }

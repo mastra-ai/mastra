@@ -46,7 +46,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
           if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
             return {
               ...resolved,
-              external: true,
+              external: !request.startsWith('hono/') && request !== 'hono',
             };
           }
         }

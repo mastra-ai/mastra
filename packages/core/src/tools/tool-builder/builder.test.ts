@@ -1,9 +1,11 @@
 import { openai } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel } from 'ai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
+import type { AnyAISpan } from '../../ai-tracing';
+import { AISpanType } from '../../ai-tracing';
 import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
@@ -444,6 +446,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A test tool',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -467,6 +470,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A tool without ID',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -491,6 +495,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A provider-defined tool',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -510,6 +515,277 @@ describe('CoreToolBuilder ID Preservation', () => {
 
     // Verify that the tool created with createTool() has an ID
     expect(tool.id).toBe('verify-id-exists');
+  });
+});
+
+describe('Tool Tracing Context Injection', () => {
+  it('should inject tracingContext for Mastra tools when agentAISpan is available', async () => {
+    let receivedTracingContext: any = null;
+
+    const testTool = createTool({
+      id: 'tracing-test-tool',
+      description: 'Test tool that captures tracing context',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ context, tracingContext }) => {
+        receivedTracingContext = tracingContext;
+        return { result: `processed: ${context.message}` };
+      },
+    });
+
+    // Mock agent span
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnyAISpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'tracing-test-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Test tool that captures tracing context',
+        runtimeContext: new RuntimeContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+
+    const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify tool span was created
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
+      type: AISpanType.TOOL_CALL,
+      name: 'tool: tracing-test-tool',
+      input: { message: 'test' },
+      attributes: {
+        toolId: 'tracing-test-tool',
+        toolDescription: 'Test tool that captures tracing context',
+        toolType: 'tool',
+      },
+    });
+
+    // Verify tracingContext was injected with the tool span
+    expect(receivedTracingContext).toBeTruthy();
+    expect(receivedTracingContext.currentSpan).toBe(mockToolSpan);
+
+    // Verify tool span was ended with result
+    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: { result: 'processed: test' } });
+    expect(result).toEqual({ result: 'processed: test' });
+  });
+
+  it('should not inject tracingContext when agentAISpan is not available', async () => {
+    let receivedTracingContext: any = undefined;
+
+    const testTool = createTool({
+      id: 'no-tracing-tool',
+      description: 'Test tool without agent span',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ context, tracingContext }) => {
+        receivedTracingContext = tracingContext;
+        return { result: `processed: ${context.message}` };
+      },
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'no-tracing-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Test tool without agent span',
+        runtimeContext: new RuntimeContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+    const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify tracingContext was injected but currentSpan is undefined
+    expect(receivedTracingContext).toEqual({ currentSpan: undefined });
+    expect(result).toEqual({ result: 'processed: test' });
+  });
+
+  it('should handle Vercel tools with tracing but not inject tracingContext', async () => {
+    let executeCalled = false;
+
+    // Mock Vercel tool
+    const vercelTool = {
+      description: 'Vercel tool test',
+      parameters: z.object({ input: z.string() }),
+      execute: async (args: unknown) => {
+        executeCalled = true;
+        return { output: `vercel result: ${(args as any).input}` };
+      },
+    };
+
+    // Mock agent span
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnyAISpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: {
+        name: 'vercel-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Vercel tool test',
+        runtimeContext: new RuntimeContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    const result = await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify tool span was created for Vercel tool
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
+      type: AISpanType.TOOL_CALL,
+      name: 'tool: vercel-tool',
+      input: { input: 'test' },
+      attributes: {
+        toolId: 'vercel-tool',
+        toolDescription: 'Vercel tool test',
+        toolType: 'tool',
+      },
+    });
+
+    // Verify Vercel tool execute was called (without tracingContext)
+    expect(executeCalled).toBe(true);
+
+    // Verify tool span was ended with result
+    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: { output: 'vercel result: test' } });
+    expect(result).toEqual({ output: 'vercel result: test' });
+  });
+
+  it('should handle tool execution errors and end span with error', async () => {
+    const testError = new Error('Tool execution failed');
+
+    const testTool = createTool({
+      id: 'error-tool',
+      description: 'Tool that throws an error',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async () => {
+        throw testError;
+      },
+    });
+
+    // Mock agent span
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnyAISpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'error-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Tool that throws an error',
+        runtimeContext: new RuntimeContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+
+    // Execute the tool - it should return a MastraError instead of throwing
+    const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify tool span was created
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
+
+    // Verify tool span was ended with error
+    expect(mockToolSpan.error).toHaveBeenCalledWith({ error: testError });
+    expect(mockToolSpan.end).not.toHaveBeenCalled(); // Should not call end() when error() is called
+
+    // Verify the result is a MastraError
+    expect(result).toHaveProperty('id', 'TOOL_EXECUTION_FAILED');
+    expect(result).toHaveProperty('message', 'Tool execution failed');
+  });
+
+  it('should create child span with correct logType attribute', async () => {
+    const testTool = createTool({
+      id: 'toolset-tool',
+      description: 'Tool from a toolset',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ context }) => ({ result: context.message }),
+    });
+
+    // Mock agent span
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnyAISpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'toolset-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Tool from a toolset',
+        runtimeContext: new RuntimeContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+      logType: 'toolset', // Specify toolset type
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify tool span was created with correct toolType attribute
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
+      type: AISpanType.TOOL_CALL,
+      name: 'tool: toolset-tool',
+      input: { message: 'test' },
+      attributes: {
+        toolId: 'toolset-tool',
+        toolDescription: 'Tool from a toolset',
+        toolType: 'toolset',
+      },
+    });
   });
 });
 
@@ -541,6 +817,7 @@ describe('Tool Input Validation', () => {
         tags: ['developer', 'typescript'],
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toEqual({
@@ -557,6 +834,7 @@ describe('Tool Input Validation', () => {
         age: 25,
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toEqual({
@@ -574,6 +852,7 @@ describe('Tool Input Validation', () => {
         age: 30,
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -591,6 +870,7 @@ describe('Tool Input Validation', () => {
         age: -5, // Negative age
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -609,6 +889,7 @@ describe('Tool Input Validation', () => {
         email: 'not-an-email', // Invalid email
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -645,6 +926,7 @@ describe('Tool Input Validation', () => {
         tags: [], // Empty array when min(1) required
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -664,6 +946,7 @@ describe('Tool Input Validation', () => {
         tags: [],
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);

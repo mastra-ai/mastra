@@ -1,4 +1,4 @@
-import { ToolCallContentPartComponent } from '@assistant-ui/react';
+import { ToolCallMessagePartComponent } from '@assistant-ui/react';
 import { ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 
@@ -7,7 +7,7 @@ import { Icon, ToolsIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 import { SyntaxHighlighter } from '../../ui/syntax-highlighter';
 
-export const ToolFallback: ToolCallContentPartComponent = ({ toolName, argsText, result }) => {
+export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
 
   let argSlot;

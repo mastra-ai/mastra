@@ -46,8 +46,8 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
       <div
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
-          previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1 bg-accent1Darker',
-          previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2 bg-accent2Darker',
+          previousStep?.status === 'success' && nextStep && 'bg-accent1Darker',
+          previousStep?.status === 'failed' && nextStep && 'bg-accent2Darker',
         )}
       >
         <Collapsible
