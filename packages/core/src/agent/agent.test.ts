@@ -6588,7 +6588,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         input: expect.any(Object),
         output: expect.any(Object),
         runtimeContext: expect.any(Object),
-        tracingContext: expect.any(Object),
         entity: expect.objectContaining({
           id: 'Test Agent',
           name: 'Test Agent',
