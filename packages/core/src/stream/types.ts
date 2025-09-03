@@ -8,8 +8,8 @@ import type {
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1StreamPart, LanguageModelRequestMetadata } from 'ai';
 import type { CoreMessage, StepResult } from 'ai-v5';
-import type { OutputSchema, PartialSchemaOutput } from './base/schema';
 import type { WorkflowStreamEvent } from '../workflows/types';
+import type { OutputSchema, PartialSchemaOutput } from './base/schema';
 
 export enum ChunkFrom {
   AGENT = 'AGENT',
