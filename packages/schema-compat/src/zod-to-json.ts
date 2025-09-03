@@ -1,18 +1,14 @@
 import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
 export function zodToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7') {
-  let toJSONSchemaFn: undefined | ((schema: any, opts?: any) => JSONSchema7) = undefined;
-  try {
-    toJSONSchemaFn = require('zod').toJSONSchema;
-  } catch {}
-
-  if (typeof toJSONSchemaFn === 'function') {
+  if ('toJSONSchema' in z) {
     // Use dynamic property access to avoid import errors in Zod v3
-    return toJSONSchemaFn(zodSchema, {
+    return (z as any)['toJSONSchema'](zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
         // Safe access to handle cases where _zod might be undefined
