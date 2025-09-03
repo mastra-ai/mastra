@@ -76,7 +76,7 @@ export function TemplateForm({
                       name={key}
                       labelIsHidden={true}
                       label="Value"
-                      value={value as string}
+                      value={value}
                       onChange={handleVariableChange}
                       errorMsg={errors.includes(key) ? `Value is required.` : ''}
                       autoComplete="off"
@@ -95,9 +95,7 @@ export function TemplateForm({
               'flex items-center gap-[0.5rem] justify-center text-[0.875rem] w-full bg-surface5 min-h-[2.5rem] rounded-lg text-icon5 hover:bg-surface6 transition-colors',
               '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
             )}
-            onClick={() => {
-              handleInstallTemplate();
-            }}
+            onClick={handleInstallTemplate}
             disabled={!selectedProvider || errors.length > 0}
           >
             Install <ArrowRightIcon />

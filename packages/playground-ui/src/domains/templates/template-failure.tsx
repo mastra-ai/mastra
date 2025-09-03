@@ -15,7 +15,7 @@ export function TemplateFailure({ errorMsg }: TemplateFailureProps) {
       )}
     >
       <FrownIcon />
-      <p className="text-[0.875rem] text-center text-icon3 ">{errorMsg || 'Template installation failed'}</p>
+      <p className="text-[0.875rem] text-center text-icon3">{errorMsg || 'Template installation failed'}</p>
     </Container>
   );
 }

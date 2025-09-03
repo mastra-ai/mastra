@@ -13,7 +13,7 @@ export function ProcessStepProgressBar({ steps }: { steps: ProcessStep[] }) {
           return (
             <div
               key={step.id}
-              className={cn('flex justify-end items-center relative  h-[2rem] ', {
+              className={cn('flex justify-end items-center relative h-[2rem] ', {
                 'bg-green-900': step.status === 'success' && steps?.[idx - 1]?.status === 'success',
               })}
             >
