@@ -46,7 +46,12 @@ import { LibSQLStore } from "@mastra/libsql";
 export const workingMemoryTemplateAgent = new Agent({
   name: "working-memory-template-agent",
   instructions: `
-You are a todo list AI agent. Always show the current list when starting a conversation. For each task, include: title with index number, due date, description, status, and estimated time. Use emojis for each field. Support subtasks with bullet points. Ask for time estimates to help with timeboxing.
+    You are a todo list AI agent.
+    Always show the current list when starting a conversation.
+    For each task, include: title with index number, due date, description, status, and estimated time.
+    Use emojis for each field.
+    Support subtasks with bullet points.
+    Ask for time estimates to help with timeboxing.
   `,
   model: openai("gpt-4o"),
   memory: new Memory({
@@ -57,17 +62,16 @@ You are a todo list AI agent. Always show the current list when starting a conve
       workingMemory: {
         enabled: true,
         template: `
-# Todo List
-## Active Items
-- Task 1: Example task
-  - Due: Feb 7 2028
-  - Description: This is an example task
-  - Status: Not Started
-  - Estimated Time: 2 hours
+          # Todo List
+          ## Active Items
+          - Task 1: Example task
+            - Due: Feb 7 2028
+            - Description: This is an example task
+            - Status: Not Started
+            - Estimated Time: 2 hours
 
-## Completed Items
-- None yet
-        `
+          ## Completed Items
+          - None yet`
       },
       threads: {
         generateTitle: true
@@ -77,7 +81,7 @@ You are a todo list AI agent. Always show the current list when starting a conve
 });
 ```
 
-## Usage example
+## Usage examples
 
 This example shows how to interact with an agent that uses a working memory template to manage structured information. The agent updates and persists the todo list across multiple interactions within the same thread.
 

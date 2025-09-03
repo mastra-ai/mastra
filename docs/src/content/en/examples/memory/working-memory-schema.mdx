@@ -33,7 +33,7 @@ To add LibSQL memory to an agent, use the `Memory` class and pass a `storage` in
 
 Enable working memory by setting `workingMemory.enabled` to `true`. This allows the agent to remember structured information between interactions.
 
-Providing a `schema` helps define the structure of what should be remembered using Zod validation. In this example, the schema organizes tasks into active and completed items with proper typing.
+Providing a `schema` defines the shape in which the agent should remember information. In this example, it separates tasks into active and completed lists.
 
 Threads group related messages into conversations. When `generateTitle` is enabled, each thread is automatically given a descriptive name based on its content.
 
@@ -47,7 +47,12 @@ import { z } from "zod";
 export const workingMemorySchemaAgent = new Agent({
   name: "working-memory-schema-agent",
   instructions: `
-You are a todo list AI agent. Always show the current list when starting a conversation. For each task, include: title with index number, due date, description, status, and estimated time. Use emojis for each field. Support subtasks with bullet points. Ask for time estimates to help with timeboxing.
+    You are a todo list AI agent.
+    Always show the current list when starting a conversation.
+    For each task, include: title with index number, due date, description, status, and estimated time.
+    Use emojis for each field.
+    Support subtasks with bullet points.
+    Ask for time estimates to help with timeboxing.
   `,
   model: openai("gpt-4o"),
   memory: new Memory({
@@ -77,7 +82,7 @@ You are a todo list AI agent. Always show the current list when starting a conve
 });
 ```
 
-## Usage example
+## Usage examples
 
 This example shows how to interact with an agent that uses a working memory schema to manage structured information. The agent updates and persists the todo list across multiple interactions within the same thread.
 
