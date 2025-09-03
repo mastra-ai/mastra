@@ -51,7 +51,7 @@ export default function Observability() {
   const { data: agents } = useAgents();
   const { data: workflows } = useWorkflows();
 
-  const { data: aiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
+  const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
 
   const {
     data: aiTraces = [],
@@ -153,7 +153,7 @@ export default function Observability() {
   };
 
   const toPreviousItem = () => {
-    const currentIndex = aiTraces.findIndex(event => event.traceId === selectedTraceId);
+    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
     const prevItem = aiTraces[currentIndex + 1];
 
     if (prevItem) {
@@ -162,7 +162,7 @@ export default function Observability() {
   };
 
   const toNextItem = () => {
-    const currentIndex = aiTraces.findIndex(event => event.traceId === selectedTraceId);
+    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
     const nextItem = aiTraces[currentIndex - 1];
 
     if (nextItem) {
@@ -215,6 +215,7 @@ export default function Observability() {
         onClose={() => setDialogIsOpen(false)}
         onNext={aiTraces.length > 1 ? toNextItem : undefined}
         onPrevious={aiTraces.length > 1 ? toPreviousItem : undefined}
+        isLoadingSpans={isLoadingAiTrace}
       />
     </>
   );

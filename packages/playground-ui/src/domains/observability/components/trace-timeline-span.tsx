@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { getSpanTypeUi } from './shared';
 import { useLinkComponent } from '@/lib/framework';
 
-type TraceTreeSpanProps = {
+type TraceTimelineSpanProps = {
   span: UISpan;
   depth?: number;
   onSpanClick?: (span: UISpan) => void;
@@ -27,7 +27,7 @@ type TraceTreeSpanProps = {
   overallStartTime?: string;
 };
 
-export function TraceTreeSpan({
+export function TraceTimelineSpan({
   span,
   depth = 0,
   onSpanClick,
@@ -37,7 +37,7 @@ export function TraceTreeSpan({
   isNextToLastChild,
   overallLatency,
   overallStartTime,
-}: TraceTreeSpanProps) {
+}: TraceTimelineSpanProps) {
   const { Link } = useLinkComponent();
   const [isHovered, setIsHovered] = useState(false);
   const hasChildren = span.spans && span.spans.length > 0;
@@ -105,7 +105,7 @@ export function TraceTreeSpan({
           <div className="text-left text-[0.75rem] relative w-full h-[1.4rem] ">
             <span
               className={cn(
-                'absolute flex pt-[0.1rem]  items-center gap-[0.5rem] text-icon5',
+                'absolute flex pt-[0.1rem] items-center gap-[0.5rem] text-icon5',
                 '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50 mb-[0.1em] [&>svg]:mb-[0.1rem]',
               )}
               style={{ width: `${percentageSpanLatency}%`, left: `${percentageSpanStartTime}%` }}
@@ -190,7 +190,7 @@ export function TraceTreeSpan({
           const isNextToLastChild = idx === array.length - 2;
 
           return (
-            <TraceTreeSpan
+            <TraceTimelineSpan
               key={childSpan.id}
               span={childSpan}
               depth={depth + 1}

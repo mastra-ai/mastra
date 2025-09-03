@@ -1,11 +1,11 @@
 import { cn } from '@/lib/utils';
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
 
-type TraceTreeLegendProps = {
+type TraceTimelineLegendProps = {
   spans?: any[];
 };
 
-export function TraceTreeLegend({ spans = [] }: TraceTreeLegendProps) {
+export function TraceTimelineLegend({ spans = [] }: TraceTimelineLegendProps) {
   const activeSpanTypes = spanTypePrefixes.filter(typePrefix =>
     spans.some(span => span?.spanType?.startsWith(typePrefix)),
   );
