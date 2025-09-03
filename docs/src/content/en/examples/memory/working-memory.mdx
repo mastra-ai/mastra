@@ -7,7 +7,9 @@ description: Example showing how to use working memory with an agent to maintain
 
 Use working memory to help agents remember key facts, track user details, and maintain context across conversations.
 
-It works with both streamed responses using `.stream()` and generated responses using `.generate()`, and requires a storage provider such as PostgreSQL, LibSQL, or Redis to persist data between sessions.
+Working memory works with both streamed responses using `.stream()` and generated responses using `.generate()`, and requires a storage provider such as PostgreSQL, LibSQL, or Redis to persist data between sessions.
+
+This example shows how to enable working memory in an agent and interact with it across multiple messages in the same thread.
 
 ## Prerequisites
 
@@ -65,7 +67,7 @@ This example shows how to interact with an agent that has working memory enabled
 
 ### Streaming a response using `.stream()`
 
-Sends two messages to the agent within the same thread. The second response is streamed and includes information remembered from the first.
+This example sends two messages to the agent within the same thread. The response is streamed and includes information remembered from the first.
 
 ```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
 import "dotenv/config";
@@ -98,8 +100,7 @@ for await (const chunk of stream.textStream) {
 
 ### Generating a response using `.generate()`
 
-Uses `.generate()` to send and receive full messages in a single call. The agent recalls details from the first interaction when responding to the second.
-
+This example sends two messages to the agent within the same thread. The response is returned as a single message and includes information remembered from the first.
 
 ```typescript filename="src/test-working-memory-agent.ts" showLineNumbers copy
 import "dotenv/config";

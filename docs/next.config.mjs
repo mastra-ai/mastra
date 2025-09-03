@@ -797,6 +797,11 @@ export default withGT(
         destination: "/examples/memory/working-memory",
         permanent: true,
       },
+      {
+        source: "/examples/memory/streaming-working-memory-advanced",
+        destination: "/examples/memory/working-memory-templates",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),
