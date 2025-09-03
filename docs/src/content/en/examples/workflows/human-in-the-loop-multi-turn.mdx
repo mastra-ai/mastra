@@ -114,64 +114,64 @@ The workflow coordinates the full interaction using `suspend`/`resume` to pause 
 The `startStep` generates a name using the `famousPersonAgent`, while the `gameStep` runs the interaction through the `gameAgent`, which handles both questions and guesses and produces structured output that includes a `gameWon` boolean.
 
 ```typescript filename="src/mastra/workflows/example-heads-up-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
 
 const startStep = createStep({
-  id: "start-step",
-  description: "Get the name of a famous person",
+  id: 'start-step',
+  description: 'Get the name of a famous person',
   inputSchema: z.object({
-    start: z.boolean()
+    start: z.boolean(),
   }),
   outputSchema: z.object({
     famousPerson: z.string(),
-    guessCount: z.number()
+    guessCount: z.number(),
   }),
   execute: async ({ mastra }) => {
-    const agent = mastra.getAgent("famousPersonAgent");
+    const agent = mastra.getAgent('famousPersonAgent');
     const response = await agent.generate("Generate a famous person's name", {
       temperature: 1.2,
       topP: 0.9,
       memory: {
-        resource: "heads-up-game",
-        thread: "famous-person-generator"
-      }
+        resource: 'heads-up-game',
+        thread: 'famous-person-generator',
+      },
     });
     const famousPerson = response.text.trim();
     return { famousPerson, guessCount: 0 };
-  }
+  },
 });
 
 const gameStep = createStep({
-  id: "game-step",
-  description: "Handles the question-answer-continue loop",
+  id: 'game-step',
+  description: 'Handles the question-answer-continue loop',
   inputSchema: z.object({
     famousPerson: z.string(),
-    guessCount: z.number()
+    guessCount: z.number(),
   }),
   resumeSchema: z.object({
-    userMessage: z.string()
+    userMessage: z.string(),
   }),
   suspendSchema: z.object({
-    suspendResponse: z.string()
+    suspendResponse: z.string(),
   }),
   outputSchema: z.object({
     famousPerson: z.string(),
     gameWon: z.boolean(),
     agentResponse: z.string(),
-    guessCount: z.number()
+    guessCount: z.number(),
   }),
   execute: async ({ inputData, mastra, resumeData, suspend }) => {
     let { famousPerson, guessCount } = inputData;
     const { userMessage } = resumeData ?? {};
 
     if (!userMessage) {
-      await suspend({
-        suspendResponse: "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!"
+      return await suspend({
+        suspendResponse: "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!",
       });
     }
 
-    const agent = mastra.getAgent("gameAgent");
+    const agent = mastra.getAgent('gameAgent');
     const response = await agent.generate(
       `
         The famous person is: ${famousPerson}
@@ -181,9 +181,9 @@ const gameStep = createStep({
       {
         output: z.object({
           response: z.string(),
-          gameWon: z.boolean()
-        })
-      }
+          gameWon: z.boolean(),
+        }),
+      },
     );
 
     const { response: agentResponse, gameWon } = response.object;
@@ -191,40 +191,44 @@ const gameStep = createStep({
     guessCount++;
 
     return { famousPerson, gameWon, agentResponse, guessCount };
-  }
+  },
 });
 
 const winStep = createStep({
-  id: "win-step",
-  description: "Handle game win logic",
+  id: 'win-step',
+  description: 'Handle game win logic',
   inputSchema: z.object({
     famousPerson: z.string(),
     gameWon: z.boolean(),
     agentResponse: z.string(),
-    guessCount: z.number()
+    guessCount: z.number(),
   }),
   outputSchema: z.object({
     famousPerson: z.string(),
     gameWon: z.boolean(),
-    guessCount: z.number()
+    guessCount: z.number(),
   }),
   execute: async ({ inputData }) => {
     const { famousPerson, gameWon, guessCount } = inputData;
 
+    console.log('famousPerson: ', famousPerson);
+    console.log('gameWon: ', gameWon);
+    console.log('guessCount: ', guessCount);
+
     return { famousPerson, gameWon, guessCount };
-  }
+  },
 });
 
 export const headsUpWorkflow = createWorkflow({
-  id: "heads-up-workflow",
+  id: 'heads-up-workflow',
   inputSchema: z.object({
-    start: z.boolean()
+    start: z.boolean(),
   }),
   outputSchema: z.object({
     famousPerson: z.string(),
     gameWon: z.boolean(),
-    guessCount: z.number()
-  })
+    guessCount: z.number(),
+  }),
 })
   .then(startStep)
   .dountil(gameStep, async ({ inputData: { gameWon } }) => gameWon)

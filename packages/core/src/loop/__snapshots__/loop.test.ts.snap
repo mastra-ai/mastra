@@ -676,25 +676,6 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
 ]
 `;
 
-exports[`Loop Tests > AISDK v5 > generateText > result.files > should contain files 1`] = `
-[
-  DefaultGeneratedFile {
-    "base64Data": "AQID",
-    "mediaType": "image/png",
-    "uint8ArrayData": Uint8Array [
-      1,
-      2,
-      3,
-    ],
-  },
-  DefaultGeneratedFile {
-    "base64Data": "QkFVRw==",
-    "mediaType": "image/jpeg",
-    "uint8ArrayData": undefined,
-  },
-]
-`;
-
 exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain response body and headers 1`] = `
 {
   "body": "test body",
@@ -784,30 +765,6 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response.messages > shoul
 [
   {
     "content": [
-      {
-        "text": "Hello, world!",
-        "type": "text",
-      },
-    ],
-    "id": "msg-0",
-    "role": "assistant",
-  },
-]
-`;
-
-exports[`Loop Tests > AISDK v5 > generateText > result.response.messages > should contain reasoning 1`] = `
-[
-  {
-    "content": [
-      {
-        "signature": "signature",
-        "text": "I will open the conversation with witty banter.",
-        "type": "reasoning",
-      },
-      {
-        "data": "redacted-reasoning-data",
-        "type": "redacted-reasoning",
-      },
       {
         "text": "Hello, world!",
         "type": "text",
@@ -930,145 +887,6 @@ exports[`Loop Tests > AISDK v5 > generateText > result.steps > should add the re
 ]
 `;
 
-exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain files 1`] = `
-[
-  {
-    "experimental_providerMetadata": undefined,
-    "files": [
-      DefaultGeneratedFileWithType {
-        "base64Data": undefined,
-        "mimeType": "image/png",
-        "type": "file",
-        "uint8ArrayData": Uint8Array [
-          1,
-          2,
-          3,
-        ],
-      },
-      DefaultGeneratedFileWithType {
-        "base64Data": "QkFVRw==",
-        "mimeType": "image/jpeg",
-        "type": "file",
-        "uint8ArrayData": undefined,
-      },
-    ],
-    "finishReason": "stop",
-    "isContinued": false,
-    "logprobs": undefined,
-    "providerMetadata": undefined,
-    "reasoning": undefined,
-    "reasoningDetails": [],
-    "request": {},
-    "response": {
-      "headers": undefined,
-      "id": "id-0",
-      "messages": [
-        {
-          "content": [
-            {
-              "data": "AQID",
-              "mimeType": "image/png",
-              "type": "file",
-            },
-            {
-              "data": "QkFVRw==",
-              "mimeType": "image/jpeg",
-              "type": "file",
-            },
-            {
-              "text": "Hello, world!",
-              "type": "text",
-            },
-          ],
-          "id": "msg-0",
-          "role": "assistant",
-        },
-      ],
-      "modelId": "mock-model-id",
-      "timestamp": 1970-01-01T00:00:00.000Z,
-    },
-    "sources": [],
-    "stepType": "initial",
-    "text": "Hello, world!",
-    "toolCalls": [],
-    "toolResults": [],
-    "usage": {
-      "completionTokens": 20,
-      "promptTokens": 10,
-      "totalTokens": 30,
-    },
-    "warnings": undefined,
-  },
-]
-`;
-
-exports[`Loop Tests > AISDK v5 > generateText > result.steps > should contain sources 1`] = `
-[
-  DefaultStepResult {
-    "content": [
-      {
-        "text": "Hello, world!",
-        "type": "text",
-      },
-      {
-        "id": "123",
-        "providerMetadata": {
-          "provider": {
-            "custom": "value",
-          },
-        },
-        "sourceType": "url",
-        "title": "Example",
-        "type": "source",
-        "url": "https://example.com",
-      },
-      {
-        "id": "456",
-        "providerMetadata": {
-          "provider": {
-            "custom": "value2",
-          },
-        },
-        "sourceType": "url",
-        "title": "Example 2",
-        "type": "source",
-        "url": "https://example.com/2",
-      },
-    ],
-    "finishReason": "stop",
-    "providerMetadata": undefined,
-    "request": {},
-    "response": {
-      "body": undefined,
-      "headers": undefined,
-      "id": "id-0",
-      "messages": [
-        {
-          "content": [
-            {
-              "providerOptions": undefined,
-              "text": "Hello, world!",
-              "type": "text",
-            },
-          ],
-          "role": "assistant",
-        },
-      ],
-      "modelId": "mock-model-id",
-      "timestamp": 1970-01-01T00:00:00.000Z,
-    },
-    "usage": {
-      "cachedInputTokens": undefined,
-      "inputTokens": 3,
-      "outputTokens": 10,
-      "reasoningTokens": undefined,
-      "totalTokens": 13,
-    },
-    "warnings": [],
-  },
-]
-`;
-
 exports[`Loop Tests > AISDK v5 > generateText > result.text > should generate text 1`] = `[]`;
 
 exports[`Loop Tests > AISDK v5 > generateText > telemetry > should not record any telemetry data when not explicitly enabled 1`] = `[]`;
@@ -1124,93 +942,6 @@ exports[`Loop Tests > AISDK v5 > generateText > telemetry > should not record te
     },
     "events": [],
     "name": "ai.toolCall",
-  },
-]
-`;
-
-exports[`Loop Tests > AISDK v5 > generateText > telemetry > should record telemetry data when enabled 1`] = `
-[
-  {
-    "attributes": {
-      "ai.model.id": "mock-model-id",
-      "ai.model.provider": "mock-provider",
-      "ai.operationId": "ai.generateText",
-      "ai.prompt": "{"prompt":"prompt"}",
-      "ai.request.headers.header1": "value1",
-      "ai.request.headers.header2": "value2",
-      "ai.response.finishReason": "stop",
-      "ai.response.providerMetadata": "{"testProvider":{"testKey":"testValue"}}",
-      "ai.response.text": "Hello, world!",
-      "ai.settings.frequencyPenalty": 0.3,
-      "ai.settings.maxRetries": 2,
-      "ai.settings.presencePenalty": 0.4,
-      "ai.settings.stopSequences": [
-        "stop",
-      ],
-      "ai.settings.temperature": 0.5,
-      "ai.settings.topK": 0.1,
-      "ai.settings.topP": 0.2,
-      "ai.telemetry.functionId": "test-function-id",
-      "ai.telemetry.metadata.test1": "value1",
-      "ai.telemetry.metadata.test2": false,
-      "ai.usage.completionTokens": 10,
-      "ai.usage.promptTokens": 3,
-      "operation.name": "ai.generateText test-function-id",
-      "resource.name": "test-function-id",
-    },
-    "events": [],
-    "name": "ai.generateText",
-  },
-  {
-    "attributes": {
-      "ai.model.id": "mock-model-id",
-      "ai.model.provider": "mock-provider",
-      "ai.operationId": "ai.generateText.doGenerate",
-      "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"prompt"}]}]",
-      "ai.request.headers.header1": "value1",
-      "ai.request.headers.header2": "value2",
-      "ai.response.finishReason": "stop",
-      "ai.response.id": "test-id-from-model",
-      "ai.response.model": "test-response-model-id",
-      "ai.response.providerMetadata": "{"testProvider":{"testKey":"testValue"}}",
-      "ai.response.text": "Hello, world!",
-      "ai.response.timestamp": "1970-01-01T00:00:10.000Z",
-      "ai.settings.frequencyPenalty": 0.3,
-      "ai.settings.maxRetries": 2,
-      "ai.settings.presencePenalty": 0.4,
-      "ai.settings.stopSequences": [
-        "stop",
-      ],
-      "ai.settings.temperature": 0.5,
-      "ai.settings.topK": 0.1,
-      "ai.settings.topP": 0.2,
-      "ai.telemetry.functionId": "test-function-id",
-      "ai.telemetry.metadata.test1": "value1",
-      "ai.telemetry.metadata.test2": false,
-      "ai.usage.completionTokens": 10,
-      "ai.usage.promptTokens": 3,
-      "gen_ai.request.frequency_penalty": 0.3,
-      "gen_ai.request.model": "mock-model-id",
-      "gen_ai.request.presence_penalty": 0.4,
-      "gen_ai.request.stop_sequences": [
-        "stop",
-      ],
-      "gen_ai.request.temperature": 0.5,
-      "gen_ai.request.top_k": 0.1,
-      "gen_ai.request.top_p": 0.2,
-      "gen_ai.response.finish_reasons": [
-        "stop",
-      ],
-      "gen_ai.response.id": "test-id-from-model",
-      "gen_ai.response.model": "test-response-model-id",
-      "gen_ai.system": "mock-provider",
-      "gen_ai.usage.input_tokens": 3,
-      "gen_ai.usage.output_tokens": 10,
-      "operation.name": "ai.generateText.doGenerate test-function-id",
-      "resource.name": "test-function-id",
-    },
-    "events": [],
-    "name": "ai.generateText.doGenerate",
   },
 ]
 `;
@@ -1697,22 +1428,12 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 
 exports[`Loop Tests > AISDK v5 > result.text > should resolve with full text 1`] = `"Hello, world!"`;
 
-exports[`Loop Tests > AISDK v5 > result.textStream > should filter out empty text deltas 1`] = `
-[
-  "Hello",
-  ", ",
-  "world!",
-]
-`;
-
 exports[`Loop Tests > AISDK v5 > result.textStream > should not include reasoning content in textStream 1`] = `
 [
   "Hi",
   " there!",
 ]
 `;
-
-exports[`Loop Tests > AISDK v5 > result.textStream > should swallow error to prevent server crash 1`] = `[]`;
 
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error messages by default 1`] = `
 [

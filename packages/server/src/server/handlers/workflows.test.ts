@@ -1,10 +1,10 @@
 import { Mastra } from '@mastra/core';
 import { MockStore } from '@mastra/core/storage';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import {
   getWorkflowsHandler,

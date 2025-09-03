@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
-import type { AnyAISpan } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -881,7 +881,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    this.mastra?.getLogger().warn('createRun() is deprecated. Use createRunAsync() instead.');
+    this.mastra?.getLogger().warn('createRun() will be removed on September 16th. Use createRunAsync() instead.');
 
     return run;
   }
@@ -922,7 +922,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -977,6 +977,7 @@ export class Workflow<
   }
 
   async execute({
+    runId,
     inputData,
     resumeData,
     suspend,
@@ -987,8 +988,9 @@ export class Workflow<
     abort,
     abortSignal,
     runCount,
-    currentSpan,
+    tracingContext,
   }: {
+    runId?: string;
     inputData: z.infer<TInput>;
     resumeData?: any;
     getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
@@ -1008,12 +1010,12 @@ export class Workflow<
     bail: (result: any) => any;
     abort: () => any;
     runCount?: number;
-    currentSpan?: AnyAISpan;
+    tracingContext?: TracingContext;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
     const isResume = !!(resume?.steps && resume.steps.length > 0);
-    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync();
+    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
     const nestedAbortCb = () => {
       abort();
     };
@@ -1035,8 +1037,8 @@ export class Workflow<
     }
 
     const res = isResume
-      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, currentSpan })
-      : await run.start({ inputData, runtimeContext, currentSpan });
+      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, tracingContext })
+      : await run.start({ inputData, runtimeContext, tracingContext });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1095,7 +1097,61 @@ export class Workflow<
     );
   }
 
-  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
+  protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run steps. Mastra storage is not initialized');
+      return {};
+    }
+
+    const run = await storage.getWorkflowRunById({ runId, workflowName: workflowId });
+
+    let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+    if (!snapshot) {
+      return {};
+    }
+
+    if (typeof snapshot === 'string') {
+      // this occurs whenever the parsing of snapshot fails in storage
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', e);
+        return {};
+      }
+    }
+
+    const { serializedStepGraph, context } = snapshot as WorkflowRunState;
+    const { input, ...steps } = context;
+
+    let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
+
+    for (const step of Object.keys(steps)) {
+      const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
+      finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
+      if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
+        const nestedSteps = await this.getWorkflowRunSteps({ runId, workflowId: step });
+        if (nestedSteps) {
+          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
+            (acc, [key, value]) => {
+              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
+              return acc;
+            },
+            {} as Record<string, StepResult<any, any, any, any>>,
+          );
+          finalSteps = { ...finalSteps, ...updatedNestedSteps };
+        }
+      }
+    }
+
+    return finalSteps;
+  }
+
+  async getWorkflowRunExecutionResult(
+    runId: string,
+    withNestedWorkflows: boolean = true,
+  ): Promise<WatchEvent['payload']['workflowState'] | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
@@ -1120,12 +1176,16 @@ export class Workflow<
       }
     }
 
+    const fullSteps = withNestedWorkflows
+      ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
+      : (snapshot as WorkflowRunState).context;
+
     return {
       status: (snapshot as WorkflowRunState).status,
       result: (snapshot as WorkflowRunState).result,
       error: (snapshot as WorkflowRunState).error,
       payload: (snapshot as WorkflowRunState).context?.input,
-      steps: (snapshot as WorkflowRunState).context as any,
+      steps: fullSteps as any,
     };
   }
 }
@@ -1249,12 +1309,12 @@ export class Run<
     inputData,
     runtimeContext,
     writableStream,
-    currentSpan,
+    tracingContext,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
-    currentSpan?: AnyAISpan;
+    tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1281,7 +1341,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
-      currentSpan,
+      tracingContext,
     });
 
     if (result.status !== 'suspended') {
@@ -1527,7 +1587,7 @@ export class Run<
       | string[];
     runtimeContext?: RuntimeContext;
     runCount?: number;
-    currentSpan?: AnyAISpan;
+    tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1645,7 +1705,7 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-        currentSpan: params.currentSpan,
+        tracingContext: params.tracingContext,
       })
       .then(result => {
         if (result.status !== 'suspended') {

@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.11.3-alpha.1",
+  "version": "0.11.3-alpha.2",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -20,7 +20,7 @@
   },
   "files": [
     "dist",
-    "src/scripts"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
