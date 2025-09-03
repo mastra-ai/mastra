@@ -331,7 +331,7 @@ importers:
         specifier: ^9.7.0
         version: 9.7.0
       redis:
-        specifier: ^5.8.0
+        specifier: ^5.8.2
         version: 5.8.2
     devDependencies:
       '@internal/lint':
