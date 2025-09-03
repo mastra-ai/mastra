@@ -8,13 +8,12 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
-
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
 import type { AnyAISpan, TracingContext } from '../../ai-tracing';
@@ -277,13 +276,6 @@ export class MastraLLMV1 extends MastraBase {
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
 
-    let toJSONSchema: undefined | ((schema: any) => any) = undefined;
-
-    try {
-      // @ts-expect-error: toJSONSchema does not exist in Zod v3
-      toJSONSchema = (await import('zod')).toJSONSchema;
-    } catch {}
-
     this.logger.debug(`[LLM] - Generating text`, {
       runId,
       messages,
@@ -307,14 +299,7 @@ export class MastraLLMV1 extends MastraBase {
         }
 
         let jsonSchemaToUse;
-        if (typeof toJSONSchema === 'function') {
-          jsonSchemaToUse = toJSONSchema(schema) as JSONSchema7;
-        } else {
-          jsonSchemaToUse = zodToJsonSchema(schema, {
-            $refStrategy: 'none',
-            target: 'jsonSchema7',
-          }) as JSONSchema7;
-        }
+        jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7') as JSONSchema7;
 
         schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
       } else {
