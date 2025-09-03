@@ -2452,12 +2452,15 @@ export class MessageList {
             // Ensure we have a valid MIME type - default to image/jpeg if not specified
             const finalMimeType = extractedMimeType || 'image/jpeg';
 
+            // For AI SDK V5, file parts should use 'url' field with data URI
+            const dataUri = imageData.startsWith('data:') ? imageData : createDataUri(imageData, finalMimeType);
+
             parts.push({
               type: 'file',
-              data: imageData,
+              url: dataUri,
               mediaType: finalMimeType,
               providerMetadata: part.providerOptions,
-            } as any);
+            });
             break;
           }
           case 'file': {
@@ -2473,13 +2476,14 @@ export class MessageList {
                 }
 
                 if (parsed.base64Content !== urlStr) {
-                  // Valid data URI with base64 content
+                  // Valid data URI with base64 content - use url field with data URI
+                  const dataUri = createDataUri(parsed.base64Content, extractedMimeType || 'image/png');
                   parts.push({
                     type: 'file',
-                    data: parsed.base64Content,
+                    url: dataUri,
                     mediaType: extractedMimeType || 'image/png',
                     providerMetadata: part.providerOptions,
-                  } as any);
+                  });
                 } else {
                   // Malformed data URI, use as URL
                   parts.push({
@@ -2510,19 +2514,21 @@ export class MessageList {
                     extractedMimeType = parsed.mimeType;
                   }
 
+                  const dataUri = createDataUri(parsed.base64Content, extractedMimeType || 'image/png');
                   parts.push({
                     type: 'file',
-                    data: parsed.base64Content,
+                    url: dataUri,
                     mediaType: extractedMimeType || 'image/png',
                     providerMetadata: part.providerOptions,
-                  } as any);
+                  });
                 } else {
+                  const dataUri = createDataUri(base64Data, part.mediaType || 'image/png');
                   parts.push({
                     type: 'file',
-                    data: base64Data,
+                    url: dataUri,
                     mediaType: part.mediaType || 'image/png',
                     providerMetadata: part.providerOptions,
-                  } as any);
+                  });
                 }
               } catch (error) {
                 console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
