@@ -6351,7 +6351,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
   }, 10000);
 
-  describe('scorer', () => {
+  describe('scorer output data', () => {
     it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
       const agent = new Agent({
         name: 'Scorer Agent',
