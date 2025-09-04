@@ -86,7 +86,7 @@
   "resolutions": {
     "typescript": "^5.8.3",
     "@types/node": "^20.17.57",
-    "cookie": ">=0.7.0",
+    "cookie": ">=0.7.2",
     "tmp": ">=0.2.4"
   },
   "license": "Apache-2.0",
