@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSampleMessageV1, createSampleMessageV2 } from './data';
 import { resetRole, createSampleThread } from './data';
-import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
+import { MastraStorage } from '@mastra/core/storage';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesPaginatedTest({ storage }: { storage: MastraStorage }) {
@@ -133,14 +133,14 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       await storage.saveMessages({ messages });
 
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+      const retrievedMessages = await storage.getMessages({ threadId: thread.id, format: 'v1' });
 
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
         // @ts-expect-error
-        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
+        expect(msg.content[0]?.text).toBe(messages[idx].content[0]?.text);
       });
     });
 

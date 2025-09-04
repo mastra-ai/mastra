@@ -341,22 +341,23 @@ When a tool includes an `outputSchema`, its `execute` function **must** return a
 Here's an example of a tool with an `outputSchema`:
 
 ```typescript filename="src/tools/structured-tool.ts"
-import { createTool } from '@mastra/core';
+import { createMCPTool } from '@mastra/mcp';
 import { z } from 'zod';
 
-export const structuredTool = createTool({
+export const structuredTool = createMCPTool({
+  id: 'structuredTool',
   description: 'A test tool that returns structured data.',
-  parameters: z.object({
+  inputSchema: z.object({
     input: z.string().describe('Some input string.'),
   }),
   outputSchema: z.object({
     processedInput: z.string().describe('The processed input string.'),
     timestamp: z.string().describe('An ISO timestamp.'),
   }),
-  execute: async ({ input }) => {
+  execute: async (params, { elicitation, extra }) => {
     // When outputSchema is defined, you must return an object
     return {
-      processedInput: `processed: ${input}`,
+      processedInput: `processed: ${params.input}`,
       timestamp: new Date().toISOString(),
     };
   },

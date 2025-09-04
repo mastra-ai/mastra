@@ -1,154 +1,131 @@
+---
+title: "Example: Memory with Mem0 | Memory | Mastra Docs"
+description: Example for how to use Mastra's agent system with Mem0 as the memory backend through custom tools.
+---
+
 # Memory with Mem0
 
 This example demonstrates how to use Mastra's agent system with Mem0 as the memory backend through custom tools.
 
-## Setup
+## Prerequisites
 
-First, set up the Mem0 integration and create tools for memorizing and remembering information:
+This example uses the `openai` model and requires a Mem0 API key. Make sure to add the following to your `.env` file:
 
-```typescript
-import { Mem0Integration } from "@mastra/mem0";
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+MEM0_API_KEY=<your-mem0-api-key>
+```
+
+And install the following package:
+
+```bash copy
+npm install @mastra/mem0
+```
+
+You can get your Mem0 API key by signing up at [app.mem0.ai](https://app.mem0.ai) and creating a new project.
+
+## Adding memory to an agent
+
+To add Mem0 memory to an agent, create custom tools that use a `Mem0Integration` and add them to the agent's tools. This gives the agent control over memory operations using Mem0.
+
+```typescript filename="src/mastra/agents/example-mem0-agent.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
+import { Mem0Integration } from "@mastra/mem0";
 import { z } from "zod";
 
-// Initialize Mem0 integration
 const mem0 = new Mem0Integration({
   config: {
-    apiKey: process.env.MEM0_API_KEY || "",
-    user_id: "alice", // Unique user identifier
-  },
+    apiKey: process.env.MEM0_API_KEY!,
+    user_id: "mem0-agent"
+  }
 });
 
-// Create memory tools
-const mem0RememberTool = createTool({
-  id: "Mem0-remember",
-  description:
-    "Remember your agent memories that you've previously saved using the Mem0-memorize tool.",
-  inputSchema: z.object({
-    question: z
-      .string()
-      .describe("Question used to look up the answer in saved memories."),
-  }),
-  outputSchema: z.object({
-    answer: z.string().describe("Remembered answer"),
-  }),
-  execute: async ({ context }) => {
-    console.log(`Searching memory "${context.question}"`);
-    const memory = await mem0.searchMemory(context.question);
-    console.log(`\nFound memory "${memory}"\n`);
-
-    return {
-      answer: memory,
-    };
-  },
-});
-
-const mem0MemorizeTool = createTool({
-  id: "Mem0-memorize",
-  description:
-    "Save information to mem0 so you can remember it later using the Mem0-remember tool.",
-  inputSchema: z.object({
-    statement: z.string().describe("A statement to save into memory"),
-  }),
-  execute: async ({ context }) => {
-    console.log(`\nCreating memory "${context.statement}"\n`);
-    // To reduce latency, memories can be saved async without blocking tool execution
-    void mem0.createMemory(context.statement).then(() => {
-      console.log(`\nMemory "${context.statement}" saved.\n`);
-    });
-    return { success: true };
-  },
-});
-
-// Create an agent with memory tools
-const mem0Agent = new Agent({
-  name: "Mem0 Agent",
+export const mem0Agent = new Agent({
+  name: "mem0-agent",
   instructions: `
     You are a helpful assistant that has the ability to memorize and remember facts using Mem0.
     Use the Mem0-memorize tool to save important information that might be useful later.
     Use the Mem0-remember tool to recall previously saved information when answering questions.
   `,
   model: openai("gpt-4o"),
-  tools: { mem0RememberTool, mem0MemorizeTool },
+  tools: {
+    mem0Memorize: createTool({
+      id: "Mem0-memorize",
+      description: "Save information to Mem0",
+      inputSchema: z.object({
+        statement: z.string()
+      }),
+      execute: async ({ context }) => {
+        const { statement } = context;
+
+        await mem0.createMemory(statement);
+        console.log(`memory "${statement}" saved.\n`);
+
+        return { success: true };
+      }
+    }),
+    mem0Remember: createTool({
+      id: "Mem0-remember",
+      description: "Recall agent memories",
+      inputSchema: z.object({
+        question: z.string()
+      }),
+      outputSchema: z.object({
+        answer: z.string()
+      }),
+      execute: async ({ context }) => {
+        const { question } = context;
+        const memory = await mem0.searchMemory(question);
+        return { answer: memory };
+      }
+    })
+  }
 });
 ```
 
-## Environment Setup
+## Usage example
 
-Make sure to set up your Mem0 API key in the environment variables:
+Use system messages to ensure the agent calls the appropriate Mem0 tools. For memorization, use a system message to instruct the agent to save information. For recall, use a system message to instruct the agent to search memories before answering.
 
-```bash
-MEM0_API_KEY=your-mem0-api-key
+```typescript filename="src/test-mem0-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mem0Agent");
+
+const message = await agent.stream(
+  [
+    { role: "system", content: "Use the mem0Memorize tool to save any personal information shared by the user." },
+    { role: "user", content: "My name is Mastra" }
+  ],
+  {
+    memory: { thread: threadId, resource: resourceId }
+  }
+);
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream(
+  [
+    { role: "system", content: "Use the mem0Remember tool to search for any relevant memories before answering questions about the user." },
+    { role: "user", content: "What's my name?" }
+  ],
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId
+    }
+  }
+);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-You can get your Mem0 API key by signing up at [app.mem0.ai](https://app.mem0.ai) and creating a new project.
-
-## Usage Example
-
-```typescript
-import { randomUUID } from "crypto";
-
-// Start a conversation
-const threadId = randomUUID();
-
-// Ask the agent to remember some information
-const response1 = await mem0Agent.text(
-  "Please remember that I prefer vegetarian meals and I'm allergic to nuts. Also, I live in San Francisco.",
-  {
-    threadId,
-  },
-);
-
-// Ask about different topics
-const response2 = await mem0Agent.text(
-  "I'm planning a dinner party for 6 people next weekend. Can you suggest a menu?",
-  {
-    threadId,
-  },
-);
-
-// Later, ask the agent to recall information
-const response3 = await mem0Agent.text(
-  "What do you remember about my dietary preferences?",
-  {
-    threadId,
-  },
-);
-
-// Ask about location-specific information
-const response4 = await mem0Agent.text(
-  "Recommend some local restaurants for my dinner party based on what you know about me.",
-  {
-    threadId,
-  },
-);
-```
-
-## Key Features
-
-The Mem0 integration provides several advantages:
-
-1. **Automatic Memory Management**: Mem0 handles the storage, indexing, and retrieval of memories intelligently
-2. **Semantic Search**: The agent can find relevant memories based on semantic similarity, not just exact matches
-3. **User-specific Memories**: Each user_id maintains separate memory spaces
-4. **Asynchronous Saving**: Memories are saved in the background to reduce response latency
-5. **Long-term Persistence**: Memories persist across conversations and sessions
-
-## Tool-based Approach
-
-Unlike Mastra's built-in memory system, this example uses a tool-based approach where:
-
-- The agent decides when to save information using the `Mem0-memorize` tool
-- The agent can actively search for relevant memories using the `Mem0-remember` tool
-- This gives the agent more control over memory operations and makes the memory usage transparent
-
-## Best Practices
-
-1. **Clear Instructions**: Provide clear instructions to the agent about when to memorize and remember information
-2. **User Identification**: Use consistent user_id values to maintain separate memory spaces for different users
-3. **Descriptive Statements**: When saving memories, use descriptive statements that will be easy to search for later
-4. **Memory Cleanup**: Consider implementing periodic cleanup of old or irrelevant memories
-
-The example shows how to create an intelligent agent that can learn and remember information about users across conversations, making interactions more personalized and contextual over time.

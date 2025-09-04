@@ -1,9 +1,9 @@
 import { ReadableStream } from 'node:stream/web';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { LegacyWorkflowRuns } from '@mastra/core/storage';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { stringify } from 'superjson';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';

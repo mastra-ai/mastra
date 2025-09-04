@@ -23,40 +23,7 @@ Use this guide to scaffold and integrate Mastra with your Next.js project.
   project, e.g., `app` rather than `src/app`.
 </Callout>
 
-  <Steps>
-  ## Install Mastra
-
-Install the required Mastra packages:
-{/*
-LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
-Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
-This is part of the "Integrated Backend Integration" approach for Next.js projects.
-All commands create the same Mastra project but use different package manager syntax.
-*/}
-
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-</Tabs>
-
+<Steps>
 ## Integrate Mastra
 
 To integrate Mastra into your project, you have two options:
@@ -83,44 +50,6 @@ npx mastra@latest init
 By default, `mastra init` suggests `src` as the install location. If you're using the App Router at the root of your project (e.g., `app`, not `src/app`), enter `.` when prompted:
 </Callout>
 
-Add the `dev` and `build` scripts to `package.json`:
-
-<Tabs items={["app", "src/app"]}>
-  <Tabs.Tab>
-    ```json filename="package.json"
-    {
-      "scripts": {
-        ...
-        "dev:mastra": "mastra dev --dir mastra",
-        "build:mastra": "mastra build --dir mastra"
-      }
-    }
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```json filename="package.json"
-    {
-      "scripts": {
-        ...
-        "dev:mastra": "mastra dev --dir src/mastra",
-        "build:mastra": "mastra build --dir src/mastra"
-      }
-    }
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-## Configure TypeScript
-
-Modify the `tsconfig.json` file in your project root:
-
-```json filename="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
-```
-
 ## Set Up API Key
 
 ```bash filename=".env" copy
@@ -143,36 +72,9 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-## Update .gitignore
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash filename=".gitignore" copy
-.mastra
-```
-
-## Start the Mastra Dev Server
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs items={["npm", "CLI"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm run dev:mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    mastra dev:mastra
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/server-db/local-dev-playground) for more information.
-
 ## Start Next.js Dev Server
 
-With the Mastra Dev Server running, you can start your Next.js app in the usual way.
+You can start your Next.js app in the usual way.
 
 ## Create Test Directory
 
@@ -286,41 +188,7 @@ Let me know if you need more information!
   project, e.g., `pages` rather than `src/pages`.
 </Callout>
 
-  <Steps>
-
-## Install Mastra
-
-Install the required Mastra packages:
-{/*
-LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
-Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
-This is part of the "Integrated Backend Integration" approach for Next.js projects.
-All commands create the same Mastra project but use different package manager syntax.
-*/}
-
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-  </Tabs.Tab>
-</Tabs>
-
+<Steps>
 ## Integrate Mastra
 
 To integrate Mastra into your project, you have two options:
@@ -347,44 +215,6 @@ npx mastra@latest init
 By default, `mastra init` suggests `src` as the install location. If you're using the Pages Router at the root of your project (e.g., `pages`, not `src/pages`), enter `.` when prompted:
 </Callout>
 
-Add the `dev` and `build` scripts to `package.json`:
-
-<Tabs items={["pages", "src/pages"]}>
-  <Tabs.Tab>
-    ```json filename="package.json"
-    {
-      "scripts": {
-        ...
-        "dev:mastra": "mastra dev --dir mastra",
-        "build:mastra": "mastra build --dir mastra"
-      }
-    }
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```json filename="package.json"
-    {
-      "scripts": {
-        ...
-        "dev:mastra": "mastra dev --dir src/mastra",
-        "build:mastra": "mastra build --dir src/mastra"
-      }
-    }
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-## Configure TypeScript
-
-Modify the `tsconfig.json` file in your project root:
-
-```json filename="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
-```
-
 ## Set Up API Key
 
 ```bash filename=".env" copy
@@ -407,36 +237,9 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-## Update .gitignore
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash filename=".gitignore" copy
-.mastra
-```
-
-## Start the Mastra Dev Server
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs items={["npm", "CLI"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm run dev:mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    mastra dev:mastra
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/local-dev/mastra-dev) for more information.
-
 ## Start Next.js Dev Server
 
-With the Mastra Dev Server running, you can start your Next.js app in the usual way.
+You can start your Next.js app in the usual way.
 
 ## Create Test API Route
 
@@ -530,3 +333,4 @@ Let me know if you need more information!
 ## Next Steps
 
 - [Deployment | With Next.js on Vercel](/docs/deployment/web-framework#with-nextjs-on-vercel)
+- [Monorepo Deployment](../../deployment/monorepo.mdx)

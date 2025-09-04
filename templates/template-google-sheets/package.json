@@ -1,0 +1,39 @@
+{
+  "name": "template-google-sheets",
+  "version": "1.0.0",
+  "description": "Google Sheets integration template using Mastra's AI agents. Enables intelligent sheet manipulation, and seamless integration between Google Sheets and AI-powered business logic for spreadsheet automation and analysis.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.2.12",
+    "@composio/core": "^0.1.48",
+    "@composio/mastra": "^0.1.49",
+    "@mastra/core": "^0.13.2",
+    "@mastra/fastembed": "^0.10.4",
+    "@mastra/libsql": "^0.13.4",
+    "@mastra/loggers": "^0.10.7",
+    "@mastra/mcp": "^0.10.12",
+    "@mastra/memory": "^0.12.2",
+    "@openrouter/ai-sdk-provider": "^0.7.5",
+    "hono": "^4.9.4",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "mastra": "^0.10.21",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}

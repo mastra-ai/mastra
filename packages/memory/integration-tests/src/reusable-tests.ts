@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
-import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core/memory';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
@@ -567,12 +567,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           role: 'assistant',
           type: 'text',
         });
-        const content2 = result.messages[1].content[0];
-        if (typeof content2 === 'object' && content2 !== null && 'type' in content2 && content2.type === 'text') {
-          expect(content2).toEqual(assistantPart);
-        } else {
-          expect(content2).toEqual('Goodbye');
-        }
+        expect(result.messages[1].content).toEqual(`Goodbye`);
       });
 
       it('should handle complex message content', async () => {

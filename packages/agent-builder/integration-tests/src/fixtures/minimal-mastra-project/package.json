@@ -1,0 +1,17 @@
+{
+  "name": "minimal-mastra-fixture",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

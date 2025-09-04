@@ -1,8 +1,9 @@
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
+import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 export interface SystemPromptScrubberOptions {
@@ -86,11 +87,12 @@ export class SystemPromptScrubber implements Processor {
    * Process streaming chunks to detect and handle system prompts
    */
   async processOutputStream(args: {
-    part: TextStreamPart<any> | ObjectStreamPart<any>;
-    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: ChunkType;
+    streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
+    tracingContext?: TracingContext;
+  }): Promise<ChunkType | null> {
     const { part, abort } = args;
 
     // Only process text-delta chunks
@@ -98,7 +100,7 @@ export class SystemPromptScrubber implements Processor {
       return part;
     }
 
-    const text = part.textDelta;
+    const text = part.payload.text;
     if (!text || text.trim() === '') {
       return part;
     }
@@ -132,7 +134,10 @@ export class SystemPromptScrubber implements Processor {
               detectionResult.redacted_content || this.redactText(text, detectionResult.detections || []);
             return {
               ...part,
-              textDelta: redactedText,
+              payload: {
+                ...part.payload,
+                text: redactedText,
+              },
             };
         }
       }
@@ -221,7 +226,10 @@ export class SystemPromptScrubber implements Processor {
   /**
    * Detect system prompts in text using the detection agent
    */
-  private async detectSystemPrompts(text: string): Promise<SystemPromptDetectionResult> {
+  private async detectSystemPrompts(
+    text: string,
+    tracingContext?: TracingContext,
+  ): Promise<SystemPromptDetectionResult> {
     try {
       const model = await this.detectionAgent.getModel();
       let result: any;
@@ -244,10 +252,12 @@ export class SystemPromptScrubber implements Processor {
       if (model.specificationVersion === 'v2') {
         result = await this.detectionAgent.generateVNext(text, {
           output: schema,
+          tracingContext,
         });
       } else {
         result = await this.detectionAgent.generate(text, {
           output: schema,
+          tracingContext,
         });
       }
 

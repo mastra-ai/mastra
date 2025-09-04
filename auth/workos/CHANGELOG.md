@@ -1,5 +1,41 @@
 # @mastra/auth-workos
 
+## 0.10.5
+
+### Patch Changes
+
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- cb9aa8c: Cookie vuln
+- Updated dependencies [de3cbc6]
+  - @mastra/auth@0.1.3
+
+## 0.10.5-alpha.1
+
+### Patch Changes
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/auth@0.1.3-alpha.0
+
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- [#7220](https://github.com/mastra-ai/mastra/pull/7220) [`cb9aa8c`](https://github.com/mastra-ai/mastra/commit/cb9aa8c8564bafa1b6e5321cca5a1bc4d3170590) Thanks [@abhiaiyer91](https://github.com/abhiaiyer91)! - Cookie vuln
+
+- Updated dependencies []:
+  - @mastra/auth@0.1.2
+
+## 0.10.4
+
+### Patch Changes
+
+- [`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix peerdpes for @mastra/core
+
+- Updated dependencies [[`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430)]:
+  - @mastra/auth@0.1.2
+
 ## 0.10.3
 
 ### Patch Changes

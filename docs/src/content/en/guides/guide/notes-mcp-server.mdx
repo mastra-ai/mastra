@@ -220,7 +220,7 @@ Tools are the actions your server can perform. Let's create a `write` tool.
 First, define the tool in `src/mastra/tools/write-note.ts`:
 
 ```typescript copy filename="src/mastra/tools/write-note.ts"
-import { createTool } from "@mastra/core/tools";
+import { createMCPTool } from "@mastra/mcp";
 import { z } from "zod";
 import { fileURLToPath } from "url";
 import path from "node:path";
@@ -230,7 +230,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const NOTES_DIR = path.resolve(__dirname, "../../../notes");
 
-export const writeNoteTool = createTool({
+export const writeNoteTool = createMCPTool({
   id: "write",
   description: "Write a new note or overwrite an existing one.",
   inputSchema: z.object({
@@ -244,9 +244,9 @@ export const writeNoteTool = createTool({
       .describe("The markdown content of the note."),
   }),
   outputSchema: z.string().nonempty(),
-  execute: async ({ context }) => {
+  execute: async (params, { elicitation, extra }) => {
     try {
-      const { title, content } = context;
+      const { title, content } = params;
       const filePath = path.join(NOTES_DIR, `${title}.md`);
       await fs.mkdir(NOTES_DIR, { recursive: true });
       await fs.writeFile(filePath, content, "utf-8");

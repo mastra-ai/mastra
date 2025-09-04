@@ -1,8 +1,8 @@
-import type { ObjectStreamPart, StreamObjectResult, TextStreamPart } from 'ai';
 import type { MastraMessageV2, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import type { StreamTextResult } from '../llm';
+import type { TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
 
@@ -12,15 +12,15 @@ import type { Processor } from './index';
 export class ProcessorState {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
-  public streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[] = [];
+  public streamParts: ChunkType[] = [];
 
   constructor(private readonly processorName: string) {}
 
   // Internal methods for the runner
-  addPart(part: TextStreamPart<any> | ObjectStreamPart<any>): void {
+  addPart(part: ChunkType): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
-      this.accumulatedText += part.textDelta;
+      this.accumulatedText += part.payload.text;
     }
     this.streamParts.push(part);
   }
@@ -49,7 +49,11 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
-  async runOutputProcessors(messageList: MessageList, telemetry?: any): Promise<MessageList> {
+  async runOutputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    telemetry?: any,
+  ): Promise<MessageList> {
     const responseMessages = messageList.clear.response.v2();
 
     let processableMessages: MastraMessageV2[] = [...responseMessages];
@@ -77,11 +81,15 @@ export class ProcessorRunner {
       }
 
       if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort });
+        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
       } else {
         await telemetry.traceMethod(
           async () => {
-            processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort });
+            processableMessages = await processMethod({
+              messages: processableMessages,
+              abort: ctx.abort,
+              tracingContext,
+            });
             return processableMessages;
           },
           {
@@ -107,10 +115,11 @@ export class ProcessorRunner {
    * Process a stream part through all output processors with state management
    */
   async processPart(
-    part: TextStreamPart<any> | ObjectStreamPart<any>,
+    part: ChunkType,
     processorStates: Map<string, ProcessorState>,
+    tracingContext?: TracingContext,
   ): Promise<{
-    part: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined;
+    part: ChunkType | null | undefined;
     blocked: boolean;
     reason?: string;
   }> {
@@ -119,7 +128,7 @@ export class ProcessorRunner {
     }
 
     try {
-      let processedPart: TextStreamPart<any> | ObjectStreamPart<any> | null | undefined = part;
+      let processedPart: ChunkType | null | undefined = part;
 
       for (const processor of this.outputProcessors) {
         try {
@@ -141,6 +150,7 @@ export class ProcessorRunner {
               abort: (reason?: string) => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
               },
+              tracingContext,
             });
 
             // If result is null, or undefined, don't emit
@@ -163,7 +173,8 @@ export class ProcessorRunner {
   }
 
   async runOutputProcessorsForStream(
-    streamResult: StreamObjectResult<any, any, any> | StreamTextResult<any, any> | MastraModelOutput,
+    streamResult: MastraModelOutput,
+    tracingContext?: TracingContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
@@ -184,7 +195,7 @@ export class ProcessorRunner {
               part: processedPart,
               blocked,
               reason,
-            } = await this.processPart(value as TextStreamPart<any> | ObjectStreamPart<any>, processorStates);
+            } = await this.processPart(value, processorStates, tracingContext);
 
             if (blocked) {
               // Log that part was blocked
@@ -213,7 +224,11 @@ export class ProcessorRunner {
     });
   }
 
-  async runInputProcessors(messageList: MessageList, telemetry?: any): Promise<MessageList> {
+  async runInputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    telemetry?: any,
+  ): Promise<MessageList> {
     const userMessages = messageList.clear.input.v2();
 
     let processableMessages: MastraMessageV2[] = [...userMessages];
@@ -241,11 +256,15 @@ export class ProcessorRunner {
       }
 
       if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort });
+        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
       } else {
         await telemetry.traceMethod(
           async () => {
-            processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort });
+            processableMessages = await processMethod({
+              messages: processableMessages,
+              abort: ctx.abort,
+              tracingContext,
+            });
             return processableMessages;
           },
           {

@@ -7,6 +7,7 @@ import { execute } from '../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
+import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType, ReasoningStartPayload, TextStartPayload } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
@@ -14,13 +15,13 @@ import type { LoopConfig, OuterLLMRun } from '../types';
 import { AgenticRunState } from './run-state';
 import { llmIterationOutputSchema } from './schema';
 
-type ProcessOutputStreamOptions = {
+type ProcessOutputStreamOptions<OUTPUT extends OutputSchema | undefined = undefined> = {
   model: LanguageModelV2;
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
   messageList: MessageList;
-  outputStream: MastraModelOutput;
+  outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
   options?: LoopConfig;
   controller: ReadableStreamDefaultController<ChunkType>;
@@ -31,7 +32,7 @@ type ProcessOutputStreamOptions = {
   };
 };
 
-async function processOutputStream({
+async function processOutputStream<OUTPUT extends OutputSchema | undefined = undefined>({
   tools,
   messageId,
   messageList,
@@ -41,7 +42,7 @@ async function processOutputStream({
   controller,
   responseFromModel,
   includeRawChunks,
-}: ProcessOutputStreamOptions) {
+}: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream.fullStream) {
     if (!chunk) {
       continue;
@@ -84,7 +85,20 @@ async function processOutputStream({
     }
 
     // Streaming
-    if (chunk.type !== 'text-delta' && chunk.type !== 'tool-call' && runState.state.isStreaming) {
+    if (
+      chunk.type !== 'text-delta' &&
+      chunk.type !== 'tool-call' &&
+      // not 100% sure about this being the right fix.
+      // basically for some llm providers they add response-metadata after each text-delta
+      // we then flush the chunks by calling messageList.add (a few lines down)
+      // this results in a bunch of weird separated text chunks on the message instead of combined chunks
+      // easiest solution here is to just not flush for response-metadata
+      // BUT does this cause other issues?
+      // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
+      // simple solution for now is to not flush text deltas on response-metadata
+      chunk.type !== 'response-metadata' &&
+      runState.state.isStreaming
+    ) {
       if (runState.state.textDeltas.length) {
         const textStartPayload = chunk.payload as TextStartPayload;
         const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
@@ -341,7 +355,10 @@ async function processOutputStream({
   }
 }
 
-export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
+export function createLLMExecutionStep<
+  Tools extends ToolSet = ToolSet,
+  OUTPUT extends OutputSchema | undefined = undefined,
+>({
   model,
   _internal,
   messageId,
@@ -357,9 +374,11 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
   options,
   toolCallStreaming,
   controller,
-  objectOptions,
+  output,
   headers,
-}: OuterLLMRun<Tools>) {
+  downloadRetries,
+  downloadConcurrency,
+}: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
@@ -377,18 +396,24 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
 
       switch (model.specificationVersion) {
         case 'v2': {
+          const inputMessages = await messageList.get.all.aiV5.llmPrompt({
+            downloadRetries,
+            downloadConcurrency,
+            supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
+          });
+
           modelResult = execute({
             runId,
             model,
             providerOptions,
-            inputMessages: messageList.get.all.aiV5.llmPrompt(),
+            inputMessages,
             tools,
             toolChoice,
             options,
             modelSettings,
             telemetry_settings,
             includeRawChunks,
-            objectOptions,
+            output,
             headers,
             onResult: ({
               warnings: warningsFromStream,
@@ -433,7 +458,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet>({
           toolCallStreaming,
           telemetry_settings,
           includeRawChunks,
-          objectOptions,
+          output,
         },
       });
 

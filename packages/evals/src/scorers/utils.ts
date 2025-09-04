@@ -36,6 +36,49 @@ export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent) => {
   return input?.inputMessages.find(({ role }) => role === 'user')?.content;
 };
 
+export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): string[] => {
+  const systemMessages: string[] = [];
+
+  // Add standard system messages
+  if (input?.systemMessages) {
+    systemMessages.push(
+      ...input.systemMessages
+        .map(msg => {
+          // Handle different content types - extract text if it's an array of parts
+          if (typeof msg.content === 'string') {
+            return msg.content;
+          } else if (Array.isArray(msg.content)) {
+            // Extract text from parts array
+            return msg.content
+              .filter(part => part.type === 'text')
+              .map(part => part.text || '')
+              .join(' ');
+          }
+          return '';
+        })
+        .filter(content => content),
+    );
+  }
+
+  // Add tagged system messages (these are specialized system prompts)
+  if (input?.taggedSystemMessages) {
+    Object.values(input.taggedSystemMessages).forEach(messages => {
+      messages.forEach(msg => {
+        if (typeof msg.content === 'string') {
+          systemMessages.push(msg.content);
+        }
+      });
+    });
+  }
+
+  return systemMessages;
+};
+
+export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string => {
+  const systemMessages = getSystemMessagesFromRunInput(input);
+  return systemMessages.join('\n\n');
+};
+
 export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
   return output?.find(({ role }) => role === 'assistant')?.content;
 };
@@ -121,4 +164,44 @@ export const createAgentTestRun = ({
     runtimeContext,
     runId,
   };
+};
+
+export type ToolCallInfo = {
+  toolName: string;
+  toolCallId: string;
+  messageIndex: number;
+  invocationIndex: number;
+};
+
+export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: string[]; toolCallInfos: ToolCallInfo[] } {
+  const toolCalls: string[] = [];
+  const toolCallInfos: ToolCallInfo[] = [];
+
+  for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
+    const message = output[messageIndex];
+    if (message?.toolInvocations) {
+      for (let invocationIndex = 0; invocationIndex < message.toolInvocations.length; invocationIndex++) {
+        const invocation = message.toolInvocations[invocationIndex];
+        if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+          toolCalls.push(invocation.toolName);
+          toolCallInfos.push({
+            toolName: invocation.toolName,
+            toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
+            messageIndex,
+            invocationIndex,
+          });
+        }
+      }
+    }
+  }
+
+  return { tools: toolCalls, toolCallInfos };
+}
+
+export const extractInputMessages = (runInput: ScorerRunInputForAgent | undefined): string[] => {
+  return runInput?.inputMessages?.map(msg => msg.content) || [];
+};
+
+export const extractAgentResponseMessages = (runOutput: ScorerRunOutputForAgent): string[] => {
+  return runOutput.filter(msg => msg.role === 'assistant').map(msg => msg.content);
 };

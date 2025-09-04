@@ -1,10 +1,11 @@
 import * as crypto from 'crypto';
-import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraMessageV2 } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { TracingContext } from '../../ai-tracing';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 /**
@@ -178,9 +179,10 @@ export class PIIDetector implements Processor {
   async processInput(args: {
     messages: MastraMessageV2[];
     abort: (reason?: string) => never;
+    tracingContext?: TracingContext;
   }): Promise<MastraMessageV2[]> {
     try {
-      const { messages, abort } = args;
+      const { messages, abort, tracingContext } = args;
 
       if (messages.length === 0) {
         return messages;
@@ -197,7 +199,7 @@ export class PIIDetector implements Processor {
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent);
+        const detectionResult = await this.detectPII(textContent, tracingContext);
 
         if (this.isPIIFlagged(detectionResult)) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
@@ -230,7 +232,7 @@ export class PIIDetector implements Processor {
   /**
    * Detect PII using the internal agent
    */
-  private async detectPII(content: string): Promise<PIIDetectionResult> {
+  private async detectPII(content: string, tracingContext?: TracingContext): Promise<PIIDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     const schema = z.object({
@@ -269,11 +271,13 @@ export class PIIDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          tracingContext,
         });
       } else {
         response = await this.detectionAgent.generate(prompt, {
           output: schema,
           temperature: 0,
+          tracingContext,
         });
       }
 
@@ -524,24 +528,25 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
    * Process streaming output chunks for PII detection and redaction
    */
   async processOutputStream(args: {
-    part: TextStreamPart<any> | ObjectStreamPart<any>;
-    streamParts: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    part: ChunkType;
+    streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
-  }): Promise<TextStreamPart<any> | ObjectStreamPart<any> | null> {
-    const { part, abort } = args;
+    tracingContext?: TracingContext;
+  }): Promise<ChunkType | null> {
+    const { part, abort, tracingContext } = args;
     try {
       // Only process text-delta chunks
       if (part.type !== 'text-delta') {
         return part;
       }
 
-      const textContent = part.textDelta;
+      const textContent = part.payload.text;
       if (!textContent.trim()) {
         return part;
       }
 
-      const detectionResult = await this.detectPII(textContent);
+      const detectionResult = await this.detectPII(textContent, tracingContext);
 
       if (this.isPIIFlagged(detectionResult)) {
         switch (this.strategy) {
@@ -567,7 +572,10 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
               );
               return {
                 ...part,
-                textDelta: detectionResult.redacted_content,
+                payload: {
+                  ...part.payload,
+                  text: detectionResult.redacted_content,
+                },
               };
             } else {
               console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);

@@ -2,7 +2,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  ToolCallContentPartComponent,
+  ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
@@ -13,15 +13,17 @@ import { Button } from '@/components/ui/button';
 
 import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachments/attachment';
+import { AttachFileDialog } from './attachments/attach-file-dialog';
+import { AgentProvider } from './context/agent-provider';
 
 export interface ThreadProps {
-  ToolFallback?: ToolCallContentPartComponent;
+  ToolFallback?: ToolCallMessagePartComponent;
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
@@ -37,27 +39,29 @@ export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, onInputCha
   };
 
   return (
-    <ThreadWrapper>
-      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
-        <ThreadWelcome agentName={agentName} />
+    <AgentProvider agentId={agentId}>
+      <ThreadWrapper>
+        <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+          <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
-          <ThreadPrimitive.Messages
-            components={{
-              UserMessage: UserMessage,
-              EditComposer: EditComposer,
-              AssistantMessage: WrappedAssistantMessage,
-            }}
-          />
-        </div>
+          <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
+            <ThreadPrimitive.Messages
+              components={{
+                UserMessage: UserMessage,
+                EditComposer: EditComposer,
+                AssistantMessage: WrappedAssistantMessage,
+              }}
+            />
+          </div>
 
-        <ThreadPrimitive.If empty={false}>
-          <div />
-        </ThreadPrimitive.If>
-      </ThreadPrimitive.Viewport>
+          <ThreadPrimitive.If empty={false}>
+            <div />
+          </ThreadPrimitive.If>
+        </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} onInputChange={onInputChange} agentId={agentId} />
-    </ThreadWrapper>
+        <Composer hasMemory={hasMemory} onInputChange={onInputChange} agentId={agentId} />
+      </ThreadWrapper>
+    </AgentProvider>
   );
 };
 
@@ -111,10 +115,10 @@ const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4">
+        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
-              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
+              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus
               placeholder="Enter your message..."
               name=""
@@ -165,13 +169,21 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
 };
 
 const ComposerAction = () => {
+  const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
+
   return (
     <>
-      <ComposerPrimitive.AddAttachment asChild>
-        <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
-          <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
-        </TooltipIconButton>
-      </ComposerPrimitive.AddAttachment>
+      <TooltipIconButton
+        type="button"
+        tooltip="Add attachment"
+        variant="ghost"
+        className="rounded-full"
+        onClick={() => setIsAddAttachmentDialogOpen(true)}
+      >
+        <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+      </TooltipIconButton>
+
+      <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>

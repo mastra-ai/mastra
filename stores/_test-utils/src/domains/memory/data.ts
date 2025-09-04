@@ -1,4 +1,4 @@
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { StorageResourceType } from '@mastra/core/storage';
 import { randomUUID } from 'crypto';
@@ -61,7 +61,7 @@ export const createSampleMessageV1 = ({
     role: getRole(),
     type: 'text',
     threadId,
-    content: [{ type: 'text', text: content }],
+    content,
     createdAt,
     resourceId,
   }) satisfies MastraMessageV1;

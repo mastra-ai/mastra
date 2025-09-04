@@ -36,7 +36,8 @@ import {
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import type { JSONSchema } from 'zod-from-json-schema';
+import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
+import type { JSONSchema } from 'zod-from-json-schema-v3';
 import { ElicitationClientActions } from './elicitationActions';
 import { PromptClientActions } from './promptActions';
 import { ResourceClientActions } from './resourceActions';
@@ -479,7 +480,13 @@ export class InternalMastraMCPClient extends MastraBase {
 
     try {
       await $RefParser.dereference(inputSchema);
-      return convertJsonSchemaToZod(inputSchema as JSONSchema);
+      const jsonSchemaToConvert = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema;
+      if ('toJSONSchema' in z) {
+        //@ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
@@ -516,7 +523,13 @@ export class InternalMastraMCPClient extends MastraBase {
 
     try {
       await $RefParser.dereference(outputSchema);
-      return convertJsonSchemaToZod(outputSchema as JSONSchema);
+      const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
+      if ('toJSONSchema' in z) {
+        //@ts-expect-error - zod type issue
+        return convertJsonSchemaToZod(jsonSchemaToConvert);
+      } else {
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+      }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {

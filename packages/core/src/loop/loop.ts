@@ -2,11 +2,12 @@ import { generateId } from 'ai-v5';
 import type { ToolSet } from 'ai-v5';
 import { ConsoleLogger } from '../logger';
 import { MastraModelOutput } from '../stream/base/output';
+import type { OutputSchema } from '../stream/base/schema';
 import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflow/stream';
 
-export function loop<Tools extends ToolSet = ToolSet>({
+export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
   model,
   logger,
   runId,
@@ -19,8 +20,10 @@ export function loop<Tools extends ToolSet = ToolSet>({
   _internal,
   mode = 'stream',
   outputProcessors,
+  returnScorerData,
+  llmAISpan,
   ...rest
-}: LoopOptions<Tools>) {
+}: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
     logger ||
     new ConsoleLogger({
@@ -71,7 +74,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
     telemetry_settings,
   });
 
-  const workflowLoopProps: LoopRun<Tools> = {
+  const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     model,
     runId: runIdToUse,
     logger: loggerToUse,
@@ -84,6 +87,7 @@ export function loop<Tools extends ToolSet = ToolSet>({
     telemetry_settings,
     modelSettings,
     outputProcessors,
+    llmAISpan,
     ...rest,
   };
 
@@ -105,8 +109,9 @@ export function loop<Tools extends ToolSet = ToolSet>({
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
-      objectOptions: rest.objectOptions,
+      output: rest.output,
       outputProcessors,
+      returnScorerData,
     },
   });
 }

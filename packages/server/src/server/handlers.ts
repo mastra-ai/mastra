@@ -1,9 +1,11 @@
+export * as agentBuilder from './handlers/agent-builder';
 export * as agents from './handlers/agents';
 export * as a2a from './handlers/a2a';
 export * as legacyWorkflows from './handlers/legacyWorkflows';
 export * as logs from './handlers/logs';
 export * as memory from './handlers/memory';
 export * as network from './handlers/network';
+export * as observability from './handlers/observability';
 export * as scores from './handlers/scores';
 export * as telemetry from './handlers/telemetry';
 export * as tools from './handlers/tools';

@@ -174,8 +174,6 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     if (!thread) return null;
 
-    console.log('thread', thread);
-
     try {
       return {
         ...thread,
