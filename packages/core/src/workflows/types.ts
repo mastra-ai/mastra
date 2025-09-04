@@ -117,7 +117,26 @@ export type VariableReference<
     }
   | { value: any; schema: z.ZodTypeAny };
 
-export type StreamEvent = TextStreamPart<any> | WorkflowStreamEvent;
+export type StreamEvent =
+  // old events
+  | TextStreamPart<any>
+  | {
+      type: 'step-suspended';
+      payload: any;
+      id: string;
+    }
+  | {
+      type: 'step-waiting';
+      payload: any;
+      id: string;
+    }
+  | {
+      type: 'step-result';
+      payload: any;
+      id: string;
+    }
+  // vnext events
+  | WorkflowStreamEvent;
 export type WorkflowStreamEvent =
   | {
       type: 'workflow-start';
