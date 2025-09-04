@@ -59,7 +59,7 @@
     "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
-    "test:observability": "pnpm --filter ./observability/* test",
+    "test:observability": "pnpm --filter \"./observability/*\" test",
     "lint-staged": "lint-staged",
     "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@internal/playground\" lint",
     "preinstall": "npx only-allow pnpm",

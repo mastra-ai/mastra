@@ -64,9 +64,9 @@ export const mastra = new Mastra({
         serviceName: 'my-service',
         exporters: [
           new LangfuseExporter({
-            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-            secretKey: process.env.LANGFUSE_SECRET_KEY!,
-            baseUrl: process.env.LANGFUSE_BASE_URL!,
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+            secretKey: process.env.LANGFUSE_SECRET_KEY,
+            baseUrl: process.env.LANGFUSE_BASE_URL, // Optional - defaults to Langfuse cloud
             realtime: true,
           }),
         ],
@@ -156,10 +156,12 @@ The Langfuse exporter accepts these options:
 
 ```ts
 type LangfuseExporterConfig = {
-  // Langfuse API credentials
-  publicKey: string;
-  secretKey: string;
-  baseUrl: string;
+  // Langfuse API credentials (required)
+  publicKey?: string;
+  secretKey?: string;
+  
+  // Langfuse host URL (optional - defaults to Langfuse cloud)
+  baseUrl?: string;
   
   // Enable realtime mode for immediate trace visibility
   realtime?: boolean; // defaults to false
@@ -182,9 +184,9 @@ export const mastra = new Mastra({
         sampling: { type: 'always' },
         exporters: [
           new LangfuseExporter({
-            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-            secretKey: process.env.LANGFUSE_SECRET_KEY!,
-            baseUrl: process.env.LANGFUSE_BASE_URL!,
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+            secretKey: process.env.LANGFUSE_SECRET_KEY,
+            baseUrl: process.env.LANGFUSE_BASE_URL, // Optional
             realtime: process.env.NODE_ENV === 'development',
           }),
         ],
