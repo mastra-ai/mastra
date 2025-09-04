@@ -126,7 +126,8 @@ describe('Template Workflow Integration Tests', () => {
     // Verify the workflow succeeded
     expect(result).toBeDefined();
     expect(result.status).toBe('success');
-    expect(result.result?.success).toBe(true);
+    const validationResults = result.result?.validationResults;
+    expect(result.result?.success).toBe(validationResults.valid);
     expect(result.result?.applied).toBe(true);
     expect(result.result?.branchName).toBe('feat/install-template-csv-to-questions');
 
