@@ -24,7 +24,7 @@ const mastra = new Mastra({
           new LangfuseExporter({
             publicKey: process.env.LANGFUSE_PUBLIC_KEY,
             secretKey: process.env.LANGFUSE_SECRET_KEY,
-            baseUrl: process.env.LANGFUSE_BASE_URL,
+            baseUrl: process.env.LANGFUSE_BASE_URL, // Optional - defaults to Langfuse cloud
             realtime: true,
           }),
         ],

@@ -1,10 +1,14 @@
 {
-  "name": "@mastra/chroma",
-  "version": "0.11.7",
-  "description": "Chroma vector store provider for Mastra",
+  "name": "@mastra/braintrust",
+  "version": "0.0.1",
+  "description": "Braintrust observability provider for Mastra - includes AI tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -20,13 +24,14 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "build:watch": "pnpm build --watch",
     "test": "vitest run",
+    "test:watch": "vitest watch",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "chromadb": "^3.0.14"
+    "braintrust": "^0.3.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -37,21 +42,16 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*",
-    "@internal/storage-test-utils": "workspace:*"
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.15.3-0 <0.16.0-0"
   },
-  "files": [
-    "dist",
-    "CHANGELOG.md"
-  ],
   "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "stores/chroma"
+    "directory": "observability/braintrust"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
