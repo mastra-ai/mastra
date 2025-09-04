@@ -185,6 +185,7 @@ export function createStep<
         };
         await emitter.emit('watch-v2', {
           type: 'workflow-agent-call-start',
+          from: 'WORKFLOW',
           payload: toolData,
         });
         // TODO: add support for format, if format is undefined use stream, else streamVNext
@@ -224,6 +225,7 @@ export function createStep<
 
         await emitter.emit('watch-v2', {
           type: 'workflow-agent-call-finish',
+          from: 'WORKFLOW',
           payload: toolData,
         });
 
@@ -1514,11 +1516,13 @@ export class Run<
           setImmediate(tryWrite);
         };
 
-        const unwatch = this.watch(async ({ type, payload }) => {
+        // TODO: fix this, watch-v2 doesn't have a type
+        // @ts-ignore
+        const unwatch = this.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           buffer.push({
             type,
             runId: this.runId,
-            from: ChunkFrom.WORKFLOW,
+            from,
             payload: {
               stepName: (payload as unknown as { id: string }).id,
               ...payload,
