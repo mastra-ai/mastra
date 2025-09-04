@@ -142,7 +142,7 @@ export class BraintrustExporter implements AITracingExporter {
     // Log the update to the span
     const payload = this.buildSpanPayload(span, false);
 
-    // Log the update to the span
+    braintrustSpan.log(payload);
     braintrustSpan.log(payload);
 
     if (isEnd) {
