@@ -908,6 +908,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
+            tracingContext,
           });
         }
 
@@ -1024,6 +1025,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepId,
     runtimeContext,
     disableScorers,
+    tracingContext,
   }: {
     scorers: DynamicArgument<MastraScorers>;
     runId: string;
@@ -1033,6 +1035,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId: string;
     stepId: string;
     disableScorers?: boolean;
+    tracingContext: TracingContext;
   }) {
     let scorersToUse = scorers;
     if (typeof scorersToUse === 'function') {
@@ -1074,6 +1077,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           structuredOutput: true,
           source: 'LIVE',
           entityType: 'WORKFLOW',
+          tracingContext,
         });
       }
     }
