@@ -733,6 +733,83 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(response.steps.length).toBe(7);
     }, 500000);
 
+    it('should retry when tool fails and eventually succeed with maxSteps=5', async () => {
+      let toolCallCount = 0;
+      const failuresBeforeSuccess = 2; // Tool will fail 2 times then succeed
+
+      const flakeyTool = createTool({
+        id: 'flakeyTool',
+        description: 'A tool that fails initially but eventually succeeds',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ context }) => {
+          toolCallCount++;
+          if (toolCallCount <= failuresBeforeSuccess) {
+            throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
+          }
+          return { output: `Success on attempt ${toolCallCount}: ${context.input}` };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'retry-agent',
+        instructions: 'Call the flakey tool with input "test data".',
+        model: openaiModel,
+        tools: { flakeyTool },
+      });
+      agent.__setLogger(noopLogger);
+
+      let response;
+      if (version === 'v1') {
+        response = await agent.generate('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      } else {
+        response = await agent.generateVNext('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      }
+
+      // Should have made multiple attempts
+      expect(response.steps.length).toBeGreaterThan(1);
+      expect(response.steps.length).toBeLessThanOrEqual(5);
+
+      // Should have at least 3 tool calls total (2 failures + 1 success)
+      expect(toolCallCount).toBeGreaterThanOrEqual(3);
+
+      // Check that we eventually get a success result
+      let foundSuccess = false;
+      if (version === 'v1') {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (result.toolName === 'flakeyTool' && result.result && result.result.output?.includes('Success')) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      } else {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (
+                result.payload.toolName === 'flakeyTool' &&
+                result.payload.result &&
+                result.payload.result.output?.includes('Success')
+              ) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      expect(foundSuccess).toBe(true);
+    }, 500000);
+
     it('should call testTool from TestIntegration', async () => {
       const testAgent = new Agent({
         name: 'Test agent',
@@ -5763,6 +5840,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           stream = await agentWithStreamAbort.stream('Stream abort test');
         } else {
           stream = await agentWithStreamAbort.streamVNext('Stream abort test');
+
+          for await (const chunk of stream.fullStream) {
+            expect(chunk.type).toBe('tripwire');
+            expect(chunk.payload.tripwireReason).toBe('Stream aborted');
+          }
         }
 
         expect(stream.tripwire).toBe(true);
@@ -6583,7 +6665,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         input: expect.any(Object),
         output: expect.any(Object),
         runtimeContext: expect.any(Object),
-        tracingContext: expect.any(Object),
         entity: expect.objectContaining({
           id: 'Test Agent',
           name: 'Test Agent',
@@ -6594,6 +6675,160 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         threadId: undefined,
         resourceId: undefined,
       });
+    });
+  });
+
+  describe('defaultStreamOptions onFinish callback bug', () => {
+    it(`${version} - should call onFinish from defaultStreamOptions when no options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish',
+        name: 'Test Default onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream without passing any options - should use defaultStreamOptions
+      const result = version === 'v1' ? await agent.stream('How are you?') : await agent.streamVNext('How are you?');
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should call onFinish from defaultStreamOptions when empty options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish-empty',
+        name: 'Test Default onFinish Empty',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream with empty options - should still use defaultStreamOptions
+      const result =
+        version === 'v1' ? await agent.stream('How are you?', {}) : await agent.streamVNext('How are you?', {});
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should prioritize passed onFinish over defaultStreamOptions onFinish`, async () => {
+      let defaultOnFinishCalled = false;
+      let passedOnFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-override-onfinish',
+        name: 'Test Override onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }),
+      });
+
+      // Call stream with explicit onFinish - should override defaultStreamOptions
+      const result =
+        version === 'v1'
+          ? await agent.stream('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            })
+          : await agent.streamVNext('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            });
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(defaultOnFinishCalled).toBe(false);
+      expect(passedOnFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
     });
   });
 }

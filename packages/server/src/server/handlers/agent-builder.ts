@@ -25,7 +25,7 @@ function createAgentBuilderWorkflowHandler<TWorkflowArgs, TResult>(
     const logger = mastra.getLogger();
 
     try {
-      WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows);
+      WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
 
       // Validate actionId if it's provided
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {

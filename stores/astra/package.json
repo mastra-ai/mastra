@@ -1,6 +1,6 @@
 {
   "name": "@mastra/astra",
-  "version": "0.11.7-alpha.0",
+  "version": "0.11.7",
   "description": "Astra DB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -44,7 +44,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

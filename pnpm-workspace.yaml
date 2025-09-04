@@ -13,3 +13,4 @@ packages:
   - "auth/*"
   - "observability/*"
   - "explorations/longmemeval"
+  - "explorations/agent-builder-gh-repro"
