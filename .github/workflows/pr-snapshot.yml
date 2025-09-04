@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Optional tag for snapshot version and npm publish (defaults to slugified branch name)'
+        description: "Optional tag for snapshot version and npm publish (defaults to slugified branch name)"
         required: false
         type: string
 
@@ -48,8 +48,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.19.1
-          cache: 'pnpm'
-          registry-url: 'https://registry.yarnpkg.com'
+          cache: "pnpm"
+          registry-url: "https://registry.yarnpkg.com"
 
       - name: Install dependencies
         run: pnpm install
@@ -101,8 +101,9 @@ jobs:
         run: pnpm changeset pre exit
 
       - name: Run Changeset Version Snapshot
-        run: pnpm changeset version --snapshot ${{ env.FINAL_TAG }}
+        run: pnpx tsx .changeset/changeset-version.ts
         env:
+          FINAL_TAG: ${{ env.FINAL_TAG }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Publish to npm
