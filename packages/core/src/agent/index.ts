@@ -1435,7 +1435,7 @@ export class Agent<
               }
 
               toolAISpan?.end({ output: result });
-              return result;
+              return { result, runId: run.runId };
             } catch (err) {
               const mastraError = new MastraError(
                 {
