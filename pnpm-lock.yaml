@@ -310,7 +310,7 @@ importers:
   deployers/cloud:
     dependencies:
       '@mastra/core':
-        specifier: '>=0.15.3-0 <0.16.0-0'
+        specifier: '>=0.15.3-0 <0.17.0-0'
         version: 0.15.3-alpha.6(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.5)
       '@mastra/deployer':
         specifier: workspace:^
