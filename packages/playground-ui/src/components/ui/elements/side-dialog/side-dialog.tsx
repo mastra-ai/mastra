@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 
 export function SideDialog({
   dialogTitle,
+  dialogDescription,
   isOpen,
   onClose,
   children,
@@ -16,6 +17,7 @@ export function SideDialog({
 }: {
   variant?: 'default' | 'confirmation';
   dialogTitle: string;
+  dialogDescription: string;
   isOpen: boolean;
   onClose?: () => void;
   onNext?: (() => void) | null;
@@ -49,6 +51,7 @@ export function SideDialog({
         >
           <VisuallyHidden.Root>
             <Dialog.Title>{dialogTitle}</Dialog.Title>
+            <Dialog.Description>{dialogDescription}</Dialog.Description>
           </VisuallyHidden.Root>
 
           {!isConfirmation && hasCloseButton && (

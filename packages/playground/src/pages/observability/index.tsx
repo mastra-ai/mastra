@@ -102,7 +102,6 @@ export default function Observability() {
       const entityName = searchParams.get('entity');
       const entityOption = entityOptions.find(option => option.value === entityName);
       if (entityOption && entityOption.value !== selectedEntityOption?.value) {
-        console.log('updating entity option', entityOption, selectedEntityOption);
         setSelectedEntityOption(entityOption);
       }
     }
@@ -139,7 +138,7 @@ export default function Observability() {
       time: format(createdAtDate, 'HH:mm:ss'),
       name: trace?.name,
       entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
-      status: <EntryListStatusCell status={trace?.attributes?.status} />,
+      status: <EntryListStatusCell status={trace?.attributes?.status} key={`${trace?.traceId}-status`} />,
     };
   });
 

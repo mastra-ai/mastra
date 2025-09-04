@@ -35,6 +35,7 @@ export function SpanDialog({
   return (
     <SideDialog
       dialogTitle="Observability Span"
+      dialogDescription="View and analyze span details"
       isOpen={isOpen}
       onClose={onClose}
       hasCloseButton={true}

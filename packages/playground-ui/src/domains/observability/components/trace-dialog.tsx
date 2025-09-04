@@ -86,6 +86,7 @@ export function TraceDialog({
     <>
       <SideDialog
         dialogTitle="Observability Trace"
+        dialogDescription="View and analyze trace details"
         isOpen={isOpen}
         onClose={onClose}
         hasCloseButton={!dialogIsOpen || combinedView}
@@ -134,7 +135,15 @@ export function TraceDialog({
             <div className="overflow-y-auto grid grid-rows-[auto_1fr] relative">
               <div className="absolute left-0 right-[2.5rem] h-[.5rem] bg-surface1 rounded-full top-0"></div>
               <div className="flex items-center justify-between pb-[.5rem] pt-[1rem] border-b border-border1 pr-[2.5rem]">
-                <SideDialogTop onNext={toNextSpan} onPrevious={toPreviousSpan} showInnerNav={true} className="pl-0">
+                <SideDialogTop
+                  onNext={thereIsNextSpan() ? toNextSpan : undefined}
+                  onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
+                  //onNext={toNextSpan}
+                  //onPrevious={toPreviousSpan}
+
+                  showInnerNav={true}
+                  className="pl-0"
+                >
                   <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
                     <TextAndIcon>
                       <EyeIcon /> {getShortId(traceId)}
@@ -178,8 +187,6 @@ export function TraceDialog({
         span={selectedSpan}
         isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
         onClose={() => setDialogIsOpen(false)}
-        //        onNext={toNextSpan}
-        //        onPrevious={toPreviousSpan}
         onNext={thereIsNextSpan() ? toNextSpan : undefined}
         onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
         onViewToggle={() => setCombinedView(!combinedView)}
