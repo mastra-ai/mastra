@@ -612,7 +612,7 @@ describe('BraintrustExporter', () => {
         span: rootSpan,
       });
 
-      // Verify experiment was created
+      // Verify trace was created
       expect((exporter as any).traceMap.has('root-span')).toBe(true);
 
       rootSpan.endTime = new Date();
