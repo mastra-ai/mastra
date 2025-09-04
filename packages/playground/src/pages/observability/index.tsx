@@ -48,8 +48,8 @@ export default function Observability() {
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const { data: agents } = useAgents();
-  const { data: workflows } = useWorkflows();
+  const { data: agents, isLoading: isLoadingAgents } = useAgents();
+  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
 
   const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
 
@@ -152,22 +152,32 @@ export default function Observability() {
     setDialogIsOpen(true);
   };
 
-  const toPreviousItem = () => {
-    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
-    const prevItem = aiTraces[currentIndex + 1];
-
-    if (prevItem) {
-      setSelectedTraceId(prevItem.traceId);
-    }
-  };
-
   const toNextItem = () => {
     const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
-    const nextItem = aiTraces[currentIndex - 1];
+    const nextItem = aiTraces[currentIndex + 1];
 
     if (nextItem) {
       setSelectedTraceId(nextItem.traceId);
     }
+  };
+
+  const toPreviousItem = () => {
+    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
+    const previousItem = aiTraces[currentIndex - 1];
+
+    if (previousItem) {
+      setSelectedTraceId(previousItem.traceId);
+    }
+  };
+
+  const thereIsNextItem = () => {
+    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
+    return currentIndex < aiTraces.length - 1;
+  };
+
+  const thereIsPreviousItem = () => {
+    const currentIndex = aiTraces.findIndex(item => item.traceId === selectedTraceId);
+    return currentIndex > 0;
   };
 
   return (
@@ -192,6 +202,7 @@ export default function Observability() {
               onDateChange={handleDataChange}
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
+              isLoading={isLoadingAiTraces || isLoadingAgents || isLoadingWorkflows}
             />
             <EntryList
               items={items}
@@ -213,8 +224,8 @@ export default function Observability() {
         traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
-        onNext={aiTraces.length > 1 ? toNextItem : undefined}
-        onPrevious={aiTraces.length > 1 ? toPreviousItem : undefined}
+        onNext={thereIsNextItem() ? toNextItem : undefined}
+        onPrevious={thereIsPreviousItem() ? toPreviousItem : undefined}
         isLoadingSpans={isLoadingAiTrace}
       />
     </>

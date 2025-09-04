@@ -46,17 +46,18 @@ export function getTraceInfo(trace: AISpanRecord | undefined) {
   ];
 }
 
-export function getSpanInfo(span: AISpanRecord | undefined) {
+type getSpanInfoProps = {
+  span: AISpanRecord | undefined;
+  withTraceId?: boolean;
+  withSpanId?: boolean;
+};
+
+export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: getSpanInfoProps) {
   if (!span) {
     return [];
   }
 
-  return [
-    {
-      key: 'id',
-      label: 'Trace Id',
-      value: span?.traceId,
-    },
+  const baseInfo = [
     {
       key: 'spanType',
       label: 'Span Type',
@@ -78,4 +79,23 @@ export function getSpanInfo(span: AISpanRecord | undefined) {
       value: span?.endedAt ? format(new Date(span.endedAt), 'MMM dd, HH:mm:ss.SSS') : '-',
     },
   ];
+
+  // Conditionally add trace ID at the beginning
+  if (withTraceId) {
+    baseInfo.unshift({
+      key: 'traceId',
+      label: 'Trace Id',
+      value: span?.traceId,
+    });
+  }
+
+  if (withSpanId) {
+    baseInfo.unshift({
+      key: 'spanId',
+      label: 'Span Id',
+      value: span?.spanId,
+    });
+  }
+
+  return baseInfo;
 }

@@ -13,6 +13,7 @@ type TracesToolsProps = {
   selectedDateTo?: Date | undefined;
   onReset?: () => void;
   onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
+  isLoading?: boolean;
 };
 
 export function TracesTools({
@@ -23,6 +24,7 @@ export function TracesTools({
   onDateChange,
   selectedDateFrom,
   selectedDateTo,
+  isLoading,
 }: TracesToolsProps) {
   return (
     <div className={cn('flex flex-wrap gap-x-[2rem] gap-y-[1rem]')}>
@@ -39,8 +41,8 @@ export function TracesTools({
         }}
         value={selectedEntity?.value || ''}
         className="min-w-[20rem]"
+        disabled={isLoading}
       />
-
       <div className={cn('flex gap-[1rem] items-center flex-wrap mr-auto')}>
         <span className={cn('shrink-0 text-[0.875rem] text-icon3')}>Filter by Date & time range</span>
         <DateTimePicker
@@ -50,6 +52,7 @@ export function TracesTools({
           onValueChange={date => onDateChange?.(date || undefined, 'from')}
           className="min-w-[15rem]"
           defaultTimeStrValue="12:00 AM"
+          disabled={isLoading}
         />
         <DateTimePicker
           placeholder="To"
@@ -58,9 +61,10 @@ export function TracesTools({
           onValueChange={date => onDateChange?.(date || undefined, 'to')}
           className="min-w-[15rem]"
           defaultTimeStrValue="11:59 PM"
+          disabled={isLoading}
         />
       </div>
-      <Button variant="primary" onClick={onReset}>
+      <Button variant="primary" onClick={onReset} disabled={isLoading}>
         Reset <XIcon />
       </Button>
     </div>

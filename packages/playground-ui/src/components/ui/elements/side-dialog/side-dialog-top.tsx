@@ -8,9 +8,10 @@ export type SideDialogTopProps = {
   onNext?: (() => void) | null;
   onPrevious?: (() => void) | null;
   showInnerNav?: boolean;
+  className?: string;
 };
 
-export function SideDialogTop({ children, onNext, onPrevious, showInnerNav }: SideDialogTopProps) {
+export function SideDialogTop({ children, onNext, onPrevious, showInnerNav, className }: SideDialogTopProps) {
   const handleOnNext = () => {
     onNext?.();
   };
@@ -20,7 +21,9 @@ export function SideDialogTop({ children, onNext, onPrevious, showInnerNav }: Si
   };
 
   return (
-    <div className={cn(`flex justify-between h-[3.5rem] items-center  text-icon5 text-[.875rem] pl-[1.5rem]`)}>
+    <div
+      className={cn(`flex justify-between h-[3.5rem] items-center  text-icon5 text-[.875rem] pl-[1.5rem]`, className)}
+    >
       <div className={cn('flex items-center gap-[2rem]', '[&_svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon3')}>
         {children}
 
@@ -35,11 +38,11 @@ export function SideDialogTop({ children, onNext, onPrevious, showInnerNav }: Si
             >
               <Button onClick={handleOnPrevious} disabled={!onPrevious} variant="ghost">
                 Previous
-                <ArrowDownIcon />
+                <ArrowUpIcon />
               </Button>
               <Button onClick={handleOnNext} disabled={!onNext} variant="ghost">
                 Next
-                <ArrowUpIcon />
+                <ArrowDownIcon />
               </Button>
             </div>
           </>

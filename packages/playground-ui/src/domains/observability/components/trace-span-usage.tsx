@@ -81,7 +81,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
   return (
     <div
       className={cn(
-        'grid gap-[1.5rem] pr-[1.5rem]',
+        'grid gap-[1.5rem]',
         {
           'xl:grid-cols-3': usageAsArray.length === 3,
           'xl:grid-cols-2': usageAsArray.length === 2,

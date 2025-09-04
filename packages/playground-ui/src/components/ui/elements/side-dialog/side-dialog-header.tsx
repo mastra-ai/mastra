@@ -8,5 +8,5 @@ export type SideDialogHeaderProps = {
 };
 
 export function SideDialogHeader({ children, className }: SideDialogHeaderProps) {
-  return <div className={cn('flex justify-between items-center', className)}>{children}</div>;
+  return <div className={cn('flex justify-between items-center pb-[1rem]', className)}>{children}</div>;
 }

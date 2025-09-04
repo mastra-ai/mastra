@@ -7,6 +7,7 @@ import {
   TextAndIcon,
   SideDialogHeader,
   SideDialogHeading,
+  getShortId,
 } from '@/components/ui/elements';
 import { PanelLeftIcon, PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon, Link } from 'lucide-react';
 import { TraceSpanUsage } from './trace-span-usage';
@@ -43,12 +44,12 @@ export function SpanDialog({
         <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
           <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
             <TextAndIcon>
-              <EyeIcon /> {span?.traceId?.slice(0, 6)}
+              <EyeIcon /> {getShortId(span?.traceId)}
             </TextAndIcon>
             ›
             <TextAndIcon>
               <ChevronsLeftRightEllipsisIcon />
-              {span?.id?.slice(0, 6)}
+              {getShortId(span?.spanId)}
             </TextAndIcon>
           </div>
         </SideDialogTop>
@@ -66,6 +67,7 @@ export function SpanDialog({
             <HashIcon /> {span?.spanId}
           </TextAndIcon>
         </SideDialogHeader>
+
         {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} className="mt-[1.5rem]" />}
         <KeyValueList data={spanInfo} LinkComponent={Link} className="mt-[1.5rem]" />
         <SpanDetails span={span} />

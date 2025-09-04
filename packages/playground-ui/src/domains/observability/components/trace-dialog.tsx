@@ -2,7 +2,6 @@ import { cn } from '@/lib/utils';
 import {
   SideDialog,
   SideDialogTop,
-  SideDialogCodeSection,
   KeyValueList,
   TextAndIcon,
   getShortId,
@@ -10,7 +9,7 @@ import {
   SideDialogHeading,
 } from '@/components/ui/elements';
 import { type UISpan } from '../types';
-import { PanelLeftIcon, PanelTopIcon, HashIcon, EyeIcon } from 'lucide-react';
+import { PanelLeftIcon, HashIcon, EyeIcon, ChevronsLeftRightEllipsisIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
@@ -18,6 +17,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { AISpanRecord } from '@mastra/core';
 import { getTraceInfo, getSpanInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
+import { SpanDetails } from './span-details';
 
 type TraceDialogProps = {
   traceSpans?: any[];
@@ -44,7 +44,7 @@ export function TraceDialog({
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const [combinedView, setCombinedView] = useState<boolean>(false);
-  const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId) ?? traceSpans[0];
+  const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
 
   const handleSpanClick = (span: UISpan) => {
     setSelectedSpanId(span.id);
@@ -53,7 +53,7 @@ export function TraceDialog({
 
   const toNextSpan = () => {
     const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
-    const nextSpan = traceSpans[currentIndex + 1];
+    const nextSpan = traceSpans[currentIndex - 1];
 
     if (nextSpan) {
       setSelectedSpanId(nextSpan.spanId);
@@ -62,15 +62,25 @@ export function TraceDialog({
 
   const toPreviousSpan = () => {
     const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
-    const prevSpan = traceSpans[currentIndex - 1];
+    const previousSpan = traceSpans[currentIndex + 1];
 
-    if (prevSpan) {
-      setSelectedSpanId(prevSpan.spanId);
+    if (previousSpan) {
+      setSelectedSpanId(previousSpan.spanId);
     }
   };
 
+  const thereIsNextSpan = () => {
+    const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
+    return currentIndex > 0;
+  };
+
+  const thereIsPreviousSpan = () => {
+    const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
+    return currentIndex < traceSpans.length - 1;
+  };
+
   const traceInfo = getTraceInfo(traceDetails);
-  const selectedSpanInfo = getSpanInfo(selectedSpan);
+  const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
 
   return (
     <>
@@ -78,7 +88,7 @@ export function TraceDialog({
         dialogTitle="Observability Trace"
         isOpen={isOpen}
         onClose={onClose}
-        hasCloseButton={!dialogIsOpen}
+        hasCloseButton={!dialogIsOpen || combinedView}
         className={cn('w-[calc(100vw-20rem)] max-w-[75%]', '3xl:max-w-[60rem]', '4xl:max-w-[60%]')}
       >
         <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
@@ -88,11 +98,11 @@ export function TraceDialog({
         </SideDialogTop>
 
         <div
-          className={cn('p-[1.5rem] pl-[2.5rem] pr-0 overflow-y-auto grid grid-rows-[auto_1fr_1fr]', {
-            'grid-rows-[auto_1fr]': !combinedView,
+          className={cn('pt-[1.5rem] pl-[2rem] grid-rows-[auto_1fr] grid h-full overflow-y-auto', {
+            'grid-rows-[auto_1fr_1fr]': selectedSpan && combinedView,
           })}
         >
-          <SideDialogHeader className="flex  gap-[1rem] items-baseline pr-[3.5rem]">
+          <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
             <SideDialogHeading>
               <EyeIcon /> {traceDetails?.name}
             </SideDialogHeading>
@@ -102,41 +112,60 @@ export function TraceDialog({
             </TextAndIcon>
           </SideDialogHeader>
 
-          <div className="overflow-y-auto pr-[1rem]">
+          <div className="overflow-y-auto pb-[2.5rem]">
             {traceDetails?.metadata?.usage && (
               <TraceSpanUsage
                 traceUsage={traceDetails?.metadata?.usage}
                 traceSpans={traceSpans}
-                className="mt-[3rem]"
+                className="mt-[3rem] pr-[1.5rem]"
               />
             )}
-            <KeyValueList data={traceInfo} LinkComponent={Link} className="mt-[3rem]" />
+            <KeyValueList data={traceInfo} LinkComponent={Link} className="mt-[2rem]" />
             <TraceTimeline
               spans={traceSpans}
               onSpanClick={handleSpanClick}
               selectedSpanId={selectedSpanId}
               isLoading={isLoadingSpans}
+              className="pr-[1.5rem] pt-[2.5rem]"
             />
           </div>
 
-          {combinedView && (
-            <div className="overflow-y-auto border-t-2 border-gray-500 grid grid-rows-[auto_1fr]">
-              <div className="flex items-center justify-between py-[.5rem] border-b border-border1 pr-[1rem]">
-                <SideDialogTop onNext={toNextSpan} onPrevious={toPreviousSpan} showInnerNav={true}>
-                  <div className="flex items-center gap-[0.5rem] text-icon4 text-[0.875rem]">{selectedSpanId}</div>
+          {selectedSpan && combinedView && (
+            <div className="overflow-y-auto grid grid-rows-[auto_1fr] relative">
+              <div className="absolute left-0 right-[2.5rem] h-[.5rem] bg-surface1 rounded-full top-0"></div>
+              <div className="flex items-center justify-between pb-[.5rem] pt-[1rem] border-b border-border1 pr-[2.5rem]">
+                <SideDialogTop onNext={toNextSpan} onPrevious={toPreviousSpan} showInnerNav={true} className="pl-0">
+                  <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
+                    <TextAndIcon>
+                      <EyeIcon /> {getShortId(traceId)}
+                    </TextAndIcon>
+                    ›
+                    <TextAndIcon>
+                      <EyeIcon /> {getShortId(selectedSpanId)}
+                    </TextAndIcon>
+                  </div>
                 </SideDialogTop>
                 <div className="flex items-center gap-[1rem]">
                   <button className="flex items-center gap-1" onClick={() => setCombinedView(false)}>
-                    {combinedView ? <PanelLeftIcon /> : <PanelTopIcon />}
+                    <PanelLeftIcon />
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-[20rem_1fr] p-[1.5rem] overflow-y-auto">
-                <div className="overflow-y-auto">
+              <div className="grid grid-cols-[20rem_1fr] gap-[1rem] overflow-y-auto">
+                <div className="overflow-y-auto grid content-start p-[1.5rem] pl-0 gap-[2rem]">
+                  <SideDialogHeading>
+                    <ChevronsLeftRightEllipsisIcon /> {selectedSpan?.name}
+                  </SideDialogHeading>
+                  {selectedSpan?.attributes?.usage && (
+                    <TraceSpanUsage
+                      spanUsage={selectedSpan.attributes.usage}
+                      className="xl:grid-cols-1 xl:gap-[1rem]"
+                    />
+                  )}
                   <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
                 </div>
-                <div className="overflow-y-auto">
+                <div className="overflow-y-auto pr-[1.5rem] pt-[2rem]">
                   <SpanDetails span={selectedSpan} />
                 </div>
               </div>
@@ -149,22 +178,13 @@ export function TraceDialog({
         span={selectedSpan}
         isOpen={Boolean(dialogIsOpen && selectedSpanId && !combinedView)}
         onClose={() => setDialogIsOpen(false)}
-        onNext={toNextSpan}
-        onPrevious={toPreviousSpan}
+        //        onNext={toNextSpan}
+        //        onPrevious={toPreviousSpan}
+        onNext={thereIsNextSpan() ? toNextSpan : undefined}
+        onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
         onViewToggle={() => setCombinedView(!combinedView)}
         spanInfo={selectedSpanInfo}
       />
     </>
-  );
-}
-
-function SpanDetails({ span }: { span: any }) {
-  return (
-    <div className="grid gap-[1.5rem] mb-[2rem]">
-      <SideDialogCodeSection title="Input" codeStr={JSON.stringify(span.input || null, null, 2)} />
-      <SideDialogCodeSection title="Output" codeStr={JSON.stringify(span.output || null, null, 2)} />
-      <SideDialogCodeSection title="Metadata" codeStr={JSON.stringify(span.metadata || null, null, 2)} />
-      <SideDialogCodeSection title="Attributes" codeStr={JSON.stringify(span.attributes || null, null, 2)} />
-    </div>
   );
 }

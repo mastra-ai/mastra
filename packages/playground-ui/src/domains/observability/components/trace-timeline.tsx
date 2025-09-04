@@ -13,9 +13,10 @@ type TraceTimelineProps = {
   onSpanClick: (span: UISpan) => void;
   selectedSpanId?: string;
   isLoading?: boolean;
+  className?: string;
 };
 
-export function TraceTimeline({ spans = [], onSpanClick, selectedSpanId, isLoading }: TraceTimelineProps) {
+export function TraceTimeline({ spans = [], onSpanClick, selectedSpanId, isLoading, className }: TraceTimelineProps) {
   const hierarchicalSpans = useMemo(() => {
     if (!spans) return [];
     return formatHierarchicalSpans(spans || []);
@@ -25,7 +26,7 @@ export function TraceTimeline({ spans = [], onSpanClick, selectedSpanId, isLoadi
   const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
 
   return (
-    <div className="mt-[3rem] grid gap-[1rem]">
+    <div className={cn('grid gap-[1rem]', className)}>
       <div className="flex w-full justify-between pr-[4rem]">
         <SideDialogHeading as="h2">
           <ListTreeIcon /> Timeline
@@ -45,7 +46,7 @@ export function TraceTimeline({ spans = [], onSpanClick, selectedSpanId, isLoadi
       ) : (
         <div
           className={cn(
-            'overflow-y-auto pr-[1.5rem] grid items-start content-start gap-y-[2px] xl:py-[1rem] ',
+            'overflow-y-auto  grid items-start content-start gap-y-[2px] xl:py-[1rem] ',
             'xl:grid-cols-[3fr_2fr] xl:gap-x-[1rem]',
           )}
         >
