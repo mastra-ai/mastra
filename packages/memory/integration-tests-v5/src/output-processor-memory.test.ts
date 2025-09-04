@@ -39,27 +39,48 @@ describe('Output Processor Memory Persistence Integration', () => {
     await storage.client?.close();
   });
 
-  it('should persist PII-redacted messages to memory', async () => {
-    // Create a PII redaction processor
-    class PIIRedactionProcessor implements Processor {
-      readonly name = 'pii-redaction-processor';
+  // Create a PII redaction processor
+  class PIIRedactionProcessor implements Processor {
+    readonly name = 'pii-redaction-processor';
 
-      // Process complete messages after generation
-      async processOutputResult({
-        messages,
-      }: {
-        messages: any[];
-        abort: (reason?: string) => never;
-        tracingContext?: any;
-      }): Promise<any[]> {
-        return messages.map(msg => {
-          // Handle both v2 format (content.parts) and v5 format (content as array)
-          if (msg.role === 'assistant') {
-            if (Array.isArray(msg.content)) {
-              // v5 format: content is directly an array
-              return {
-                ...msg,
-                content: msg.content.map((part: any) => {
+    // Process complete messages after generation
+    async processOutputResult({
+      messages,
+    }: {
+      messages: any[];
+      abort: (reason?: string) => never;
+      tracingContext?: any;
+    }): Promise<any[]> {
+      return messages.map(msg => {
+        // Handle both v2 format (content.parts) and v5 format (content as array)
+        if (msg.role === 'assistant') {
+          if (Array.isArray(msg.content)) {
+            // v5 format: content is directly an array
+            return {
+              ...msg,
+              content: msg.content.map((part: any) => {
+                if (part.type === 'text') {
+                  // Redact email addresses, phone numbers, and SSNs
+                  let redactedText = part.text
+                    .replace(/[\w.-]+@[\w.-]+\.\w+/g, '[EMAIL_REDACTED]')
+                    .replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '[PHONE_REDACTED]')
+                    .replace(/\bSSN:\s*\d{3}-\d{2}-\d{4}\b/gi, '[SSN_REDACTED]');
+
+                  return {
+                    ...part,
+                    text: redactedText,
+                  };
+                }
+                return part;
+              }),
+            };
+          } else if (msg.content?.parts) {
+            // v2 format: content has parts array
+            return {
+              ...msg,
+              content: {
+                ...msg.content,
+                parts: msg.content.parts.map((part: any) => {
                   if (part.type === 'text') {
                     // Redact email addresses, phone numbers, and SSNs
                     let redactedText = part.text
@@ -74,37 +95,16 @@ describe('Output Processor Memory Persistence Integration', () => {
                   }
                   return part;
                 }),
-              };
-            } else if (msg.content?.parts) {
-              // v2 format: content has parts array
-              return {
-                ...msg,
-                content: {
-                  ...msg.content,
-                  parts: msg.content.parts.map((part: any) => {
-                    if (part.type === 'text') {
-                      // Redact email addresses, phone numbers, and SSNs
-                      let redactedText = part.text
-                        .replace(/[\w.-]+@[\w.-]+\.\w+/g, '[EMAIL_REDACTED]')
-                        .replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '[PHONE_REDACTED]')
-                        .replace(/\bSSN:\s*\d{3}-\d{2}-\d{4}\b/gi, '[SSN_REDACTED]');
-
-                      return {
-                        ...part,
-                        text: redactedText,
-                      };
-                    }
-                    return part;
-                  }),
-                },
-              };
-            }
+              },
+            };
           }
-          return msg;
-        });
-      }
+        }
+        return msg;
+      });
     }
+  }
 
+  it('should persist PII-redacted messages to memory using generateVNext', async () => {
     // Create a mock model that returns PII data
     const mockModel = new MockLanguageModelV2({
       doStream: async () => ({
@@ -145,6 +145,89 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Verify the returned messages have redacted parts
     const returnedAssistantMsg = result.response?.messages?.find((m: any) => m.role === 'assistant');
+    expect(returnedAssistantMsg).toBeDefined();
+
+    // content is an array in v5 response format
+    const textPart = returnedAssistantMsg.content.find((part: any) => part.type === 'text');
+    expect(textPart).toBeDefined();
+    const redactedText = textPart.text;
+
+    expect(redactedText).toBe('Contact me at [EMAIL_REDACTED] or call [PHONE_REDACTED]. My [SSN_REDACTED].');
+    expect(redactedText).not.toContain('john.doe@example.com');
+    expect(redactedText).not.toContain('555-123-4567');
+    expect(redactedText).not.toContain('123-45-6789');
+
+    // Wait for async memory operations
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Retrieve messages from storage directly
+    const savedMessages = await storage.getMessages({
+      threadId,
+      format: 'v2',
+    });
+
+    // Find the assistant message
+    const assistantMessages = savedMessages.filter((m: any) => m.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    const assistantMessage = assistantMessages[0];
+    const textParts = assistantMessage.content.parts.filter((p: any) => p.type === 'text');
+    expect(textParts.length).toBeGreaterThan(0);
+
+    const savedText = (textParts[0] as any).text;
+
+    // Verify PII is redacted in the saved message
+    expect(savedText).toContain('[EMAIL_REDACTED]');
+    expect(savedText).toContain('[PHONE_REDACTED]');
+    expect(savedText).toContain('[SSN_REDACTED]');
+
+    // Ensure original PII is NOT in the saved message
+    expect(savedText).not.toContain('john.doe@example.com');
+    expect(savedText).not.toContain('555-123-4567');
+    expect(savedText).not.toContain('123-45-6789');
+  });
+
+  it('should persist PII-redacted messages to memory using streamVNext', async () => {
+    // Create a mock model that returns PII data
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+          },
+        ]),
+      }),
+    });
+
+    // Create an agent with the PII redaction processor
+    const agent = new Agent({
+      name: 'test-agent-pii',
+      model: mockModel,
+      instructions: 'You are a helpful assistant',
+      outputProcessors: [new PIIRedactionProcessor()],
+      memory,
+    });
+
+    const threadId = `thread-pii-streamvnext-${Date.now()}`;
+    const resourceId = 'test-resource-pii';
+
+    // Generate a response with memory enabled using generateVNext
+    const result = await agent.streamVNext('Share your contact info', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Verify the returned messages have redacted parts
+    const returnedAssistantMsg = (await result.response)?.messages?.find((m: any) => m.role === 'assistant');
     expect(returnedAssistantMsg).toBeDefined();
 
     // content is an array in v5 response format
