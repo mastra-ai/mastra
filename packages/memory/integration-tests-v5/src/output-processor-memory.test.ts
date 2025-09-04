@@ -1,12 +1,19 @@
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { openai } from '@ai-sdk/openai';
+<<<<<<< Updated upstream:packages/memory/integration-tests-v5/src/output-processor-memory.test.ts
+=======
+import { MockLanguageModelV2 } from 'ai-v5/test';
+>>>>>>> Stashed changes:packages/memory/integration-tests/src/output-processor-memory.test.ts
 import { Agent } from '@mastra/core/agent';
-import type { Processor } from '@mastra/core/processors';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+<<<<<<< Updated upstream:packages/memory/integration-tests-v5/src/output-processor-memory.test.ts
+import type { Processor } from '@mastra/core/processors';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+=======
+>>>>>>> Stashed changes:packages/memory/integration-tests/src/output-processor-memory.test.ts
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('Output Processor Memory Persistence Integration', () => {
   let memory: Memory;
@@ -23,6 +30,7 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Initialize memory with the database
     memory = new Memory({
+      storage,
       options: {
         lastMessages: 10,
         semanticRecall: false,
@@ -38,7 +46,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await storage.client?.close();
   });
 
-  it.skip('should persist PII-redacted messages to memory', async () => {
+  it('should persist PII-redacted messages to memory', async () => {
     // Create a PII redaction processor
     class PIIRedactionProcessor implements Processor {
       readonly name = 'pii-redaction-processor';
@@ -80,10 +88,47 @@ describe('Output Processor Memory Persistence Integration', () => {
       }
     }
 
+    // Create a mock model that returns PII data
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+<<<<<<< Updated upstream:packages/memory/integration-tests-v5/src/output-processor-memory.test.ts
+        stream: convertArrayToReadableStream([
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+          },
+        ]),
+=======
+        stream: {
+          [Symbol.asyncIterator]: async function* () {
+            yield {
+              type: 'text-delta' as const,
+              textDelta: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
+            };
+            yield {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              logprobs: undefined,
+              usage: { promptTokens: 10, completionTokens: 15, totalTokens: 25 },
+              experimental_providerMetadata: undefined,
+            };
+          },
+        },
+        rawCall: { rawPrompt: null, rawSettings: {} },
+>>>>>>> Stashed changes:packages/memory/integration-tests/src/output-processor-memory.test.ts
+      }),
+    });
+
     // Create an agent with the PII redaction processor
     const agent = new Agent({
       name: 'test-agent-pii',
-      model: openai('gpt-3.5-turbo'),
+      model: mockModel,
       instructions: 'You are a helpful assistant',
       outputProcessors: [new PIIRedactionProcessor()],
       memory,
@@ -92,25 +137,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-pii-${Date.now()}`;
     const resourceId = 'test-resource-pii';
 
-    // Mock the LLM to return PII data
-    vi.spyOn(agent as any, '__getLLM').mockReturnValue({
-      generate: vi.fn().mockResolvedValue({
-        text: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
-        response: {
-          messages: [
-            {
-              role: 'assistant',
-              content: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
-            },
-          ],
-        },
-        usage: { promptTokens: 10, completionTokens: 15, totalTokens: 25 },
-        finishReason: 'stop',
-      }),
-    });
-
-    // Generate a response with memory enabled
-    const result = await agent.generate('Share your contact info', {
+    // Generate a response with memory enabled using generateVNext
+    const result = await agent.generateVNext('Share your contact info', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -153,7 +181,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     expect(savedText).not.toContain('123-45-6789');
   });
 
-  it.skip('should chain multiple output processors and persist the result', async () => {
+  it('should chain multiple output processors and persist the result', async () => {
     // First processor: Add a warning prefix
     class WarningPrefixProcessor implements Processor {
       readonly name = 'warning-prefix';
@@ -222,9 +250,26 @@ describe('Output Processor Memory Persistence Integration', () => {
       }
     }
 
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: 'This is a test message',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+          },
+        ]),
+      }),
+    });
+
     const agent = new Agent({
       name: 'test-agent-chain',
-      model: openai('gpt-3.5-turbo'),
+      model: mockModel,
       instructions: 'You are a helpful assistant',
       outputProcessors: [new WarningPrefixProcessor(), new UppercaseProcessor()],
       memory,
@@ -233,25 +278,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-chain-${Date.now()}`;
     const resourceId = 'test-resource-chain';
 
-    // Mock the LLM response
-    vi.spyOn(agent as any, '__getLLM').mockReturnValue({
-      generate: vi.fn().mockResolvedValue({
-        text: 'This is a test message',
-        response: {
-          messages: [
-            {
-              role: 'assistant',
-              content: 'This is a test message',
-            },
-          ],
-        },
-        usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
-        finishReason: 'stop',
-      }),
-    });
-
-    // Generate a response
-    const result = await agent.generate('Say something', {
+    // Generate a response using generateVNext
+    const result = await agent.generateVNext('Say something', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -277,7 +305,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     expect((textParts[0] as any).text).toBe('[WARNING] THIS IS A TEST MESSAGE');
   });
 
-  it.skip('should handle processor that removes all text content', async () => {
+  it('should handle processor that removes all text content', async () => {
     // Processor that removes all text (extreme redaction case)
     class RemoveAllTextProcessor implements Processor {
       readonly name = 'remove-all-text';
@@ -305,9 +333,26 @@ describe('Output Processor Memory Persistence Integration', () => {
       }
     }
 
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: 'This text should be completely removed',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { promptTokens: 5, completionTokens: 7, totalTokens: 12 },
+          },
+        ]),
+      }),
+    });
+
     const agent = new Agent({
       name: 'test-agent-remove',
-      model: openai('gpt-3.5-turbo'),
+      model: mockModel,
       instructions: 'You are a helpful assistant',
       outputProcessors: [new RemoveAllTextProcessor()],
       memory,
@@ -316,25 +361,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-remove-${Date.now()}`;
     const resourceId = 'test-resource-remove';
 
-    // Mock the LLM response
-    vi.spyOn(agent as any, '__getLLM').mockReturnValue({
-      generate: vi.fn().mockResolvedValue({
-        text: 'This text should be completely removed',
-        response: {
-          messages: [
-            {
-              role: 'assistant',
-              content: 'This text should be completely removed',
-            },
-          ],
-        },
-        usage: { promptTokens: 5, completionTokens: 7, totalTokens: 12 },
-        finishReason: 'stop',
-      }),
-    });
-
-    // Generate a response
-    const result = await agent.generate('Say something', {
+    // Generate a response using generateVNext
+    const result = await agent.generateVNext('Say something', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -361,7 +389,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     expect(textParts.length).toBe(0);
   });
 
-  it.skip('should persist processed messages when refreshing conversation', async () => {
+  it('should persist processed messages when refreshing conversation', async () => {
     // This tests the original bug scenario - refreshing should show processed messages
     class SensitiveDataRedactor implements Processor {
       readonly name = 'sensitive-data-redactor';
@@ -402,9 +430,26 @@ describe('Output Processor Memory Persistence Integration', () => {
       }
     }
 
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: 'Your card number is 4532-1234-5678-9012',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { promptTokens: 5, completionTokens: 8, totalTokens: 13 },
+          },
+        ]),
+      }),
+    });
+
     const agent = new Agent({
       name: 'test-agent-refresh',
-      model: openai('gpt-3.5-turbo'),
+      model: mockModel,
       instructions: 'You are a helpful assistant',
       outputProcessors: [new SensitiveDataRedactor()],
       memory,
@@ -413,25 +458,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     const threadId = `thread-refresh-${Date.now()}`;
     const resourceId = 'test-resource-refresh';
 
-    // Mock the LLM response with credit card info
-    vi.spyOn(agent as any, '__getLLM').mockReturnValue({
-      generate: vi.fn().mockResolvedValue({
-        text: 'Your card number is 4532-1234-5678-9012',
-        response: {
-          messages: [
-            {
-              role: 'assistant',
-              content: 'Your card number is 4532-1234-5678-9012',
-            },
-          ],
-        },
-        usage: { promptTokens: 5, completionTokens: 8, totalTokens: 13 },
-        finishReason: 'stop',
-      }),
-    });
-
-    // First interaction - generate response
-    const result = await agent.generate('What is my card number?', {
+    // First interaction - generate response using generateVNext
+    const result = await agent.generateVNext('What is my card number?', {
       memory: {
         thread: threadId,
         resource: resourceId,
