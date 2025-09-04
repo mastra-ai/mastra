@@ -1,14 +1,18 @@
 import type { Mastra } from '..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema, type ScoreRowData, type ScoringHookInput } from '../scores';
+import type { MastraStorage } from '../storage';
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
-    if (!mastra.getStorage()) {
+    const storage = mastra.getStorage();
+
+    console.log('storage', storage);
+    if (!storage) {
+      mastra.getLogger()?.warn('Storage not found, skipping score validation and saving');
       return;
     }
 
-    const storage = mastra.getStorage();
     const entityId = hookData.entity.id;
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
@@ -49,8 +53,7 @@ export function createOnScorerHook(mastra: Mastra) {
         },
       };
 
-      const payloadToSave = saveScorePayloadSchema.parse(payload);
-      await storage?.saveScore(payloadToSave);
+      await validateAndSaveScore(storage, payload);
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -70,6 +73,12 @@ export function createOnScorerHook(mastra: Mastra) {
       mastra.getLogger()?.error(mastraError.toString());
     }
   };
+}
+
+export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
+  console.log('validateAndSaveScore', storage, payload);
+  const payloadToSave = saveScorePayloadSchema.parse(payload);
+  await storage?.saveScore(payloadToSave);
 }
 
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
