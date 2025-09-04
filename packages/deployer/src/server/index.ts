@@ -424,8 +424,6 @@ export async function createHonoServer(
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
   app.route('/api/vector', vectorRouter(bodyLimitOptions));
-  // Files routes
-  app.route('/api/files', filesRouter(bodyLimitOptions));
 
   if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
     app.get(

@@ -30,7 +30,6 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
     const url = formData.get('url-attachment')?.toString();
 
     if (url) {
-      const { contentType } = await client.getFileContentType(url);
       /**
        * This is a hack.
        * Assistant-ui does not allow to pass anything else than a file to be handled in their internal system.
@@ -38,7 +37,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
        * to add the URL in the AI SDK core message by reading assistant-ui's file name (on an empty file :upside_down_face:)
        */
       const file = new File([], url, {
-        type: contentType,
+        type: 'image/whatever',
       });
 
       composerRuntime.addAttachment(file);
