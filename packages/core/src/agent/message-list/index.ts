@@ -454,7 +454,7 @@ export class MessageList {
               file: new DefaultGeneratedFileWithType({
                 data:
                   typeof c.data === `string`
-                    ? c.data
+                    ? parseDataUri(c.data).base64Content // Strip data URI prefix if present
                     : c.data instanceof URL
                       ? c.data.toString()
                       : convertDataContentToBase64String(c.data),
@@ -467,7 +467,7 @@ export class MessageList {
               file: new DefaultGeneratedFileWithType({
                 data:
                   typeof c.image === `string`
-                    ? c.image
+                    ? parseDataUri(c.image).base64Content // Strip data URI prefix if present
                     : c.image instanceof URL
                       ? c.image.toString()
                       : convertDataContentToBase64String(c.image),
