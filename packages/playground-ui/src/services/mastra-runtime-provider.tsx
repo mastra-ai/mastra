@@ -416,7 +416,6 @@ export function MastraRuntimeProvider({
             onChunk: async chunk => {
               switch (chunk.type) {
                 case 'text-delta': {
-                  console.log('text delta', chunk.payload);
                   if (assistantToolCallAddedForContent) {
                     // start new content value to add as next message item in messages array
                     assistantToolCallAddedForContent = false;
@@ -429,13 +428,7 @@ export function MastraRuntimeProvider({
                   break;
                 }
 
-                case 'tool-call-delta': {
-                  console.log('tool call delta', chunk.payload);
-                  break;
-                }
-
                 case 'tool-call': {
-                  console.log('tool call', chunk.payload);
                   // Update the messages state
                   setMessages(currentConversation => {
                     // Get the last message (should be the assistant's message)
@@ -498,7 +491,6 @@ export function MastraRuntimeProvider({
                 }
 
                 case 'tool-result': {
-                  console.log('tool result', chunk.payload);
                   // Update the messages state
                   setMessages(currentConversation => {
                     // Get the last message (should be the assistant's message)
