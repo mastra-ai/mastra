@@ -178,6 +178,7 @@ export class AgentBuilder extends Agent {
     const enhancedOptions = {
       ...baseOptions,
       temperature: 0.3, // Lower temperature for more consistent code generation
+      maxSteps: baseOptions?.maxSteps || 100,
       instructions: enhancedInstructions,
       context: enhancedContext,
     };
@@ -215,6 +216,7 @@ export class AgentBuilder extends Agent {
     const enhancedOptions = {
       ...baseOptions,
       temperature: 0.3, // Lower temperature for more consistent code generation
+      maxSteps: baseOptions?.maxSteps || 100,
       instructions: enhancedInstructions,
       context: enhancedContext,
     };
