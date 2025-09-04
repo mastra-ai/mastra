@@ -733,6 +733,83 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(response.steps.length).toBe(7);
     }, 500000);
 
+    it('should retry when tool fails and eventually succeed with maxSteps=5', async () => {
+      let toolCallCount = 0;
+      const failuresBeforeSuccess = 2; // Tool will fail 2 times then succeed
+
+      const flakeyTool = createTool({
+        id: 'flakeyTool',
+        description: 'A tool that fails initially but eventually succeeds',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ context }) => {
+          toolCallCount++;
+          if (toolCallCount <= failuresBeforeSuccess) {
+            throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
+          }
+          return { output: `Success on attempt ${toolCallCount}: ${context.input}` };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'retry-agent',
+        instructions: 'Call the flakey tool with input "test data".',
+        model: openaiModel,
+        tools: { flakeyTool },
+      });
+      agent.__setLogger(noopLogger);
+
+      let response;
+      if (version === 'v1') {
+        response = await agent.generate('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      } else {
+        response = await agent.generateVNext('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      }
+
+      // Should have made multiple attempts
+      expect(response.steps.length).toBeGreaterThan(1);
+      expect(response.steps.length).toBeLessThanOrEqual(5);
+
+      // Should have at least 3 tool calls total (2 failures + 1 success)
+      expect(toolCallCount).toBeGreaterThanOrEqual(3);
+
+      // Check that we eventually get a success result
+      let foundSuccess = false;
+      if (version === 'v1') {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (result.toolName === 'flakeyTool' && result.result && result.result.output?.includes('Success')) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      } else {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (
+                result.payload.toolName === 'flakeyTool' &&
+                result.payload.result &&
+                result.payload.result.output?.includes('Success')
+              ) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      expect(foundSuccess).toBe(true);
+    }, 500000);
+
     it('should call testTool from TestIntegration', async () => {
       const testAgent = new Agent({
         name: 'Test agent',
