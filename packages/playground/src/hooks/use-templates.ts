@@ -276,6 +276,8 @@ const processTemplateInstallRecord = (
 
   if (record.type === 'step-result') {
     const stepId = record.payload.id;
+    const status = record.payload.status;
+    const hasError = record.payload.error;
     newState = {
       ...newState,
       payload: {
@@ -302,6 +304,29 @@ const processTemplateInstallRecord = (
         },
       },
     };
+
+    // If this step failed, also set workflow-level error state
+    if (status === 'failed' && hasError) {
+      newState = {
+        ...newState,
+        status: 'failed',
+        error: hasError,
+        phase: 'error',
+        failedStep: {
+          id: stepId,
+          error: hasError,
+          description: record.payload.description || stepId,
+        },
+        payload: {
+          ...newState.payload,
+          workflowState: {
+            ...newState.payload.workflowState,
+            status: 'failed',
+          },
+        },
+        errorTimestamp: new Date(),
+      };
+    }
   }
 
   if (record.type === 'step-finish') {
@@ -315,20 +340,30 @@ const processTemplateInstallRecord = (
   }
 
   if (record.type === 'finish') {
-    newState = {
-      ...newState,
-      status: record.payload.status,
-      phase: 'completed',
-      payload: {
-        ...newState.payload,
-        currentStep: null,
-        workflowState: {
-          ...newState.payload.workflowState,
-          status: record.payload.status,
+    // Don't override error states - if we're already in error phase, stay there
+    if (newState.phase === 'error' || newState.status === 'failed') {
+      newState = {
+        ...newState,
+        // Keep existing status, phase, error, failedStep
+        completedAt: new Date(),
+      };
+    } else {
+      // Normal completion flow
+      newState = {
+        ...newState,
+        status: record.payload.status || 'completed',
+        phase: 'completed',
+        payload: {
+          ...newState.payload,
+          currentStep: null,
+          workflowState: {
+            ...newState.payload.workflowState,
+            status: record.payload.status || 'completed',
+          },
         },
-      },
-      completedAt: new Date(),
-    };
+        completedAt: new Date(),
+      };
+    }
   }
 
   if (record.type === 'error') {
@@ -455,7 +490,7 @@ export const useWatchTemplateInstall = (workflowInfo?: any) => {
               try {
                 processTemplateRecord(record);
               } catch (err) {
-                console.error('Error processing template record:', err);
+                console.error('💥 [watchInstall] Error processing template record:', err);
                 // Set minimal error state if processing fails (graceful degradation)
                 setStreamResult((prev: any) => ({ ...prev, error: err }));
               }
@@ -465,6 +500,7 @@ export const useWatchTemplateInstall = (workflowInfo?: any) => {
           // If we get here, the watch completed successfully
           return;
         } catch (error: any) {
+          console.error(`💥 [watchInstall] Attempt ${attempt} failed:`, error);
           const isNetworkError =
             error?.message?.includes('Failed to fetch') ||
             error?.message?.includes('NetworkError') ||
@@ -484,6 +520,7 @@ export const useWatchTemplateInstall = (workflowInfo?: any) => {
           }
 
           // If it's not a network error or we've exhausted retries, throw
+          console.error('❌ [watchInstall] Non-network error or max retries reached, throwing:', error);
           throw error;
         }
       }
@@ -538,7 +575,7 @@ const useTemplateStreamProcessor = (workflowInfo?: any, runId?: string) => {
         }
       }
     } catch (error) {
-      console.error('Error processing template installation stream:', error);
+      console.error('💥 [processStream] Error processing template installation stream:', error);
 
       // Use the helper for error handling too
       const { newState } = processTemplateInstallRecord(
@@ -587,6 +624,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
           // If we get here, the stream completed successfully
           return;
         } catch (error: any) {
+          console.error(`💥 [streamInstall] Attempt ${attempt} failed:`, error);
           const isNetworkError =
             error?.message?.includes('Failed to fetch') ||
             error?.message?.includes('NetworkError') ||
@@ -608,6 +646,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
           }
 
           // If it's not a network error or we've exhausted retries, throw
+          console.error('❌ [streamInstall] Non-network error or max retries reached, throwing:', error);
           throw error;
         }
       }

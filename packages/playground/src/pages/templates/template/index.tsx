@@ -72,16 +72,11 @@ export default function Template() {
       getTemplateInstallRun({ runId })
         .then((runData: any) => {
           const snapshot = runData.snapshot;
-          console.log('📊 Retrieved run data:', runData);
 
           if (snapshot?.status === 'success' && snapshot?.result?.success) {
-            console.log('✅ Run completed successfully - showing success state');
             setSuccess(true);
           } else if (snapshot?.result?.success === false) {
-            console.log('❌ Run completed with failure - showing error state');
             setFailure(snapshot?.result?.message || snapshot?.result?.error || 'Template installation failed');
-          } else {
-            console.log('📊 Run is incomplete or in progress - no action needed');
           }
         })
         .catch(error => {
@@ -108,12 +103,6 @@ export default function Template() {
       !isFreshInstall &&
       workflowInfo
     ) {
-      console.log('🔄 Auto-resuming template installation from URL:', {
-        runId,
-        templateSlug,
-        savedProvider,
-      });
-
       setCurrentRunId(runId);
       setHasAutoResumed(true); // Prevent multiple auto-resume attempts
 
@@ -122,13 +111,9 @@ export default function Template() {
         getTemplateInstallRun({ runId })
           .then((runData: any) => {
             const snapshot = runData.snapshot;
-            console.log('📊 Retrieved run data:', runData);
 
             if (snapshot?.status === 'running') {
-              console.log('🔄 Starting to watch template installation');
               return watchInstall.mutateAsync({ runId });
-            } else {
-              console.log('🔄 Run is not running, skipping watch');
             }
           })
           .then(() => {
@@ -227,6 +212,20 @@ export default function Template() {
       setVariables(templateEnvVars);
     }
   }, [templateEnvVars]);
+
+  // Monitor streamResult for workflow errors
+  useEffect(() => {
+    if (streamResult?.phase === 'error' && streamResult?.error) {
+      setFailure(streamResult.error);
+    }
+  }, [streamResult?.phase, streamResult?.error]);
+
+  // Monitor watchStreamResult for workflow errors
+  useEffect(() => {
+    if (watchStreamResult?.phase === 'error' && watchStreamResult?.error) {
+      setFailure(watchStreamResult.error);
+    }
+  }, [watchStreamResult?.phase, watchStreamResult?.error]);
 
   const handleProviderChange = (value: string) => {
     setSelectedProvider(value);
