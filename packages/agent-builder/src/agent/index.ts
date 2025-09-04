@@ -1,13 +1,20 @@
 import { Agent } from '@mastra/core/agent';
-import type { AiMessageType, AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type {
+  AiMessageType,
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  AgentExecutionOptions,
+} from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
+import type { AISDKV5OutputStream, MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
+import type { JSONSchema7 } from 'ai';
+import type { ZodSchema } from 'zod';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
-import { WriteToDiskProcessor } from '../processors/write-file';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
-import { agentBuilderWorkflows } from '../workflows';
 
 // =============================================================================
 // Template Merge Workflow Implementation
@@ -56,18 +63,18 @@ export class AgentBuilder extends Agent {
       model: config.model,
       tools: async () => {
         return {
-          ...(await AgentBuilderDefaults.DEFAULT_TOOLS(config.projectPath, config.mode)),
+          ...(await AgentBuilderDefaults.getToolsForMode(config.projectPath, config.mode)),
           ...(config.tools || {}),
         };
       },
-      workflows: agentBuilderWorkflows,
       memory: new Memory({
         options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
         processors: [
-          new WriteToDiskProcessor({ prefix: 'before-filter' }),
+          // use the write to disk processor to debug the agent's context
+          // new WriteToDiskProcessor({ prefix: 'before-filter' }),
           new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
           new TokenLimiter(100000),
-          new WriteToDiskProcessor({ prefix: 'after-filter' }),
+          // new WriteToDiskProcessor({ prefix: 'after-filter' }),
         ],
       }),
     };
@@ -84,7 +91,7 @@ export class AgentBuilder extends Agent {
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     generateOptions: (GenerateAgentOptions & AgentGenerateOptions<any, any>) | undefined = {},
   ): Promise<any> => {
-    const { ...baseOptions } = generateOptions;
+    const { maxSteps, ...baseOptions } = generateOptions;
 
     const originalInstructions = await this.getInstructions({ runtimeContext: generateOptions?.runtimeContext });
     const additionalInstructions = baseOptions.instructions;
@@ -98,7 +105,7 @@ export class AgentBuilder extends Agent {
 
     const enhancedOptions = {
       ...baseOptions,
-      maxSteps: 300, // Higher default for code generation
+      maxSteps: maxSteps || 100, // Higher default for code generation
       temperature: 0.3, // Lower temperature for more consistent code generation
       instructions: enhancedInstructions,
       context: enhancedContext,
@@ -119,7 +126,7 @@ export class AgentBuilder extends Agent {
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions: (GenerateAgentOptions & AgentStreamOptions<any, any>) | undefined = {},
   ): Promise<any> => {
-    const { ...baseOptions } = streamOptions;
+    const { maxSteps, ...baseOptions } = streamOptions;
 
     const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
     const additionalInstructions = baseOptions.instructions;
@@ -132,7 +139,7 @@ export class AgentBuilder extends Agent {
 
     const enhancedOptions = {
       ...baseOptions,
-      maxSteps: 100, // Higher default for code generation
+      maxSteps: maxSteps || 100, // Higher default for code generation
       temperature: 0.3, // Lower temperature for more consistent code generation
       instructions: enhancedInstructions,
       context: enhancedContext,
@@ -146,40 +153,76 @@ export class AgentBuilder extends Agent {
   };
 
   /**
-   * Generate a Mastra agent from natural language requirements
+   * Enhanced stream method with AgentBuilder-specific configuration
+   * Overrides the base Agent stream method to provide additional project context
    */
-  async generateAgent(
-    requirements: string,
-    options?: {
-      outputFormat?: 'code' | 'explanation' | 'both';
-      runtimeContext?: any;
-    },
-  ) {
-    const prompt = `Generate a Mastra agent based on these requirements: ${requirements}
+  async streamVNext<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    const { ...baseOptions } = streamOptions || {};
 
-Please provide:
-1. Complete agent code with proper configuration
-2. Any custom tools the agent needs
-3. Example usage
-4. Testing recommendations
+    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const additionalInstructions = baseOptions.instructions;
 
-${options?.outputFormat === 'explanation' ? 'Focus on explaining the approach and architecture.' : ''}
-${options?.outputFormat === 'code' ? 'Focus on providing complete, working code.' : ''}
-${!options?.outputFormat || options.outputFormat === 'both' ? 'Provide both explanation and complete code.' : ''}`;
+    let enhancedInstructions = originalInstructions as string;
+    if (additionalInstructions) {
+      enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
+    }
+    const enhancedContext = [...(baseOptions.context || [])];
 
-    return this.generate(prompt, {
-      runtimeContext: options?.runtimeContext,
+    const enhancedOptions = {
+      ...baseOptions,
+      temperature: 0.3, // Lower temperature for more consistent code generation
+      instructions: enhancedInstructions,
+      context: enhancedContext,
+    };
+
+    this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
+      projectPath: this.builderConfig.projectPath,
     });
+
+    return super.streamVNext(messages, enhancedOptions);
   }
 
-  /**
-   * Get the default configuration for AgentBuilder
-   */
-  static defaultConfig(projectPath?: string) {
-    return {
-      instructions: AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(projectPath),
-      memoryConfig: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
-      tools: AgentBuilderDefaults.DEFAULT_TOOLS,
+  async generateVNext<
+    OUTPUT extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    FORMAT extends 'aisdk' | 'mastra' = 'mastra',
+  >(
+    messages: MessageListInput,
+    options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
+  ): Promise<
+    FORMAT extends 'aisdk'
+      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
+      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
+  > {
+    const { ...baseOptions } = options || {};
+
+    const originalInstructions = await this.getInstructions({ runtimeContext: options?.runtimeContext });
+    const additionalInstructions = baseOptions.instructions;
+
+    let enhancedInstructions = originalInstructions as string;
+    if (additionalInstructions) {
+      enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
+    }
+    const enhancedContext = [...(baseOptions.context || [])];
+
+    const enhancedOptions = {
+      ...baseOptions,
+      temperature: 0.3, // Lower temperature for more consistent code generation
+      instructions: enhancedInstructions,
+      context: enhancedContext,
     };
+
+    this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
+      projectPath: this.builderConfig.projectPath,
+    });
+
+    return super.generateVNext(messages, enhancedOptions);
   }
 }
