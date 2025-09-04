@@ -37,7 +37,7 @@
     "lint": "eslint .",
     "build": "tsup --config tsup.config.ts",
     "dev": "pnpm build --watch",
-    "test": "vites",
+    "test": "vitest",
     "test:unit": "vitest run"
   },
   "dependencies": {
