@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.11.2-alpha.3
+
+### Patch Changes
+
+- [#7350](https://github.com/mastra-ai/mastra/pull/7350) [`45e4d39`](https://github.com/mastra-ai/mastra/commit/45e4d391a2a09fc70c48e4d60f505586ada1ba0e) Thanks [@LekoArts](https://github.com/LekoArts)! - Try fixing the `Attempted import error: 'z'.'toJSONSchema' is not exported from 'zod'` error by tricking the compiler
+
 ## 0.11.2-alpha.2
 
 ### Patch Changes

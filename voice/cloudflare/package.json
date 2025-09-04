@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.11.3-alpha.0",
+  "version": "0.11.3-alpha.1",
   "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
@@ -57,7 +57,7 @@
     "speech-recognition"
   ],
   "peerDependencies": {
-    "@mastra/core": ">=0.15.2-0 <0.16.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

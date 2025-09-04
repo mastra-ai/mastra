@@ -1,0 +1,53 @@
+---
+'@mastra/mcp-registry-registry': patch
+'@mastra/voice-google-gemini-live': patch
+'@mastra/google-cloud-pubsub': patch
+'@mastra/voice-openai-realtime': patch
+'@mastra/firecrawl': patch
+'@mastra/playground-ui': patch
+'@mastra/deployer-cloudflare': patch
+'@mastra/cloudflare-d1': patch
+'@mastra/github': patch
+'@mastra/ragie': patch
+'@mastra/turbopuffer': patch
+'@mastra/deployer-netlify': patch
+'@mastra/mem0': patch
+'@mastra/deployer': patch
+'@mastra/clickhouse': patch
+'@mastra/cloudflare': patch
+'@mastra/opensearch': patch
+'@mastra/deployer-vercel': patch
+'@mastra/loggers': patch
+'@mastra/couchbase': patch
+'@mastra/vectorize': patch
+'@mastra/voice-cloudflare': patch
+'@mastra/voice-elevenlabs': patch
+'@mastra/deployer-cloud': patch
+'@mastra/memory': patch
+'@mastra/server': patch
+'@mastra/dynamodb': patch
+'@mastra/pinecone': patch
+'@mastra/voice-speechify': patch
+'@mastra/cloud': patch
+'@mastra/evals': patch
+'@mastra/mongodb': patch
+'@mastra/upstash': patch
+'@mastra/voice-deepgram': patch
+'@mastra/chroma': patch
+'@mastra/libsql': patch
+'@mastra/qdrant': patch
+'@mastra/rag': patch
+'@mastra/astra': patch
+'@mastra/lance': patch
+'@mastra/mssql': patch
+'@mastra/voice-gladia': patch
+'@mastra/voice-google': patch
+'@mastra/voice-openai': patch
+'@mastra/voice-playai': patch
+'@mastra/voice-sarvam': patch
+'@mastra/voice-azure': patch
+'@mastra/voice-murf': patch
+'@mastra/pg': patch
+---
+
+updated core peerdep
