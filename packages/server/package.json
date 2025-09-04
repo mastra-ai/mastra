@@ -1,10 +1,11 @@
 {
   "name": "@mastra/server",
-  "version": "0.15.3-alpha.3",
+  "version": "0.15.3-alpha.9",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -62,7 +63,7 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": ">=0.15.2-0 <0.16.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -89,5 +90,14 @@
     "vitest": "^3.2.4",
     "zod": "^3.25.76",
     "@internal/types-builder": "workspace:*"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/server"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

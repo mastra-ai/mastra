@@ -1,5 +1,26 @@
 # @mastra/qdrant
 
+## 0.11.9-alpha.1
+
+### Patch Changes
+
+- [#7394](https://github.com/mastra-ai/mastra/pull/7394) [`f0dfcac`](https://github.com/mastra-ai/mastra/commit/f0dfcac4458bdf789b975e2d63e984f5d1e7c4d3) Thanks [@NikAiyer](https://github.com/NikAiyer)! - updated core peerdep
+
+- Updated dependencies [[`7149d8d`](https://github.com/mastra-ai/mastra/commit/7149d8d4bdc1edf0008e0ca9b7925eb0b8b60dbe)]:
+  - @mastra/core@0.15.3-alpha.7
+
+## 0.11.9-alpha.0
+
+### Patch Changes
+
+- [#6964](https://github.com/mastra-ai/mastra/pull/6964) [`8282732`](https://github.com/mastra-ai/mastra/commit/82827322495a6c2b859d737218a4d8d42a1fb77d) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`@qdrant/js-client-rest@^1.15.1` ↗︎](https://www.npmjs.com/package/@qdrant/js-client-rest/v/1.15.1) (from `^1.15.0`, in `dependencies`)
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`85ef90b`](https://github.com/mastra-ai/mastra/commit/85ef90bb2cd4ae4df855c7ac175f7d392c55c1bf), [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/core@0.15.3-alpha.5
+
 ## 0.11.8
 
 ### Patch Changes

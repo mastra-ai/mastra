@@ -500,7 +500,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortSignal: abortController?.signal,
         writer: new ToolStream(
           {
-            prefix: 'step',
+            prefix: 'workflow-step',
             callId: stepCallId,
             name: 'sleep',
             runId,
@@ -611,7 +611,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortSignal: abortController?.signal,
         writer: new ToolStream(
           {
-            prefix: 'step',
+            prefix: 'workflow-step',
             callId: stepCallId,
             name: 'sleepUntil',
             runId,
@@ -773,7 +773,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-start',
+        type: 'workflow-step-start',
         payload: {
           id: step.id,
           stepCallId,
@@ -879,7 +879,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortSignal: abortController?.signal,
           writer: new ToolStream(
             {
-              prefix: 'step',
+              prefix: 'workflow-step',
               callId: stepCallId,
               name: step.id,
               runId,
@@ -899,7 +899,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowId,
             stepId: step.id,
             runtimeContext,
-            tracingContext: innerTracingContext,
             disableScorers,
           });
         }
@@ -968,7 +967,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       if (execResults.status === 'suspended') {
         await emitter.emit('watch-v2', {
-          type: 'step-suspended',
+          type: 'workflow-step-suspended',
           payload: {
             id: step.id,
             stepCallId,
@@ -977,7 +976,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         });
       } else {
         await emitter.emit('watch-v2', {
-          type: 'step-result',
+          type: 'workflow-step-result',
           payload: {
             id: step.id,
             stepCallId,
@@ -986,7 +985,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         });
 
         await emitter.emit('watch-v2', {
-          type: 'step-finish',
+          type: 'workflow-step-finish',
           payload: {
             id: step.id,
             stepCallId,
@@ -1016,7 +1015,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId,
     stepId,
     runtimeContext,
-    tracingContext,
     disableScorers,
   }: {
     scorers: DynamicArgument<MastraScorers>;
@@ -1024,7 +1022,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     input: any;
     output: any;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
     workflowId: string;
     stepId: string;
     disableScorers?: boolean;
@@ -1062,7 +1059,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           input: [input],
           output: output,
           runtimeContext,
-          tracingContext,
           entity: {
             id: workflowId,
             stepId: stepId,
@@ -1288,7 +1284,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               abortSignal: abortController?.signal,
               writer: new ToolStream(
                 {
-                  prefix: 'step',
+                  prefix: 'workflow-step',
                   callId: randomUUID(),
                   name: 'conditional',
                   runId,
@@ -1571,7 +1567,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortSignal: abortController?.signal,
         writer: new ToolStream(
           {
-            prefix: 'step',
+            prefix: 'workflow-step',
             callId: randomUUID(),
             name: 'loop',
             runId,
@@ -1686,7 +1682,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       eventTimestamp: Date.now(),
     });
     await emitter.emit('watch-v2', {
-      type: 'step-start',
+      type: 'workflow-step-start',
       payload: {
         id: step.id,
         ...stepInfo,
@@ -1750,7 +1746,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
           if (execResults.status === 'suspended') {
             await emitter.emit('watch-v2', {
-              type: 'step-suspended',
+              type: 'workflow-step-suspended',
               payload: {
                 id: step.id,
                 ...execResults,
@@ -1758,7 +1754,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             });
           } else {
             await emitter.emit('watch-v2', {
-              type: 'step-result',
+              type: 'workflow-step-result',
               payload: {
                 id: step.id,
                 ...execResults,
@@ -1766,7 +1762,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             });
 
             await emitter.emit('watch-v2', {
-              type: 'step-finish',
+              type: 'workflow-step-finish',
               payload: {
                 id: step.id,
                 metadata: {},
@@ -1816,7 +1812,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     await emitter.emit('watch-v2', {
-      type: 'step-result',
+      type: 'workflow-step-result',
       payload: {
         id: step.id,
         status: 'success',
@@ -1826,7 +1822,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     await emitter.emit('watch-v2', {
-      type: 'step-finish',
+      type: 'workflow-step-finish',
       payload: {
         id: step.id,
         metadata: {},
@@ -2155,7 +2151,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-waiting',
+        type: 'workflow-step-waiting',
         payload: {
           id: entry.id,
           payload: prevOutput,
@@ -2231,7 +2227,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-result',
+        type: 'workflow-step-result',
         payload: {
           id: entry.id,
           endedAt,
@@ -2241,7 +2237,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
 
       await emitter.emit('watch-v2', {
-        type: 'step-finish',
+        type: 'workflow-step-finish',
         payload: {
           id: entry.id,
           metadata: {},
@@ -2275,7 +2271,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-waiting',
+        type: 'workflow-step-waiting',
         payload: {
           id: entry.id,
           payload: prevOutput,
@@ -2353,7 +2349,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-result',
+        type: 'workflow-step-result',
         payload: {
           id: entry.id,
           endedAt,
@@ -2363,7 +2359,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
 
       await emitter.emit('watch-v2', {
-        type: 'step-finish',
+        type: 'workflow-step-finish',
         payload: {
           id: entry.id,
           metadata: {},
@@ -2398,7 +2394,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-waiting',
+        type: 'workflow-step-waiting',
         payload: {
           id: entry.step.id,
           payload: prevOutput,

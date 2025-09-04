@@ -28,7 +28,7 @@ export class StoreOperationsInMemory extends StoreOperations {
     const table = this.data[tableName];
     let key = record.id;
     if ([TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS].includes(tableName) && !record.id && record.run_id) {
-      key = record.run_id;
+      key = record.workflow_name ? `${record.workflow_name}-${record.run_id}` : record.run_id;
       record.id = key;
     } else if (!record.id) {
       key = `auto-${Date.now()}-${Math.random()}`;

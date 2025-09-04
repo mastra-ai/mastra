@@ -50,9 +50,11 @@ import { runScorer } from '../scores/hooks';
 import type { AISDKV5OutputStream } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { OutputSchema } from '../stream/base/schema';
+import { ChunkFrom } from '../stream/types';
 import type { ChunkType } from '../stream/types';
 import { InstrumentClass } from '../telemetry';
 import { Telemetry } from '../telemetry/telemetry';
+import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
@@ -1346,81 +1348,133 @@ export class Agent<
     threadId,
     resourceId,
     runtimeContext,
+    methodType,
     tracingContext,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
+    methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+    format?: 'mastra' | 'aisdk';
     tracingContext: TracingContext;
   }) {
-    let convertedWorkflowTools: Record<string, CoreTool> = {};
+    const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
     if (Object.keys(workflows).length > 0) {
-      convertedWorkflowTools = Object.entries(workflows).reduce(
-        (memo, [workflowName, workflow]) => {
-          memo[workflowName] = {
-            description: workflow.description || `Workflow: ${workflowName}`,
-            parameters: workflow.inputSchema || { type: 'object', properties: {} },
-            // manually wrap workflow tools with ai tracing, so that we can pass the
-            // current tool span onto the workflow to maintain continuity of the trace
-            execute: async (args: any) => {
-              const toolAISpan = tracingContext.currentSpan?.createChildSpan({
-                type: AISpanType.TOOL_CALL,
-                name: `tool: '${workflowName}'`,
-                input: args,
-                attributes: {
-                  toolId: workflowName,
-                  toolType: 'workflow',
-                },
+      for (const [workflowName, workflow] of Object.entries(workflows)) {
+        const toolObj = createTool({
+          id: workflowName,
+          description: workflow.description || `Workflow: ${workflowName}`,
+          inputSchema: workflow.inputSchema,
+          outputSchema: workflow.outputSchema,
+          mastra: this.#mastra,
+          // manually wrap workflow tools with ai tracing, so that we can pass the
+          // current tool span onto the workflow to maintain continuity of the trace
+          execute: async ({ context, writer }) => {
+            const toolAISpan = tracingContext.currentSpan?.createChildSpan({
+              type: AISpanType.TOOL_CALL,
+              name: `tool: '${workflowName}'`,
+              input: context,
+              attributes: {
+                toolId: workflowName,
+                toolType: 'workflow',
+              },
+            });
+
+            try {
+              this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
+                name: workflowName,
+                description: workflow.description,
+                args: context,
+                runId,
+                threadId,
+                resourceId,
               });
 
-              try {
-                this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
-                  name: workflowName,
-                  description: workflow.description,
-                  args,
-                  runId,
-                  threadId,
-                  resourceId,
-                });
+              const run = workflow.createRun();
 
-                const run = workflow.createRun();
-
-                const result = await run.start({
-                  inputData: args,
+              let result: any;
+              if (methodType === 'generate') {
+                result = await run.start({
+                  inputData: context,
                   runtimeContext,
                   tracingContext: { currentSpan: toolAISpan },
                 });
-                toolAISpan?.end({ output: result });
-                return result;
-              } catch (err) {
-                const mastraError = new MastraError(
-                  {
-                    id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
-                    domain: ErrorDomain.AGENT,
-                    category: ErrorCategory.USER,
-                    details: {
-                      agentName: this.name,
-                      runId: runId || '',
-                      threadId: threadId || '',
-                      resourceId: resourceId || '',
-                    },
-                    text: `[Agent:${this.name}] - Failed workflow tool execution`,
-                  },
-                  err,
-                );
-                this.logger.trackException(mastraError);
-                this.logger.error(mastraError.toString());
-                toolAISpan?.error({ error: mastraError });
-                throw mastraError;
+              } else if (methodType === 'stream') {
+                const streamResult = await run.stream({
+                  inputData: context,
+                  runtimeContext,
+                  // TODO: is this forgottn?
+                  //currentSpan: toolAISpan,
+                });
+
+                if (writer) {
+                  await streamResult.stream.pipeTo(writer);
+                } else {
+                  for await (const _chunk of streamResult.stream) {
+                    // complete the stream
+                  }
+                }
+
+                result = await streamResult.getWorkflowState();
+              } else if (methodType === 'streamVNext') {
+                // TODO: add support for format
+                const streamResult = run.streamVNext({
+                  inputData: context,
+                  runtimeContext,
+                  //format,
+                });
+
+                if (writer) {
+                  await streamResult.pipeTo(writer);
+                }
+
+                result = await streamResult.result;
               }
-            },
-          };
-          return memo;
-        },
-        {} as Record<string, CoreTool>,
-      );
+
+              toolAISpan?.end({ output: result });
+              return result;
+            } catch (err) {
+              const mastraError = new MastraError(
+                {
+                  id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.USER,
+                  details: {
+                    agentName: this.name,
+                    runId: runId || '',
+                    threadId: threadId || '',
+                    resourceId: resourceId || '',
+                  },
+                  text: `[Agent:${this.name}] - Failed workflow tool execution`,
+                },
+                err,
+              );
+              this.logger.trackException(mastraError);
+              this.logger.error(mastraError.toString());
+              toolAISpan?.error({ error: mastraError });
+              throw mastraError;
+            }
+          },
+        });
+
+        const options: ToolOptions = {
+          name: workflowName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: this.#mastra,
+          memory: await this.getMemory({ runtimeContext }),
+          agentName: this.name,
+          runtimeContext,
+          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          tracingContext,
+        };
+
+        convertedWorkflowTools[workflowName] = makeCoreTool(toolObj, options);
+      }
     }
 
     return convertedWorkflowTools;
@@ -1435,6 +1489,8 @@ export class Agent<
     runtimeContext,
     tracingContext,
     writableStream,
+    methodType,
+    format,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -1444,6 +1500,8 @@ export class Agent<
     runtimeContext: RuntimeContext;
     tracingContext: TracingContext;
     writableStream?: WritableStream<ChunkType>;
+    methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
+    format?: 'mastra' | 'aisdk';
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -1496,6 +1554,8 @@ export class Agent<
       resourceId,
       threadId,
       runtimeContext,
+      methodType,
+      format,
       tracingContext,
     });
 
@@ -1596,6 +1656,7 @@ export class Agent<
     runtimeContext,
     saveQueueManager,
     writableStream,
+    methodType,
     tracingContext,
   }: {
     instructions: string;
@@ -1610,6 +1671,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
+    methodType: 'generate' | 'stream';
     tracingContext?: TracingContext;
   }) {
     return {
@@ -1673,6 +1735,7 @@ export class Agent<
           runtimeContext,
           tracingContext: innerTracingContext,
           writableStream,
+          methodType,
         });
 
         const messageList = new MessageList({
@@ -2073,7 +2136,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           outputText,
           instructions,
           runtimeContext,
-          tracingContext: { currentSpan: agentAISpan },
           structuredOutput,
           overrideScorers,
           threadId,
@@ -2118,7 +2180,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     outputText,
     instructions,
     runtimeContext,
-    tracingContext,
     structuredOutput,
     overrideScorers,
     threadId,
@@ -2129,7 +2190,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     outputText: string;
     instructions: string;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
     structuredOutput?: boolean;
     overrideScorers?:
       | MastraScorers
@@ -2185,7 +2245,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           input: scorerInput,
           output: scorerOutput,
           runtimeContext,
-          tracingContext,
           entity: {
             id: this.id,
             name: this.name,
@@ -2246,6 +2305,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     options: AgentGenerateOptions<Output, ExperimentalOutput>,
+    methodType: 'generate' | 'stream',
   ): Promise<{
     before: () => Promise<
       Omit<
@@ -2281,6 +2341,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     options: AgentStreamOptions<Output, ExperimentalOutput>,
+    methodType: 'generate' | 'stream',
   ): Promise<{
     before: () => Promise<
       Omit<
@@ -2318,6 +2379,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
     },
+    methodType: 'generate' | 'stream',
   ): Promise<{
     before:
       | (() => Promise<
@@ -2445,6 +2507,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runtimeContext,
       saveQueueManager,
       writableStream,
+      methodType,
       tracingContext,
     });
 
@@ -2548,10 +2611,36 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
   }
 
+  /**
+   * Merges telemetry wrapper with default onFinish callback when needed
+   */
+  #mergeOnFinishWithTelemetry(streamOptions: any, defaultStreamOptions: any) {
+    let finalOnFinish = streamOptions?.onFinish || defaultStreamOptions.onFinish;
+
+    if (
+      streamOptions?.onFinish &&
+      (streamOptions.onFinish as any).__hasOriginalOnFinish === false &&
+      defaultStreamOptions.onFinish
+    ) {
+      // Create composite callback: telemetry wrapper + default callback
+      const telemetryWrapper = streamOptions.onFinish;
+      const defaultCallback = defaultStreamOptions.onFinish;
+
+      finalOnFinish = async (data: any) => {
+        // Call telemetry wrapper first (for span attributes, etc.)
+        await telemetryWrapper(data);
+        // Then call the default callback
+        await defaultCallback(data);
+      };
+    }
+
+    return finalOnFinish;
+  }
+
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >(options: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  >({ methodType, format = 'mastra', ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -2658,6 +2747,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runId,
           runtimeContext,
           writableStream: options.writableStream,
+          methodType,
+          format,
           tracingContext: { currentSpan: agentAISpan },
         });
 
@@ -2902,10 +2993,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const streamResult = llm.stream({
           ...inputData,
           outputProcessors,
+          returnScorerData: options.returnScorerData,
           tracingContext,
         });
 
-        if (options.format === 'aisdk') {
+        if (format === 'aisdk') {
           return streamResult.aisdk.v5;
         }
 
@@ -2973,6 +3065,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             })(),
             fullStream: new (globalThis as any).ReadableStream({
               start(controller: any) {
+                controller.enqueue({
+                  type: 'tripwire',
+                  runId: result.runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    tripwireReason: result.tripwireReason,
+                  },
+                });
                 controller.close();
               },
             }),
@@ -3301,7 +3401,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText,
       instructions,
       runtimeContext,
-      tracingContext,
       structuredOutput,
       overrideScorers,
     });
@@ -3355,6 +3454,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
+      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
     const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });
@@ -3371,6 +3471,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const result = await this.#execute({
       ...mergedStreamOptions,
       messages,
+      methodType: 'streamVNext',
     });
 
     if (result.status !== 'success') {
@@ -3418,6 +3519,35 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
+    this.logger.warn(
+      "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 16th. Please use generateLegacy if you don't want to upgrade just yet.",
+    );
+    // @ts-expect-error - generic type issues
+    return this.generateLegacy(messages, generateOptions);
+  }
+
+  async generateLegacy(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateTextResult<any, undefined>>;
+  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<GenerateObjectResult<OUTPUT>>;
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
+    messages: MessageListInput,
+    args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
+  ): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
+  async generateLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+  ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
       runtimeContext: generateOptions.runtimeContext,
     });
@@ -3426,7 +3556,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...generateOptions,
     };
 
-    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions);
+    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions, 'generate');
 
     if (llm.getModel().specificationVersion !== 'v1') {
       this.logger.error(
@@ -3699,6 +3829,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
       : GenerateObjectResult<OUTPUT>;
   }
+
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -3744,14 +3875,67 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
+    this.logger.warn(
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 16th. Please use streamLegacy if you don't want to upgrade just yet.",
+    );
+    // @ts-expect-error - generic type issues
+    return this.streamLegacy(messages, streamOptions);
+  }
+
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
+  ): Promise<
+    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
+      partialObjectStream: StreamTextResult<
+        any,
+        OUTPUT extends ZodSchema
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
+      >['experimental_partialOutputStream'];
+    }
+  >;
+  async streamLegacy<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    messages: MessageListInput,
+    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+  ): Promise<
+    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
+  > {
     const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
 
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptions,
       ...streamOptions,
+      onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+    const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
 
     if (llm.getModel().specificationVersion !== 'v1') {
       this.logger.error('V2 models are not supported for stream. Please use streamVNext instead.', {

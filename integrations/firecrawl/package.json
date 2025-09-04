@@ -1,11 +1,12 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.2.17-alpha.0",
+  "version": "1.2.17-alpha.4",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -47,7 +48,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "keywords": [],
-  "author": "",
   "license": "Apache-2.0",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
@@ -56,6 +56,15 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "integrations/firecrawl"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

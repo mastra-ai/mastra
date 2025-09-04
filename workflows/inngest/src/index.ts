@@ -319,11 +319,43 @@ export class InngestRun<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
+    let currentToolData: { name: string; args: any } | undefined = undefined;
+
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
+      if ((event as any).type === 'workflow-agent-call-start') {
+        currentToolData = {
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
+        };
+        await writer.write({
+          ...event.payload,
+          type: 'tool-call-streaming-start',
+        } as any);
+
+        return;
+      }
+
       try {
+        if ((event as any).type === 'workflow-agent-call-finish') {
+          return;
+        } else if (!(event as any).type.startsWith('workflow-')) {
+          if ((event as any).type === 'text-delta') {
+            await writer.write({
+              type: 'tool-call-delta',
+              ...(currentToolData ?? {}),
+              argsTextDelta: (event as any).textDelta,
+            } as any);
+          }
+          return;
+        }
+
+        const e: any = {
+          ...event,
+          type: event.type.replace('workflow-', ''),
+        };
         // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
+        await writer.write(e as any);
       } catch {}
     }, 'watch-v2');
 
@@ -416,32 +448,6 @@ export class InngestWorkflow<
     );
   }
 
-  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
-      return null;
-    }
-
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
-
-    if (!run?.snapshot) {
-      return null;
-    }
-
-    if (typeof run.snapshot === 'string') {
-      return null;
-    }
-
-    return {
-      status: run.snapshot.status,
-      result: run.snapshot.result,
-      error: run.snapshot.error,
-      payload: run.snapshot.context?.input,
-      steps: run.snapshot.context as any,
-    };
-  }
-
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
@@ -511,7 +517,7 @@ export class InngestWorkflow<
 
     this.runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -738,8 +744,8 @@ export function createStep<
           args: inputData,
         };
         await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
-          ...toolData,
+          type: 'workflow-agent-call-start',
+          payload: toolData,
         });
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
@@ -757,31 +763,13 @@ export function createStep<
         }
 
         for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
-
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-              break;
-
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
-          }
+          await emitter.emit('watch-v2', chunk);
         }
+
+        await emitter.emit('watch-v2', {
+          type: 'workflow-agent-call-finish',
+          payload: toolData,
+        });
 
         return {
           text: await streamPromise.promise,
@@ -918,14 +906,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     currentSpan?: AnyAISpan;
   }): Promise<TOutput> {
     await params.emitter.emit('watch-v2', {
-      type: 'start',
+      type: 'workflow-start',
       payload: { runId: params.runId },
     });
 
     const result = await super.execute<TInput, TOutput>(params);
 
     await params.emitter.emit('watch-v2', {
-      type: 'finish',
+      type: 'workflow-finish',
       payload: { runId: params.runId },
     });
 
@@ -1096,7 +1084,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           abortSignal: abortController?.signal,
           writer: new ToolStream(
             {
-              prefix: 'step',
+              prefix: 'workflow-step',
               callId: stepCallId,
               name: 'sleep',
               runId,
@@ -1210,7 +1198,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           abortSignal: abortController?.signal,
           writer: new ToolStream(
             {
-              prefix: 'step',
+              prefix: 'workflow-step',
               callId: stepCallId,
               name: 'sleep',
               runId,
@@ -1321,7 +1309,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
 
         await emitter.emit('watch-v2', {
-          type: 'step-start',
+          type: 'workflow-step-start',
           payload: {
             id: step.id,
             status: 'running',
@@ -1398,7 +1386,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             });
 
             await emitter.emit('watch-v2', {
-              type: 'step-result',
+              type: 'workflow-step-result',
               payload: {
                 id: step.id,
                 status: 'failed',
@@ -1438,7 +1426,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               });
 
               await emitter.emit('watch-v2', {
-                type: 'step-suspended',
+                type: 'workflow-step-suspended',
                 payload: {
                   id: step.id,
                   status: 'suspended',
@@ -1502,7 +1490,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           });
 
           await emitter.emit('watch-v2', {
-            type: 'step-result',
+            type: 'workflow-step-result',
             payload: {
               id: step.id,
               status: 'success',
@@ -1511,7 +1499,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           });
 
           await emitter.emit('watch-v2', {
-            type: 'step-finish',
+            type: 'workflow-step-finish',
             payload: {
               id: step.id,
               metadata: {},
@@ -1645,7 +1633,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       if (execResults.status === 'suspended') {
         await emitter.emit('watch-v2', {
-          type: 'step-suspended',
+          type: 'workflow-step-suspended',
           payload: {
             id: step.id,
             ...execResults,
@@ -1653,7 +1641,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
       } else {
         await emitter.emit('watch-v2', {
-          type: 'step-result',
+          type: 'workflow-step-result',
           payload: {
             id: step.id,
             ...execResults,
@@ -1661,7 +1649,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
 
         await emitter.emit('watch-v2', {
-          type: 'step-finish',
+          type: 'workflow-step-finish',
           payload: {
             id: step.id,
             metadata: {},
@@ -1685,7 +1673,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId: executionContext.workflowId,
             stepId: step.id,
             runtimeContext,
-            tracingContext: { currentSpan: stepAISpan },
             disableScorers,
           });
         }
@@ -1849,7 +1836,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 abortSignal: abortController.signal,
                 writer: new ToolStream(
                   {
-                    prefix: 'step',
+                    prefix: 'workflow-step',
                     callId: randomUUID(),
                     name: 'conditional',
                     runId,

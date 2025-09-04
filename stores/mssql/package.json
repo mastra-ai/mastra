@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mssql",
-  "version": "0.3.5",
+  "version": "0.3.6-alpha.1",
   "description": "MSSQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
     "posttest:watch": "docker compose down -v",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "mssql": "^11.0.1"
   },
@@ -46,6 +46,19 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.16.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/mssql"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

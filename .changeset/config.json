@@ -16,7 +16,6 @@
     "!mastra",
     "!create-mastra",
     "!@mastra/*",
-    "!docs",
     "@internal/*",
     "@mastra/memory-integration-tests"
   ]

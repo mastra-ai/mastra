@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-google-gemini-live",
-  "version": "0.10.8",
+  "version": "0.10.9-alpha.2",
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -50,7 +51,16 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.2-0 <0.16.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0",
     "zod": "^3.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "voice/google-gemini-live-api"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

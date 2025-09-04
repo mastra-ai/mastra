@@ -10,6 +10,13 @@ import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
 import { downloadAssetsFromMessages } from './prompt/download-assets';
+import {
+  imageContentToString,
+  imageContentToDataUri,
+  getImageCacheKey,
+  parseDataUri,
+  createDataUri,
+} from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
 
@@ -447,7 +454,7 @@ export class MessageList {
               file: new DefaultGeneratedFileWithType({
                 data:
                   typeof c.data === `string`
-                    ? c.data
+                    ? parseDataUri(c.data).base64Content // Strip data URI prefix if present
                     : c.data instanceof URL
                       ? c.data.toString()
                       : convertDataContentToBase64String(c.data),
@@ -460,7 +467,7 @@ export class MessageList {
               file: new DefaultGeneratedFileWithType({
                 data:
                   typeof c.image === `string`
-                    ? c.image
+                    ? parseDataUri(c.image).base64Content // Strip data URI prefix if present
                     : c.image instanceof URL
                       ? c.image.toString()
                       : convertDataContentToBase64String(c.image),
@@ -1345,7 +1352,11 @@ export class MessageList {
             });
             break;
           case 'image':
-            parts.push({ type: 'file', data: part.image.toString(), mimeType: part.mimeType! });
+            parts.push({
+              type: 'file',
+              data: imageContentToString(part.image),
+              mimeType: part.mimeType!,
+            });
             break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
@@ -1527,7 +1538,7 @@ export class MessageList {
         key += part.mimeType;
       }
       if (part.type === `image`) {
-        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
+        key += getImageCacheKey(part.image);
         key += part.mimeType;
       }
       if (part.type === `redacted-reasoning`) {
@@ -2137,15 +2148,49 @@ export class MessageList {
           }
           break;
 
-        case 'file':
-          parts.push({
-            type: 'file',
-            url: part.data,
-            mediaType: part.mimeType,
-            providerMetadata: part.providerMetadata,
-          });
+        case 'file': {
+          // Check if it's an external URL (http/https)
+          if (typeof part.data === 'string' && (part.data.startsWith('http://') || part.data.startsWith('https://'))) {
+            // External URLs should use the 'url' field
+            parts.push({
+              type: 'file',
+              url: part.data,
+              mediaType: part.mimeType || 'image/png',
+              providerMetadata: part.providerMetadata,
+            });
+          } else {
+            // For AI SDK V5 compatibility with inline images (especially Google Gemini),
+            // file parts need a 'data' field with base64 content (without data URI prefix)
+            let filePartData: string;
+            let extractedMimeType = part.mimeType;
+
+            // Parse data URI if present to extract base64 content and MIME type
+            if (typeof part.data === 'string') {
+              const parsed = parseDataUri(part.data);
+              filePartData = parsed.base64Content;
+              if (parsed.isDataUri && parsed.mimeType) {
+                extractedMimeType = extractedMimeType || parsed.mimeType;
+              }
+            } else {
+              filePartData = part.data;
+            }
+
+            // Ensure we always have a valid MIME type - default to image/png for better compatibility
+            const finalMimeType = extractedMimeType || 'image/png';
+
+            // Create a data URI from the base64 data
+            const dataUri = createDataUri(filePartData, finalMimeType);
+
+            parts.push({
+              type: 'file',
+              url: dataUri, // Use url field with data URI
+              mediaType: finalMimeType,
+              providerMetadata: part.providerMetadata,
+            });
+          }
           fileUrls.add(part.data);
           break;
+        }
       }
     }
 
@@ -2376,35 +2421,121 @@ export class MessageList {
               providerMetadata: part.providerOptions,
             });
             break;
-          case 'image':
+          case 'image': {
+            // For AI SDK V5 compatibility, use 'data' field with base64 content
+            let imageData: string;
+            let extractedMimeType = part.mediaType;
+
+            // Convert image to data URI if it's binary, or string otherwise
+            const imageStr = imageContentToDataUri(part.image, extractedMimeType || 'image/png');
+
+            // Parse the image string to extract base64 content and MIME type
+            const parsed = parseDataUri(imageStr);
+            if (parsed.isDataUri) {
+              imageData = parsed.base64Content;
+              if (!extractedMimeType && parsed.mimeType) {
+                extractedMimeType = parsed.mimeType;
+              }
+            } else if (imageStr.startsWith('http://') || imageStr.startsWith('https://')) {
+              // For external URLs, use url field instead
+              parts.push({
+                type: 'file',
+                url: imageStr,
+                mediaType: part.mediaType || 'image/jpeg', // Default to image/jpeg for URLs
+                providerMetadata: part.providerOptions,
+              });
+              break;
+            } else {
+              imageData = imageStr;
+            }
+
+            // Ensure we have a valid MIME type - default to image/jpeg if not specified
+            const finalMimeType = extractedMimeType || 'image/jpeg';
+
+            // For AI SDK V5, file parts should use 'url' field with data URI
+            const dataUri = imageData.startsWith('data:') ? imageData : createDataUri(imageData, finalMimeType);
+
             parts.push({
               type: 'file',
-              url: part.image.toString(),
-              mediaType: part.mediaType || 'unknown',
+              url: dataUri,
+              mediaType: finalMimeType,
               providerMetadata: part.providerOptions,
             });
             break;
-          case 'file':
+          }
+          case 'file': {
             if (part.data instanceof URL) {
-              parts.push({
-                type: 'file',
-                url: part.data.toString(),
-                mediaType: part.mediaType,
-                providerMetadata: part.providerOptions,
-              });
-            } else {
-              try {
+              const urlStr = part.data.toString();
+              let extractedMimeType = part.mediaType;
+
+              // Parse data URI if present
+              const parsed = parseDataUri(urlStr);
+              if (parsed.isDataUri) {
+                if (!extractedMimeType && parsed.mimeType) {
+                  extractedMimeType = parsed.mimeType;
+                }
+
+                if (parsed.base64Content !== urlStr) {
+                  // Valid data URI with base64 content - use url field with data URI
+                  const dataUri = createDataUri(parsed.base64Content, extractedMimeType || 'image/png');
+                  parts.push({
+                    type: 'file',
+                    url: dataUri,
+                    mediaType: extractedMimeType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                } else {
+                  // Malformed data URI, use as URL
+                  parts.push({
+                    type: 'file',
+                    url: urlStr,
+                    mediaType: part.mediaType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                }
+              } else {
+                // Regular URL
                 parts.push({
                   type: 'file',
-                  mediaType: part.mediaType,
-                  url: convertDataContentToBase64String(part.data),
+                  url: urlStr,
+                  mediaType: part.mediaType || 'application/octet-stream',
                   providerMetadata: part.providerOptions,
                 });
+              }
+            } else {
+              try {
+                const base64Data = convertDataContentToBase64String(part.data);
+                let extractedMimeType = part.mediaType;
+
+                // Parse data URI if present to extract base64 and MIME type
+                const parsed = parseDataUri(base64Data);
+                if (parsed.isDataUri) {
+                  if (!extractedMimeType && parsed.mimeType) {
+                    extractedMimeType = parsed.mimeType;
+                  }
+
+                  const dataUri = createDataUri(parsed.base64Content, extractedMimeType || 'image/png');
+                  parts.push({
+                    type: 'file',
+                    url: dataUri,
+                    mediaType: extractedMimeType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                } else {
+                  const dataUri = createDataUri(base64Data, part.mediaType || 'image/png');
+                  parts.push({
+                    type: 'file',
+                    url: dataUri,
+                    mediaType: part.mediaType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                }
               } catch (error) {
                 console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
               }
             }
             break;
+          }
         }
       }
     }
@@ -2563,7 +2694,7 @@ export class MessageList {
         key += part.mediaType;
       }
       if (part.type === `image`) {
-        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
+        key += getImageCacheKey(part.image);
         key += part.mediaType;
       }
     }

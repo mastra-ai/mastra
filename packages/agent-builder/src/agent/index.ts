@@ -1,6 +1,6 @@
-import type { CoreMessage } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type { AiMessageType, AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/llm';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
 import { AgentBuilderDefaults } from '../defaults';

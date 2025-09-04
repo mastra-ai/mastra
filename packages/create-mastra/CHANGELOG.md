@@ -1,5 +1,23 @@
 # create-mastra
 
+## 0.11.3-alpha.4
+
+### Patch Changes
+
+- [#7357](https://github.com/mastra-ai/mastra/pull/7357) [`01264f1`](https://github.com/mastra-ai/mastra/commit/01264f1280db040d1bd1ac9b8d29cfcaac3d6cbc) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Mastra dev- load env vars before watch
+
+## 0.11.3-alpha.3
+
+### Patch Changes
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+## 0.11.3-alpha.2
+
+### Patch Changes
+
+- [#7218](https://github.com/mastra-ai/mastra/pull/7218) [`f539199`](https://github.com/mastra-ai/mastra/commit/f53919950a9320b292732e0cfcdf61cdae6c8742) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - mastra start - load env files, custom env. Deperecate --env flag for mastra build
+
 ## 0.11.3-alpha.1
 
 ### Patch Changes
