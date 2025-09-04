@@ -1,7 +1,6 @@
 import type { Mastra } from '..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema, type ScoreRowData, type ScoringHookInput } from '../scores';
-import type { MastraStorage } from '../storage/base';
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
@@ -50,8 +49,7 @@ export function createOnScorerHook(mastra: Mastra) {
         },
       };
 
-      const payloadValidationResult = saveScorePayloadSchema.parse(payload);
-      const payloadToSave = payloadValidationResult;
+      const payloadToSave = saveScorePayloadSchema.parse(payload);
       await storage?.saveScore(payloadToSave);
     } catch (error) {
       const mastraError = new MastraError(
