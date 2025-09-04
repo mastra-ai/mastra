@@ -14,7 +14,7 @@ import type { Span, Logger } from 'braintrust';
 
 export interface BraintrustExporterConfig {
   /** Braintrust API key */
-  apiKey: string;
+  apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
@@ -131,7 +131,6 @@ export class BraintrustExporter implements AITracingExporter {
         spanType: span.type,
         isRootSpan: span.isRootSpan,
         parentSpanId: span.parent?.id,
-        availableSpanIds: Array.from(spanData.spans.keys()),
         method,
       });
       return;
@@ -144,9 +143,9 @@ export class BraintrustExporter implements AITracingExporter {
     braintrustSpan.log(payload);
 
     if (isEnd) {
-      // End the span with the correct endTime
+      // End the span with the correct endTime (convert milliseconds to seconds)
       if (span.endTime) {
-        braintrustSpan.end({ endTime: span.endTime.getTime() });
+        braintrustSpan.end({ endTime: span.endTime.getTime() / 1000 });
       } else {
         braintrustSpan.end();
       }
@@ -181,18 +180,18 @@ export class BraintrustExporter implements AITracingExporter {
 
     const payload = this.buildSpanPayload(span, true);
 
-    // Create zero-duration span for event
+    // Create zero-duration span for event (convert milliseconds to seconds)
     const braintrustSpan = braintrustParent.startSpan({
       name: span.name,
       type: mapSpanType(span.type),
-      startTime: span.startTime.getTime(),
+      startTime: span.startTime.getTime() / 1000,
       ...payload,
     });
 
     // Immediately log output and end with same timestamp
     braintrustSpan.log(payload);
 
-    braintrustSpan.end({ endTime: span.startTime.getTime() });
+    braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
     spanData.spans.set(span.id, braintrustSpan);
   }
 
@@ -254,7 +253,8 @@ export class BraintrustExporter implements AITracingExporter {
   private buildSpanPayload(span: AnyAISpan, isCreate: boolean): Record<string, any> {
     const payload: Record<string, any> = {};
 
-    if (isCreate && span.input !== undefined) {
+    // Core span data
+    if (span.input !== undefined) {
       payload.input = span.input;
     }
 
@@ -262,44 +262,59 @@ export class BraintrustExporter implements AITracingExporter {
       payload.output = span.output;
     }
 
-    const attributes = (span.attributes ?? {}) as Record<string, any>;
+    // Initialize metrics and metadata objects
+    payload.metrics = {};
+    payload.metadata = {
+      spanType: span.type,
+      ...span.metadata,
+    };
 
-    // Strip special fields from metadata if used in top-level keys
-    const attributesToOmit: string[] = [];
+    const attributes = (span.attributes ?? {}) as Record<string, any>;
 
     if (span.type === AISpanType.LLM_GENERATION) {
       const llmAttr = attributes as LLMGenerationAttributes;
 
+      // Model goes to metadata
       if (llmAttr.model !== undefined) {
-        payload.model = llmAttr.model;
-        attributesToOmit.push('model');
+        payload.metadata.model = llmAttr.model;
       }
 
+      // Usage/token info goes to metrics
       if (llmAttr.usage !== undefined) {
-        payload.metrics = llmAttr.usage;
-        attributesToOmit.push('usage');
+        payload.metrics = {
+          ...payload.metrics,
+          ...llmAttr.usage,
+        };
       }
 
+      // Model parameters go to metadata
       if (llmAttr.parameters !== undefined) {
-        payload.metadata = {
-          ...(payload.metadata ?? {}),
-          modelParameters: llmAttr.parameters,
-        };
-        attributesToOmit.push('parameters');
+        payload.metadata.modelParameters = llmAttr.parameters;
       }
+
+      // Other LLM attributes go to metadata
+      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters']);
+      payload.metadata = {
+        ...payload.metadata,
+        ...otherAttributes,
+      };
+    } else {
+      // For non-LLM spans, put all attributes in metadata
+      payload.metadata = {
+        ...payload.metadata,
+        ...attributes,
+      };
     }
 
-    // Add span metadata
-    payload.metadata = {
-      ...(payload.metadata ?? {}),
-      spanType: span.type,
-      ...omitKeys(attributes, attributesToOmit),
-      ...span.metadata,
-    };
-
+    // Handle errors
     if (span.errorInfo) {
       payload.error = span.errorInfo.message;
       payload.metadata.errorDetails = span.errorInfo;
+    }
+
+    // Clean up empty metrics object
+    if (Object.keys(payload.metrics).length === 0) {
+      delete payload.metrics;
     }
 
     return payload;

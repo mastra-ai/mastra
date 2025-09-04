@@ -366,7 +366,6 @@ describe('BraintrustExporter', () => {
         type: 'llm',
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
-        model: 'gpt-4',
         metrics: {
           promptTokens: 10,
           completionTokens: 5,
@@ -374,6 +373,7 @@ describe('BraintrustExporter', () => {
         },
         metadata: {
           spanType: 'llm_generation',
+          model: 'gpt-4',
           provider: 'openai',
           streaming: false,
           resultType: 'response_generation',
@@ -404,10 +404,9 @@ describe('BraintrustExporter', () => {
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
         name: 'simple-llm',
         type: 'llm',
-        input: undefined,
-        model: 'gpt-3.5-turbo',
         metadata: {
           spanType: 'llm_generation',
+          model: 'gpt-3.5-turbo',
         },
       });
     });
@@ -479,10 +478,10 @@ describe('BraintrustExporter', () => {
 
       expect(mockSpan.log).toHaveBeenCalledWith({
         output: { content: 'Updated response' },
-        model: 'gpt-4',
         metrics: { totalTokens: 150 },
         metadata: {
           spanType: 'llm_generation',
+          model: 'gpt-4',
         },
       });
     });
@@ -518,7 +517,7 @@ describe('BraintrustExporter', () => {
         },
       });
 
-      expect(mockSpan.end).toHaveBeenCalledWith({ endTime: span.endTime.getTime() });
+      expect(mockSpan.end).toHaveBeenCalledWith({ endTime: span.endTime.getTime() / 1000 });
     });
 
     it('should handle spans with error information', async () => {
@@ -560,7 +559,7 @@ describe('BraintrustExporter', () => {
         },
       });
 
-      expect(mockSpan.end).toHaveBeenCalledWith({ endTime: errorSpan.endTime.getTime() });
+      expect(mockSpan.end).toHaveBeenCalledWith({ endTime: errorSpan.endTime.getTime() / 1000 });
     });
 
     it('should clean up traceMap when root span ends', async () => {
@@ -624,7 +623,7 @@ describe('BraintrustExporter', () => {
       expect(mockLogger.startSpan).toHaveBeenCalledWith({
         name: 'user-feedback',
         type: 'task',
-        startTime: eventSpan.startTime.getTime(),
+        startTime: eventSpan.startTime.getTime() / 1000,
         output: { message: 'Great response!' },
         metadata: {
           spanType: 'generic',
@@ -643,7 +642,7 @@ describe('BraintrustExporter', () => {
         },
       });
 
-      expect(mockSpan.end).toHaveBeenCalledWith({ endTime: eventSpan.startTime.getTime() });
+      expect(mockSpan.end).toHaveBeenCalledWith({ endTime: eventSpan.startTime.getTime() / 1000 });
     });
 
     it('should create zero-duration child spans for child event spans', async () => {
@@ -686,7 +685,7 @@ describe('BraintrustExporter', () => {
       expect(mockSpan.startSpan).toHaveBeenCalledWith({
         name: 'tool-result',
         type: 'task',
-        startTime: childEventSpan.startTime.getTime(),
+        startTime: childEventSpan.startTime.getTime() / 1000,
         output: { result: 42 },
         metadata: {
           spanType: 'generic',
