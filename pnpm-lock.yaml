@@ -1029,64 +1029,28 @@ importers:
 
   packages/agent-builder/integration-tests:
     dependencies:
-      '@ai-sdk/google':
-        specifier: ^1.2.19
-        version: 1.2.22(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^1.3.0
         version: 1.3.24(zod@3.25.76)
-      '@ai-sdk/react':
-        specifier: ^1.2.1
-        version: 1.2.12(react@19.1.1)(zod@3.25.76)
       '@mastra/agent-builder':
         specifier: workspace:*
         version: link:..
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
-      json-schema:
-        specifier: ^0.4.0
-        version: 0.4.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
-      '@faker-js/faker':
-        specifier: ^9.6.0
-        version: 9.8.0
       '@mastra/core':
         specifier: workspace:*
         version: link:../../core
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../../stores/libsql
-      '@testing-library/react':
-        specifier: ^16.3.0
-        version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@types/json-schema':
-        specifier: ^7.0.15
-        version: 7.0.15
-      '@types/node':
-        specifier: ^20.17.57
-        version: 20.19.11
-      ai:
-        specifier: ^4.2.2
-        version: 4.3.19(react@19.1.1)(zod@3.25.76)
-      jsdom:
-        specifier: ^26.0.0
-        version: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       mastra:
         specifier: workspace:*
         version: link:../../cli
-      next:
-        specifier: ^15.2.4
-        version: 15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      react:
-        specifier: ^19.1.0
-        version: 19.1.1
-      react-dom:
-        specifier: ^19.1.0
-        version: 19.1.1(react@19.1.1)
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
