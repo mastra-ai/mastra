@@ -1016,10 +1016,6 @@ export const mastra = new Mastra({
                     packages,
                     projectPath,
                   });
-                // case 'check':
-                //   return await AgentBuilderDefaults.checkProject({
-                //     projectPath,
-                //   });
                 default:
                   return {
                     success: false,
@@ -1256,55 +1252,6 @@ export const mastra = new Mastra({
       };
     }
   }
-
-  // /**
-  //  * Check project health and status
-  //  */
-  // static async checkProject({ projectPath }: { projectPath?: string }) {
-  //   try {
-  //     const execOptions = projectPath ? { cwd: projectPath } : {};
-
-  //     let hasPackageJson = false;
-  //     let hasMastraConfig = false;
-
-  //     try {
-  //       await exec('test -f package.json', execOptions);
-  //       hasPackageJson = true;
-  //     } catch {
-  //       // ignore
-  //     }
-
-  //     try {
-  //       await exec('test -f mastra.config.* || test -d src/mastra || test -d mastra', execOptions);
-  //       hasMastraConfig = true;
-  //     } catch {
-  //       // ignore
-  //     }
-
-  //     const warnings: string[] = [];
-  //     if (!hasPackageJson) {
-  //       warnings.push('No package.json found - this may not be a Node.js project');
-  //     }
-  //     if (!hasMastraConfig) {
-  //       warnings.push('No Mastra configuration found - run "npx create-mastra" to initialize');
-  //     }
-
-  //     return {
-  //       success: true,
-  //       message: `Project health check completed for ${projectPath || 'current directory'}`,
-  //       warnings,
-  //       checks: {
-  //         hasPackageJson,
-  //         hasMastraConfig,
-  //       },
-  //     };
-  //   } catch (error) {
-  //     return {
-  //       success: false,
-  //       message: `Failed to check project: ${error instanceof Error ? error.message : String(error)}`,
-  //     };
-  //   }
-  // }
 
   /**
    * Start the Mastra server
