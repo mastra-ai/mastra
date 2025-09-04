@@ -11,6 +11,8 @@ import {
   updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
   generateVNextHandler as getOriginalVNextGenerateHandler,
   streamVNextUIMessageHandler as getOriginalStreamVNextUIMessageHandler,
+  generateLegacyHandler as getOriginalGenerateLegacyHandler,
+  streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -124,6 +126,27 @@ export async function getLiveEvalsByAgentIdHandler(c: Context) {
   return c.json(result);
 }
 
+export async function generateLegacyHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+
+    const result = await getOriginalGenerateLegacyHandler({
+      mastra,
+      agentId,
+      runtimeContext,
+      body,
+      abortSignal: c.req.raw.signal,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error generating from agent');
+  }
+}
+
 export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
@@ -163,6 +186,27 @@ export async function generateVNextHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error generating vnext from agent');
+  }
+}
+
+export async function streamGenerateLegacyHandler(c: Context): Promise<Response | undefined> {
+  try {
+    const mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+
+    const streamResponse = await getOriginalStreamGenerateLegacyHandler({
+      mastra,
+      agentId,
+      runtimeContext,
+      body,
+      abortSignal: c.req.raw.signal,
+    });
+
+    return streamResponse;
+  } catch (error) {
+    return handleError(error, 'Error streaming from agent');
   }
 }
 

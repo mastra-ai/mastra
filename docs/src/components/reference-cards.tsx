@@ -459,6 +459,14 @@ export const ReferenceCards = () => {
             href: "/reference/scorers/content-similarity",
           },
           {
+            title: "Context Relevance",
+            href: "/reference/scorers/context-relevance",
+          },
+          {
+            title: "Context Precision",
+            href: "/reference/scorers/context-precision",
+          },
+          {
             title: "Faithfulness",
             href: "/reference/scorers/faithfulness",
           },
@@ -471,12 +479,16 @@ export const ReferenceCards = () => {
             href: "/reference/scorers/keyword-coverage",
           },
           {
-            title: "Textual Difference",
-            href: "/reference/scorers/textual-difference",
+            title: "Noise Sensitivity",
+            href: "/reference/scorers/noise-sensitivity",
           },
           {
-            title: "Tone Consistency",
-            href: "/reference/scorers/tone-consistency",
+            title: "Prompt Alignment",
+            href: "/reference/scorers/prompt-alignment",
+          },
+          {
+            title: "Tool Call Accuracy",
+            href: "/reference/scorers/tool-call-accuracy",
           },
           {
             title: "Toxicity",

@@ -521,6 +521,8 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   private async _getIncludedMessages(threadId: string, selectBy: StorageGetMessagesArg['selectBy']) {
+    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
     const include = selectBy?.include;
     if (!include) return null;
 
@@ -597,18 +599,20 @@ export class MemoryStorageD1 extends MemoryStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
-    const limit = resolveMessageLimit({
-      last: selectBy?.last,
-      defaultLimit: 40,
-    });
-    const include = selectBy?.include || [];
-    const messages: any[] = [];
-
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+      const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
+      const limit = resolveMessageLimit({
+        last: selectBy?.last,
+        defaultLimit: 40,
+      });
+      const include = selectBy?.include || [];
+      const messages: any[] = [];
+
       if (include.length) {
         const includeResult = await this._getIncludedMessages(threadId, selectBy);
         if (Array.isArray(includeResult)) messages.push(...includeResult);
@@ -666,7 +670,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           text: `Failed to retrieve messages for thread ${threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );
@@ -749,6 +753,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
   public async getMessagesPaginated({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
@@ -763,6 +768,8 @@ export class MemoryStorageD1 extends MemoryStorage {
     const messages: any[] = [];
 
     try {
+      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+
       if (selectBy?.include?.length) {
         const includeResult = await this._getIncludedMessages(threadId, selectBy);
         if (Array.isArray(includeResult)) messages.push(...includeResult);
@@ -876,7 +883,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           text: `Failed to retrieve messages for thread ${threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
-          details: { threadId },
+          details: { threadId, resourceId: resourceId ?? '' },
         },
         error,
       );

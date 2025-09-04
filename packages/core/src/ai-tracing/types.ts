@@ -278,8 +278,6 @@ export interface AISpan<TType extends AISpanType> {
   attributes?: AISpanTypeMap[TType];
   /** Parent span reference (undefined for root spans) */
   parent?: AnyAISpan;
-  /** The top-level span - can be any type */
-  trace: AnyAISpan;
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
   traceId: string;
   /** Pointer to the AITracing instance */
@@ -404,6 +402,8 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.RATIO; probability: number }
   | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
 
+export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+
 /**
  * Configuration for a single AI tracing instance
  */
@@ -457,6 +457,9 @@ export type AITracingEvent =
 export interface AITracingExporter {
   /** Exporter name */
   name: string;
+
+  /** Initialize exporter (called after all dependencies are ready) */
+  init?(): void;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;

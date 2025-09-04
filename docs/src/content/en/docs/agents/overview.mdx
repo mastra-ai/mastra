@@ -3,6 +3,8 @@ title: "Agent Overview | Agent Documentation | Mastra"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
+import { Steps } from "nextra/components";
+
 # Using Agents
 
 Agents let you build intelligent assistants powered by language models that can make decisions and perform actions. Each agent has required instructions and an LLM, with optional tools and memory.
@@ -161,64 +163,46 @@ Define the `output` shape using [Zod](https://zod.dev/):
 ```typescript showLineNumbers copy
 import { z } from "zod";
 
-const response = await testAgent.generate("Monkey, Ice Cream, Boat", {
-  experimental_output: z.object({
-    summary: z.string(),
-    keywords: z.array(z.string())
-  })
-});
+const response = await testAgent.generate(
+  [
+    {
+      role: "system",
+      content: "Provide a summary and keywords for the following text:"
+    },
+    {
+      role: "user",
+      content: "Monkey, Ice Cream, Boat"
+    }
+  ],
+  {
+    output: z.object({
+      summary: z.string(),
+      keywords: z.array(z.string())
+    })
+  }
+);
 
 console.log(response.object);
 ```
 
-### Using Tools
+#### Agents with tools
 
-If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` or `structuredOutput` property instead of `output`. Here's how:
+To generate structured output with agents that use tools, use the `experimental_output` property:
 
-```typescript showLineNumbers copy
-const response = await testAgent.generate("Monkey, Ice Cream, Boat", {
-  experimental_output: z.object({
-    summary: z.string(),
-    keywords: z.array(z.string())
-  })
-});
+```typescript {6} showLineNumbers copy
+import { z } from "zod";
 
-const responseWithExperimentalOutput = await testAgent.generate(
-  [
-    {
-      role: "user",
-      content:
-        "Please analyze this repository and provide a summary and keywords...",
-    },
-  ],
+const response = await testAgent.generate(
+  // ...
   {
-    // Use experimental_output to enable both structured output and tool calls
-    experimental_output: schema,
-  },
+    experimental_output: z.object({
+      summary: z.string(),
+      keywords: z.array(z.string())
+    })
+  }
 );
 
-console.log("Structured Output:", responseWithExperimentalOutput.object);
-
-const responseWithStructuredOutput = await testAgent.generate(
-  [
-    {
-      role: "user",
-      content:
-        "Please analyze this repository and provide a summary and keywords...",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string())
-      }),
-      model: openai("gpt-4o-mini"),
-    }
-  },
-);
-
-console.log("Structured Output:", responseWithStructuredOutput.object);
+console.log(response.object);
 ```
 
 ## Describing images
@@ -279,14 +263,43 @@ const response = await testAgent.generate("Help me organize my day", {
 ```
 
 ## Testing agents locally
+There are two ways to run and test agents.
 
-Use the `mastra dev` CLI command to run your agents behind a local API.
-By default, it loads exported agents from the `src/mastra/agents` directory and creates endpoints for testing (for example, `http://localhost:4111/api/agents/myAgent/generate`).
-It also launches a visual playground where you can chat with your agent and view execution traces.
+<Steps>
+
+### Mastra Playground
+
+With the Mastra Dev Server running you can test an agent from the Mastra Playground by visiting [http://localhost:4111/agents](http://localhost:4111/agents) in your browser.
 
 > For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
 
-## Next Steps
+### Command line
+
+Create an agent response using `.generate()` or `.stream()`.
+
+```typescript {7} filename="src/test-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("testAgent");
+
+const response = await agent.generate("Help me organize my day");
+
+console.log(response.text);
+```
+
+> See [.generate()](../../reference/agents/generate.mdx) or [.stream()](../../reference/agents/stream.mdx) for more information.
+
+To test this agent, run the following:
+
+```bash copy
+npx tsx src/test-agent.ts
+```
+
+</Steps>
+
+## Related
 
 - [Agent Memory](./agent-memory.mdx)
 - [Dynamic Agents](./dynamic-agents.mdx)

@@ -118,6 +118,7 @@ export type VariableReference<
   | { value: any; schema: z.ZodTypeAny };
 
 export type StreamEvent =
+  // old events
   | TextStreamPart<any>
   | {
       type: 'step-suspended';
@@ -133,6 +134,85 @@ export type StreamEvent =
       type: 'step-result';
       payload: any;
       id: string;
+    }
+  // vnext events
+  | WorkflowStreamEvent;
+
+export type WorkflowStreamEvent =
+  | {
+      type: 'workflow-start';
+      payload: {};
+    }
+  | {
+      type: 'workflow-finish';
+      payload: {};
+    }
+  | {
+      type: 'workflow-step-start';
+      id: string;
+      payload: {
+        id: string;
+        stepCallId: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    }
+  | {
+      type: 'workflow-step-finish';
+      payload: {
+        id: string;
+        metadata: Record<string, any>;
+      };
+    }
+  | {
+      type: 'workflow-step-suspended';
+      payload: {
+        id: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    }
+  | {
+      type: 'workflow-step-waiting';
+      payload: {
+        id: string;
+        payload: Record<string, any>;
+        startedAt: number;
+        status: WorkflowStepStatus;
+      };
+    }
+  | {
+      type: 'workflow-step-result';
+      payload: {
+        id: string;
+        stepCallId: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    }
+  | {
+      type: 'workflow-agent-call-start';
+      payload: {
+        name: string;
+        args: any;
+      };
+    }
+  | {
+      type: 'workflow-agent-call-finish';
+      payload: {
+        name: string;
+        args: any;
+      };
+      args: any;
     };
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';

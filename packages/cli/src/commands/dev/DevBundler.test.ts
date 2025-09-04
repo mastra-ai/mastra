@@ -1,5 +1,29 @@
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Mock process.exit and process.argv to avoid CLI triggering
+const mockExit = vi.hoisted(() => vi.fn());
+vi.stubGlobal('process', {
+  ...process,
+  exit: mockExit,
+  argv: ['node', 'test'], // Override command line args
+});
+
+// Mock commander to prevent CLI from running
+vi.mock('commander', () => ({
+  Command: vi.fn(() => ({
+    name: vi.fn().mockReturnThis(),
+    version: vi.fn().mockReturnThis(),
+    addHelpText: vi.fn().mockReturnThis(),
+    action: vi.fn().mockReturnThis(),
+    command: vi.fn().mockReturnThis(),
+    description: vi.fn().mockReturnThis(),
+    option: vi.fn().mockReturnThis(),
+    parse: vi.fn(),
+    help: vi.fn(),
+  })),
+}));
+
 import { DevBundler } from './DevBundler';
 
 // Don't reference top-level variables in mock definitions
@@ -29,13 +53,17 @@ vi.mock('fs-extra', () => {
 
 describe('DevBundler', () => {
   const originalEnv = process.env.NODE_ENV;
+  const originalExit = process.exit;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Mock process.exit to prevent it from actually exiting during tests
+    process.exit = vi.fn() as any;
   });
 
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;
+    process.exit = originalExit;
   });
 
   describe('watch', () => {

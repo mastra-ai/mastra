@@ -1,5 +1,182 @@
 # @mastra/deployer
 
+## 0.15.3
+
+### Patch Changes
+
+- 3e0bd2a: dependencies updates:
+  - Updated dependency [`rollup@~4.49.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.49.0) (from `~4.47.1`, in `dependencies`)
+- 2b64943: dependencies updates:
+  - Updated dependency [`rollup@~4.50.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.50.0) (from `~4.49.0`, in `dependencies`)
+- ff89505: Add deprecation warnings and add legacy routes
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- 71b657b: Excluding hono from being external
+- f0dfcac: updated core peerdep
+- 6d98856: Correct set the root span for telemetry traces
+- 6f715fe: Fix plyground baseUrl, default api baseUrl to playground baseUrl
+- 48f0742: add deployer, server and clientjs handlers for agent builder template
+- 12adcc8: add missing endpoint to get agent tool by ID
+- a6e2254: Do not export otel scoped traces
+- 8f22a2c: During package installation do not print audit, funding or any non-error logs
+- 03d0c39: temp disable agent-builder workflows import
+- Updated dependencies [ab48c97]
+- Updated dependencies [85ef90b]
+- Updated dependencies [aedbbfa]
+- Updated dependencies [ff89505]
+- Updated dependencies [637f323]
+- Updated dependencies [de3cbc6]
+- Updated dependencies [c19bcf7]
+- Updated dependencies [4474d04]
+- Updated dependencies [183dc95]
+- Updated dependencies [a1111e2]
+- Updated dependencies [b42a961]
+- Updated dependencies [61debef]
+- Updated dependencies [9beaeff]
+- Updated dependencies [29de0e1]
+- Updated dependencies [f643c65]
+- Updated dependencies [00c74e7]
+- Updated dependencies [f0dfcac]
+- Updated dependencies [fef7375]
+- Updated dependencies [e3d8fea]
+- Updated dependencies [45e4d39]
+- Updated dependencies [9eee594]
+- Updated dependencies [7149d8d]
+- Updated dependencies [822c2e8]
+- Updated dependencies [979912c]
+- Updated dependencies [7dcf4c0]
+- Updated dependencies [4106a58]
+- Updated dependencies [ad78bfc]
+- Updated dependencies [48f0742]
+- Updated dependencies [0302f50]
+- Updated dependencies [12adcc8]
+- Updated dependencies [6ac697e]
+- Updated dependencies [74db265]
+- Updated dependencies [0ce418a]
+- Updated dependencies [bcec7db]
+- Updated dependencies [af90672]
+- Updated dependencies [8387952]
+- Updated dependencies [7f3b8da]
+- Updated dependencies [905352b]
+- Updated dependencies [599d04c]
+- Updated dependencies [56041d0]
+- Updated dependencies [3412597]
+- Updated dependencies [5eca5d2]
+- Updated dependencies [f2cda47]
+- Updated dependencies [5de1555]
+- Updated dependencies [cfd377a]
+- Updated dependencies [1ed5a3e]
+- Updated dependencies [03d0c39]
+  - @mastra/core@0.15.3
+  - @mastra/server@0.15.3
+
+## 0.15.3-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`599d04c`](https://github.com/mastra-ai/mastra/commit/599d04cebe92c1d536fee3190434941b8c91548e)]:
+  - @mastra/core@0.15.3-alpha.9
+  - @mastra/server@0.15.3-alpha.9
+
+## 0.15.3-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`4474d04`](https://github.com/mastra-ai/mastra/commit/4474d0489b1e152e0985c33a4f529207317d27b5), [`4106a58`](https://github.com/mastra-ai/mastra/commit/4106a58b15b4c0a060a4a9ccab52d119d00d8edb)]:
+  - @mastra/core@0.15.3-alpha.8
+  - @mastra/server@0.15.3-alpha.8
+
+## 0.15.3-alpha.7
+
+### Patch Changes
+
+- [#7394](https://github.com/mastra-ai/mastra/pull/7394) [`f0dfcac`](https://github.com/mastra-ai/mastra/commit/f0dfcac4458bdf789b975e2d63e984f5d1e7c4d3) Thanks [@NikAiyer](https://github.com/NikAiyer)! - updated core peerdep
+
+- Updated dependencies [[`f0dfcac`](https://github.com/mastra-ai/mastra/commit/f0dfcac4458bdf789b975e2d63e984f5d1e7c4d3), [`7149d8d`](https://github.com/mastra-ai/mastra/commit/7149d8d4bdc1edf0008e0ca9b7925eb0b8b60dbe)]:
+  - @mastra/server@0.15.3-alpha.7
+  - @mastra/core@0.15.3-alpha.7
+
+## 0.15.3-alpha.6
+
+### Patch Changes
+
+- [#7388](https://github.com/mastra-ai/mastra/pull/7388) [`03d0c39`](https://github.com/mastra-ai/mastra/commit/03d0c3963a748294577dd232a53ee01e1e5bcc12) Thanks [@NikAiyer](https://github.com/NikAiyer)! - temp disable agent-builder workflows import
+
+- Updated dependencies [[`c19bcf7`](https://github.com/mastra-ai/mastra/commit/c19bcf7b43542b02157b5e17303e519933a153ab), [`b42a961`](https://github.com/mastra-ai/mastra/commit/b42a961a5aefd19d6e938a7705fc0ecc90e8f756), [`45e4d39`](https://github.com/mastra-ai/mastra/commit/45e4d391a2a09fc70c48e4d60f505586ada1ba0e), [`0302f50`](https://github.com/mastra-ai/mastra/commit/0302f50861a53c66ff28801fc371b37c5f97e41e), [`74db265`](https://github.com/mastra-ai/mastra/commit/74db265b96aa01a72ffd91dcae0bc3b346cca0f2), [`7f3b8da`](https://github.com/mastra-ai/mastra/commit/7f3b8da6dd21c35d3672e44b4f5dd3502b8f8f92), [`905352b`](https://github.com/mastra-ai/mastra/commit/905352bcda134552400eb252bca1cb05a7975c14), [`f2cda47`](https://github.com/mastra-ai/mastra/commit/f2cda47ae911038c5d5489f54c36517d6f15bdcc), [`cfd377a`](https://github.com/mastra-ai/mastra/commit/cfd377a3a33a9c88b644f6540feed9cd9832db47), [`03d0c39`](https://github.com/mastra-ai/mastra/commit/03d0c3963a748294577dd232a53ee01e1e5bcc12)]:
+  - @mastra/core@0.15.3-alpha.6
+  - @mastra/server@0.15.3-alpha.6
+
+## 0.15.3-alpha.5
+
+### Patch Changes
+
+- [#7333](https://github.com/mastra-ai/mastra/pull/7333) [`2b64943`](https://github.com/mastra-ai/mastra/commit/2b64943a282c99988c2e5b6e1269bfaca60e6fe3) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.50.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.50.0) (from `~4.49.0`, in `dependencies`)
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+- Updated dependencies [[`85ef90b`](https://github.com/mastra-ai/mastra/commit/85ef90bb2cd4ae4df855c7ac175f7d392c55c1bf), [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e)]:
+  - @mastra/core@0.15.3-alpha.5
+  - @mastra/server@0.15.3-alpha.5
+
+## 0.15.3-alpha.4
+
+### Patch Changes
+
+- [#7000](https://github.com/mastra-ai/mastra/pull/7000) [`3e0bd2a`](https://github.com/mastra-ai/mastra/commit/3e0bd2aa0a19823939f9a973d44791f4927ff5c3) Thanks [@dane-ai-mastra](https://github.com/apps/dane-ai-mastra)! - dependencies updates:
+  - Updated dependency [`rollup@~4.49.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.49.0) (from `~4.47.1`, in `dependencies`)
+
+- [#7269](https://github.com/mastra-ai/mastra/pull/7269) [`ff89505`](https://github.com/mastra-ai/mastra/commit/ff895057c8c7e91a5535faef46c5e5391085ddfa) Thanks [@wardpeet](https://github.com/wardpeet)! - Add deprecation warnings and add legacy routes
+
+- [#7136](https://github.com/mastra-ai/mastra/pull/7136) [`48f0742`](https://github.com/mastra-ai/mastra/commit/48f0742662414610dc9a7a99d45902d059ee123d) Thanks [@NikAiyer](https://github.com/NikAiyer)! - add deployer, server and clientjs handlers for agent builder template
+
+- [#7250](https://github.com/mastra-ai/mastra/pull/7250) [`12adcc8`](https://github.com/mastra-ai/mastra/commit/12adcc8929db79b3cf7b83237ebaf6ba2db0181e) Thanks [@roaminro](https://github.com/roaminro)! - add missing endpoint to get agent tool by ID
+
+- [#6946](https://github.com/mastra-ai/mastra/pull/6946) [`8f22a2c`](https://github.com/mastra-ai/mastra/commit/8f22a2c35a0a9ddd2f34a9c3ebb6ff6668aa9ea9) Thanks [@LekoArts](https://github.com/LekoArts)! - During package installation do not print audit, funding or any non-error logs
+
+- Updated dependencies [[`ab48c97`](https://github.com/mastra-ai/mastra/commit/ab48c979098ea571faf998a55d3a00e7acd7a715), [`ff89505`](https://github.com/mastra-ai/mastra/commit/ff895057c8c7e91a5535faef46c5e5391085ddfa), [`183dc95`](https://github.com/mastra-ai/mastra/commit/183dc95596f391b977bd1a2c050b8498dac74891), [`a1111e2`](https://github.com/mastra-ai/mastra/commit/a1111e24e705488adfe5e0a6f20c53bddf26cb22), [`61debef`](https://github.com/mastra-ai/mastra/commit/61debefd80ad3a7ed5737e19df6a23d40091689a), [`9beaeff`](https://github.com/mastra-ai/mastra/commit/9beaeffa4a97b1d5fd01a7f8af8708b16067f67c), [`9eee594`](https://github.com/mastra-ai/mastra/commit/9eee594e35e0ca2a650fcc33fa82009a142b9ed0), [`979912c`](https://github.com/mastra-ai/mastra/commit/979912cfd180aad53287cda08af771df26454e2c), [`7dcf4c0`](https://github.com/mastra-ai/mastra/commit/7dcf4c04f44d9345b1f8bc5d41eae3f11ac61611), [`ad78bfc`](https://github.com/mastra-ai/mastra/commit/ad78bfc4ea6a1fff140432bf4f638e01af7af668), [`48f0742`](https://github.com/mastra-ai/mastra/commit/48f0742662414610dc9a7a99d45902d059ee123d), [`12adcc8`](https://github.com/mastra-ai/mastra/commit/12adcc8929db79b3cf7b83237ebaf6ba2db0181e), [`0ce418a`](https://github.com/mastra-ai/mastra/commit/0ce418a1ccaa5e125d4483a9651b635046152569), [`bcec7db`](https://github.com/mastra-ai/mastra/commit/bcec7db62dab25e4c85f1d484172061382c6615d), [`8387952`](https://github.com/mastra-ai/mastra/commit/838795227b4edf758c84a2adf6f7fba206c27719), [`5eca5d2`](https://github.com/mastra-ai/mastra/commit/5eca5d2655788863ea0442a46c9ef5d3c6dbe0a8)]:
+  - @mastra/core@0.15.3-alpha.4
+  - @mastra/server@0.15.3-alpha.4
+
+## 0.15.3-alpha.3
+
+### Patch Changes
+
+- [#7207](https://github.com/mastra-ai/mastra/pull/7207) [`71b657b`](https://github.com/mastra-ai/mastra/commit/71b657bffebbdcfdf1ce9c6d72003041bd6e200a) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Excluding hono from being external
+
+- [#7215](https://github.com/mastra-ai/mastra/pull/7215) [`6d98856`](https://github.com/mastra-ai/mastra/commit/6d98856ed7cf56cbd6c4e02b3254e3dfb1e455db) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Correct set the root span for telemetry traces
+
+- Updated dependencies [[`aedbbfa`](https://github.com/mastra-ai/mastra/commit/aedbbfa064124ddde039111f12629daebfea7e48), [`f643c65`](https://github.com/mastra-ai/mastra/commit/f643c651bdaf57c2343cf9dbfc499010495701fb), [`fef7375`](https://github.com/mastra-ai/mastra/commit/fef737534574f41b432a7361a285f776c3bac42b), [`e3d8fea`](https://github.com/mastra-ai/mastra/commit/e3d8feaacfb8b5c5c03c13604cc06ea2873d45fe), [`3412597`](https://github.com/mastra-ai/mastra/commit/3412597a6644c0b6bf3236d6e319ed1450c5bae8)]:
+  - @mastra/core@0.15.3-alpha.3
+  - @mastra/server@0.15.3-alpha.3
+
+## 0.15.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`822c2e8`](https://github.com/mastra-ai/mastra/commit/822c2e88a3ecbffb7c680e6227976006ccefe6a8)]:
+  - @mastra/core@0.15.3-alpha.2
+  - @mastra/server@0.15.3-alpha.2
+
+## 0.15.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`637f323`](https://github.com/mastra-ai/mastra/commit/637f32371d79a8f78c52c0d53411af0915fcec67), [`29de0e1`](https://github.com/mastra-ai/mastra/commit/29de0e1b0a7173317ae7d1ab0c0993167c659f2b), [`6ac697e`](https://github.com/mastra-ai/mastra/commit/6ac697edcc2435482c247cba615277ec4765dcc4)]:
+  - @mastra/core@0.15.3-alpha.1
+  - @mastra/server@0.15.3-alpha.1
+
+## 0.15.3-alpha.0
+
+### Patch Changes
+
+- [#7115](https://github.com/mastra-ai/mastra/pull/7115) [`6f715fe`](https://github.com/mastra-ai/mastra/commit/6f715fe524296e1138a319e56bcf8e4214bd5dd5) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Fix plyground baseUrl, default api baseUrl to playground baseUrl
+
+- [#7091](https://github.com/mastra-ai/mastra/pull/7091) [`a6e2254`](https://github.com/mastra-ai/mastra/commit/a6e225469159950bb69e8d240d510ec57dc0d79a) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - Do not export otel scoped traces
+
+- Updated dependencies [[`00c74e7`](https://github.com/mastra-ai/mastra/commit/00c74e73b1926be0d475693bb886fb67a22ff352), [`af90672`](https://github.com/mastra-ai/mastra/commit/af906722d8da28688882193b1e531026f9e2e81e), [`56041d0`](https://github.com/mastra-ai/mastra/commit/56041d018863a3da6b98c512e47348647c075fb3), [`5de1555`](https://github.com/mastra-ai/mastra/commit/5de15554d3d6695211945a36928f6657e76cddc9), [`1ed5a3e`](https://github.com/mastra-ai/mastra/commit/1ed5a3e19330374c4347a4237cd2f4b9ffb60376)]:
+  - @mastra/core@0.15.3-alpha.0
+  - @mastra/server@0.15.3-alpha.0
+
 ## 0.15.2
 
 ### Patch Changes

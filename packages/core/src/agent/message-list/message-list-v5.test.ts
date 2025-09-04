@@ -537,7 +537,7 @@ describe('MessageList V5 Support', () => {
         expect(prompt).toHaveLength(1);
         expect(prompt[0]).toMatchObject({
           role: 'user',
-          content: ' ', // Default message uses a space
+          content: '.', // Default message uses a period
         });
       });
 
@@ -555,13 +555,13 @@ describe('MessageList V5 Support', () => {
         expect(prompt[1].role).toBe('assistant');
       });
 
-      it('llmPrompt() should return proper LanguageModelV2Prompt format', () => {
+      it('llmPrompt() should return proper LanguageModelV2Prompt format', async () => {
         const list = new MessageList({ threadId, resourceId });
         list.addSystem('System message');
         list.add('User input', 'input');
         list.add({ role: 'assistant', content: 'Response' }, 'response');
 
-        const llmPrompt = list.get.all.aiV5.llmPrompt();
+        const llmPrompt = await list.get.all.aiV5.llmPrompt();
 
         // llmPrompt returns messages array directly based on the implementation
         expect(Array.isArray(llmPrompt)).toBe(true);
@@ -791,6 +791,145 @@ describe('MessageList V5 Support', () => {
           }),
         ]),
       );
+    });
+  });
+
+  describe('Image Handling', () => {
+    it('should convert data URI images to url field for AI SDK V5', () => {
+      const messageList = new MessageList();
+
+      const imageDataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this image?' },
+              { type: 'file', mimeType: 'image/png', data: imageDataUri },
+            ],
+          },
+        ],
+        'user',
+      );
+
+      const uiMessages = messageList.get.all.aiV5.ui();
+      expect(uiMessages).toHaveLength(1);
+
+      const filePart = uiMessages[0].parts.find(p => p.type === 'file');
+      expect(filePart).toBeDefined();
+
+      if (filePart?.type === 'file') {
+        expect(filePart).toHaveProperty('url');
+        expect(filePart).toHaveProperty('mediaType', 'image/png');
+        expect((filePart as any).url).toBe(imageDataUri);
+      }
+    });
+
+    it('should extract MIME type from data URI when not explicitly provided', () => {
+      const messageList = new MessageList();
+      const imageDataUri = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD//2Q==';
+
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Analyze' },
+              { type: 'file', data: imageDataUri },
+            ],
+          },
+        ],
+        'user',
+      );
+
+      const uiMessages = messageList.get.all.aiV5.ui();
+      const filePart = uiMessages[0].parts.find(p => p.type === 'file');
+
+      if (filePart?.type === 'file') {
+        expect(filePart.mediaType).toBe('image/jpeg');
+        expect((filePart as any).url).toContain('data:image/jpeg;base64,');
+      }
+    });
+
+    it('should handle raw base64 data correctly', () => {
+      const messageList = new MessageList();
+      const rawBase64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Analyze this' },
+              { type: 'file', mimeType: 'image/png', data: rawBase64 },
+            ],
+          },
+        ],
+        'user',
+      );
+
+      const uiMessages = messageList.get.all.aiV5.ui();
+      const filePart = uiMessages[0].parts.find(p => p.type === 'file');
+
+      if (filePart?.type === 'file') {
+        expect((filePart as any).url).toContain(`data:image/png;base64,${rawBase64}`);
+        expect(filePart.mediaType).toBe('image/png');
+      }
+    });
+
+    it('should handle binary data (Uint8Array) correctly', () => {
+      const messageList = new MessageList();
+      const binaryData = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG header bytes
+
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Process this image' },
+              { type: 'file', mimeType: 'image/png', data: binaryData },
+            ],
+          },
+        ],
+        'user',
+      );
+
+      const uiMessages = messageList.get.all.aiV5.ui();
+      const filePart = uiMessages[0].parts.find(p => p.type === 'file');
+
+      if (filePart?.type === 'file') {
+        expect(typeof (filePart as any).url).toBe('string');
+        expect((filePart as any).url).toContain('data:image/png;base64,');
+        expect(filePart.mediaType).toBe('image/png');
+      }
+    });
+
+    it('should preserve external URLs in url field', () => {
+      const messageList = new MessageList();
+
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Look at this' },
+              { type: 'file', mimeType: 'image/jpeg', data: new URL('https://example.com/image.jpg') },
+            ],
+          },
+        ],
+        'user',
+      );
+
+      const uiMessages = messageList.get.all.aiV5.ui();
+      const filePart = uiMessages[0].parts.find(p => p.type === 'file');
+
+      if (filePart?.type === 'file') {
+        expect(filePart).toHaveProperty('url', 'https://example.com/image.jpg');
+        expect(filePart).not.toHaveProperty('data');
+      }
     });
   });
 

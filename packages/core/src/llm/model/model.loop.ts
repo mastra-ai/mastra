@@ -15,6 +15,7 @@ import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives } from '../../action';
 import { MessageList } from '../../agent';
+import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
@@ -121,6 +122,7 @@ export class MastraLLMVNext extends MastraBase {
   stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
     messages,
     stopWhen = stepCountIs(5),
+    maxSteps,
     tools = {} as Tools,
     runId,
     modelSettings,
@@ -131,8 +133,19 @@ export class MastraLLMVNext extends MastraBase {
     output,
     options,
     outputProcessors,
+    returnScorerData,
+    providerOptions,
+    tracingContext,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
+    let stopWhenToUse;
+
+    if (maxSteps && typeof maxSteps === 'number') {
+      stopWhenToUse = stepCountIs(maxSteps);
+    } else {
+      stopWhenToUse = stopWhen;
+    }
+
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
@@ -146,6 +159,21 @@ export class MastraLLMVNext extends MastraBase {
       output = this._applySchemaCompat(output) as any; // TODO: types for schema compat
     }
 
+    const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
+      name: `llm stream: '${model.modelId}'`,
+      type: AISpanType.LLM_GENERATION,
+      input: messages,
+      attributes: {
+        model: model.modelId,
+        provider: model.provider,
+        streaming: true,
+      },
+      metadata: {
+        threadId,
+        resourceId,
+      },
+    });
+
     try {
       const messageList = new MessageList({
         threadId,
@@ -157,15 +185,18 @@ export class MastraLLMVNext extends MastraBase {
         messageList,
         model: this.#model,
         tools: tools as Tools,
-        stopWhen,
+        stopWhen: stopWhenToUse,
         toolChoice,
         modelSettings,
+        providerOptions,
         telemetry_settings: {
           ...this.experimental_telemetry,
           ...telemetry_settings,
         },
         output,
         outputProcessors,
+        returnScorerData,
+        llmAISpan,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -254,7 +285,9 @@ export class MastraLLMVNext extends MastraBase {
         },
       };
 
-      return loop(loopOptions);
+      const result = loop(loopOptions);
+      llmAISpan?.end({ output: result });
+      return result;
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {
@@ -271,6 +304,7 @@ export class MastraLLMVNext extends MastraBase {
         },
         e,
       );
+      llmAISpan?.error({ error: mastraError });
       throw mastraError;
     }
   }

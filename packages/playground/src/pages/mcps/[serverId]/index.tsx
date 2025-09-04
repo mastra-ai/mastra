@@ -3,7 +3,6 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMCPServerTools } from '@/hooks/use-mcp-server-tools';
 import { useMCPServers } from '@/hooks/use-mcp-servers';
-import { client } from '@/lib/client';
 import { ToolIconMap } from '@/types';
 
 import { McpToolInfo } from '@mastra/client-js';
@@ -32,13 +31,28 @@ import {
 import { useRef } from 'react';
 import { Link, useParams } from 'react-router';
 
+declare global {
+  interface Window {
+    MASTRA_SERVER_HOST: string;
+    MASTRA_SERVER_PORT: string;
+  }
+}
+
 export const McpServerPage = () => {
   const { serverId } = useParams();
   const { servers: mcpServers, isLoading } = useMCPServers();
 
   const server = mcpServers?.find(server => server.id === serverId);
 
-  const effectiveBaseUrl = client.options.baseUrl || 'http://localhost:4111';
+  const host = window.MASTRA_SERVER_HOST;
+  const port = window.MASTRA_SERVER_PORT;
+
+  let baseUrl = null;
+  if (host && port) {
+    baseUrl = `http://${host}:${port}`;
+  }
+
+  const effectiveBaseUrl = baseUrl || 'http://localhost:4111';
   const sseUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/sse`;
   const httpStreamUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/mcp`;
 

@@ -22,6 +22,10 @@ Mastra also supports other LLM providers. For a full list of supported models an
 
 Our CLI is the fastest way to get started with Mastra. You can run `create mastra` anywhere on your machine.
 
+<Callout type="warning">
+  The CLI currently generates projects that are only compatible with `ai-sdk v4`. Please refer to [ai-sdk v5 compatibility](#ai-sdk-v5-compatibility) if you wish to use `ai-sdk v5`.
+</Callout>
+
 <Steps>
 
 ## Start the CLI wizard
@@ -35,7 +39,7 @@ This helps users choose their preferred package manager while following the same
 All commands achieve the same result - creating a new Mastra project with the interactive setup.
 */}
 
-<Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tab>
     ```bash copy
     npx create-mastra@latest
@@ -43,12 +47,7 @@ All commands achieve the same result - creating a new Mastra project with the in
   </Tab>
   <Tab>
     ```bash copy
-    npm create mastra@latest
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn create mastra@latest
+    yarn dlx create-mastra@latest
     ```
   </Tab>
   <Tab>
@@ -171,7 +170,7 @@ This helps users manually set up a Mastra project with their preferred package m
 
     npm install typescript tsx @types/node mastra@latest --save-dev
 
-    npm install @mastra/core@latest zod@^3 @ai-sdk/openai
+    npm install @mastra/core@latest zod@^3 @ai-sdk/openai@^1
     ```
 
   </Tab>
@@ -181,7 +180,7 @@ This helps users manually set up a Mastra project with their preferred package m
 
     pnpm add typescript tsx @types/node mastra@latest --save-dev
 
-    pnpm add @mastra/core@latest zod@^3 @ai-sdk/openai
+    pnpm add @mastra/core@latest zod@^3 @ai-sdk/openai@^1
     ```
 
   </Tab>
@@ -191,7 +190,7 @@ This helps users manually set up a Mastra project with their preferred package m
 
     yarn add typescript tsx @types/node mastra@latest --dev
 
-    yarn add @mastra/core@latest zod@^3 @ai-sdk/openai
+    yarn add @mastra/core@latest zod@^3 @ai-sdk/openai@^1
     ```
 
   </Tab>
@@ -201,7 +200,7 @@ This helps users manually set up a Mastra project with their preferred package m
 
     bun add typescript tsx @types/node mastra@latest --dev
 
-    bun add @mastra/core@latest zod@^3 @ai-sdk/openai
+    bun add @mastra/core@latest zod@^3 @ai-sdk/openai@^1
     ```
 
   </Tab>
@@ -371,6 +370,50 @@ Mastra can be installed and integrated into a wide range of projects. Below are 
 To install Mastra in an existing project, use the `mastra init` command.
 
 > See [mastra init](/reference/cli/init) for more information.
+
+## ai-sdk v5 compatibility
+
+By default, Mastra projects are only compatible with `ai-sdk v4`, if you wish to use `ai-sdk v5`, please make the following changes to the generated project.
+
+Install the latest version to the `@ai-sdk/openai` package:
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+
+  <Tab>
+    ```bash copy
+    npm install @ai-sdk/openai@latest
+    ```
+
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @ai-sdk/openai@latest
+    ```
+
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @ai-sdk/openai@latest
+    ```
+
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @ai-sdk/openai@latest
+    ```
+
+  </Tab>
+</Tabs>
+
+Update the `planActivities` step in `src/mastra/workflows/weather-workflow.ts` as follow:
+```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers{150} copy
+const response = await agent.stream([ // [!code --]
+const response = await agent.streamVNext([ // [!code ++]
+  {
+    role: 'user',
+    content: prompt,
+  },
+]);
+```
 
 ## Next steps
 

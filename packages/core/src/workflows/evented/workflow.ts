@@ -176,8 +176,8 @@ export function createStep<
           args: inputData,
         };
         await emitter.emit('watch-v2', {
-          type: 'tool-call-streaming-start',
-          ...toolData,
+          type: 'workflow-agent-call-start',
+          payload: toolData,
         });
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
@@ -194,31 +194,13 @@ export function createStep<
         }
 
         for await (const chunk of fullStream) {
-          switch (chunk.type) {
-            case 'text-delta':
-              await emitter.emit('watch-v2', {
-                type: 'tool-call-delta',
-                ...toolData,
-                argsTextDelta: chunk.textDelta,
-              });
-              break;
-
-            case 'step-start':
-            case 'step-finish':
-            case 'finish':
-              break;
-
-            case 'tool-call':
-            case 'tool-result':
-            case 'tool-call-streaming-start':
-            case 'tool-call-delta':
-            case 'source':
-            case 'file':
-            default:
-              await emitter.emit('watch-v2', chunk);
-              break;
-          }
+          await emitter.emit('watch-v2', chunk);
         }
+
+        await emitter.emit('watch-v2', {
+          type: 'workflow-agent-call-finish',
+          payload: toolData,
+        });
 
         return {
           text: await streamPromise.promise,
@@ -243,6 +225,8 @@ export function createStep<
           context: inputData,
           mastra,
           runtimeContext,
+          // TODO: Pass proper tracing context when evented workflows support tracing
+          tracingContext: { currentSpan: undefined },
         });
       },
     };
@@ -316,7 +300,7 @@ export class EventedWorkflow<
 
     this.runs.set(runIdToUse, run);
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -437,11 +421,45 @@ export class EventedRun<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
+    let currentToolData: { name: string; args: any } | undefined = undefined;
+
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
+      console.log('raw_event', event);
+      if ((event as any).type === 'workflow-agent-call-start') {
+        currentToolData = {
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
+        };
+        await writer.write({
+          ...event.payload,
+          type: 'tool-call-streaming-start',
+        } as any);
+
+        return;
+      }
+
       try {
+        if ((event as any).type === 'workflow-agent-call-finish') {
+          return;
+        } else if (!(event as any).type.startsWith('workflow-')) {
+          if ((event as any).type === 'text-delta') {
+            await writer.write({
+              type: 'tool-call-delta',
+              ...(currentToolData ?? {}),
+              argsTextDelta: (event as any).textDelta,
+            } as any);
+          }
+          return;
+        }
+
+        const e: any = {
+          ...event,
+          type: event.type.replace('workflow-', ''),
+        };
         // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
+
+        await writer.write(e as any);
       } catch {}
     }, 'watch-v2');
 
@@ -480,11 +498,43 @@ export class EventedRun<
   }> {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
+    let currentToolData: { name: string; args: any } | undefined = undefined;
+
     const writer = writable.getWriter();
     const unwatch = await this.watchAsync(async event => {
+      if ((event as any).type === 'workflow-agent-call-start') {
+        currentToolData = {
+          name: (event as any).payload.name,
+          args: (event as any).payload.args,
+        };
+        await writer.write({
+          ...event.payload,
+          type: 'tool-call-streaming-start',
+        } as any);
+
+        return;
+      }
+
       try {
+        if ((event as any).type === 'workflow-agent-call-finish') {
+          return;
+        } else if (!(event as any).type.startsWith('workflow-')) {
+          if ((event as any).type === 'text-delta') {
+            await writer.write({
+              type: 'tool-call-delta',
+              ...(currentToolData ?? {}),
+              argsTextDelta: (event as any).textDelta,
+            } as any);
+          }
+          return;
+        }
+
+        const e: any = {
+          ...event,
+          type: event.type.replace('workflow-', ''),
+        };
         // watch-v2 events are data stream events, so we need to cast them to the correct type
-        await writer.write(event as any);
+        await writer.write(e as any);
       } catch {}
     }, 'watch-v2');
 

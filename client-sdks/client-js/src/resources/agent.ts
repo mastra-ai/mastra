@@ -68,7 +68,14 @@ async function executeToolCallAndRespond({
 
       if (clientTool && clientTool.execute) {
         const result = await clientTool.execute(
-          { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
+          {
+            context: toolCall?.args,
+            runId,
+            resourceId,
+            threadId,
+            runtimeContext: runtimeContext as RuntimeContext,
+            tracingContext: { currentSpan: undefined },
+          },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
             toolCallId: toolCall?.toolCallId,
@@ -204,6 +211,31 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodType | undefined = undefined,
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
+    console.warn(
+      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 16th. Please use generateLegacy if you don't want to upgrade just yet.",
+    );
+    // @ts-expect-error - generic type issues
+    return this.generateLegacy(params);
+  }
+
+  /**
+   * Generates a response from the agent
+   * @param params - Generation parameters including prompt
+   * @returns Promise containing the generated response
+   */
+  async generateLegacy(
+    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateReturn<any, undefined, undefined>>;
+  async generateLegacy<Output extends JSONSchema7 | ZodType>(
+    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
+  ): Promise<GenerateReturn<any, Output, undefined>>;
+  async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
+    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
+  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
+  async generateLegacy<
+    Output extends JSONSchema7 | ZodType | undefined = undefined,
+    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -215,7 +247,7 @@ export class Agent extends BaseResource {
     const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
-      `/api/agents/${this.agentId}/generate`,
+      `/api/agents/${this.agentId}/generate-legacy`,
       {
         method: 'POST',
         body: processedParams,
@@ -239,7 +271,14 @@ export class Agent extends BaseResource {
 
         if (clientTool && clientTool.execute) {
           const result = await clientTool.execute(
-            { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
+            {
+              context: toolCall?.args,
+              runId,
+              resourceId,
+              threadId,
+              runtimeContext: runtimeContext as RuntimeContext,
+              tracingContext: { currentSpan: undefined },
+            },
             {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
@@ -662,6 +701,24 @@ export class Agent extends BaseResource {
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
   async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
+    params: StreamParams<T>,
+  ): Promise<
+    Response & {
+      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+    }
+  > {
+    console.warn(
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 16th. Please use streamLegacy if you don't want to upgrade just yet.",
+    );
+    return this.streamLegacy(params);
+  }
+
+  /**
+   * Streams a response from the agent
+   * @param params - Stream parameters including prompt
+   * @returns Promise containing the enhanced Response object with processDataStream method
+   */
+  async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
     params: StreamParams<T>,
   ): Promise<
     Response & {
@@ -1105,6 +1162,8 @@ export class Agent extends BaseResource {
                     resourceId: processedParams.resourceId,
                     threadId: processedParams.threadId,
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                    // TODO: Pass proper tracing context when client-js supports tracing
+                    tracingContext: { currentSpan: undefined },
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
@@ -1245,7 +1304,7 @@ export class Agent extends BaseResource {
   private async processStreamResponse(processedParams: any, writable: WritableStream<Uint8Array>) {
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/api/agents/${this.agentId}/stream`, {
+    } = await this.request(`/api/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1303,6 +1362,8 @@ export class Agent extends BaseResource {
                     resourceId: processedParams.resourceId,
                     threadId: processedParams.threadId,
                     runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                    // TODO: Pass proper tracing context when client-js supports tracing
+                    tracingContext: { currentSpan: undefined },
                   },
                   {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,

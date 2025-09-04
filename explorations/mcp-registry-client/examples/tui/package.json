@@ -1,7 +1,7 @@
 {
 	"name": "tui",
 	"version": "0.0.0",
-	"license": "MIT",
+	"license": "Apache-2.0",
 	"bin": "dist/cli.js",
 	"type": "module",
 	"engines": {
