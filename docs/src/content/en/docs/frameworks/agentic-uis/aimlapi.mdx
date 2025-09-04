@@ -1,0 +1,110 @@
+---
+title: "Using with AIMLAPI"
+description: "Learn how to integrate AIMLAPI with Mastra"
+---
+
+import { Steps } from 'nextra/components'
+
+# Use AIMLAPI with Mastra
+
+Integrate AIMLAPI with Mastra to access 300+ AI models with enterprise-grade rate limits and uptime.
+
+<Steps>
+  ## Initialize a Mastra Project
+
+  The simplest way to get started with Mastra is to use the `mastra` CLI to initialize a new project:
+
+  ```bash copy
+  npx create-mastra@latest
+  ```
+
+  You'll be guided through prompts to set up your project. For this example, select:
+  - Name your project: my-mastra-aimlapi-app
+  - Components: Agents (recommended)
+  - For default provider, select OpenAI (recommended) - we'll configure AIMLAPI manually later
+  - Optionally include example code
+
+  ## Configure AIMLAPI
+
+  After creating your project with `create-mastra`, you'll find a `.env` file in your project root.
+  Since we selected OpenAI during setup, we'll configure AIMLAPI manually:
+
+  ```bash filename=".env" copy
+  AIMLAPI_API_KEY=
+  ```
+
+  We remove the `@ai-sdk/openai` package from the project:
+
+  ```bash copy
+  npm uninstall @ai-sdk/openai
+  ```
+
+  Then, we install the **`@ai-ml.api/aimlapi-vercel-ai`** package, which provides the same interface but routes requests through **AI/ML API**.
+  We explicitly add the flag **`--legacy-peer-deps`** to bypass potential peer-dependency conflicts in the Vercel AI SDK ecosystem (common with mixed versions of `@ai-sdk/*` packages):
+
+  ```bash copy
+  npm install @ai-ml.api/aimlapi-vercel-ai --legacy-peer-deps
+  ```
+
+  ## Configure your Agent to use AIMLAPI
+
+  We will now configure our agent to use AIMLAPI.
+
+  ```typescript filename="src/mastra/agents/assistant.ts" copy showLineNumbers {4}
+  import {Agent} from "@mastra/core/agent";
+  import {aimlapi} from "@ai-ml.api/aimlapi-vercel-ai";
+
+  export const assistant = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: aimlapi("gpt-4o"),
+})
+  ```
+
+  Make sure to register your agent to the Mastra instance:
+
+  ```typescript filename="src/mastra/index.ts" copy showLineNumbers {4}
+  import {assistant} from "./agents/assistant";
+
+  export const mastra = new Mastra({
+  agents: {assistant}
+})
+  ```
+
+  ## Run and Test your Agent
+
+  ```bash copy
+  npm run dev
+  ```
+
+  This will start the Mastra development server.
+
+  You can now test your agent by visiting [http://localhost:4111](http://localhost:4111) for the playground or via the
+  Mastra API
+  at [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream).
+
+</Steps>
+
+## Advanced Configuration
+
+For more control over your AIMLAPI requests, you can pass additional configuration options.
+
+### Provider-wide options:
+
+You can pass provider-wide options to the AIMLAPI provider:
+
+```typescript filename="src/mastra/agents/assistant.ts" {6-9} copy showLineNumbers
+import { Agent } from '@mastra/core/agent';
+import { createAIMLAPI } from '@ai-ml.api/aimlapi-vercel-ai';
+
+export const weatherAgent = new Agent({
+    name: 'assistant',
+    instructions: 'You are a helpful assistant.',
+    model: createAIMLAPI({
+        apiKey: process.env.AIMLAPI_API_KEY,
+        baseURL: 'https://api.aimlapi.com/v1',
+        headers: { 'X-Title': 'mastra' },
+    })('gpt-4o'),
+});
+
+```
