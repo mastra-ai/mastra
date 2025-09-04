@@ -1349,6 +1349,7 @@ export class Agent<
     runtimeContext,
     methodType,
     tracingContext,
+    format,
   }: {
     runId?: string;
     threadId?: string;
@@ -1422,7 +1423,7 @@ export class Agent<
                 const streamResult = run.streamVNext({
                   inputData: context,
                   runtimeContext,
-                  //format,
+                  format,
                 });
 
                 if (writer) {

@@ -17,7 +17,7 @@ import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { EMITTER_SYMBOL } from './constants';
+import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -161,7 +161,14 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
+      execute: async ({
+        inputData,
+        [EMITTER_SYMBOL]: emitter,
+        [STREAM_FORMAT_SYMBOL]: streamFormat,
+        runtimeContext,
+        abortSignal,
+        abort,
+      }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -181,21 +188,37 @@ export function createStep<
           payload: toolData,
         });
         // TODO: add support for format, if format is undefined use stream, else streamVNext
-        const { fullStream } = await params.stream(inputData.prompt, {
-          // resourceId: inputData.resourceId,
-          // threadId: inputData.threadId,
-          runtimeContext,
-          onFinish: result => {
-            streamPromise.resolve(result.text);
-          },
-          abortSignal,
-        });
+        let stream: ReadableStream<any>;
+
+        if (streamFormat === 'aisdk') {
+          const { fullStream } = await params.stream(inputData.prompt, {
+            // resourceId: inputData.resourceId,
+            // threadId: inputData.threadId,
+            runtimeContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            abortSignal,
+          });
+
+          stream = fullStream as any;
+        } else {
+          const modelOutput = await params.streamVNext(inputData.prompt, {
+            runtimeContext,
+            onFinish: result => {
+              streamPromise.resolve(result.text);
+            },
+            // abortSignal,
+          });
+
+          stream = modelOutput.fullStream;
+        }
 
         if (abortSignal.aborted) {
           return abort();
         }
 
-        for await (const chunk of fullStream) {
+        for await (const chunk of stream) {
           await emitter.emit('watch-v2', chunk);
         }
 
@@ -1283,21 +1306,18 @@ export class Run<
     this.emitter.emit(`user-event-${event}`, data);
   }
 
-  /**
-   * Starts the workflow execution with the provided input
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  async start({
+  protected async _start({
     inputData,
     runtimeContext,
     writableStream,
     tracingContext,
+    format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
+    format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1325,6 +1345,7 @@ export class Run<
       abortController: this.abortController,
       writableStream,
       tracingContext,
+      format,
     });
 
     if (result.status !== 'suspended') {
@@ -1332,6 +1353,25 @@ export class Run<
     }
 
     return result;
+  }
+
+  /**
+   * Starts the workflow execution with the provided input
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  async start({
+    inputData,
+    runtimeContext,
+    writableStream,
+    tracingContext,
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
+    tracingContext?: TracingContext;
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
+    return this._start({ inputData, runtimeContext, writableStream, tracingContext, format: 'aisdk' });
   }
 
   /**
@@ -1405,7 +1445,7 @@ export class Run<
       type: 'workflow-start',
       payload: { runId: this.runId },
     });
-    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+    this.executionResults = this._start({ inputData, runtimeContext, format: 'aisdk' }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
@@ -1434,7 +1474,11 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  streamVNext({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}) {
+  streamVNext({
+    inputData,
+    runtimeContext,
+    format,
+  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext; format?: 'aisdk' | 'mastra' | undefined } = {}) {
     this.closeStreamAction = async () => {};
 
     return new MastraWorkflowStream({
@@ -1494,13 +1538,15 @@ export class Run<
           }
         };
 
-        const executionResults = this.start({ inputData, runtimeContext, writableStream: writable }).then(result => {
-          if (result.status !== 'suspended') {
-            this.closeStreamAction?.().catch(() => {});
-          }
+        const executionResults = this._start({ inputData, runtimeContext, writableStream: writable, format }).then(
+          result => {
+            if (result.status !== 'suspended') {
+              this.closeStreamAction?.().catch(() => {});
+            }
 
-          return result;
-        });
+            return result;
+          },
+        );
         this.executionResults = executionResults;
 
         return readable;
