@@ -4,15 +4,26 @@ import { useState } from 'react';
 
 interface PdfEntryProps {
   data: string;
+  url?: string;
 }
 
-export const PdfEntry = ({ data }: PdfEntryProps) => {
+const ctaClassName = 'h-full w-full flex items-center justify-center';
+
+export const PdfEntry = ({ data, url }: PdfEntryProps) => {
   const [open, setOpen] = useState(false);
+
+  if (url) {
+    return (
+      <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener">
+        <FileText className="text-accent2" aria-label="View PDF" />
+      </a>
+    );
+  }
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="h-full w-full flex items-center justify-center" type="button">
-        <FileText className="text-accent2" />
+      <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
+        <FileText className="text-accent2" aria-label="View PDF" />
       </button>
 
       <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} />
@@ -48,7 +59,7 @@ export const ImageEntry = ({ src }: ImageEntryProps) => {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} type="button" className="h-full w-full flex items-center justify-center">
+      <button onClick={() => setOpen(true)} type="button" className={ctaClassName}>
         <img src={src} className="object-cover aspect-ratio max-h-[140px] max-w-[320px]" alt="Preview" />
       </button>
       <ImagePreviewDialog src={src} open={open} onOpenChange={setOpen} />
@@ -88,7 +99,7 @@ export const TxtEntry = ({ data }: TxtEntryProps) => {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="h-full w-full flex items-center justify-center" type="button">
+      <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
         <FileText className="text-icon3" />
       </button>
       <TxtPreviewDialog data={formattedContent} open={open} onOpenChange={setOpen} />

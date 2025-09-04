@@ -45,4 +45,5 @@ export type ModelLoopStreamArgs<
   tracingContext: TracingContext;
   resourceId?: string;
   threadId?: string;
+  returnScorerData?: boolean;
 } & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;

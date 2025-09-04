@@ -13,12 +13,13 @@ import { Button } from '@/components/ui/button';
 
 import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachments/attachment';
+import { AttachFileDialog } from './attachments/attach-file-dialog';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallMessagePartComponent;
@@ -165,13 +166,21 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
 };
 
 const ComposerAction = () => {
+  const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
+
   return (
     <>
-      <ComposerPrimitive.AddAttachment asChild>
-        <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
-          <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
-        </TooltipIconButton>
-      </ComposerPrimitive.AddAttachment>
+      <TooltipIconButton
+        type="button"
+        tooltip="Add attachment"
+        variant="ghost"
+        className="rounded-full"
+        onClick={() => setIsAddAttachmentDialogOpen(true)}
+      >
+        <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+      </TooltipIconButton>
+
+      <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>
