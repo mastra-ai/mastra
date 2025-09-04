@@ -14,11 +14,11 @@ import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient,
 
 export interface LangfuseExporterConfig {
   /** Langfuse API key */
-  publicKey: string;
+  publicKey?: string;
   /** Langfuse secret key */
-  secretKey: string;
+  secretKey?: string;
   /** Langfuse host URL */
-  baseUrl: string;
+  baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
   /** Logger level for diagnostic messages (default: 'warn') */
@@ -45,6 +45,17 @@ export class LangfuseExporter implements AITracingExporter {
   constructor(config: LangfuseExporterConfig) {
     this.realtime = config.realtime ?? false;
     this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+
+    if (!config.publicKey || !config.secretKey) {
+      this.logger.error('LangfuseExporter: Missing required credentials, exporter will be disabled', {
+        hasPublicKey: !!config.publicKey,
+        hasSecretKey: !!config.secretKey,
+      });
+      // Create a no-op client to prevent runtime errors
+      this.client = null as any;
+      return;
+    }
+
     this.client = new Langfuse({
       publicKey: config.publicKey,
       secretKey: config.secretKey,
@@ -54,6 +65,11 @@ export class LangfuseExporter implements AITracingExporter {
   }
 
   async exportEvent(event: AITracingEvent): Promise<void> {
+    if (!this.client) {
+      // Exporter is disabled due to missing credentials
+      return;
+    }
+
     if (event.span.isEvent) {
       await this.handleEventSpan(event.span);
       return;
@@ -118,7 +134,6 @@ export class LangfuseExporter implements AITracingExporter {
         spanType: span.type,
         isRootSpan: span.isRootSpan,
         parentSpanId: span.parent?.id,
-        availableSpanIds: Array.from(traceData.spans.keys()),
         method,
       });
       return;
@@ -285,7 +300,9 @@ export class LangfuseExporter implements AITracingExporter {
   }
 
   async shutdown(): Promise<void> {
-    await this.client.shutdownAsync();
+    if (this.client) {
+      await this.client.shutdownAsync();
+    }
     this.traceMap.clear();
   }
 }

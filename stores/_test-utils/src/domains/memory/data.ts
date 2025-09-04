@@ -61,7 +61,7 @@ export const createSampleMessageV1 = ({
     role: getRole(),
     type: 'text',
     threadId,
-    content: [{ type: 'text', text: content }],
+    content,
     createdAt,
     resourceId,
   }) satisfies MastraMessageV1;

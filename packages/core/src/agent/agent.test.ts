@@ -5763,6 +5763,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           stream = await agentWithStreamAbort.stream('Stream abort test');
         } else {
           stream = await agentWithStreamAbort.streamVNext('Stream abort test');
+
+          for await (const chunk of stream.fullStream) {
+            expect(chunk.type).toBe('tripwire');
+            expect(chunk.payload.tripwireReason).toBe('Stream aborted');
+          }
         }
 
         expect(stream.tripwire).toBe(true);
@@ -6351,6 +6356,74 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     }
   }, 10000);
 
+  describe('scorer output data', () => {
+    it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green', {
+          returnScorerData: true,
+        });
+      } else {
+        result = await agent.generateVNext('Make it green', {
+          returnScorerData: true,
+        });
+      }
+
+      expect(result.scoringData).toBeDefined();
+      expect(result.scoringData.input).toMatchObject({
+        inputMessages: expect.any(Array),
+        rememberedMessages: expect.any(Array),
+        systemMessages: expect.any(Array),
+        taggedSystemMessages: expect.any(Object),
+      });
+      expect(result.scoringData.output).toBeInstanceOf(Array);
+    });
+
+    it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green', {
+          returnScorerData: false,
+        });
+      } else {
+        result = await agent.generateVNext('Make it green', {
+          returnScorerData: false,
+        });
+      }
+
+      expect(result.scoringData).toBeUndefined();
+    });
+
+    it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green');
+      } else {
+        result = await agent.generateVNext('Make it green');
+      }
+
+      expect(result.scoringData).toBeUndefined();
+    });
+  });
+
   describe('scorer override functionality', () => {
     let agent: Agent;
     let mastra: Mastra;
@@ -6515,7 +6588,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         input: expect.any(Object),
         output: expect.any(Object),
         runtimeContext: expect.any(Object),
-        tracingContext: expect.any(Object),
         entity: expect.objectContaining({
           id: 'Test Agent',
           name: 'Test Agent',
@@ -6526,6 +6598,160 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         threadId: undefined,
         resourceId: undefined,
       });
+    });
+  });
+
+  describe('defaultStreamOptions onFinish callback bug', () => {
+    it(`${version} - should call onFinish from defaultStreamOptions when no options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish',
+        name: 'Test Default onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream without passing any options - should use defaultStreamOptions
+      const result = version === 'v1' ? await agent.stream('How are you?') : await agent.streamVNext('How are you?');
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should call onFinish from defaultStreamOptions when empty options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish-empty',
+        name: 'Test Default onFinish Empty',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream with empty options - should still use defaultStreamOptions
+      const result =
+        version === 'v1' ? await agent.stream('How are you?', {}) : await agent.streamVNext('How are you?', {});
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should prioritize passed onFinish over defaultStreamOptions onFinish`, async () => {
+      let defaultOnFinishCalled = false;
+      let passedOnFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-override-onfinish',
+        name: 'Test Override onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }),
+      });
+
+      // Call stream with explicit onFinish - should override defaultStreamOptions
+      const result =
+        version === 'v1'
+          ? await agent.stream('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            })
+          : await agent.streamVNext('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            });
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(defaultOnFinishCalled).toBe(false);
+      expect(passedOnFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
     });
   });
 }

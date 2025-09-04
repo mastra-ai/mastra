@@ -1,5 +1,13 @@
 # @mastra/auth-clerk
 
+## 0.10.4
+
+### Patch Changes
+
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- Updated dependencies [de3cbc6]
+  - @mastra/auth@0.1.3
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes

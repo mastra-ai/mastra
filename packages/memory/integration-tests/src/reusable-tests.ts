@@ -617,12 +617,7 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           role: 'assistant',
           type: 'text',
         });
-        const content2 = result.messages[1].content[0];
-        if (typeof content2 === 'object' && content2 !== null && 'type' in content2 && content2.type === 'text') {
-          expect(content2).toEqual(assistantPart);
-        } else {
-          expect(content2).toEqual('Goodbye');
-        }
+        expect(result.messages[1].content).toEqual(`Goodbye`);
       });
 
       it('should handle complex message content', async () => {

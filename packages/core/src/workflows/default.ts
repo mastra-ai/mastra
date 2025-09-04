@@ -11,7 +11,7 @@ import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
-import { EMITTER_SYMBOL } from './constants';
+import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -36,6 +36,7 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
+  format?: 'aisdk' | 'mastra' | undefined;
 };
 
 /**
@@ -200,6 +201,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext?: TracingContext;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
+    format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput> {
     const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, tracingContext, disableScorers } =
       params;
@@ -263,6 +265,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
+            format: params.format,
           },
           tracingContext: {
             currentSpan: workflowAISpan,
@@ -424,6 +427,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    executionContext,
     writableStream,
     tracingContext,
   }: {
@@ -496,6 +500,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController?.abort();
         },
         [EMITTER_SYMBOL]: emitter,
+        [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: {},
         abortSignal: abortController?.signal,
         writer: new ToolStream(
@@ -534,6 +539,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    executionContext,
     writableStream,
     tracingContext,
   }: {
@@ -607,6 +613,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController?.abort();
         },
         [EMITTER_SYMBOL]: emitter,
+        [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: {},
         abortSignal: abortController?.signal,
         writer: new ToolStream(
@@ -875,6 +882,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 }
               : undefined,
           [EMITTER_SYMBOL]: emitter,
+          [STREAM_FORMAT_SYMBOL]: executionContext.format,
           engine: {},
           abortSignal: abortController?.signal,
           writer: new ToolStream(
@@ -899,7 +907,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowId,
             stepId: step.id,
             runtimeContext,
-            tracingContext: innerTracingContext,
             disableScorers,
           });
         }
@@ -1016,7 +1023,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId,
     stepId,
     runtimeContext,
-    tracingContext,
     disableScorers,
   }: {
     scorers: DynamicArgument<MastraScorers>;
@@ -1024,7 +1030,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     input: any;
     output: any;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
     workflowId: string;
     stepId: string;
     disableScorers?: boolean;
@@ -1062,7 +1067,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           input: [input],
           output: output,
           runtimeContext,
-          tracingContext,
           entity: {
             id: workflowId,
             stepId: stepId,
@@ -1284,6 +1288,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 abortController?.abort();
               },
               [EMITTER_SYMBOL]: emitter,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
               engine: {},
               abortSignal: abortController?.signal,
               writer: new ToolStream(
@@ -1567,6 +1572,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController?.abort();
         },
         [EMITTER_SYMBOL]: emitter,
+        [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: {},
         abortSignal: abortController?.signal,
         writer: new ToolStream(

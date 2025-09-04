@@ -458,6 +458,9 @@ To enable AI SDK v5 compatibility, use the `@mastra/ai-sdk` package:
 </Tabs>
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from '@mastra/core/mastra';
+import { chatRoute } from '@mastra/ai-sdk';
+
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
@@ -475,7 +478,7 @@ In your application call the `useChat()` hook.
 const { error, status, sendMessage, messages, regenerate, stop } =
   useChat({
     transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/api/chat',
+      api: 'http://localhost:4111/chat',
     }),
   });
 ```
