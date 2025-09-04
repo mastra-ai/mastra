@@ -148,12 +148,5 @@ export function getImageCacheKey(image: ImageContent): string | number {
     return image.byteLength;
   }
 
-  if (globalThis.Buffer && Buffer.isBuffer(image)) {
-    return (image as Buffer).byteLength;
-  }
-
-  // For unknown types, use a consistent placeholder
-  // This avoids expensive JSON.stringify and provides predictable behavior
-  console.warn('Unknown image type for cache key generation:', typeof image);
-  return 0;
+  return image;
 }
