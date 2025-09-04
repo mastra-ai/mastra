@@ -154,7 +154,7 @@ jobs:
           registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
-        run: npm install globby
+        run: npm install globby --no-package-lock
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
@@ -178,7 +178,7 @@ jobs:
           registry-url: 'https://registry.yarnpkg.com'
 
       - name: Install dependencies
-        run: npm install semver
+        run: npm install semver --no-package-lock
 
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs
