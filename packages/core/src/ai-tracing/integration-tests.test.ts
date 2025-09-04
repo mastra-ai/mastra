@@ -1,4 +1,4 @@
-import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+gitimport { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -995,51 +995,54 @@ describe('AI Tracing Integration Tests', () => {
     testExporter.finalExpectations();
   });
 
-  describe.each(agentMethods)('should trace agent with multiple tools using $name', ({ name, method, model }) => {
-    it(`should trace spans correctly`, async () => {
-      const testAgent = new Agent({
-        name: 'Test Agent',
-        instructions: 'You are a test agent',
-        model,
-        tools: {
-          calculator: calculatorTool,
-          apiCall: apiTool,
-          workflowExecutor: workflowExecutorTool,
-        },
+  describe.each(agentMethods)(
+    'should trace agent with multiple tools using $name',
+    ({ name, method, model, expectedText }) => {
+      it(`should trace spans correctly`, async () => {
+        const testAgent = new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a test agent',
+          model,
+          tools: {
+            calculator: calculatorTool,
+            apiCall: apiTool,
+            workflowExecutor: workflowExecutorTool,
+          },
+        });
+
+        const testExporter = new TestExporter();
+        const mastra = new Mastra({
+          ...getBaseMastraConfig(testExporter),
+          agents: { testAgent },
+        });
+
+        const agent = mastra.getAgent('testAgent');
+        const result = await method(agent, 'Calculate 5 + 3');
+        expect(result.text).toBeDefined();
+
+        // Validate span types
+        const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
+        const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+        const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
+
+        expect(agentRunSpans.length).toBe(1); // One agent run
+
+        // Different methods have different LLM generation patterns
+        if (name === 'generate' || name === 'generateVNext') {
+          expect(llmGenerationSpans.length).toBeGreaterThanOrEqual(1);
+        } else {
+          // Streaming methods
+          expect(llmGenerationSpans.length).toBeGreaterThanOrEqual(1);
+        }
+
+        expect(toolCallSpans.length).toBeGreaterThanOrEqual(1); // At least one tool call (calculator)
+
+        testExporter.finalExpectations();
       });
+    },
+  );
 
-      const testExporter = new TestExporter();
-      const mastra = new Mastra({
-        ...getBaseMastraConfig(testExporter),
-        agents: { testAgent },
-      });
-
-      const agent = mastra.getAgent('testAgent');
-      const result = await method(agent, 'Calculate 5 + 3');
-      expect(result.text).toBeDefined();
-
-      // Validate span types
-      const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
-      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
-      const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
-
-      expect(agentRunSpans.length).toBe(1); // One agent run
-
-      // Different methods have different LLM generation patterns
-      if (name === 'generate' || name === 'generateVNext') {
-        expect(llmGenerationSpans.length).toBeGreaterThanOrEqual(1);
-      } else {
-        // Streaming methods
-        expect(llmGenerationSpans.length).toBeGreaterThanOrEqual(1);
-      }
-
-      expect(toolCallSpans.length).toBeGreaterThanOrEqual(1); // At least one tool call (calculator)
-
-      testExporter.finalExpectations();
-    });
-  });
-
-  describe.skip.each(agentMethods)('agent launched inside workflow step using $name', ({ method, model }) => {
+  describe.skip.each(agentMethods)('agent launched inside workflow step using $name', ({ name, method, model }) => {
     it(`should trace spans correctly`, async () => {
       const testAgent = new Agent({
         name: 'Test Agent',
