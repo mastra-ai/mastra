@@ -1,5 +1,17 @@
 # @mastra/memory
 
+## 0.14.4-alpha.0
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- 38020d5: Fix memory pagination not working when using query() method
+
+  The Memory.query() method was ignoring pagination parameters in the selectBy option, always returning all messages instead of the requested page. This fix ensures pagination works correctly by using storage.getMessagesPaginated() when pagination is requested, while maintaining backward compatibility with storage.getMessages() for non-paginated queries.
+
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
 ## 0.14.3
 
 ### Patch Changes

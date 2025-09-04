@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.16.0-alpha.1
+
+### Patch Changes
+
+- 8fbf79e: Fix this to be not set when workflow is a step
+
 ## 0.16.0-alpha.0
 
 ### Minor Changes

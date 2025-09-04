@@ -1,5 +1,13 @@
 # @mastra/astra
 
+## 0.11.8-alpha.0
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
 ## 0.11.7
 
 ### Patch Changes

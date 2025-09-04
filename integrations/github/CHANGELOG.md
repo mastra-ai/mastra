@@ -1,5 +1,13 @@
 # @mastra/github
 
+## 1.2.12-alpha.0
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
 ## 1.2.11
 
 ### Patch Changes

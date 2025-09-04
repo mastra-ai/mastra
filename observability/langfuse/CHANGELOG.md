@@ -1,5 +1,13 @@
 # @mastra/langfuse
 
+## 0.0.6-alpha.1
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
 ## 0.0.6-alpha.0
 
 ### Patch Changes

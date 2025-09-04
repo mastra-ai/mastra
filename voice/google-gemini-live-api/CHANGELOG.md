@@ -1,5 +1,13 @@
 # @mastra/voice-google-gemini-live
 
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
 ## 0.10.9
 
 ### Patch Changes

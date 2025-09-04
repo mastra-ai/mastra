@@ -1,5 +1,18 @@
 # @mastra/deployer
 
+## 0.16.0-alpha.1
+
+### Minor Changes
+
+- 376913a: Update peerdeps of @mastra/core
+
+### Patch Changes
+
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/server@0.16.0-alpha.1
+
 ## 0.16.0-alpha.0
 
 ### Patch Changes

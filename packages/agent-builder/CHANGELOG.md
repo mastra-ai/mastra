@@ -1,5 +1,16 @@
 # @mastra/agent-builder
 
+## 0.0.2-alpha.1
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+- Updated dependencies [38020d5]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/memory@0.14.4-alpha.0
+
 ## 0.0.2-alpha.0
 
 ### Patch Changes

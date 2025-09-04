@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 6.1.0-alpha.1
+
+### Minor Changes
+
+- 376913a: Update peerdeps of @mastra/core
+
+### Patch Changes
+
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/client-js@0.12.0-alpha.1
+
 ## 6.1.0-alpha.0
 
 ### Minor Changes

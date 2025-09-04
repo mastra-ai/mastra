@@ -1,5 +1,15 @@
 # @mastra/deployer-vercel
 
+## 0.11.20-alpha.1
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/deployer@0.16.0-alpha.1
+
 ## 0.11.20-alpha.0
 
 ### Patch Changes

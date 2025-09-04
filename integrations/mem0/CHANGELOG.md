@@ -1,5 +1,13 @@
 # @mastra/mem0
 
+## 0.1.12-alpha.0
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
 ## 0.1.11
 
 ### Patch Changes

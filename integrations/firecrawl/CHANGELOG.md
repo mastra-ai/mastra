@@ -1,5 +1,15 @@
 # @mastra/firecrawl
 
+## 1.2.18-alpha.0
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/rag@1.2.4-alpha.0
+
 ## 1.2.17
 
 ### Patch Changes

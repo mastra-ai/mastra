@@ -1,5 +1,17 @@
 # @mastra/deployer-cloud
 
+## 0.16.0-alpha.1
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+- Updated dependencies [376913a]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/loggers@0.10.11-alpha.0
+  - @mastra/deployer@0.16.0-alpha.1
+
 ## 0.16.0-alpha.0
 
 ### Patch Changes

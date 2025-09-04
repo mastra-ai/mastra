@@ -1,5 +1,16 @@
 # @mastra/inngest
 
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- 376913a: Update peerdeps of @mastra/core
+
+### Patch Changes
+
+- Updated dependencies [8fbf79e]
+  - @mastra/core@0.16.0-alpha.1
+
 ## 0.12.4-alpha.0
 
 ### Patch Changes

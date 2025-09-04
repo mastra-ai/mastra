@@ -1,5 +1,18 @@
 # @mastra/memory-integration-tests-v5
 
+## 0.1.7-alpha.1
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+- Updated dependencies [376913a]
+- Updated dependencies [38020d5]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/memory@0.14.4-alpha.0
+  - @mastra/libsql@0.14.0-alpha.1
+
 ## 0.1.7-alpha.0
 
 ### Patch Changes
