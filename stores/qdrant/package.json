@@ -1,6 +1,6 @@
 {
   "name": "@mastra/qdrant",
-  "version": "0.11.9-alpha.0",
+  "version": "0.11.9",
   "description": "Qdrant vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -41,7 +41,7 @@
     "@internal/storage-test-utils": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0"
   },
   "files": [
     "dist",

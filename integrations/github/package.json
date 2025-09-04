@@ -1,6 +1,6 @@
 {
   "name": "@mastra/github",
-  "version": "1.2.11-alpha.1",
+  "version": "1.2.11",
   "description": "",
   "main": "dist/index.js",
   "type": "module",
@@ -59,7 +59,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

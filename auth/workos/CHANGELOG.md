@@ -1,5 +1,14 @@
 # @mastra/auth-workos
 
+## 0.10.5
+
+### Patch Changes
+
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- cb9aa8c: Cookie vuln
+- Updated dependencies [de3cbc6]
+  - @mastra/auth@0.1.3
+
 ## 0.10.5-alpha.1
 
 ### Patch Changes

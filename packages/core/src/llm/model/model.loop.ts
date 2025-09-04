@@ -133,6 +133,7 @@ export class MastraLLMVNext extends MastraBase {
     output,
     options,
     outputProcessors,
+    returnScorerData,
     providerOptions,
     tracingContext,
     // ...rest
@@ -194,6 +195,7 @@ export class MastraLLMVNext extends MastraBase {
         },
         output,
         outputProcessors,
+        returnScorerData,
         llmAISpan,
         options: {
           ...options,
