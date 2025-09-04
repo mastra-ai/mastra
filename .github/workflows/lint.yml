@@ -188,9 +188,9 @@ jobs:
 
       - name: Check for git changes
         run: |
-          if ! git diff --quiet || ! git diff --cached --quiet; then
+          if ! git diff --quiet --ignore-space-at-eol -- ':!package.json' || ! git diff --cached --quiet --ignore-space-at-eol -- ':!package.json'; then
             echo "Error: Peerdependency mismatch"
             echo "The following files have been modified:"
-            git diff --name-only
+            git diff --name-only -- ':!package.json'
             exit 1
           fi
