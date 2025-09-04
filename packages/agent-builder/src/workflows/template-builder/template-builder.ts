@@ -210,8 +210,9 @@ Return the actual exported names of the units, as well as the file names.`,
         },
       });
 
-      const result = await agent.generate(
-        `Analyze the Mastra project directory structure at "${templateDir}".
+      const isV2 = model.specificationVersion === 'v2';
+
+      const prompt = `Analyze the Mastra project directory structure at "${templateDir}".
 
             List directory contents using listDirectory tool, and then analyze each file with readFile tool.
       IMPORTANT:
@@ -220,19 +221,26 @@ Return the actual exported names of the units, as well as the file names.`,
       - Return the actual exported variable names, as well as the file names
       - If a directory doesn't exist or has no files, return an empty array
 
-      Return the analysis in the exact format specified in the output schema.`,
-        {
-          experimental_output: z.object({
-            agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          }),
-          maxSteps: 100,
-        },
-      );
+      Return the analysis in the exact format specified in the output schema.`;
+
+      const output = z.object({
+        agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+      });
+
+      const result = isV2
+        ? await agent.generateVNext(prompt, {
+            output,
+            maxSteps: 100,
+          })
+        : await agent.generate(prompt, {
+            experimental_output: output,
+            maxSteps: 100,
+          });
 
       const template = result.object ?? {};
 
@@ -1107,8 +1115,7 @@ Template information:
       // Log git state before merge operations
       await logGitState(targetPath, 'before intelligent merge');
 
-      // Process tasks systematically
-      const result = await agentBuilder.stream(`
+      const prompt = `
 You need to work through a task list to complete the template integration.
 
 CRITICAL INSTRUCTIONS:
@@ -1150,7 +1157,11 @@ For each task:
 - DO NOT perform validation - that's handled by the dedicated validation step
 
 Start by listing your tasks and work through them systematically!
-`);
+`;
+
+      // Process tasks systematically
+      const isV2 = model.specificationVersion === 'v2';
+      const result = isV2 ? await agentBuilder.streamVNext(prompt) : await agentBuilder.stream(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{
@@ -1163,29 +1174,33 @@ Start by listing your tasks and work through them systematically!
 
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+          const chunkData = 'payload' in chunk ? chunk.payload : chunk;
           console.log({
             type: chunk.type,
-            msgId: chunk.messageId,
+            msgId: chunkData.messageId,
           });
         } else {
           console.log(JSON.stringify(chunk, null, 2));
 
           // Extract task management tool results
-          if (chunk.type === 'tool-result' && chunk.toolName === 'manageTaskList') {
-            try {
-              const toolResult = chunk.result;
-              if (toolResult.action === 'update' && toolResult.status === 'completed') {
-                actualResolutions.push({
-                  taskId: toolResult.taskId || '',
-                  action: toolResult.action,
-                  status: toolResult.status,
-                  content: toolResult.content || '',
-                  notes: toolResult.notes,
-                });
-                console.log(`📋 Task completed: ${toolResult.taskId} - ${toolResult.content}`);
+          if (chunk.type === 'tool-result') {
+            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
+            if (chunkData.toolName === 'manageTaskList') {
+              try {
+                const toolResult = chunkData.result;
+                if (toolResult.action === 'update' && toolResult.status === 'completed') {
+                  actualResolutions.push({
+                    taskId: toolResult.taskId || '',
+                    action: toolResult.action,
+                    status: toolResult.status,
+                    content: toolResult.content || '',
+                    notes: toolResult.notes,
+                  });
+                  console.log(`📋 Task completed: ${toolResult.taskId} - ${toolResult.content}`);
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse task management result:', parseError);
               }
-            } catch (parseError) {
-              console.warn('Failed to parse task management result:', parseError);
             }
           }
         }
@@ -1420,9 +1435,15 @@ Start by running validateCode with all validation types to get a complete pictur
 
 Previous iterations may have fixed some issues, so start by re-running validateCode to see the current state, then fix any remaining issues.`;
 
-        const result = await validationAgent.stream(iterationPrompt, {
-          experimental_output: z.object({ success: z.boolean() }),
-        });
+        const isV2 = model.specificationVersion === 'v2';
+        const output = z.object({ success: z.boolean() });
+        const result = isV2
+          ? await validationAgent.streamVNext(iterationPrompt, {
+              output,
+            })
+          : await validationAgent.stream(iterationPrompt, {
+              experimental_output: output,
+            });
 
         let iterationErrors = 0;
         let previousErrors = validationResults.remainingErrors;
@@ -1430,9 +1451,10 @@ Previous iterations may have fixed some issues, so start by re-running validateC
 
         for await (const chunk of result.fullStream) {
           if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
             console.log({
               type: chunk.type,
-              msgId: chunk.messageId,
+              msgId: chunkData.messageId,
               iteration: currentIteration,
             });
           } else {
@@ -1440,8 +1462,9 @@ Previous iterations may have fixed some issues, so start by re-running validateC
           }
           if (chunk.type === 'tool-result') {
             // Track validation results
-            if (chunk.toolName === 'validateCode') {
-              const toolResult = chunk.result as any;
+            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
+            if (chunkData.toolName === 'validateCode') {
+              const toolResult = chunkData.result;
               lastValidationResult = toolResult; // Store the full result
               if (toolResult?.summary) {
                 iterationErrors = toolResult.summary.totalErrors || 0;

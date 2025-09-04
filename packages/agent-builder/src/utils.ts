@@ -588,7 +588,7 @@ export const detectAISDKVersion = async (projectPath: string): Promise<'v1' | 'v
     for (const pkg of providerPackages) {
       const version = allDeps[pkg];
       if (version) {
-        const versionMatch = version.match(/(\d+)\./);
+        const versionMatch = version.match(/(\d+)/);
         if (versionMatch) {
           const majorVersion = parseInt(versionMatch[1]);
           if (majorVersion >= 2) {
