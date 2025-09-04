@@ -58,7 +58,7 @@
     "@babel/preset-typescript": "^7.27.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@tsconfig/recommended": "^1.0.9",
+    "@tsconfig/recommended": "^1.0.10",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.19.0",
     "zod": "^3.25.76",
