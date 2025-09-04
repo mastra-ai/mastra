@@ -526,18 +526,16 @@ export interface GetScorersResponse {
 
 // Template installation types
 export interface TemplateInstallationRequest {
-  inputData: {
-    /** Template repository URL or slug */
-    repo: string;
-    /** Git ref (branch/tag/commit) to install from */
-    ref?: string;
-    /** Template slug for identification */
-    slug?: string;
-    /** Target project path */
-    targetPath?: string;
-    /** Environment variables for template */
-    variables?: Record<string, string>;
-  };
+  /** Template repository URL or slug */
+  repo: string;
+  /** Git ref (branch/tag/commit) to install from */
+  ref?: string;
+  /** Template slug for identification */
+  slug?: string;
+  /** Target project path */
+  targetPath?: string;
+  /** Environment variables for template */
+  variables?: Record<string, string>;
 }
 
 export interface GetAITraceResponse {

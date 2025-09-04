@@ -29,6 +29,8 @@ export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [selectedModelProvider, setSelectedModelProvider] = useState<string>('');
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [variables, setVariables] = useState({});
   const [errors, setErrors] = useState<string[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
@@ -230,6 +232,12 @@ export default function Template() {
     setSelectedProvider(value);
   };
 
+  const handleModelUpdate = async (params: { provider: string; modelId: string }) => {
+    setSelectedModelProvider(params.provider);
+    setSelectedModelId(params.modelId);
+    return { message: 'Model updated successfully' };
+  };
+
   const handleInstallTemplate = async () => {
     const errors = Object.entries(variables).reduce((acc, [key, value]) => {
       if (value === '') {
@@ -276,7 +284,11 @@ export default function Template() {
 
         // Step 2: Start streaming the installation with the runId
         await streamInstall.mutateAsync({
-          params: { inputData: templateParams },
+          inputData: templateParams,
+          selectedModel: {
+            provider: selectedModelProvider,
+            modelId: selectedModelId,
+          },
           runId,
         });
       } catch (err: any) {
@@ -355,6 +367,9 @@ export default function Template() {
                   handleInstallTemplate={handleInstallTemplate}
                   handleVariableChange={handleVariableChange}
                   isLoadingEnvVars={isLoadingEnvVars}
+                  defaultModelProvider={selectedModelProvider}
+                  defaultModelId={selectedModelId}
+                  onModelUpdate={handleModelUpdate}
                 />
               )}
             </>

@@ -240,6 +240,7 @@ export const CloneTemplateResultSchema = z.object({
   slug: z.string(),
   success: z.boolean().optional(),
   error: z.string().optional(),
+  targetPath: z.string().optional(),
 });
 
 // Package analysis schemas and types

@@ -55,7 +55,7 @@ const cloneTemplateStep = createStep({
   inputSchema: AgentBuilderInputSchema,
   outputSchema: CloneTemplateResultSchema,
   execute: async ({ inputData }) => {
-    const { repo, ref = 'main', slug } = inputData;
+    const { repo, ref = 'main', slug, targetPath } = inputData;
 
     if (!repo) {
       throw new Error('Repository URL or path is required');
@@ -90,6 +90,7 @@ const cloneTemplateStep = createStep({
         commitSha: commitSha.trim(),
         slug: inferredSlug,
         success: true,
+        targetPath,
       };
     } catch (error) {
       // Cleanup on error
@@ -103,6 +104,7 @@ const cloneTemplateStep = createStep({
         slug: slug || 'unknown',
         success: false,
         error: `Failed to clone template: ${error instanceof Error ? error.message : String(error)}`,
+        targetPath,
       };
     }
   },
@@ -159,12 +161,17 @@ const discoverUnitsStep = createStep({
   outputSchema: DiscoveryResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     const { templateDir } = inputData;
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
+    console.log('targetPath', targetPath);
+
+    const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+
     try {
       const agent = new Agent({
-        model: resolveModel(runtimeContext, openai('gpt-4.1')),
+        model,
         instructions: `You are an expert at analyzing Mastra projects.
 
 Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
@@ -938,6 +945,8 @@ const intelligentMergeStep = createStep({
     const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
     const targetPath = resolveTargetPath(inputData, runtimeContext);
     try {
+      const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
         id: 'copy-file',
@@ -983,7 +992,7 @@ const intelligentMergeStep = createStep({
       const agentBuilder = new AgentBuilder({
         projectPath: targetPath,
         mode: 'template',
-        model: resolveModel(runtimeContext, openai('gpt-4.1')),
+        model,
         instructions: `
 You are an expert at integrating Mastra template components into existing projects.
 
@@ -1266,6 +1275,8 @@ const validationAndFixStep = createStep({
     let currentIteration = 1; // Declare at function scope for error handling
 
     try {
+      const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+
       const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath, 'template');
 
       const validationAgent = new Agent({
@@ -1374,7 +1385,7 @@ INTEGRATED UNITS:
 ${JSON.stringify(orderedUnits, null, 2)}
 
 Be thorough and methodical. Always use listDirectory to verify actual file existence before fixing imports.`,
-        model: resolveModel(runtimeContext, openai('gpt-4.1')),
+        model,
         tools: {
           validateCode: allTools.validateCode,
           readFile: allTools.readFile,

@@ -4,6 +4,7 @@ import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import { Container } from './shared';
 import Spinner from '@/components/ui/spinner';
+import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
 
 type TemplateFormProps = {
   providerOptions: { value: string; label: string }[];
@@ -16,6 +17,9 @@ type TemplateFormProps = {
   handleInstallTemplate: () => void;
   handleVariableChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isLoadingEnvVars?: boolean;
+  defaultModelProvider?: string;
+  defaultModelId?: string;
+  onModelUpdate?: (params: { provider: string; modelId: string }) => Promise<{ message: string }>;
 };
 
 export function TemplateForm({
@@ -27,6 +31,9 @@ export function TemplateForm({
   handleInstallTemplate,
   handleVariableChange,
   isLoadingEnvVars,
+  defaultModelProvider,
+  defaultModelId,
+  onModelUpdate,
 }: TemplateFormProps) {
   return (
     <Container>
@@ -49,6 +56,22 @@ export function TemplateForm({
 
         {selectedProvider && Object.entries(variables || {}).length > 0 && (
           <>
+            <div className="space-y-[0.5rem]">
+              <h3 className="text-icon3 text-[0.875rem] font-medium">Select AI Model for Template Installation *</h3>
+              <p className="text-icon4 text-[0.75rem]">
+                This model will be used by the workflow to process and install the template
+              </p>
+              <AgentMetadataModelSwitcher
+                defaultProvider={defaultModelProvider || ''}
+                defaultModel={defaultModelId || ''}
+                updateModel={onModelUpdate || (() => Promise.resolve({ message: 'Updated' }))}
+                closeEditor={() => {}} // No need to close in template context
+                modelProviders={['openai', 'anthropic', 'google', 'xai', 'groq']}
+              />
+              {(!defaultModelProvider || !defaultModelId) && (
+                <p className="text-red-500 text-[0.75rem]">Please select an AI model to continue</p>
+              )}
+            </div>
             <h3 className="text-icon3 text-[0.875rem]">Set required Environmental Variables</h3>
             <div className="grid grid-cols-[1fr_1fr] gap-[1rem] items-start">
               {isLoadingEnvVars ? (
@@ -96,7 +119,7 @@ export function TemplateForm({
               '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-icon5',
             )}
             onClick={handleInstallTemplate}
-            disabled={!selectedProvider || errors.length > 0}
+            disabled={!selectedProvider || !defaultModelProvider || !defaultModelId || errors.length > 0}
           >
             Install <ArrowRightIcon />
           </button>

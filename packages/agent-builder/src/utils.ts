@@ -1,11 +1,11 @@
 import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'child_process';
 import type { SpawnOptions } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
-import { copyFile } from 'fs/promises';
+import { copyFile, readFile } from 'fs/promises';
 import { createRequire } from 'module';
-import { dirname, basename, extname, resolve } from 'path';
+import { dirname, basename, extname, resolve, join } from 'path';
 import { promisify } from 'util';
-import { openai as openai_v5 } from '@ai-sdk/openai_v5';
+import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { UNIT_KINDS } from './types';
@@ -411,30 +411,9 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
   return uniqueTargetFile;
 }
 
-// Helper function to resolve the model to use
-export const resolveModel = (
-  runtimeContext: RuntimeContext,
-  defaultModel: MastraLanguageModel = openai_v5('gpt-4.1'),
-): MastraLanguageModel => {
-  const modelFromContext = runtimeContext.get('model');
-  if (modelFromContext) {
-    console.log(`Using model: ${modelFromContext}`);
-    // Type check to ensure it's a MastraLanguageModel
-    if (isValidMastraLanguageModel(modelFromContext)) {
-      return modelFromContext;
-    }
-    throw new Error(
-      'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
-    );
-  }
-  return defaultModel;
-};
-
 // Type guard to check if object is a valid MastraLanguageModel
 export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
-  return (
-    model && typeof model === 'object' && typeof model.modelId === 'string' && typeof model.generate === 'function'
-  );
+  return model && typeof model === 'object' && typeof model.modelId === 'string';
 };
 
 // Helper function to resolve target path with smart defaults
@@ -583,4 +562,164 @@ export const mergeEnvFiles = (
   }
 
   return result.join('\n');
+};
+
+// Helper function to detect AI SDK version from package.json
+export const detectAISDKVersion = async (projectPath: string): Promise<'v1' | 'v2'> => {
+  try {
+    const packageJsonPath = join(projectPath, 'package.json');
+
+    if (!existsSync(packageJsonPath)) {
+      console.log('No package.json found, defaulting to v2');
+      return 'v2';
+    }
+
+    const packageContent = await readFile(packageJsonPath, 'utf-8');
+    const packageJson = JSON.parse(packageContent);
+
+    const allDeps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+      ...packageJson.peerDependencies,
+    };
+
+    // Check individual provider packages for version hints
+    const providerPackages = ['@ai-sdk/openai', '@ai-sdk/anthropic', '@ai-sdk/google', '@ai-sdk/groq', '@ai-sdk/xai'];
+    for (const pkg of providerPackages) {
+      const version = allDeps[pkg];
+      if (version) {
+        const versionMatch = version.match(/(\d+)\./);
+        if (versionMatch) {
+          const majorVersion = parseInt(versionMatch[1]);
+          if (majorVersion >= 2) {
+            console.log(`Detected ${pkg} v${majorVersion} -> using v2 specification`);
+            return 'v2';
+          } else {
+            console.log(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
+            return 'v1';
+          }
+        }
+      }
+    }
+
+    console.log('No AI SDK version detected, defaulting to v2');
+    return 'v2';
+  } catch (error) {
+    console.warn(`Failed to detect AI SDK version: ${error instanceof Error ? error.message : String(error)}`);
+    return 'v2';
+  }
+};
+
+// Helper function to create model instance based on provider and version
+export const createModelInstance = async (
+  provider: string,
+  modelId: string,
+  version: 'v1' | 'v2' = 'v2',
+): Promise<MastraLanguageModel | null> => {
+  try {
+    // Dynamic imports to avoid issues if packages aren't available
+    const providerMap = {
+      v1: {
+        openai: async () => {
+          const { openai } = await import('@ai-sdk/openai');
+          return openai(modelId);
+        },
+        anthropic: async () => {
+          const { anthropic } = await import('@ai-sdk/anthropic');
+          return anthropic(modelId);
+        },
+        groq: async () => {
+          const { groq } = await import('@ai-sdk/groq');
+          return groq(modelId);
+        },
+        xai: async () => {
+          const { xai } = await import('@ai-sdk/xai');
+          return xai(modelId);
+        },
+        google: async () => {
+          const { google } = await import('@ai-sdk/google');
+          return google(modelId);
+        },
+      },
+      v2: {
+        openai: async () => {
+          const { openai } = await import('@ai-sdk/openai-v5');
+          return openai(modelId);
+        },
+        anthropic: async () => {
+          const { anthropic } = await import('@ai-sdk/anthropic-v5');
+          return anthropic(modelId);
+        },
+        groq: async () => {
+          const { groq } = await import('@ai-sdk/groq-v5');
+          return groq(modelId);
+        },
+        xai: async () => {
+          const { xai } = await import('@ai-sdk/xai-v5');
+          return xai(modelId);
+        },
+        google: async () => {
+          const { google } = await import('@ai-sdk/google-v5');
+          return google(modelId);
+        },
+      },
+    };
+
+    const providerFn = providerMap[version][provider as keyof (typeof providerMap)[typeof version]];
+    if (!providerFn) {
+      console.error(`Unsupported provider: ${provider}`);
+      return null;
+    }
+
+    const modelInstance = await providerFn();
+    console.log(`Created ${provider} model instance (${version}): ${modelId}`);
+    return modelInstance;
+  } catch (error) {
+    console.error(`Failed to create model instance: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+};
+
+// Helper function to resolve model from runtime context with AI SDK version detection
+export const resolveModel = async ({
+  runtimeContext,
+  defaultModel = openai_v5('gpt-4.1'),
+  projectPath,
+}: {
+  runtimeContext: RuntimeContext;
+  defaultModel?: MastraLanguageModel;
+  projectPath?: string;
+}): Promise<MastraLanguageModel> => {
+  // First try to get model from runtime context
+  const modelFromContext = runtimeContext.get('model');
+  if (modelFromContext) {
+    console.log('Using model from runtime context');
+    // Type check to ensure it's a MastraLanguageModel
+    if (isValidMastraLanguageModel(modelFromContext)) {
+      return modelFromContext;
+    }
+    throw new Error(
+      'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
+    );
+  }
+
+  // Check for selected model info in runtime context
+  const selectedModel = runtimeContext.get('selectedModel') as { provider: string; modelId: string } | undefined;
+  if (selectedModel?.provider && selectedModel?.modelId && projectPath) {
+    console.log(`Resolving selected model: ${selectedModel.provider}/${selectedModel.modelId}`);
+
+    // Detect AI SDK version from project
+    const version = await detectAISDKVersion(projectPath);
+
+    // Create model instance with detected version
+    const modelInstance = await createModelInstance(selectedModel.provider, selectedModel.modelId, version);
+    if (modelInstance) {
+      // Store resolved model back in context for other steps to use
+      runtimeContext.set('model', modelInstance);
+      return modelInstance;
+    }
+  }
+
+  console.log('Using default model');
+  return defaultModel;
 };
