@@ -1,5 +1,11 @@
 # @mastra/auth-firebase
 
+## 0.10.3
+
+### Patch Changes
+
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes

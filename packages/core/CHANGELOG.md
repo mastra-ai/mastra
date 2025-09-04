@@ -1,5 +1,74 @@
 # @mastra/core
 
+## 0.15.3
+
+### Patch Changes
+
+- ab48c97: dependencies updates:
+  - Updated dependency [`zod-to-json-schema@^3.24.6` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.6) (from `^3.24.5`, in `dependencies`)
+- 85ef90b: Return nested workflow steps information in getWorkflowRunExecutionResult
+- aedbbfa: Fixed wrapping of models with AI Tracing when used with structured output.
+- ff89505: Add deprecation warnings and add legacy routes
+- 637f323: Fix issue with some compilers and calling zod v4's toJSONSchema function
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- c19bcf7: stopped recording event spans for llm_chunks in ai-observability
+- 4474d04: fix: do not pass tracing context to score run
+- 183dc95: Added a fix to prevent filtering out injected initial default user messages. Related to issue 7231
+- a1111e2: Fixes #7254 where the onFinish callback wasn't returning assistant messages when using format: 'aisdk' in streamVNext. The messageList was being updated with response messages but these weren't being passed to the user's onFinish callback.
+- b42a961: New createMCPTool helper for correct types for MCP Server tools
+- 61debef: Fix - add missing tool options to createTool
+- 9beaeff: Create new `@mastra/ai-sdk` package to better support `useChat()`
+- 29de0e1: MastraEmbeddingModel and ts hack
+- f643c65: Support file download
+- 00c74e7: Added a DefaultExporter for AI Tracing.
+- fef7375: Fix tool validation when schema uses context or inputData reserved keys
+- e3d8fea: Support Inngest flow control features for Mastra Inngest workflows
+- 45e4d39: Try fixing the `Attempted import error: 'z'.'toJSONSchema' is not exported from 'zod'` error by tricking the compiler
+- 9eee594: Fix passing providerOptions through in streamVNext, enabling reasoning-delta chunks to be receiving.
+- 7149d8d: Add tripwire chunk to streamVNext full stream
+- 822c2e8: Fix custom output (tool-output) in ai-sdk stream output
+- 979912c: "Updated langfuse exporter to handle Event spans"
+- 7dcf4c0: Ensure original stacktrace is preserved during workflow runs
+- 4106a58: Fix image handling for Google Gemini and other providers when using streamVNext (fixes #7362)
+- ad78bfc: "pipes tracingContext through all ai items: agents, workflows, tools, processors, scorers, etc.."
+- 0302f50: Some LLM providers (openrouter for ex) add response-metadata chunks after each text-delta, this was resulting in us flushing text deltas into parts after each delta, so our output messages (with streamVNext) would have a separate text part for each text delta, instead of one text part for the combined deltas
+- 6ac697e: improveEmbeddingModelStuff
+- 74db265: Adds handling for event-type spans to the default ai observability exporter
+- 0ce418a: upgrade ai v5 versions to latest for core and memory
+- af90672: Add maxSteps
+- 8387952: Register scorers on mastra instance to override per agent generate call
+- 7f3b8da: Automatically pipe writer to workflows as a tool.
+  Also changed start, finish, step-output events to be workflow-start, workflow-finish and workflow-step-output
+- 905352b: Support AISDK models for runExperiment
+- 599d04c: follow up fix for scorers
+- 56041d0: Don't set supportsStructuredOutputs for every v2 model
+- 3412597: Pass provider options
+- 5eca5d2: Fixed wrapped mastra class inside workflow steps.
+- f2cda47: Fixed issue where multiple split messages were created with identical content
+  instead of properly distributing different parts of the original message.
+- 5de1555: Fixed tracingContext on tool executions in AI tracing
+- cfd377a: fix default stream options onFinish being overridden
+- 1ed5a3e: Support workflows for run experiments
+- Updated dependencies [ab48c97]
+- Updated dependencies [637f323]
+- Updated dependencies [de3cbc6]
+- Updated dependencies [45e4d39]
+  - @mastra/schema-compat@0.11.2
+
+## 0.15.3-alpha.9
+
+### Patch Changes
+
+- [#7401](https://github.com/mastra-ai/mastra/pull/7401) [`599d04c`](https://github.com/mastra-ai/mastra/commit/599d04cebe92c1d536fee3190434941b8c91548e) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - follow up fix for scorers
+
+## 0.15.3-alpha.8
+
+### Patch Changes
+
+- [#7397](https://github.com/mastra-ai/mastra/pull/7397) [`4474d04`](https://github.com/mastra-ai/mastra/commit/4474d0489b1e152e0985c33a4f529207317d27b5) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - fix: do not pass tracing context to score run
+
+- [#7396](https://github.com/mastra-ai/mastra/pull/7396) [`4106a58`](https://github.com/mastra-ai/mastra/commit/4106a58b15b4c0a060a4a9ccab52d119d00d8edb) Thanks [@TylerBarnes](https://github.com/TylerBarnes)! - Fix image handling for Google Gemini and other providers when using streamVNext (fixes #7362)
+
 ## 0.15.3-alpha.7
 
 ### Patch Changes

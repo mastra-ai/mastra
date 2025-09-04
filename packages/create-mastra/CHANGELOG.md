@@ -1,5 +1,19 @@
 # create-mastra
 
+## 0.11.3
+
+### Patch Changes
+
+- 64152fd: Improve output of Cli Dev command
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- 8e4fe90: Unify focus outlines
+- f539199: mastra start - load env files, custom env. Deperecate --env flag for mastra build
+- 87de958: fix chat outline
+- 6f715fe: Fix plyground baseUrl, default api baseUrl to playground baseUrl
+- 01264f1: Mastra dev- load env vars before watch
+- 3308c9f: fix dev:playground command
+- d99baf6: change outline
+
 ## 0.11.3-alpha.4
 
 ### Patch Changes

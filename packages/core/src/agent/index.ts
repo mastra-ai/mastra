@@ -2136,7 +2136,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           outputText,
           instructions,
           runtimeContext,
-          tracingContext: { currentSpan: agentAISpan },
           structuredOutput,
           overrideScorers,
           threadId,
@@ -2181,7 +2180,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     outputText,
     instructions,
     runtimeContext,
-    tracingContext,
     structuredOutput,
     overrideScorers,
     threadId,
@@ -2192,7 +2190,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     outputText: string;
     instructions: string;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
     structuredOutput?: boolean;
     overrideScorers?:
       | MastraScorers
@@ -2248,7 +2245,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           input: scorerInput,
           output: scorerOutput,
           runtimeContext,
-          tracingContext,
           entity: {
             id: this.id,
             name: this.name,
@@ -3405,7 +3401,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText,
       instructions,
       runtimeContext,
-      tracingContext,
       structuredOutput,
       overrideScorers,
     });
