@@ -8,6 +8,7 @@ export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/traces/index';
 export * from './domains/resizable-panel';
+export * from './domains/datasets';
 export * from './components/dynamic-form/index';
 export * from './components/ui/data-table';
 export * from './components/ui/containers';
@@ -31,6 +32,7 @@ export * from './components/ui/radio-group';
 export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
+export * from './components/ui/elements';
 
 export type { TraceContextType } from './domains/traces/context/trace-context';
 
