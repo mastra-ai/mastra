@@ -7,7 +7,6 @@ export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
     const storage = mastra.getStorage();
 
-    console.log('storage', storage);
     if (!storage) {
       mastra.getLogger()?.warn('Storage not found, skipping score validation and saving');
       return;
@@ -76,7 +75,6 @@ export function createOnScorerHook(mastra: Mastra) {
 }
 
 export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
-  console.log('validateAndSaveScore', storage, payload);
   const payloadToSave = saveScorePayloadSchema.parse(payload);
   await storage?.saveScore(payloadToSave);
 }
