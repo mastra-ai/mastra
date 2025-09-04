@@ -1793,7 +1793,7 @@ describe('Workflow', () => {
       ]);
     });
 
-    it.only('should handle sleep waiting flow', async () => {
+    it('should handle sleep waiting flow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 
@@ -1824,24 +1824,27 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const streamResult = run.streamVNext({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of stream) {
+      for await (const data of streamResult) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
 
-      const executionResult = await getWorkflowState();
+      const executionResult = await streamResult.result;
+      if (!executionResult) {
+        expect.fail('Execution result is not set');
+      }
 
-      expect(watchData.length).toBe(11);
+      expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -1850,7 +1853,9 @@ describe('Workflow', () => {
             status: 'running',
             payload: {},
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -1861,14 +1866,9 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -1879,7 +1879,9 @@ describe('Workflow', () => {
               result: 'success1',
             },
           },
-          type: 'step-waiting',
+          type: 'workflow-step-waiting',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -1890,14 +1892,9 @@ describe('Workflow', () => {
               result: 'success1',
             },
           },
-          type: 'step-result',
-        },
-        {
-          type: 'step-finish',
-          payload: {
-            id: 'sleep_mock-uuid-1',
-            metadata: {},
-          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -1908,7 +1905,9 @@ describe('Workflow', () => {
             startedAt: expect.any(Number),
             status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -1919,20 +1918,32 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            id: 'step2',
+            messages: {
+              all: [],
+              nonUser: [],
+              user: [],
+            },
             metadata: {},
+            output: {
+              usage: {
+                completionTokens: 0,
+                promptTokens: 0,
+                totalTokens: 0,
+              },
+            },
+            stepResult: {
+              reason: 'stop',
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ]);
       // Verify execution completed successfully
@@ -1991,24 +2002,27 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const streamResult = run.streamVNext({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of stream) {
+      for await (const data of streamResult) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
 
-      const executionResult = await getWorkflowState();
+      const executionResult = await streamResult.result;
+      if (!executionResult) {
+        expect.fail('Execution result is not set');
+      }
 
-      expect(watchData.length).toBe(11);
+      expect(watchData.length).toBe(8);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2017,7 +2031,9 @@ describe('Workflow', () => {
             status: 'running',
             payload: {},
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2028,14 +2044,9 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2046,7 +2057,9 @@ describe('Workflow', () => {
               value: 1000,
             },
           },
-          type: 'step-waiting',
+          type: 'workflow-step-waiting',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2057,14 +2070,9 @@ describe('Workflow', () => {
               value: 1000,
             },
           },
-          type: 'step-result',
-        },
-        {
-          type: 'step-finish',
-          payload: {
-            id: 'sleep_mock-uuid-1',
-            metadata: {},
-          },
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2075,7 +2083,9 @@ describe('Workflow', () => {
             startedAt: expect.any(Number),
             status: 'running',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2086,20 +2096,32 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            id: 'step2',
+            messages: {
+              all: [],
+              nonUser: [],
+              user: [],
+            },
             metadata: {},
+            output: {
+              usage: {
+                completionTokens: 0,
+                promptTokens: 0,
+                totalTokens: 0,
+              },
+            },
+            stepResult: {
+              reason: 'stop',
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ]);
       // Verify execution completed successfully
@@ -2154,10 +2176,10 @@ describe('Workflow', () => {
       const run = await workflow.createRunAsync({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
 
-      const { stream, getWorkflowState } = run.stream({ inputData: originalInput });
+      const streamResult = run.streamVNext({ inputData: originalInput });
 
-      for await (const data of stream) {
-        if (data.type === 'step-suspended') {
+      for await (const data of streamResult) {
+        if (data.type === 'workflow-step-suspended') {
           // Resume with different data to test that input comes from snapshot, not resume data
           setImmediate(() => {
             const resumeData = { stepId: 'step1', context: { differentData: 'resume-data' } };
@@ -2166,7 +2188,10 @@ describe('Workflow', () => {
         }
       }
 
-      const result = await getWorkflowState();
+      const result = await streamResult.result;
+      if (!result) {
+        expect.fail('Execution result is not set');
+      }
 
       expect.assertions(3);
       // Verify that the input property is preserved from the original snapshot context
@@ -2216,7 +2241,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+      const streamResult = run.streamVNext({ inputData: {} });
 
       setTimeout(() => {
         run.sendEvent('user-event-test', {
@@ -2226,26 +2251,31 @@ describe('Workflow', () => {
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
-      for await (const data of stream) {
+      for await (const data of streamResult) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
 
-      const executionResult = await getWorkflowState();
+      const executionResult = await streamResult.result;
+      if (!executionResult) {
+        expect.fail('Execution result is not set');
+      }
 
-      expect(watchData.length).toBe(9);
+      expect(watchData.length).toBe(7);
       expect(watchData).toMatchObject([
         {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
+          payload: {},
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step1',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2255,26 +2285,25 @@ describe('Workflow', () => {
             },
             status: 'success',
           },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step2',
           },
-          type: 'step-waiting',
+          type: 'workflow-step-waiting',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
             id: 'step2',
           },
-          type: 'step-start',
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
@@ -2284,20 +2313,32 @@ describe('Workflow', () => {
             },
             status: 'success',
           },
-          type: 'step-result',
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
         {
           payload: {
-            id: 'step2',
+            messages: {
+              all: [],
+              nonUser: [],
+              user: [],
+            },
             metadata: {},
+            output: {
+              usage: {
+                completionTokens: 0,
+                promptTokens: 0,
+                totalTokens: 0,
+              },
+            },
+            stepResult: {
+              reason: 'stop',
+            },
           },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          runId: 'test-run-id',
         },
       ]);
       // Verify execution completed successfully
