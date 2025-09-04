@@ -1,7 +1,7 @@
 {
   "name": "@mastra/agent-builder-integration-tests",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2-alpha.0",
   "scripts": {
     "test": "vitest run",
     "test:agent": "vitest run ./src/agent-template-behavior.test.ts",

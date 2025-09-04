@@ -1,5 +1,29 @@
 # @mastra/playground-ui
 
+## 6.1.0-alpha.0
+
+### Minor Changes
+
+- a01cf14: Add workflow graph in agent (workflow as tool in agent)
+
+### Patch Changes
+
+- cf4e353: Agent Builder Template - adding in UI components to use agent builder template actions
+- 788e612: Fix playground workflow graph is broken when workflow starts with a branch
+- 5397eb4: Add public URL support when adding files in Multi Modal
+- Updated dependencies [cf4e353]
+- Updated dependencies [6155cfc]
+- Updated dependencies [fd83526]
+- Updated dependencies [d0b90ab]
+- Updated dependencies [6f5eb7a]
+- Updated dependencies [a01cf14]
+- Updated dependencies [a9e50ee]
+- Updated dependencies [5397eb4]
+- Updated dependencies [c9f4e4a]
+- Updated dependencies [0acbc80]
+  - @mastra/client-js@0.12.0-alpha.0
+  - @mastra/core@0.16.0-alpha.0
+
 ## 6.0.0
 
 ### Major Changes

@@ -1,5 +1,16 @@
 # create-mastra
 
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- a01cf14: Add workflow graph in agent (workflow as tool in agent)
+
+### Patch Changes
+
+- 788e612: Fix playground workflow graph is broken when workflow starts with a branch
+- 5397eb4: Add public URL support when adding files in Multi Modal
+
 ## 0.11.3
 
 ### Patch Changes

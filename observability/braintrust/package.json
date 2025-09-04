@@ -1,6 +1,6 @@
 {
   "name": "@mastra/braintrust",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.0",
   "description": "Braintrust observability provider for Mastra - includes AI tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",

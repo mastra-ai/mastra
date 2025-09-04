@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 0.16.0-alpha.0
+
+### Minor Changes
+
+- a01cf14: Add workflow graph in agent (workflow as tool in agent)
+
+### Patch Changes
+
+- fd83526: Stream agent events with workflow `.streamVNext()`
+- d0b90ab: Fix output processors to run before saving messages to memory
+- 6f5eb7a: Throw if an empty or whitespace-only threadId is passed when getting messages
+- a9e50ee: Allow both workflow stream message formats for now
+- 5397eb4: Add public URL support when adding files in Multi Modal
+- c9f4e4a: Pass tracing context to scorer run
+- 0acbc80: Add InferUITools and related type helpers for AI SDK compatibility
+
+  Adds new type utility functions to help with type inference when using Mastra tools with the AI SDK's UI components:
+  - `InferUITools` - Infers input/output types for a collection of tools
+  - `InferUITool` - Infers input/output types for a single tool
+
+  These type helpers allow developers to easily integrate Mastra tools with AI SDK UI components like `useChat` by providing proper type inference for tool inputs and outputs.
+
 ## 0.15.3
 
 ### Patch Changes
