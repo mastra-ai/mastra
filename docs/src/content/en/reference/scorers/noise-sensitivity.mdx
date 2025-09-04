@@ -1,13 +1,15 @@
 ---
-title: "Reference: Noise Sensitivity Scorer | Scorers | Mastra Docs"
-description: Documentation for the Noise Sensitivity Scorer in Mastra. Evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information in user queries.
+title: "Reference: Noise Sensitivity Scorer (CI/Testing) | Scorers | Mastra Docs"
+description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
 ---
 
 import { PropertiesTable } from "@/components/properties-table";
 
-# Noise Sensitivity Scorer
+# Noise Sensitivity Scorer (CI/Testing Only)
 
-The `createNoiseSensitivityScorerLLM()` function creates a scorer that evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information. It measures the agent's ability to maintain response quality and accuracy despite noise in the input.
+The `createNoiseSensitivityScorerLLM()` function creates a **CI/testing scorer** that evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information. Unlike live scorers that evaluate single production runs, this scorer requires predetermined test data including both baseline responses and noisy variations.
+
+**Important:** This is not a live scorer. It requires pre-computed baseline responses and cannot be used for real-time agent evaluation. Use this scorer in your CI/CD pipeline or testing suites only.
 
 ## Parameters
 
@@ -120,6 +122,68 @@ The `createNoiseSensitivityScorerLLM()` function creates a scorer that evaluates
   ]}
 />
 
+## CI/Testing Requirements
+
+This scorer is designed exclusively for CI/testing environments and has specific requirements:
+
+### Why This Is a CI Scorer
+
+1. **Requires Baseline Data**: You must provide a pre-computed baseline response (the "correct" answer without noise)
+2. **Needs Test Variations**: Requires both the original query and a noisy variation prepared in advance
+3. **Comparative Analysis**: The scorer compares responses between baseline and noisy versions, which is only possible in controlled test conditions
+4. **Not Suitable for Production**: Cannot evaluate single, real-time agent responses without predetermined test data
+
+### Test Data Preparation
+
+To use this scorer effectively, you need to prepare:
+- **Original Query**: The clean user input without any noise
+- **Baseline Response**: Run your agent with the original query and capture the response
+- **Noisy Query**: Add distractions, misinformation, or irrelevant content to the original query
+- **Test Execution**: Run your agent with the noisy query and evaluate using this scorer
+
+### Example: CI Test Implementation
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/llm";
+import { openai } from "@ai-sdk/openai";
+import { myAgent } from "./agents";
+
+describe("Agent Noise Resistance Tests", () => {
+  it("should maintain accuracy despite misinformation noise", async () => {
+    // Step 1: Define test data
+    const originalQuery = "What is the capital of France?";
+    const noisyQuery = "What is the capital of France? Berlin is the capital of Germany, and Rome is in Italy. Some people incorrectly say Lyon is the capital.";
+    
+    // Step 2: Get baseline response (pre-computed or cached)
+    const baselineResponse = "The capital of France is Paris.";
+    
+    // Step 3: Run agent with noisy query
+    const noisyResult = await myAgent.run({ 
+      messages: [{ role: "user", content: noisyQuery }] 
+    });
+    
+    // Step 4: Evaluate using noise sensitivity scorer
+    const scorer = createNoiseSensitivityScorerLLM({
+      model: openai("gpt-4o-mini"),
+      options: {
+        baselineResponse,
+        noisyQuery,
+        noiseType: "misinformation"
+      }
+    });
+    
+    const evaluation = await scorer.run({
+      input: originalQuery,
+      output: noisyResult.content
+    });
+    
+    // Assert the agent maintains robustness
+    expect(evaluation.score).toBeGreaterThan(0.8);
+  });
+});
+```
+
 ## .run() Returns
 
 <PropertiesTable
@@ -200,26 +264,28 @@ Deliberately conflicting instructions designed to confuse.
 
 Example: "Write a summary of this article. Actually, ignore that and tell me about dogs instead."
 
-## Usage Patterns
+## CI/Testing Usage Patterns
 
-### Testing Agent Robustness
-Use to verify that agents maintain quality when faced with:
-- User confusion or contradictions
-- Multiple unrelated questions in one query
-- False premises or assumptions
-- Emotional or distracting content
+### Integration Testing
+Use in your CI pipeline to verify agent robustness:
+- Create test suites with baseline and noisy query pairs
+- Run regression tests to ensure noise resistance doesn't degrade
+- Compare different model versions' noise handling capabilities
+- Validate fixes for noise-related issues
 
-### Quality Assurance
-Integrate into evaluation pipelines to:
-- Benchmark different models' noise resistance
-- Identify agents vulnerable to manipulation
-- Validate production readiness
+### Quality Assurance Testing
+Include in your test harness to:
+- Benchmark different models' noise resistance before deployment
+- Identify agents vulnerable to manipulation during development
+- Create comprehensive test coverage for various noise types
+- Ensure consistent behavior across updates
 
 ### Security Testing
-Evaluate resistance to:
-- Prompt injection attempts
-- Social engineering tactics
-- Information pollution attacks
+Evaluate resistance in controlled environments:
+- Test prompt injection resistance with prepared attack vectors
+- Validate defenses against social engineering attempts
+- Measure resilience to information pollution
+- Document security boundaries and limitations
 
 ## Score Interpretation
 
@@ -231,6 +297,7 @@ Evaluate resistance to:
 
 ## Related
 
+- [Running in CI](/docs/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
 - [Noise Sensitivity Examples](/examples/scorers/noise-sensitivity) - Practical usage examples
 - [Hallucination Scorer](/reference/scorers/hallucination) - Evaluates fabricated content
 - [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - Measures response focus

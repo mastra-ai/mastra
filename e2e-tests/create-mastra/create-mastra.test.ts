@@ -45,24 +45,27 @@ describe('create mastra', () => {
   describe('dev', () => {
     let port: number;
     let proc: ReturnType<typeof execa> | undefined;
-    beforeAll(async () => {
-      port = await getPort();
-      proc = execa('pnpm', ['dev', '--port', port.toString()], {
-        cwd: projectPath,
-      });
-      proc!.stderr?.on('data', data => {
-        console.error(data?.toString());
-      });
-      await new Promise<void>(resolve => {
-        console.log('waiting for server to start');
-        proc!.stdout?.on('data', data => {
-          console.log(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
-          }
+    beforeAll(
+      async () => {
+        port = await getPort();
+        proc = execa('pnpm', ['dev', '--port', port.toString()], {
+          cwd: projectPath,
         });
-      });
-    });
+        proc!.stderr?.on('data', data => {
+          console.error(data?.toString());
+        });
+        await new Promise<void>(resolve => {
+          console.log('waiting for server to start');
+          proc!.stdout?.on('data', data => {
+            console.log(data?.toString());
+            if (data?.toString()?.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
+        });
+      },
+      60 * 10 * 1000,
+    );
 
     afterAll(async () => {
       if (proc) {

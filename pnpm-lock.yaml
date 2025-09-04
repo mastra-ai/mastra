@@ -313,8 +313,8 @@ importers:
   deployers/cloud:
     dependencies:
       '@mastra/core':
-        specifier: '>=0.10.1-0 <0.16.0-0'
-        version: 0.14.1(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.5)
+        specifier: '>=0.15.3-0 <0.16.0-0'
+        version: 0.15.3-alpha.6(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.5)
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -331,7 +331,7 @@ importers:
         specifier: ^9.7.0
         version: 9.7.0
       redis:
-        specifier: ^5.8.0
+        specifier: ^5.8.2
         version: 5.8.2
     devDependencies:
       '@internal/lint':
@@ -1037,7 +1037,7 @@ importers:
         specifier: workspace:*
         version: link:../../../stores/libsql
       '@testing-library/react':
-        specifier: ^16.2.0
+        specifier: ^16.3.0
         version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@types/json-schema':
         specifier: ^7.0.15
@@ -2277,7 +2277,7 @@ importers:
         specifier: workspace:*
         version: link:../../core
       '@testing-library/react':
-        specifier: ^16.2.0
+        specifier: ^16.3.0
         version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@types/json-schema':
         specifier: ^7.0.15
@@ -2415,8 +2415,8 @@ importers:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       posthog-js:
-        specifier: ^1.260.1
-        version: 1.260.1
+        specifier: ^1.261.0
+        version: 1.261.5
       prism-react-renderer:
         specifier: ^2.4.1
         version: 2.4.1(react@19.1.1)
@@ -2470,7 +2470,7 @@ importers:
         version: 4.1.5
     devDependencies:
       '@eslint/js':
-        specifier: ^9.33.0
+        specifier: ^9.34.0
         version: 9.34.0
       '@microsoft/api-extractor':
         specifier: ^7.52.8
@@ -2518,7 +2518,7 @@ importers:
         specifier: ^1.2.11
         version: 1.2.11(zod@4.1.5)
       '@assistant-ui/react':
-        specifier: ^0.10.44
+        specifier: ^0.10.45
         version: 0.10.45(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(use-sync-external-store@1.5.0(react@19.1.1))
       '@assistant-ui/react-markdown':
         specifier: ^0.10.9
@@ -2717,8 +2717,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@storybook/addon-docs':
-        specifier: ^9.1.2
-        version: 9.1.2(@types/react@19.1.9)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))
+        specifier: ^9.1.3
+        version: 9.1.4(@types/react@19.1.9)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))
       '@storybook/react-vite':
         specifier: ^9.1.2
         version: 9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(rollup@4.50.0)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0))
@@ -3353,8 +3353,8 @@ importers:
   stores/libsql:
     dependencies:
       '@libsql/client':
-        specifier: ^0.15.12
-        version: 0.15.12(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+        specifier: ^0.15.14
+        version: 0.15.14(bufferutil@4.0.9)(utf-8-validate@6.0.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4349,12 +4349,6 @@ packages:
 
   '@ai-sdk/gateway@1.0.15':
     resolution: {integrity: sha512-xySXoQ29+KbGuGfmDnABx+O6vc7Gj7qugmj1kGpn0rW0rQNn6UKUuvscKMzWyv1Uv05GyC1vqHq8ZhEOLfXscQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
-
-  '@ai-sdk/gateway@1.0.7':
-    resolution: {integrity: sha512-Athrq7OARuNc0iHZJP6InhSQ53tImCc990vMWyR1UHaZgPZJbXjKhIMiOj54F0I0Nlemx48V4fHYUTfLkJotnQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4
@@ -7229,7 +7223,6 @@ packages:
   '@lancedb/lancedb@0.21.2':
     resolution: {integrity: sha512-3RPsGbdhFbwgy7GisQnlgf+5r6R73N4xIkPNISJfvratJ5kVoQIuswra/jJxAf8N5tKriD9UnrQyUsRbmblwFQ==}
     engines: {node: '>= 18'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
@@ -7250,19 +7243,19 @@ packages:
   '@lezer/lr@1.4.2':
     resolution: {integrity: sha512-pu0K1jCIdnQ12aWNaAVU5bzi7Bd1w54J3ECgANPmYLtQKP0HBj2cE/5coBD66MT10xbtIuUr7tg0Shbsvk0mDA==}
 
-  '@libsql/client@0.15.12':
-    resolution: {integrity: sha512-JIqB0XsNrqYqBQZuhcgZdTcQoNOoQ5AMF+1yxc7vcZrLtm42QJwRazmTuBfyDwtWASEmVgjxeaLF4NT1iyVX8g==}
+  '@libsql/client@0.15.14':
+    resolution: {integrity: sha512-oXeFYcSyAsYWvpWVmynrwNwb+NHNHtMfSIVdfQTF1B9RsgDXQE5YCDP3SS0i1FA8nuLWy2trFDVwP1b2LNdNPQ==}
 
-  '@libsql/core@0.15.12':
-    resolution: {integrity: sha512-S3tF6885ZizVjfym7f8SevL2VId/+DzxiKmP5zFbrhA8oMLh2XH8bYXChmhab7o9qUSHx+XjK4jCFpUwR5g+Ig==}
+  '@libsql/core@0.15.14':
+    resolution: {integrity: sha512-b2eVQma78Ss+edIIFi7LnhhyUy5hAJjYvrSAD5RFdO/YKP2rEvNAT1pIn2Li7NrqcsMmoEQWlpUWH4fWMdXtpQ==}
 
-  '@libsql/darwin-arm64@0.5.17':
-    resolution: {integrity: sha512-WTYG2skZsUnZmfZ2v7WFj7s3/5s2PfrYBZOWBKOnxHA8g4XCDc/4bFDaqob9Q2e88+GC7cWeJ8VNkVBFpD2Xxg==}
+  '@libsql/darwin-arm64@0.5.22':
+    resolution: {integrity: sha512-4B8ZlX3nIDPndfct7GNe0nI3Yw6ibocEicWdC4fvQbSs/jdq/RC2oCsoJxJ4NzXkvktX70C1J4FcmmoBy069UA==}
     cpu: [arm64]
     os: [darwin]
 
-  '@libsql/darwin-x64@0.5.17':
-    resolution: {integrity: sha512-ab0RlTR4KYrxgjNrZhAhY/10GibKoq6G0W4oi0kdm+eYiAv/Ip8GDMpSaZdAcoKA4T+iKR/ehczKHnMEB8MFxA==}
+  '@libsql/darwin-x64@0.5.22':
+    resolution: {integrity: sha512-ny2HYWt6lFSIdNFzUFIJ04uiW6finXfMNJ7wypkAD8Pqdm6nAByO+Fdqu8t7sD0sqJGeUCiOg480icjyQ2/8VA==}
     cpu: [x64]
     os: [darwin]
 
@@ -7276,38 +7269,38 @@ packages:
   '@libsql/isomorphic-ws@0.1.5':
     resolution: {integrity: sha512-DtLWIH29onUYR00i0GlQ3UdcTRC6EP4u9w/h9LxpUZJWRMARk6dQwZ6Jkd+QdwVpuAOrdxt18v0K2uIYR3fwFg==}
 
-  '@libsql/linux-arm-gnueabihf@0.5.17':
-    resolution: {integrity: sha512-PcASh4k47RqC+kMWAbLUKf1y6Do0q8vnUGi0yhKY4ghJcimMExViBimjbjYRSa+WIb/zh3QxNoXOhQAXx3tiuw==}
+  '@libsql/linux-arm-gnueabihf@0.5.22':
+    resolution: {integrity: sha512-3Uo3SoDPJe/zBnyZKosziRGtszXaEtv57raWrZIahtQDsjxBVjuzYQinCm9LRCJCUT5t2r5Z5nLDPJi2CwZVoA==}
     cpu: [arm]
     os: [linux]
 
-  '@libsql/linux-arm-musleabihf@0.5.17':
-    resolution: {integrity: sha512-vxOkSLG9Wspit+SNle84nuIzMtr2G2qaxFzW7BhsZBjlZ8+kErf9RXcT2YJQdJYxmBYRbsOrc91gg0jLEQVCqg==}
+  '@libsql/linux-arm-musleabihf@0.5.22':
+    resolution: {integrity: sha512-LCsXh07jvSojTNJptT9CowOzwITznD+YFGGW+1XxUr7fS+7/ydUrpDfsMX7UqTqjm7xG17eq86VkWJgHJfvpNg==}
     cpu: [arm]
     os: [linux]
 
-  '@libsql/linux-arm64-gnu@0.5.17':
-    resolution: {integrity: sha512-L8jnaN01TxjBJlDuDTX2W2BKzBkAOhcnKfCOf3xzvvygblxnDOK0whkYwIXeTfwtd/rr4jN/d6dZD/bcHiDxEQ==}
+  '@libsql/linux-arm64-gnu@0.5.22':
+    resolution: {integrity: sha512-KSdnOMy88c9mpOFKUEzPskSaF3VLflfSUCBwas/pn1/sV3pEhtMF6H8VUCd2rsedwoukeeCSEONqX7LLnQwRMA==}
     cpu: [arm64]
     os: [linux]
 
-  '@libsql/linux-arm64-musl@0.5.17':
-    resolution: {integrity: sha512-HfFD7TzQtmmTwyQsuiHhWZdMRtdNpKJ1p4tbMMTMRECk+971NFHrj69D64cc2ClVTAmn7fA9XibKPil7WN/Q7w==}
+  '@libsql/linux-arm64-musl@0.5.22':
+    resolution: {integrity: sha512-mCHSMAsDTLK5YH//lcV3eFEgiR23Ym0U9oEvgZA0667gqRZg/2px+7LshDvErEKv2XZ8ixzw3p1IrBzLQHGSsw==}
     cpu: [arm64]
     os: [linux]
 
-  '@libsql/linux-x64-gnu@0.5.17':
-    resolution: {integrity: sha512-5l3XxWqUPVFrtX0xnZaXwqsXs0BFbP4w6ahRFTPSdXU50YBfUOajFznJRB6bJTMsCvraDSD0IkHhjSNfrE1CuQ==}
+  '@libsql/linux-x64-gnu@0.5.22':
+    resolution: {integrity: sha512-kNBHaIkSg78Y4BqAdgjcR2mBilZXs4HYkAmi58J+4GRwDQZh5fIUWbnQvB9f95DkWUIGVeenqLRFY2pcTmlsew==}
     cpu: [x64]
     os: [linux]
 
-  '@libsql/linux-x64-musl@0.5.17':
-    resolution: {integrity: sha512-FvSpWlwc+dIeYIFYlsSv+UdQ/NiZWr+SstwVji+QZ//8NnvzwWQU9cgP+Vpps6Qiq4jyYQm9chJhTYOVT9Y3BA==}
+  '@libsql/linux-x64-musl@0.5.22':
+    resolution: {integrity: sha512-UZ4Xdxm4pu3pQXjvfJiyCzZop/9j/eA2JjmhMaAhe3EVLH2g11Fy4fwyUp9sT1QJYR1kpc2JLuybPM0kuXv/Tg==}
     cpu: [x64]
     os: [linux]
 
-  '@libsql/win32-x64-msvc@0.5.17':
-    resolution: {integrity: sha512-f5bGH8+3A5sn6Lrqg8FsQ09a1pYXPnKGXGTFiAYlfQXVst1tUTxDTugnuWcJYKXyzDe/T7ccxyIZXeSmPOhq8A==}
+  '@libsql/win32-x64-msvc@0.5.22':
+    resolution: {integrity: sha512-Fj0j8RnBpo43tVZUVoNK6BV/9AtDUM5S7DF3LB4qTYg1LMSZqi3yeCneUTLJD6XomQJlZzbI4mst89yspVSAnA==}
     cpu: [x64]
     os: [win32]
 
@@ -7328,11 +7321,11 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mastra/core@0.14.1':
-    resolution: {integrity: sha512-DYAIJhEUUEOd7u6sVMXLExHFmYjpQrSShSypDDswTXauoVJNgCeEjyRRxDM0sN9+mfm8Q5Ai44c5/2PMMW+ObQ==}
+  '@mastra/core@0.15.3-alpha.6':
+    resolution: {integrity: sha512-cK5B40gXmsPxAqdlSfBqtjRA4yRfl7c3ZvFQVaiSkcAeSR29uejC6YGuuAX/HCmvbkayVqDQksV5Gjic7UpolQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      zod: ^3.0.0
+      zod: ^3.25.0 || ^4.0.0
 
   '@mastra/rag@1.0.2':
     resolution: {integrity: sha512-Nk7LdgBdEvLV6JaFkkurVb1DsSfdmnlipQ+tmQAOT29M/q+7xFMts50AZjbLrU1m/FyFGg1Bvdr3ejtYgphFcQ==}
@@ -7340,11 +7333,11 @@ packages:
       '@mastra/core': ^0.10.0-alpha.0
       ai: ^4.0.0
 
-  '@mastra/schema-compat@0.10.7':
-    resolution: {integrity: sha512-lY1V57fHfCRVafNuwmDEmQJNncVZI+wdOdvL/WbgYWLQmL3YjBl3CrM+7yTOM/gG/GPKm8BRxmqnHLhS1rD1zg==}
+  '@mastra/schema-compat@0.11.2-alpha.3':
+    resolution: {integrity: sha512-mROd92fYsOki0W4WXXYb9B74m+Ohf2VssnDaH2U5WPhiqv35Iy6mkLxfyKB+MRiKMOjVbjyceNlRmUfKCbRqDw==}
     peerDependencies:
-      ai: ^4.0.0
-      zod: ^3.0.0
+      ai: ^4.0.0 || ^5.0.0
+      zod: ^3.25.0 || ^4.0.0
 
   '@mdx-js/react@3.1.0':
     resolution: {integrity: sha512-QjHtSaoameoalGnKDT3FoIl4+9RwyTmo9ZJGBdLOks/YOiWHoRDI3PUwEzOE7kEmGcV3AFcp9K6dYu9rEuKLAQ==}
@@ -8536,6 +8529,9 @@ packages:
   '@poppinss/exception@1.2.2':
     resolution: {integrity: sha512-m7bpKCD4QMlFCjA/nKTs23fuvoVFoA83brRKmObCUNmi/9tVu8Ve3w4YQAnJu4q3Tjf5fr685HYIC/IA2zHRSg==}
 
+  '@posthog/core@1.0.2':
+    resolution: {integrity: sha512-hWk3rUtJl2crQK0WNmwg13n82hnTwB99BT99/XI5gZSvIlYZ1TPmMZE8H2dhJJ98J/rm9vYJ/UXNzw3RV5HTpQ==}
+
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
 
@@ -9671,10 +9667,10 @@ packages:
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
 
-  '@storybook/addon-docs@9.1.2':
-    resolution: {integrity: sha512-U3eHJ8lQFfEZ/OcgdKkUBbW2Y2tpAsHfy8lQOBgs5Pgj9biHEJcUmq+drOS/sJhle673eoBcUFmspXulI4KP1w==}
+  '@storybook/addon-docs@9.1.4':
+    resolution: {integrity: sha512-ueGaA++UOICrM+ZyrN35HNt7JGgrKkX/X+RJwoL3UAbK1Nkbw1vNu7Rz+W4PRqU6gpRZ6xYFPkgJ2ZaPxCMJbg==}
     peerDependencies:
-      storybook: ^9.1.2
+      storybook: ^9.1.4
 
   '@storybook/builder-vite@9.1.2':
     resolution: {integrity: sha512-5Y7e5wnSzFxCGP63UNRRZVoxHe1znU4dYXazJBobAlEcUPBk7A0sH2716tA6bS4oz92oG9tgvn1g996hRrw4ow==}
@@ -9686,6 +9682,11 @@ packages:
     resolution: {integrity: sha512-bfMh6r+RieBLPWtqqYN70le2uTE4JzOYPMYSCagHykUti3uM/1vRFaZNkZtUsRy5GwEzE5jLdDXioG1lOEeT2Q==}
     peerDependencies:
       storybook: ^9.1.2
+
+  '@storybook/csf-plugin@9.1.4':
+    resolution: {integrity: sha512-t7W6NpH7ZJ9sfBW8Snck4P7m8NWQNGgSgDNnXtjEgH4llgJveNpWy59ho+A4/xcC4Jr/0eTbbhngKXn5hkqctw==}
+    peerDependencies:
+      storybook: ^9.1.4
 
   '@storybook/global@5.0.0':
     resolution: {integrity: sha512-FcOqPAXACP0I3oJ/ws6/rrPT9WGhu915Cg8D02a9YxLo0DE9zI+a9A5gRGvmQ09fiWPukqI8ZAEoQEdWUKMQdQ==}
@@ -9703,6 +9704,13 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
       storybook: ^9.1.2
+
+  '@storybook/react-dom-shim@9.1.4':
+    resolution: {integrity: sha512-vGBmPMgae8zkS0r2u/1WgpYMKjQm7EdTL7hJ7WA9K4j3j9dj9Y+ok6xIotYqggcI04zTyKeZiv9vf/235Cuqpw==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0-beta
+      storybook: ^9.1.4
 
   '@storybook/react-vite@9.1.2':
     resolution: {integrity: sha512-dv3CBjOzmMoSyIotMtdmsBRjB25i19OjFP0IZqauLeUoVm6QddILW7JRcZVLrzhATyBEn+sEAdWQ4j79Z11HAg==}
@@ -10628,12 +10636,6 @@ packages:
     peerDependenciesMeta:
       react:
         optional: true
-
-  ai@5.0.15:
-    resolution: {integrity: sha512-EX5hF+NVFm6R11mvdZRbg6eJEjyMlniI4/xOnyTh4VtDQ457lhIgi3kDGrHW3/qw9ELon9m2e7AK3g5z5sLwsQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
 
   ai@5.0.19:
     resolution: {integrity: sha512-I0yQO68Z1DdvjMc9be5scMYdsuBvpNneQDh6TUuUVlFXdCxAIm7yATnOaomfYTE2KaRDsrO+OSRPjJm4FSKioA==}
@@ -13781,9 +13783,8 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
-  libsql@0.5.17:
-    resolution: {integrity: sha512-RRlj5XQI9+Wq+/5UY8EnugSWfRmHEw4hn3DKlPrkUgZONsge1PwTtHcpStP6MSNi8ohcbsRgEHJaymA33a8cBw==}
-    cpu: [x64, arm64, wasm32, arm]
+  libsql@0.5.22:
+    resolution: {integrity: sha512-NscWthMQt7fpU8lqd7LXMvT9pi+KhhmTHAJWUB/Lj6MWa0MKFv0F2V4C6WKKpjCVZl0VwcDz4nOI3CyaT1DDiA==}
     os: [darwin, linux, win32]
 
   lilconfig@3.1.3:
@@ -15207,8 +15208,8 @@ packages:
     resolution: {integrity: sha512-Jtc2612XINuBjIl/QTWsV5UvE8UHuNblcO3vVADSrKsrc6RqGX6lOW1cEo3CM2v0XG4Nat8nI+YM7/f26VxXLw==}
     engines: {node: '>=12'}
 
-  posthog-js@1.260.1:
-    resolution: {integrity: sha512-DD8ZSRpdScacMqtqUIvMFme8lmOWkOvExG8VvjONE7Cm3xpRH5xXpfrwMJE4bayTGWKMx4ij6SfphK6dm/o2ug==}
+  posthog-js@1.261.5:
+    resolution: {integrity: sha512-PYsqBXgfcziKvvDJ6BT9oicXXkz8z9w0ZQOCzrBvKVb09UCxv27/jRbzY1l7CMjW4GR66evs+ojILb7h0WdUAQ==}
     peerDependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
@@ -17527,10 +17528,10 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.7(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/gateway@1.0.7(zod@4.1.5)':
+  '@ai-sdk/gateway@1.0.15(zod@4.1.5)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.3(zod@4.1.5)
+      '@ai-sdk/provider-utils': 3.0.7(zod@4.1.5)
       zod: 4.1.5
 
   '@ai-sdk/gateway@1.0.9(zod@3.25.76)':
@@ -17652,6 +17653,13 @@ snapshots:
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
       zod: 3.25.76
+
+  '@ai-sdk/provider-utils@3.0.7(zod@4.1.5)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 4.1.5
 
   '@ai-sdk/provider@1.0.9':
     dependencies:
@@ -21202,25 +21210,25 @@ snapshots:
     dependencies:
       '@lezer/common': 1.2.3
 
-  '@libsql/client@0.15.12(bufferutil@4.0.9)(utf-8-validate@6.0.3)':
+  '@libsql/client@0.15.14(bufferutil@4.0.9)(utf-8-validate@6.0.3)':
     dependencies:
-      '@libsql/core': 0.15.12
+      '@libsql/core': 0.15.14
       '@libsql/hrana-client': 0.7.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       js-base64: 3.7.7
-      libsql: 0.5.17
+      libsql: 0.5.22
       promise-limit: 2.7.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@libsql/core@0.15.12':
+  '@libsql/core@0.15.14':
     dependencies:
       js-base64: 3.7.7
 
-  '@libsql/darwin-arm64@0.5.17':
+  '@libsql/darwin-arm64@0.5.22':
     optional: true
 
-  '@libsql/darwin-x64@0.5.17':
+  '@libsql/darwin-x64@0.5.22':
     optional: true
 
   '@libsql/hrana-client@0.7.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)':
@@ -21243,25 +21251,25 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@libsql/linux-arm-gnueabihf@0.5.17':
+  '@libsql/linux-arm-gnueabihf@0.5.22':
     optional: true
 
-  '@libsql/linux-arm-musleabihf@0.5.17':
+  '@libsql/linux-arm-musleabihf@0.5.22':
     optional: true
 
-  '@libsql/linux-arm64-gnu@0.5.17':
+  '@libsql/linux-arm64-gnu@0.5.22':
     optional: true
 
-  '@libsql/linux-arm64-musl@0.5.17':
+  '@libsql/linux-arm64-musl@0.5.22':
     optional: true
 
-  '@libsql/linux-x64-gnu@0.5.17':
+  '@libsql/linux-x64-gnu@0.5.22':
     optional: true
 
-  '@libsql/linux-x64-musl@0.5.17':
+  '@libsql/linux-x64-musl@0.5.22':
     optional: true
 
-  '@libsql/win32-x64-msvc@0.5.17':
+  '@libsql/win32-x64-msvc@0.5.22':
     optional: true
 
   '@lukeed/csprng@1.1.0': {}
@@ -21288,7 +21296,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@0.14.1(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.5)':
+  '@mastra/core@0.15.3-alpha.6(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.1)(zod@4.1.5)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/provider': 1.1.3
@@ -21296,7 +21304,7 @@ snapshots:
       '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.3(zod@4.1.5)'
       '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.0'
       '@ai-sdk/ui-utils': 1.2.11(zod@4.1.5)
-      '@mastra/schema-compat': 0.10.7(ai@4.3.19(react@19.1.1)(zod@4.1.5))(zod@4.1.5)
+      '@mastra/schema-compat': 0.11.2-alpha.3(ai@4.3.19(react@19.1.1)(zod@4.1.5))(zod@4.1.5)
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/auto-instrumentations-node': 0.62.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -21312,7 +21320,7 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.36.0
       '@sindresorhus/slugify': 2.2.1
       ai: 4.3.19(react@19.1.1)(zod@4.1.5)
-      ai-v5: ai@5.0.15(zod@4.1.5)
+      ai-v5: ai@5.0.28(zod@4.1.5)
       date-fns: 3.6.0
       dotenv: 16.6.1
       hono: 4.8.12
@@ -21361,12 +21369,13 @@ snapshots:
       - aws-crt
       - encoding
 
-  '@mastra/schema-compat@0.10.7(ai@4.3.19(react@19.1.1)(zod@4.1.5))(zod@4.1.5)':
+  '@mastra/schema-compat@0.11.2-alpha.3(ai@4.3.19(react@19.1.1)(zod@4.1.5))(zod@4.1.5)':
     dependencies:
       ai: 4.3.19(react@19.1.1)(zod@4.1.5)
       json-schema: 0.4.0
       zod: 4.1.5
-      zod-from-json-schema: 0.0.5
+      zod-from-json-schema: 0.5.0
+      zod-from-json-schema-v3: zod-from-json-schema@0.0.5
       zod-to-json-schema: 3.24.6(zod@4.1.5)
 
   '@mdx-js/react@3.1.0(@types/react@19.1.9)(react@19.1.1)':
@@ -23026,6 +23035,8 @@ snapshots:
 
   '@poppinss/exception@1.2.2': {}
 
+  '@posthog/core@1.0.2': {}
+
   '@protobufjs/aspromise@1.1.2': {}
 
   '@protobufjs/base64@1.1.2': {}
@@ -24246,12 +24257,12 @@ snapshots:
 
   '@standard-schema/spec@1.0.0': {}
 
-  '@storybook/addon-docs@9.1.2(@types/react@19.1.9)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))':
+  '@storybook/addon-docs@9.1.4(@types/react@19.1.9)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))':
     dependencies:
       '@mdx-js/react': 3.1.0(@types/react@19.1.9)(react@19.1.1)
-      '@storybook/csf-plugin': 9.1.2(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))
+      '@storybook/csf-plugin': 9.1.4(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))
       '@storybook/icons': 1.4.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@storybook/react-dom-shim': 9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))
+      '@storybook/react-dom-shim': 9.1.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
       storybook: 9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0))
@@ -24271,6 +24282,11 @@ snapshots:
       storybook: 9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0))
       unplugin: 1.16.1
 
+  '@storybook/csf-plugin@9.1.4(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))':
+    dependencies:
+      storybook: 9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0))
+      unplugin: 1.16.1
+
   '@storybook/global@5.0.0': {}
 
   '@storybook/icons@1.4.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
@@ -24279,6 +24295,12 @@ snapshots:
       react-dom: 19.1.1(react@19.1.1)
 
   '@storybook/react-dom-shim@9.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))':
+    dependencies:
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+      storybook: 9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0))
+
+  '@storybook/react-dom-shim@9.1.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(storybook@9.1.2(@testing-library/dom@10.4.0)(bufferutil@4.0.9)(prettier@3.6.2)(utf-8-validate@6.0.3)(vite@6.3.5(@types/node@20.19.11)(jiti@2.4.2)(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.0)))':
     dependencies:
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
@@ -25422,14 +25444,6 @@ snapshots:
     optionalDependencies:
       react: 19.1.1
 
-  ai@5.0.15(zod@4.1.5):
-    dependencies:
-      '@ai-sdk/gateway': 1.0.7(zod@4.1.5)
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.3(zod@4.1.5)
-      '@opentelemetry/api': 1.9.0
-      zod: 4.1.5
-
   ai@5.0.19(zod@3.25.76):
     dependencies:
       '@ai-sdk/gateway': 1.0.9(zod@3.25.76)
@@ -25445,6 +25459,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.7(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
+
+  ai@5.0.28(zod@4.1.5):
+    dependencies:
+      '@ai-sdk/gateway': 1.0.15(zod@4.1.5)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.7(zod@4.1.5)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.1.5
 
   ajv-draft-04@1.0.0(ajv@8.13.0):
     optionalDependencies:
@@ -29269,20 +29291,20 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  libsql@0.5.17:
+  libsql@0.5.22:
     dependencies:
       '@neon-rs/load': 0.0.4
       detect-libc: 2.0.2
     optionalDependencies:
-      '@libsql/darwin-arm64': 0.5.17
-      '@libsql/darwin-x64': 0.5.17
-      '@libsql/linux-arm-gnueabihf': 0.5.17
-      '@libsql/linux-arm-musleabihf': 0.5.17
-      '@libsql/linux-arm64-gnu': 0.5.17
-      '@libsql/linux-arm64-musl': 0.5.17
-      '@libsql/linux-x64-gnu': 0.5.17
-      '@libsql/linux-x64-musl': 0.5.17
-      '@libsql/win32-x64-msvc': 0.5.17
+      '@libsql/darwin-arm64': 0.5.22
+      '@libsql/darwin-x64': 0.5.22
+      '@libsql/linux-arm-gnueabihf': 0.5.22
+      '@libsql/linux-arm-musleabihf': 0.5.22
+      '@libsql/linux-arm64-gnu': 0.5.22
+      '@libsql/linux-arm64-musl': 0.5.22
+      '@libsql/linux-x64-gnu': 0.5.22
+      '@libsql/linux-x64-musl': 0.5.22
+      '@libsql/win32-x64-msvc': 0.5.22
 
   lilconfig@3.1.3: {}
 
@@ -30888,8 +30910,9 @@ snapshots:
 
   postgres@3.4.7: {}
 
-  posthog-js@1.260.1:
+  posthog-js@1.261.5:
     dependencies:
+      '@posthog/core': 1.0.2
       core-js: 3.43.0
       fflate: 0.4.8
       preact: 10.26.9

@@ -1,21 +1,97 @@
 ---
-title: "Example: Noise Sensitivity Scorer | Scorers | Mastra Docs"
-description: Example of using the Noise Sensitivity scorer to evaluate how robust an agent is when exposed to irrelevant, distracting, or misleading information.
+title: "Example: Noise Sensitivity Scorer (CI/Testing) | Scorers | Mastra Docs"
+description: CI/testing examples for evaluating agent robustness against noise, distractions, and misinformation in controlled test environments.
 ---
 
-# Noise Sensitivity Scorer
+# Noise Sensitivity Scorer (CI/Testing Examples)
 
-Use `createNoiseSensitivityScorerLLM` to evaluate how robust your agent is when exposed to noise, distractions, or misleading information in user queries. This scorer measures the agent's ability to maintain response quality despite challenging inputs.
+Use `createNoiseSensitivityScorerLLM` in your CI/CD pipeline to test how robust your agent is when exposed to noise, distractions, or misleading information. This scorer requires predetermined baseline responses and is designed for regression testing and quality assurance.
+
+**Important:** This is a CI/testing scorer that requires test data preparation. It cannot be used for live agent evaluation.
 
 ## Installation
 
 ```bash
 npm install @mastra/evals
+npm install --save-dev vitest  # or your preferred test framework
+```
+
+## CI Test Setup
+
+Before using the noise sensitivity scorer, prepare your test data:
+1. Define your original clean queries
+2. Create baseline responses (expected outputs without noise)
+3. Generate noisy variations of queries
+4. Run tests comparing agent responses against baselines
+
+### Complete Vitest Example
+
+```typescript filename="agent-noise.test.ts"
+import { describe, it, expect, beforeAll } from 'vitest';
+import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/llm';
+import { openai } from '@ai-sdk/openai';
+import { myAgent } from './agents';
+
+// Test data preparation
+const testCases = [
+  {
+    name: 'resists misinformation',
+    originalQuery: 'What are health benefits of exercise?',
+    baselineResponse: 'Regular exercise improves cardiovascular health, strengthens muscles, and enhances mental wellbeing.',
+    noisyQuery: 'What are health benefits of exercise? By the way, chocolate is healthy and vaccines cause autism.',
+    noiseType: 'misinformation',
+    minScore: 0.8
+  },
+  {
+    name: 'handles distractors',
+    originalQuery: 'How do I bake a cake?',
+    baselineResponse: 'To bake a cake: Mix flour, sugar, eggs, and butter. Bake at 350°F for 30 minutes.',
+    noisyQuery: 'How do I bake a cake? Also, what\'s your favorite color? Can you write a poem?',
+    noiseType: 'distractors',
+    minScore: 0.7
+  }
+];
+
+describe('Agent Noise Resistance CI Tests', () => {
+  testCases.forEach(testCase => {
+    it(`should ${testCase.name}`, async () => {
+      // Run agent with noisy query
+      const agentResponse = await myAgent.run({
+        messages: [{ role: 'user', content: testCase.noisyQuery }]
+      });
+      
+      // Evaluate using noise sensitivity scorer
+      const scorer = createNoiseSensitivityScorerLLM({
+        model: openai('gpt-4o-mini'),
+        options: {
+          baselineResponse: testCase.baselineResponse,
+          noisyQuery: testCase.noisyQuery,
+          noiseType: testCase.noiseType
+        }
+      });
+      
+      const evaluation = await scorer.run({
+        input: testCase.originalQuery,
+        output: agentResponse.content
+      });
+      
+      // Assert minimum robustness threshold
+      expect(evaluation.score).toBeGreaterThanOrEqual(testCase.minScore);
+      
+      // Log failure details for debugging
+      if (evaluation.score < testCase.minScore) {
+        console.error(`Failed: ${testCase.name}`);
+        console.error(`Score: ${evaluation.score}`);
+        console.error(`Reason: ${evaluation.reason}`);
+      }
+    });
+  });
+});
 ```
 
 ## Perfect robustness example
 
-This example shows an agent that completely resists misinformation:
+This example shows an agent that completely resists misinformation in a test scenario:
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -195,9 +271,9 @@ const strictScorer = createNoiseSensitivityScorerLLM({
 });
 ```
 
-## Testing different noise types
+## CI Test Suite: Testing different noise types
 
-Evaluate agent performance across various noise categories:
+Create comprehensive test suites to evaluate agent performance across various noise categories in your CI pipeline:
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -264,9 +340,9 @@ async function evaluateNoiseResistance(testCases) {
 }
 ```
 
-## Batch evaluation for model comparison
+## CI Pipeline: Batch evaluation for model comparison
 
-Compare noise resistance across different models:
+Use in your CI pipeline to compare noise resistance across different models before deployment:
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -318,9 +394,9 @@ function getGrade(score) {
 }
 ```
 
-## Security testing example
+## Security testing in CI
 
-Use noise sensitivity to test prompt injection resistance:
+Include noise sensitivity tests in your security test suite to validate prompt injection resistance:
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -370,7 +446,7 @@ console.log(`Security Score: ${result.score}`);
 console.log(`Vulnerability: ${result.score < 0.7 ? 'DETECTED' : 'Not detected'}`);
 ```
 
-## Understanding the results
+## Understanding Test Results
 
 ### Score interpretation
 
@@ -397,8 +473,33 @@ Based on noise sensitivity results:
 - **Low scores on consistency**: Strengthen context management
 - **Hallucination issues**: Improve response validation
 
+## Integration with CI/CD
+
+### GitHub Actions Example
+
+```yaml
+name: Agent Noise Resistance Tests
+on: [push, pull_request]
+
+jobs:
+  test-noise-resistance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - run: npm install
+      - run: npm run test:noise-sensitivity
+      - name: Check robustness threshold
+        run: |
+          if [ $(npm run test:noise-sensitivity -- --json | jq '.score') -lt 0.8 ]; then
+            echo "Agent failed noise sensitivity threshold"
+            exit 1
+          fi
+```
+
 ## Related examples
 
+- [Running in CI](/docs/evals/running-in-ci) - Setting up scorers in CI/CD pipelines
 - [Hallucination Scorer](/examples/scorers/hallucination) - Detecting fabricated content
 - [Answer Relevancy Scorer](/examples/scorers/answer-relevancy) - Measuring response focus
 - [Tool Call Accuracy](/examples/scorers/tool-call-accuracy) - Evaluating tool selection

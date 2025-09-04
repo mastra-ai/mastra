@@ -1,5 +1,76 @@
 # @mastra/github
 
+## 1.2.11
+
+### Patch Changes
+
+- ab48c97: dependencies updates:
+  - Updated dependency [`zod@^3.25.76` ↗︎](https://www.npmjs.com/package/zod/v/3.25.76) (from `^3.25.67`, in `dependencies`)
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- a5632dd: Deprecate integrations in favor of mcp
+- f0dfcac: updated core peerdep
+- Updated dependencies [ab48c97]
+- Updated dependencies [85ef90b]
+- Updated dependencies [aedbbfa]
+- Updated dependencies [ff89505]
+- Updated dependencies [637f323]
+- Updated dependencies [de3cbc6]
+- Updated dependencies [c19bcf7]
+- Updated dependencies [4474d04]
+- Updated dependencies [183dc95]
+- Updated dependencies [a1111e2]
+- Updated dependencies [b42a961]
+- Updated dependencies [61debef]
+- Updated dependencies [9beaeff]
+- Updated dependencies [29de0e1]
+- Updated dependencies [f643c65]
+- Updated dependencies [00c74e7]
+- Updated dependencies [fef7375]
+- Updated dependencies [e3d8fea]
+- Updated dependencies [45e4d39]
+- Updated dependencies [9eee594]
+- Updated dependencies [7149d8d]
+- Updated dependencies [822c2e8]
+- Updated dependencies [979912c]
+- Updated dependencies [7dcf4c0]
+- Updated dependencies [4106a58]
+- Updated dependencies [ad78bfc]
+- Updated dependencies [0302f50]
+- Updated dependencies [6ac697e]
+- Updated dependencies [74db265]
+- Updated dependencies [0ce418a]
+- Updated dependencies [af90672]
+- Updated dependencies [8387952]
+- Updated dependencies [7f3b8da]
+- Updated dependencies [905352b]
+- Updated dependencies [599d04c]
+- Updated dependencies [56041d0]
+- Updated dependencies [3412597]
+- Updated dependencies [5eca5d2]
+- Updated dependencies [f2cda47]
+- Updated dependencies [5de1555]
+- Updated dependencies [cfd377a]
+- Updated dependencies [1ed5a3e]
+  - @mastra/core@0.15.3
+
+## 1.2.11-alpha.3
+
+### Patch Changes
+
+- [#7394](https://github.com/mastra-ai/mastra/pull/7394) [`f0dfcac`](https://github.com/mastra-ai/mastra/commit/f0dfcac4458bdf789b975e2d63e984f5d1e7c4d3) Thanks [@NikAiyer](https://github.com/NikAiyer)! - updated core peerdep
+
+- Updated dependencies [[`7149d8d`](https://github.com/mastra-ai/mastra/commit/7149d8d4bdc1edf0008e0ca9b7925eb0b8b60dbe)]:
+  - @mastra/core@0.15.3-alpha.7
+
+## 1.2.11-alpha.2
+
+### Patch Changes
+
+- [#7360](https://github.com/mastra-ai/mastra/pull/7360) [`a5632dd`](https://github.com/mastra-ai/mastra/commit/a5632dd316a6246666662705404bda570b070af1) Thanks [@wardpeet](https://github.com/wardpeet)! - Deprecate integrations in favor of mcp
+
+- Updated dependencies [[`c19bcf7`](https://github.com/mastra-ai/mastra/commit/c19bcf7b43542b02157b5e17303e519933a153ab), [`b42a961`](https://github.com/mastra-ai/mastra/commit/b42a961a5aefd19d6e938a7705fc0ecc90e8f756), [`45e4d39`](https://github.com/mastra-ai/mastra/commit/45e4d391a2a09fc70c48e4d60f505586ada1ba0e), [`0302f50`](https://github.com/mastra-ai/mastra/commit/0302f50861a53c66ff28801fc371b37c5f97e41e), [`74db265`](https://github.com/mastra-ai/mastra/commit/74db265b96aa01a72ffd91dcae0bc3b346cca0f2), [`7f3b8da`](https://github.com/mastra-ai/mastra/commit/7f3b8da6dd21c35d3672e44b4f5dd3502b8f8f92), [`905352b`](https://github.com/mastra-ai/mastra/commit/905352bcda134552400eb252bca1cb05a7975c14), [`f2cda47`](https://github.com/mastra-ai/mastra/commit/f2cda47ae911038c5d5489f54c36517d6f15bdcc), [`cfd377a`](https://github.com/mastra-ai/mastra/commit/cfd377a3a33a9c88b644f6540feed9cd9832db47)]:
+  - @mastra/core@0.15.3-alpha.6
+
 ## 1.2.11-alpha.1
 
 ### Patch Changes

@@ -1678,7 +1678,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId: executionContext.workflowId,
             stepId: step.id,
             runtimeContext,
-            tracingContext: { currentSpan: stepAISpan },
             disableScorers,
           });
         }
