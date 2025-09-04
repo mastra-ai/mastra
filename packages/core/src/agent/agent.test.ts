@@ -6674,6 +6674,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         structuredOutput: false,
         threadId: undefined,
         resourceId: undefined,
+        tracingContext: expect.any(Object),
       });
     });
   });
