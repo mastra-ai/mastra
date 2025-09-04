@@ -37,9 +37,8 @@
     "lint": "eslint .",
     "build": "tsup --config tsup.config.ts",
     "dev": "pnpm build --watch",
-    "test": "vitest run && pnpm run test:integration",
-    "test:unit": "vitest run",
-    "test:integration": "cd integration-tests && pnpm test"
+    "test": "vites",
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
