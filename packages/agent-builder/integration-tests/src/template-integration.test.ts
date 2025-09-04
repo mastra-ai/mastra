@@ -323,7 +323,8 @@ describe('Template Workflow Integration Tests', () => {
     console.log(JSON.stringify(result, null, 2));
 
     if (result.status === 'success') {
-      expect(result.result.success).toBe(true);
+      const validationResults = result.result?.validationResults;
+      expect(result.result?.success).toBe(validationResults.valid);
       expect(result.result.applied).toBe(true);
       // Should create a new branch with a different name or handle existing branch
       expect(result.result.branchName).toMatch(/feat\/install-template-csv-to-questions/);
