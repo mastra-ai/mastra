@@ -1973,18 +1973,35 @@ export class MessageList {
             switch (p.type) {
               case 'text':
                 return p;
-              case 'file':
+              case 'file': {
                 // Skip file parts that came from experimental_attachments
                 // They will be restored separately from __originalExperimentalAttachments
-                if (attachmentUrls.has(p.url)) {
+
+                // AIV5 file parts can have either 'url' or 'data' field
+                // 'url' field is used when converting from V2 to V3
+                // 'data' field is used in native AIV5 UIMessages
+                const fileDataSource =
+                  'url' in p && typeof p.url === 'string'
+                    ? p.url
+                    : 'data' in p && typeof p.data === 'string'
+                      ? p.data
+                      : undefined;
+
+                if (!fileDataSource) {
                   return null;
                 }
+
+                if (attachmentUrls.has(fileDataSource)) {
+                  return null;
+                }
+
                 return {
                   type: 'file',
                   mimeType: p.mediaType,
-                  data: p.url,
+                  data: fileDataSource,
                   providerMetadata: p.providerMetadata,
                 };
+              }
               case 'reasoning':
                 if (p.text === '') return null;
                 return {
@@ -2042,6 +2059,42 @@ export class MessageList {
     const originalAttachments = (v3Msg.content.metadata as any)?.__originalExperimentalAttachments;
     if (originalAttachments && Array.isArray(originalAttachments)) {
       v2Msg.content.experimental_attachments = originalAttachments || [];
+    }
+
+    // For AI SDK V4 compatibility: External URLs in file parts need to be in experimental_attachments
+    // Check file parts for any external URLs and move them to experimental_attachments
+    const urlFileParts = v2Msg.content.parts.filter(
+      p =>
+        p.type === 'file' &&
+        typeof p.data === 'string' &&
+        (p.data.startsWith('http://') || p.data.startsWith('https://')),
+    );
+
+    if (urlFileParts.length > 0) {
+      // Initialize experimental_attachments if not present
+      if (!v2Msg.content.experimental_attachments) {
+        v2Msg.content.experimental_attachments = [];
+      }
+
+      // Move URL file parts to experimental_attachments
+      for (const urlPart of urlFileParts) {
+        if (urlPart.type === 'file') {
+          v2Msg.content.experimental_attachments.push({
+            url: urlPart.data,
+            contentType: urlPart.mimeType,
+          });
+        }
+      }
+
+      // Remove URL file parts from parts array
+      v2Msg.content.parts = v2Msg.content.parts.filter(
+        p =>
+          !(
+            p.type === 'file' &&
+            typeof p.data === 'string' &&
+            (p.data.startsWith('http://') || p.data.startsWith('https://'))
+          ),
+      );
     }
 
     // Set toolInvocations on V2

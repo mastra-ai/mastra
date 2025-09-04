@@ -837,7 +837,7 @@ describe('MessageList V5 Support', () => {
             role: 'user',
             content: [
               { type: 'text', text: 'Analyze' },
-              { type: 'file', data: imageDataUri },
+              { type: 'file', data: imageDataUri, mimeType: 'image/jpeg' },
             ],
           },
         ],
@@ -930,6 +930,124 @@ describe('MessageList V5 Support', () => {
         expect(filePart).toHaveProperty('url', 'https://example.com/image.jpg');
         expect(filePart).not.toHaveProperty('data');
       }
+    });
+
+    // Tests for Issue #7362 - Ensure URL strings and base64 data are handled correctly
+    describe('Issue #7362 - File part handling for AI SDK V5', () => {
+      it('should handle URL strings in file parts without base64 decoding errors', () => {
+        const messageList = new MessageList();
+        const testUrl = 'https://unauthorized-site.com/avatars/test.png';
+
+        // This should NOT throw: AI_InvalidDataContentError
+        expect(() => {
+          messageList.add(
+            [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'process this image' },
+                  {
+                    type: 'file',
+                    data: testUrl,
+                    mimeType: 'image/png',
+                  },
+                ],
+              },
+            ],
+            'user',
+          );
+        }).not.toThrow();
+
+        // Verify the URL is properly handled
+        const v5UI = messageList.get.all.aiV5.ui();
+        const filePart = v5UI[0].parts.find(p => p.type === 'file');
+
+        if (filePart?.type === 'file') {
+          // URLs should remain as URLs, not be treated as base64
+          expect((filePart as any).url).toBe(testUrl);
+          expect(filePart.mediaType).toBe('image/png');
+        }
+      });
+
+      it('should correctly convert base64 data URIs for file parts', () => {
+        const messageList = new MessageList();
+        const base64DataUri =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+        messageList.add(
+          [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'process this base64 image' },
+                {
+                  type: 'file',
+                  data: base64DataUri,
+                  mimeType: 'image/png',
+                },
+              ],
+            },
+          ],
+          'user',
+        );
+
+        const v5UI = messageList.get.all.aiV5.ui();
+        const filePart = v5UI[0].parts.find(p => p.type === 'file');
+
+        if (filePart?.type === 'file') {
+          expect((filePart as any).url).toBe(base64DataUri);
+          expect(filePart.mediaType).toBe('image/png');
+        }
+      });
+
+      it('should handle multiple file parts with mixed data types', () => {
+        const messageList = new MessageList();
+        const httpUrl = 'https://example.com/image1.png';
+        const base64DataUri =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+        const rawBase64 = 'aGVsbG8gd29ybGQ=';
+
+        messageList.add(
+          [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'process these images' },
+                {
+                  type: 'file',
+                  data: httpUrl,
+                  mimeType: 'image/png',
+                },
+                {
+                  type: 'file',
+                  data: base64DataUri,
+                  mimeType: 'image/png',
+                },
+                {
+                  type: 'file',
+                  data: rawBase64,
+                  mimeType: 'text/plain',
+                },
+              ],
+            },
+          ],
+          'user',
+        );
+
+        const v5UI = messageList.get.all.aiV5.ui();
+        const fileParts = v5UI[0].parts.filter(p => p.type === 'file');
+
+        // Should have all three file parts converted correctly
+        expect(fileParts).toHaveLength(3);
+
+        // Each should have appropriate url field
+        fileParts.forEach(part => {
+          if (part.type === 'file') {
+            expect(part).toHaveProperty('url');
+            expect(part).toHaveProperty('mediaType');
+          }
+        });
+      });
     });
   });
 
