@@ -14,7 +14,7 @@ import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
 import Spinner from '@/components/ui/spinner';
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
-import { fileToBase64 } from '@/lib/file';
+import { fileToBase64 } from '@/lib/file/toBase64';
 
 const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
   const { isLoading, text } = useLoadBrowserFile(document.file);

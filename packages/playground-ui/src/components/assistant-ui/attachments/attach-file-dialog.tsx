@@ -1,5 +1,4 @@
 import { useComposerRuntime } from '@assistant-ui/react';
-import { useMastraClient } from '@/contexts/mastra-client-context';
 
 import { Dialog, DialogHeader, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { FormEvent } from 'react';
@@ -10,6 +9,7 @@ import { Icon } from '@/ds/icons';
 import { CloudUpload, Link } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt';
 import { useComposerAddAttachment } from '../hooks/use-composer-add-attachment';
+import { getFileContentType } from '@/lib/file/contentTypeFromUrl';
 
 export interface AttachFileDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -17,7 +17,6 @@ export interface AttachFileDialogProps {
 }
 
 export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) => {
-  const client = useMastraClient();
   const composerRuntime = useComposerRuntime();
   const addFilInputAttachment = useComposerAddAttachment({
     onChange: () => onOpenChange(false),
@@ -37,7 +36,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
        * to add the URL in the AI SDK core message by reading assistant-ui's file name (on an empty file :upside_down_face:)
        */
       const file = new File([], url, {
-        type: 'image/whatever',
+        type: await getFileContentType(url),
       });
 
       composerRuntime.addAttachment(file);

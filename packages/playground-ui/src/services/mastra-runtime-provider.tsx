@@ -10,7 +10,7 @@ import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64 } from '@/lib/file';
+import { fileToBase64 } from '@/lib/file/toBase64';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
