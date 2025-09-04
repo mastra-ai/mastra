@@ -668,16 +668,7 @@ describe('BraintrustExporter', () => {
         },
       });
 
-      // Should immediately log with same timestamp and end
-      expect(mockSpan.log).toHaveBeenCalledWith({
-        output: { message: 'Great response!' },
-        metadata: {
-          spanType: 'generic',
-          eventType: 'user_feedback',
-          rating: 5,
-        },
-      });
-
+      // Should immediately end with same timestamp
       expect(mockSpan.end).toHaveBeenCalledWith({ endTime: eventSpan.startTime.getTime() / 1000 });
     });
 

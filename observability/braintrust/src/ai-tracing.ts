@@ -105,9 +105,8 @@ export class BraintrustExporter implements AITracingExporter {
       return;
     }
 
-    const payload = this.buildSpanPayload(span, true);
+    const payload = this.buildSpanPayload(span);
 
-    // Create Braintrust span
     const braintrustSpan = braintrustParent.startSpan({
       name: span.name,
       type: mapSpanType(span.type),
@@ -139,11 +138,7 @@ export class BraintrustExporter implements AITracingExporter {
       return;
     }
 
-    // Log the update to the span
-    const payload = this.buildSpanPayload(span, false);
-
-    braintrustSpan.log(payload);
-    braintrustSpan.log(payload);
+    braintrustSpan.log(this.buildSpanPayload(span));
 
     if (isEnd) {
       // End the span with the correct endTime (convert milliseconds to seconds)
@@ -181,7 +176,7 @@ export class BraintrustExporter implements AITracingExporter {
       return;
     }
 
-    const payload = this.buildSpanPayload(span, true);
+    const payload = this.buildSpanPayload(span);
 
     // Create zero-duration span for event (convert milliseconds to seconds)
     const braintrustSpan = braintrustParent.startSpan({
@@ -190,9 +185,6 @@ export class BraintrustExporter implements AITracingExporter {
       startTime: span.startTime.getTime() / 1000,
       ...payload,
     });
-
-    // Immediately log output and end with same timestamp
-    braintrustSpan.log(payload);
 
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
     spanData.spans.set(span.id, braintrustSpan);
@@ -253,7 +245,7 @@ export class BraintrustExporter implements AITracingExporter {
     });
   }
 
-  private buildSpanPayload(span: AnyAISpan, isCreate: boolean): Record<string, any> {
+  private buildSpanPayload(span: AnyAISpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
     // Core span data
