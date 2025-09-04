@@ -181,6 +181,9 @@ export const CustomSearch: FC<SearchProps> = ({
         break;
       case "Enter":
         event.preventDefault();
+        if (event.nativeEvent.isComposing) {
+          return;
+        }
         if (selectedIndex === 0) {
           handleSelect({ url: "use-ai" });
         } else if (selectedIndex > 0) {

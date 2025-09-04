@@ -180,13 +180,12 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
               role: 'assistant',
               ...fields,
               type: content.some(c => c.type === `tool-call`) ? 'tool-call' : 'text',
-              // content: content,
               content:
                 typeof content !== `string` &&
                 Array.isArray(content) &&
                 content.length === 1 &&
                 content[0]?.type === `text`
-                  ? message?.content?.content || content
+                  ? content[0].text
                   : content,
             });
 

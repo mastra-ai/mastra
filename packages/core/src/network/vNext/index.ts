@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Agent, MessageList } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';

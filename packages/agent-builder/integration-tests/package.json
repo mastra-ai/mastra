@@ -1,7 +1,7 @@
 {
   "name": "@mastra/agent-builder-integration-tests",
   "private": true,
-  "version": "0.1.1-alpha.2",
+  "version": "0.1.1",
   "scripts": {
     "test": "vitest run",
     "test:agent": "vitest run ./src/agent-template-behavior.test.ts",
@@ -22,7 +22,7 @@
     "@faker-js/faker": "^9.6.0",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@testing-library/react": "^16.2.0",
+    "@testing-library/react": "^16.3.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",
     "ai": "^4.2.2",

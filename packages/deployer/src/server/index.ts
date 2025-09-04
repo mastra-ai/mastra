@@ -20,7 +20,7 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
-import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
+// import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
@@ -418,7 +418,7 @@ export async function createHonoServer(
   // Scores routes
   app.route('/api/scores', scoresRouter(bodyLimitOptions));
   // Agent builder routes
-  app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
+  // app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
   // Tool routes
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes

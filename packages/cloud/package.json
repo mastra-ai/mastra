@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloud",
-  "version": "0.1.11-alpha.0",
+  "version": "0.1.11",
   "description": "Official Mastra Cloud integration package for telemetry",
   "type": "module",
   "files": [
@@ -21,11 +21,22 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./ai-tracing": {
+      "import": {
+        "types": "./dist/ai-tracing/index.d.ts",
+        "default": "./dist/ai-tracing/index.js"
+      },
+      "require": {
+        "types": "./dist/ai-tracing/index.d.ts",
+        "default": "./dist/ai-tracing/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "test": "vitest run",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -45,7 +56,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.16.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

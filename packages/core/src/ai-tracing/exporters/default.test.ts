@@ -365,6 +365,41 @@ describe('DefaultExporter', () => {
           }),
         );
       });
+
+      it('should handle event-type spans that only emit SPAN_ENDED', async () => {
+        const exporter = new DefaultExporter(
+          {
+            strategy: 'batch-with-updates',
+            maxBatchSize: 1, // Set to 1 to trigger immediate flush
+          },
+          mockLogger,
+        );
+        exporter.__registerMastra(mockMastra);
+        exporter.init();
+
+        // Event-type spans only emit SPAN_ENDED (no SPAN_STARTED)
+        const eventSpan = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'event-1', true);
+        await exporter.exportEvent(eventSpan);
+
+        // Wait for async flush to complete
+        await new Promise(resolve => setImmediate(resolve));
+
+        // Should create the span record (not treat as out-of-order)
+        expect(mockStorage.batchCreateAISpans).toHaveBeenCalledWith({
+          records: expect.arrayContaining([
+            expect.objectContaining({
+              spanId: 'event-1',
+              traceId: 'trace-1',
+            }),
+          ]),
+        });
+
+        // Should not log out-of-order warning
+        expect(mockLogger.warn).not.toHaveBeenCalledWith(
+          'Out-of-order span update detected - skipping event',
+          expect.anything(),
+        );
+      });
     });
 
     describe('Insert-only strategy', () => {

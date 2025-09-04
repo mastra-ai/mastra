@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.14.3-alpha.2",
+  "version": "0.14.3",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -75,7 +75,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.2-0 <0.16.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.16.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
