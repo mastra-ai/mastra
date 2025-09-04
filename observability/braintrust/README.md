@@ -24,7 +24,6 @@ const mastra = new Mastra({
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
             endpoint: process.env.BRAINTRUST_ENDPOINT, // optional
-            realtime: true,
           }),
         ],
       },

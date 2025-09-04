@@ -51,7 +51,6 @@ describe('BraintrustExporter', () => {
     config = {
       apiKey: 'test-api-key',
       endpoint: 'https://test-braintrust.com',
-      realtime: true,
       logLevel: 'debug',
       tuningParameters: {
         debug: true,
@@ -64,6 +63,43 @@ describe('BraintrustExporter', () => {
   describe('Initialization', () => {
     it('should initialize with correct configuration', () => {
       expect(exporter.name).toBe('braintrust');
+    });
+
+    it('should disable exporter when apiKey is missing', async () => {
+      const mockConsole = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const invalidConfig = {
+        // Missing apiKey
+        endpoint: 'https://test.com',
+      };
+
+      const disabledExporter = new BraintrustExporter(invalidConfig);
+
+      // Should log error about missing credentials
+      expect(mockConsole).toHaveBeenCalledWith(
+        expect.stringContaining('BraintrustExporter: Missing required credentials, exporter will be disabled'),
+        expect.objectContaining({
+          hasApiKey: false,
+        }),
+      );
+
+      // Should not create spans when disabled
+      const rootSpan = createMockSpan({
+        id: 'test-span',
+        name: 'test',
+        type: AISpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await disabledExporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        span: rootSpan,
+      });
+
+      expect(mockInitLogger).not.toHaveBeenCalled();
+
+      mockConsole.mockRestore();
     });
   });
 
@@ -796,6 +832,13 @@ describe('BraintrustExporter', () => {
 
       // Verify maps were cleared
       expect((exporter as any).traceMap.size).toBe(0);
+    });
+
+    it('should handle shutdown when exporter is disabled', async () => {
+      const disabledExporter = new BraintrustExporter({});
+
+      // Should not throw
+      await expect(disabledExporter.shutdown()).resolves.not.toThrow();
     });
   });
 });

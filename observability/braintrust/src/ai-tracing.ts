@@ -17,8 +17,6 @@ export interface BraintrustExporterConfig {
   apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
-  /** Enable realtime mode - flushes after each event for immediate visibility */
-  realtime?: boolean;
   /** Logger level for diagnostic messages (default: 'warn') */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Support tuning parameters */
@@ -50,18 +48,29 @@ function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval
 
 export class BraintrustExporter implements AITracingExporter {
   name = 'braintrust';
-  private realtime: boolean;
   private traceMap = new Map<string, SpanData>();
   private logger: ConsoleLogger;
   private config: BraintrustExporterConfig;
 
   constructor(config: BraintrustExporterConfig) {
-    this.config = config;
-    this.realtime = config.realtime ?? false;
     this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+
+    if (!config.apiKey) {
+      this.logger.error('BraintrustExporter: Missing required credentials, exporter will be disabled', {
+        hasApiKey: !!config.apiKey,
+      });
+      this.config = null as any;
+      return;
+    }
+
+    this.config = config;
   }
 
   async exportEvent(event: AITracingEvent): Promise<void> {
+    if (!this.config) {
+      return;
+    }
+
     if (event.span.isEvent) {
       await this.handleEventSpan(event.span);
       return;
@@ -77,12 +86,6 @@ export class BraintrustExporter implements AITracingExporter {
       case 'span_ended':
         await this.handleSpanUpdateOrEnd(event.span, true);
         break;
-    }
-
-    // Flush immediately in realtime mode for instant visibility
-    if (this.realtime) {
-      // Note: Braintrust doesn't have an explicit flush method like Langfuse
-      // The data is sent automatically when spans are logged
     }
   }
 
@@ -321,6 +324,10 @@ export class BraintrustExporter implements AITracingExporter {
   }
 
   async shutdown(): Promise<void> {
+    if (!this.config) {
+      return;
+    }
+
     // End all active spans
     for (const [_traceId, spanData] of this.traceMap) {
       for (const [_spanId, span] of spanData.spans) {
