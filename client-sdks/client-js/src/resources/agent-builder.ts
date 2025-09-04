@@ -69,20 +69,26 @@ export class AgentBuilder extends BaseResource {
    * Creates a new agent builder action run and returns the runId.
    * This calls `/api/agent-builder/:actionId/create-run`.
    */
-  async createRun(params: AgentBuilderActionRequest, runId?: string): Promise<{ runId: string }> {
+  async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
     const searchParams = new URLSearchParams();
-    if (runId) {
-      searchParams.set('runId', runId);
-    }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...actionParams } = params;
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
 
     const url = `/api/agent-builder/${this.actionId}/create-run${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     return this.request(url, {
       method: 'POST',
-      body: { ...actionParams, runtimeContext },
     });
+  }
+
+  /**
+   * Creates a new workflow run (alias for createRun)
+   * @param params - Optional object containing the optional runId
+   * @returns Promise containing the runId of the created run
+   */
+  createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
+    return this.createRun(params);
   }
 
   /**
@@ -382,8 +388,11 @@ export class AgentBuilder extends BaseResource {
    * and streams any remaining progress.
    * This calls `/api/agent-builder/:actionId/watch`.
    */
-  async watch({ runId }: { runId: string }, onRecord: (record: { type: string; payload: any }) => void) {
-    const url = `/api/agent-builder/${this.actionId}/watch?runId=${runId}`;
+  async watch(
+    { runId, eventType }: { runId: string; eventType?: 'watch' | 'watch-v2' },
+    onRecord: (record: { type: string; payload: any }) => void,
+  ) {
+    const url = `/api/agent-builder/${this.actionId}/watch?runId=${runId}${eventType ? `&eventType=${eventType}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'GET',
       stream: true,

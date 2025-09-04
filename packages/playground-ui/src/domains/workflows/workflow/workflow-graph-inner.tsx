@@ -58,7 +58,11 @@ export function WorkflowGraphInner({ workflow, onShowTrace, onSendEvent }: Workf
             stroke:
               steps[e.data?.previousStepId as string]?.status === 'success' && steps[e.data?.nextStepId as string]
                 ? '#22c55e'
-                : undefined,
+                : e.data?.conditionNode &&
+                    !steps[e.data?.previousStepId as string] &&
+                    Boolean(steps[e.data?.nextStepId as string]?.status)
+                  ? '#22c55e'
+                  : undefined,
           },
         }))}
         nodeTypes={nodeTypes}
