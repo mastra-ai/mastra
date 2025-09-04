@@ -478,7 +478,7 @@ In your application call the `useChat()` hook.
 const { error, status, sendMessage, messages, regenerate, stop } =
   useChat({
     transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/api/chat',
+      api: 'http://localhost:4111/chat',
     }),
   });
 ```
