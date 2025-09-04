@@ -793,7 +793,7 @@ importers:
     dependencies:
       mem0ai:
         specifier: ^2.1.36
-        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.0.1(@opentelemetry/api@1.9.0))(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.1(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
+        version: 2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.17.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.0.1(@opentelemetry/api@1.9.0))(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.1(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3052,8 +3052,8 @@ importers:
   stores/chroma:
     dependencies:
       chromadb:
-        specifier: ^3.0.11
-        version: 3.0.11
+        specifier: ^3.0.14
+        version: 3.0.14
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3972,7 +3972,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
+        version: 1.17.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.2.1
@@ -6599,8 +6599,8 @@ packages:
     resolution: {integrity: sha512-CsmGFNZVL0mPrgcrkBPJ5LB8TPEKiPsER0N5h3nAkkPIeyAGGn3YwuRWyQhDYI5/XWLp11LlDEWqL8B14aYtNg==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.16.0':
-    resolution: {integrity: sha512-hdTYu39QgDFxv+FB6BK2zi4UIJGWhx2iPc0pHQ0C5Q/RCi+m+4gsryIzTGO+riqWcUA8/WGYp6hpqckdOBNysw==}
+  '@google/genai@1.17.0':
+    resolution: {integrity: sha512-r/OZWN9D8WvYrte3bcKPoLODrZ+2TjfxHm5OOyVHUbdFYIp1C4yJaXX4+sCS8I/+CbN9PxLjU5zm1cgmS7qz+A==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.11.4
@@ -7223,6 +7223,7 @@ packages:
   '@lancedb/lancedb@0.21.2':
     resolution: {integrity: sha512-3RPsGbdhFbwgy7GisQnlgf+5r6R73N4xIkPNISJfvratJ5kVoQIuswra/jJxAf8N5tKriD9UnrQyUsRbmblwFQ==}
     engines: {node: '>= 18'}
+    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
@@ -11204,38 +11205,38 @@ packages:
     resolution: {integrity: sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==}
     engines: {node: '>=18'}
 
-  chromadb-js-bindings-darwin-arm64@1.0.2:
-    resolution: {integrity: sha512-5guic+WJIEo11PpcY185QuQleqd7vWOBUY7WFX8I211p1HuOblGyYd4erPtiuxlc/hatUm/Eb0nTEmAxJ11QaA==}
+  chromadb-js-bindings-darwin-arm64@1.0.5:
+    resolution: {integrity: sha512-uPZa/pDzj5Qcc+r9Nd0pU31UEO7vhe9jOg3mL7LhAG2zBlLOpIofQS4deYy6q4ruQS4FGtL2DQDI7Q3RDE/1pg==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  chromadb-js-bindings-darwin-x64@1.0.2:
-    resolution: {integrity: sha512-0RpzX+kGfASetQU0svpv9esAH2Nt4o7jaCeNAqVCXVvE7Rnz6gaVtzL5qBvCP7O3ht10UkVX85b7gITRBe32tQ==}
+  chromadb-js-bindings-darwin-x64@1.0.5:
+    resolution: {integrity: sha512-E6nfKsJRFB1weEbmjg+kXbEE51fD4IvPVlrjXuPY+82E5Zns2uJmEqlwzc8IztQ6wRfUn2xF/RADfVw3vR/Asw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  chromadb-js-bindings-linux-arm64-gnu@1.0.2:
-    resolution: {integrity: sha512-fCRrFPI04+1bg/vO8eY9SxEXKk4PvT/DRfPpftMQB1w2gk68kRqEEpPj+lK9WP1nsTs1gq/qlbcf6oWs6MFJSw==}
+  chromadb-js-bindings-linux-arm64-gnu@1.0.5:
+    resolution: {integrity: sha512-HYzMxU2uGk4h47EP6nlscDRabQ1mwAuRC+JNsMm7fwqHs7VH7L7sGa1fQR4ydUCPjT9cl0y8eUWQfPz7GAw+HA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
 
-  chromadb-js-bindings-linux-x64-gnu@1.0.2:
-    resolution: {integrity: sha512-gEojseuh+XeUz3fHUYJwsXJfo54LE3oi5Ra+btbHj9eUF7ywyI+b/DNYu8t9FACnHz0Dh2+m/UHT3B1Dflne+w==}
+  chromadb-js-bindings-linux-x64-gnu@1.0.5:
+    resolution: {integrity: sha512-bIigJ+gyNZz8p3wr/zcJZTlKL7p2TVEyT7EfW9lWpdvkajPke8Q+b87aDJaPs6NuGxLcXxPHMRpS3zHWplZbdw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
 
-  chromadb-js-bindings-win32-x64-msvc@1.0.2:
-    resolution: {integrity: sha512-od3qyUd7yyMI09AFia0ZXxt+YSlSE0Pf//JFJoWqmB45qWrWsXsONbk24RMWpkYTGMh7H6r3QdE+pVDRKqkfng==}
+  chromadb-js-bindings-win32-x64-msvc@1.0.5:
+    resolution: {integrity: sha512-3HJxXw5GmuDqLNjc1cd9/cwqRq3eqaAuPvv+xvBt5/rtq9mPAaXchcKkGJfYQh+fmq46X2r5fM8civpoBQF1sw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
 
-  chromadb@3.0.11:
-    resolution: {integrity: sha512-Ikhx/CqRRhmvlpg7XNkzZowz4hwAOJvtSkfNG6D94dUky2Ivj4Bxt+xIS8D5ShHG2pS40PyPgEdllVjCRYNzgg==}
+  chromadb@3.0.14:
+    resolution: {integrity: sha512-szeY35U+Yf9O6hiK7Jw5Vyea6SIPJa4HoyBnywkjY//iIb+hkLgrneef8JClfoQC2MJkZu6SbMPVN7lR2LnhVQ==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -13785,6 +13786,7 @@ packages:
 
   libsql@0.5.22:
     resolution: {integrity: sha512-NscWthMQt7fpU8lqd7LXMvT9pi+KhhmTHAJWUB/Lj6MWa0MKFv0F2V4C6WKKpjCVZl0VwcDz4nOI3CyaT1DDiA==}
+    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   lilconfig@3.1.3:
@@ -20524,7 +20526,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)':
+  '@google/genai@1.17.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)':
     dependencies:
       google-auth-library: 9.15.1(encoding@0.1.13)
       ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
@@ -26146,30 +26148,30 @@ snapshots:
 
   chownr@3.0.0: {}
 
-  chromadb-js-bindings-darwin-arm64@1.0.2:
+  chromadb-js-bindings-darwin-arm64@1.0.5:
     optional: true
 
-  chromadb-js-bindings-darwin-x64@1.0.2:
+  chromadb-js-bindings-darwin-x64@1.0.5:
     optional: true
 
-  chromadb-js-bindings-linux-arm64-gnu@1.0.2:
+  chromadb-js-bindings-linux-arm64-gnu@1.0.5:
     optional: true
 
-  chromadb-js-bindings-linux-x64-gnu@1.0.2:
+  chromadb-js-bindings-linux-x64-gnu@1.0.5:
     optional: true
 
-  chromadb-js-bindings-win32-x64-msvc@1.0.2:
+  chromadb-js-bindings-win32-x64-msvc@1.0.5:
     optional: true
 
-  chromadb@3.0.11:
+  chromadb@3.0.14:
     dependencies:
       semver: 7.7.2
     optionalDependencies:
-      chromadb-js-bindings-darwin-arm64: 1.0.2
-      chromadb-js-bindings-darwin-x64: 1.0.2
-      chromadb-js-bindings-linux-arm64-gnu: 1.0.2
-      chromadb-js-bindings-linux-x64-gnu: 1.0.2
-      chromadb-js-bindings-win32-x64-msvc: 1.0.2
+      chromadb-js-bindings-darwin-arm64: 1.0.5
+      chromadb-js-bindings-darwin-x64: 1.0.5
+      chromadb-js-bindings-linux-arm64-gnu: 1.0.5
+      chromadb-js-bindings-linux-x64-gnu: 1.0.5
+      chromadb-js-bindings-win32-x64-msvc: 1.0.5
 
   ci-info@3.9.0: {}
 
@@ -29670,11 +29672,11 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.0.1(@opentelemetry/api@1.9.0))(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.1(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
+  mem0ai@2.1.36(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250823.0)(@google/genai@1.17.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3))(@langchain/core@0.3.59(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.0.1(@opentelemetry/api@1.9.0))(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)))(@mistralai/mistralai@1.7.2(zod@3.25.76))(@qdrant/js-client-rest@1.15.1(typescript@5.8.3))(@supabase/supabase-js@2.50.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(@types/jest@29.5.14)(@types/pg@8.15.5)(@types/sqlite3@3.1.11)(cloudflare@4.5.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.3)(redis@5.8.2)(sqlite3@5.1.7)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)):
     dependencies:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
       '@cloudflare/workers-types': 4.20250823.0
-      '@google/genai': 1.16.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
+      '@google/genai': 1.17.0(@modelcontextprotocol/sdk@1.17.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       '@langchain/core': 0.3.59(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.0.1(@opentelemetry/api@1.9.0))(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76))
       '@mistralai/mistralai': 1.7.2(zod@3.25.76)
       '@qdrant/js-client-rest': 1.15.1(typescript@5.8.3)
