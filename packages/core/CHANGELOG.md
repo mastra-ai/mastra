@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.15.3-alpha.9
+
+### Patch Changes
+
+- [#7401](https://github.com/mastra-ai/mastra/pull/7401) [`599d04c`](https://github.com/mastra-ai/mastra/commit/599d04cebe92c1d536fee3190434941b8c91548e) Thanks [@YujohnNattrass](https://github.com/YujohnNattrass)! - follow up fix for scorers
+
 ## 0.15.3-alpha.8
 
 ### Patch Changes
