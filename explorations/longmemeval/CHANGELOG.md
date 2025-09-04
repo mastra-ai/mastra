@@ -1,5 +1,21 @@
 # @mastra/longmemeval
 
+## 0.1.15-alpha.0
+
+### Patch Changes
+
+- 6f5eb7a: Throw if an empty or whitespace-only threadId is passed when getting messages
+- Updated dependencies [fd83526]
+- Updated dependencies [d0b90ab]
+- Updated dependencies [6f5eb7a]
+- Updated dependencies [a01cf14]
+- Updated dependencies [a9e50ee]
+- Updated dependencies [5397eb4]
+- Updated dependencies [c9f4e4a]
+- Updated dependencies [0acbc80]
+  - @mastra/core@0.16.0-alpha.0
+  - @mastra/libsql@0.13.9-alpha.0
+
 ## 0.1.14
 
 ### Patch Changes

@@ -50,7 +50,7 @@
     "mem0ai": "^2.1.36"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.16.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
     "zod": "^3.0.0"
   },
   "homepage": "https://mastra.ai",

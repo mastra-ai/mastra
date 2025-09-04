@@ -78,7 +78,25 @@
     "@mastra/voice-playai": "0.11.3",
     "@mastra/voice-sarvam": "0.11.3",
     "@mastra/voice-speechify": "0.11.3",
-    "@mastra/inngest": "0.12.3"
+    "@mastra/inngest": "0.12.3",
+    "@mastra/braintrust": "0.0.1"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_chroma-7422-dependencies",
+    "curvy-days-nail",
+    "dry-pandas-unite",
+    "early-seas-marry",
+    "free-news-attack",
+    "fresh-bags-hang",
+    "fuzzy-words-add",
+    "good-parents-warn",
+    "grumpy-meals-look",
+    "kind-carrots-pay",
+    "mean-yaks-clean",
+    "quick-moose-attend",
+    "quick-tips-cross",
+    "seven-wolves-wish",
+    "ui-types-helpers",
+    "wild-aliens-do"
+  ]
 }
