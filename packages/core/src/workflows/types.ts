@@ -137,6 +137,7 @@ export type StreamEvent =
     }
   // vnext events
   | WorkflowStreamEvent;
+
 export type WorkflowStreamEvent =
   | {
       type: 'workflow-start';
