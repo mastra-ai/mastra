@@ -1404,6 +1404,7 @@ Be thorough and methodical. Always use listDirectory to verify actual file exist
         errorsFixed: 0,
         remainingErrors: 1, // Start with 1 to enter the loop
         iteration: currentIteration,
+        lastValidationErrors: [] as any[], // Store the actual error details
       };
 
       // Loop up to maxIterations times or until all errors are fixed
@@ -1425,6 +1426,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
 
         let iterationErrors = 0;
         let previousErrors = validationResults.remainingErrors;
+        let lastValidationResult: any = null;
 
         for await (const chunk of result.fullStream) {
           if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
@@ -1440,6 +1442,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
             // Track validation results
             if (chunk.toolName === 'validateCode') {
               const toolResult = chunk.result as any;
+              lastValidationResult = toolResult; // Store the full result
               if (toolResult?.summary) {
                 iterationErrors = toolResult.summary.totalErrors || 0;
                 console.log(`Iteration ${currentIteration}: Found ${iterationErrors} errors`);
@@ -1453,6 +1456,11 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         validationResults.errorsFixed += Math.max(0, previousErrors - iterationErrors);
         validationResults.valid = iterationErrors === 0;
         validationResults.iteration = currentIteration;
+
+        // Store the last validation errors if any remain
+        if (iterationErrors > 0 && lastValidationResult?.errors) {
+          validationResults.lastValidationErrors = lastValidationResult.errors;
+        }
 
         console.log(`Iteration ${currentIteration} complete: ${iterationErrors} errors remaining`);
 
@@ -1482,14 +1490,17 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         console.warn('Failed to commit validation fixes:', commitError);
       }
 
+      const success = validationResults.valid;
+
       return {
-        success: true,
+        success,
         applied: true,
-        message: `Validation completed in ${currentIteration} iteration${currentIteration > 1 ? 's' : ''}. ${validationResults.valid ? 'All issues resolved!' : `${validationResults.remainingErrors} issues remaining`}`,
+        message: `Validation completed in ${currentIteration} iteration${currentIteration > 1 ? 's' : ''}. ${validationResults.valid ? 'All issues resolved!' : `${validationResults.remainingErrors} issue${validationResults.remainingErrors > 1 ? 's' : ''} remaining`}`,
         validationResults: {
           valid: validationResults.valid,
           errorsFixed: validationResults.errorsFixed,
           remainingErrors: validationResults.remainingErrors,
+          errors: validationResults.lastValidationErrors,
         },
       };
     } catch (error) {
@@ -1699,6 +1710,10 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     }
     if (validationResult.validationResults?.errorsFixed > 0) {
       messages.push(`${validationResult.validationResults.errorsFixed} validation errors fixed`);
+    }
+
+    if (validationResult.validationResults?.remainingErrors > 0) {
+      messages.push(`${validationResult.validationResults.remainingErrors} validation issues remain`);
     }
 
     const comprehensiveMessage =

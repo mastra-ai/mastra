@@ -185,6 +185,7 @@ export const ValidationResultsSchema = z.object({
   valid: z.boolean(),
   errorsFixed: z.number(),
   remainingErrors: z.number(),
+  errors: z.array(z.any()).optional(), // Include specific validation errors
 });
 
 export const ValidationFixInputSchema = z.object({

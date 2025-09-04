@@ -38,6 +38,7 @@ export default function Template() {
   const [currentRunId, setCurrentRunId] = useState<string>('');
   const [hasAutoResumed, setHasAutoResumed] = useState(false);
   const [isFreshInstall, setIsFreshInstall] = useState(false);
+  const [completedRunValidationErrors, setCompletedRunValidationErrors] = useState<any[]>([]);
 
   const { data: template, isLoading: isLoadingTemplate } = useTemplateRepo({
     repoOrSlug: templateSlug,
@@ -76,7 +77,20 @@ export default function Template() {
           if (snapshot?.status === 'success' && snapshot?.result?.success) {
             setSuccess(true);
           } else if (snapshot?.result?.success === false) {
-            setFailure(snapshot?.result?.message || snapshot?.result?.error || 'Template installation failed');
+            // Check if this is a validation error with specific validation results
+            const hasValidationResults =
+              snapshot?.result?.validationResults &&
+              !snapshot?.result?.validationResults?.valid &&
+              snapshot?.result?.validationResults?.remainingErrors > 0;
+
+            if (hasValidationResults) {
+              const { remainingErrors, errors } = snapshot.result.validationResults;
+              const errorMessage = `Template installation completed but ${remainingErrors} validation issue${remainingErrors > 1 ? 's' : ''} remain unresolved.`;
+              setFailure(errorMessage);
+              setCompletedRunValidationErrors(errors || []);
+            } else {
+              setFailure(snapshot?.result?.message || snapshot?.result?.error || 'Template installation failed');
+            }
           }
         })
         .catch(error => {
@@ -213,19 +227,14 @@ export default function Template() {
     }
   }, [templateEnvVars]);
 
-  // Monitor streamResult for workflow errors
+  // Monitor for workflow errors
   useEffect(() => {
-    if (streamResult?.phase === 'error' && streamResult?.error) {
-      setFailure(streamResult.error);
-    }
-  }, [streamResult?.phase, streamResult?.error]);
+    const result = streamResult || watchStreamResult;
 
-  // Monitor watchStreamResult for workflow errors
-  useEffect(() => {
-    if (watchStreamResult?.phase === 'error' && watchStreamResult?.error) {
-      setFailure(watchStreamResult.error);
+    if (result?.phase === 'error' && result?.error) {
+      setFailure(result.error);
     }
-  }, [watchStreamResult?.phase, watchStreamResult?.error]);
+  }, [streamResult?.phase, streamResult?.error, watchStreamResult?.phase, watchStreamResult?.error]);
 
   const handleProviderChange = (value: string) => {
     setSelectedProvider(value);
@@ -352,7 +361,16 @@ export default function Template() {
                 <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
               )}
 
-              {failure && <TemplateFailure errorMsg={failure} />}
+              {failure && (
+                <TemplateFailure
+                  errorMsg={failure}
+                  validationErrors={
+                    completedRunValidationErrors.length > 0
+                      ? completedRunValidationErrors
+                      : streamResult?.validationResults?.errors || watchStreamResult?.validationResults?.errors
+                  }
+                />
+              )}
 
               {!isStreaming && !isWatching && !success && !failure && (
                 <TemplateForm
