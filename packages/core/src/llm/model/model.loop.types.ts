@@ -46,4 +46,4 @@ export type ModelLoopStreamArgs<
   resourceId?: string;
   threadId?: string;
   returnScorerData?: boolean;
-} & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;
+} & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;

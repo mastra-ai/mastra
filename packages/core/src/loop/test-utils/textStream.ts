@@ -20,33 +20,39 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const result = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt }) => {
-            console.dir({ prompt }, { depth: null });
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-                // providerOptions: undefined,
-              },
-            ]);
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt }) => {
+                console.dir({ prompt }, { depth: null });
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
+                  },
+                ]);
 
-            return {
-              stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: `world!` },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello' },
+                    { type: 'text-delta', id: '1', delta: ', ' },
+                    { type: 'text-delta', id: '1', delta: `world!` },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
+              },
+            }),
           },
-        }),
+        ],
         messageList,
       });
 

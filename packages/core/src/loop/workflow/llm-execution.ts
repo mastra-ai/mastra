@@ -8,7 +8,13 @@ import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
 import { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
-import type { ChunkType, ReasoningStartPayload, TextStartPayload } from '../../stream/types';
+import type {
+  ChunkType,
+  ModelManagerModelConfig,
+  ExecuteStreamModelManager,
+  ReasoningStartPayload,
+  TextStartPayload,
+} from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { createStep } from '../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../types';
@@ -355,11 +361,50 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
   }
 }
 
+function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): ExecuteStreamModelManager<T> {
+  return async callback => {
+    let index = 0;
+    let finalResult: any;
+    let done = false;
+    for (const modelConfig of models) {
+      index++;
+      const maxRetries = modelConfig.maxRetries || 0;
+      let attempt = 0;
+
+      if (done) {
+        break;
+      }
+
+      while (attempt <= maxRetries) {
+        try {
+          console.log(`====Executing model ${modelConfig.model.modelId}, attempt ${attempt}====`);
+          const isLastModel = attempt === maxRetries && index === models.length;
+          const result = await callback(modelConfig.model, isLastModel);
+          finalResult = result;
+          done = true;
+          break;
+        } catch (err) {
+          attempt++;
+
+          console.log(`====Error in model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
+
+          // If we've exhausted all retries for this model, break and try the next model
+          if (attempt > maxRetries) {
+            break;
+          }
+        }
+      }
+    }
+
+    return finalResult;
+  };
+}
+
 export function createLLMExecutionStep<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
 >({
-  model,
+  models,
   _internal,
   messageId,
   runId,
@@ -384,153 +429,174 @@ export function createLLMExecutionStep<
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail }) => {
-      const runState = new AgenticRunState({
-        _internal: _internal!,
-        model,
-      });
-
-      let modelResult;
-      let warnings: any;
-      let request: any;
-      let rawResponse: any;
-
-      switch (model.specificationVersion) {
-        case 'v2': {
-          const inputMessages = await messageList.get.all.aiV5.llmPrompt({
-            downloadRetries,
-            downloadConcurrency,
-            supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
+      const { outputStream, runState, request, warnings, rawResponse, callBail } =
+        await executeStreamWithFallbackModels<{
+          outputStream: MastraModelOutput<OUTPUT | undefined>;
+          runState: AgenticRunState;
+          request: any;
+          warnings: any;
+          rawResponse: any;
+          callBail?: boolean;
+        }>(models)(async (model, isLastModel) => {
+          const runState = new AgenticRunState({
+            _internal: _internal!,
+            model: model,
           });
 
-          modelResult = execute({
-            runId,
-            model,
-            providerOptions,
-            inputMessages,
-            tools,
-            toolChoice,
-            options,
-            modelSettings,
-            telemetry_settings,
-            includeRawChunks,
-            output,
-            headers,
-            onResult: ({
-              warnings: warningsFromStream,
-              request: requestFromStream,
-              rawResponse: rawResponseFromStream,
-            }) => {
-              warnings = warningsFromStream;
-              request = requestFromStream || {};
-              rawResponse = rawResponseFromStream;
+          let modelResult;
+          let warnings: any;
+          let request: any;
+          let rawResponse: any;
 
+          switch (model.specificationVersion) {
+            case 'v2': {
+              const inputMessages = await messageList.get.all.aiV5.llmPrompt({
+                downloadRetries,
+                downloadConcurrency,
+                supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
+              });
+
+              modelResult = execute({
+                runId,
+                model,
+                shouldThrowError: !isLastModel,
+                providerOptions,
+                inputMessages,
+                tools,
+                toolChoice,
+                options,
+                modelSettings,
+                telemetry_settings,
+                includeRawChunks,
+                output,
+                headers,
+                onResult: ({
+                  warnings: warningsFromStream,
+                  request: requestFromStream,
+                  rawResponse: rawResponseFromStream,
+                }) => {
+                  warnings = warningsFromStream;
+                  request = requestFromStream || {};
+                  rawResponse = rawResponseFromStream;
+
+                  controller.enqueue({
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    type: 'step-start',
+                    payload: {
+                      request: request || {},
+                      warnings: [],
+                      messageId: messageId,
+                    },
+                  });
+                },
+                modelStreamSpan,
+              });
+              break;
+            }
+            default: {
+              throw new Error(`Unsupported model version: ${model.specificationVersion}`);
+            }
+          }
+
+          const outputStream = new MastraModelOutput({
+            model: {
+              modelId: modelResult.model.modelId,
+              provider: modelResult.model.provider,
+              version: modelResult.model.specificationVersion,
+            },
+            stream: modelResult.stream as ReadableStream<ChunkType>,
+            messageList,
+            options: {
+              runId,
+              rootSpan: modelStreamSpan,
+              toolCallStreaming,
+              telemetry_settings,
+              includeRawChunks,
+              output,
+            },
+          });
+
+          try {
+            await processOutputStream({
+              outputStream,
+              includeRawChunks,
+              model: modelResult.model,
+              tools,
+              messageId,
+              messageList,
+              runState,
+              options,
+              controller,
+              responseFromModel: {
+                warnings,
+                request,
+                rawResponse,
+              },
+            });
+          } catch (error) {
+            console.log('Error in LLM Execution Step', error);
+            if (isAbortError(error) && options?.abortSignal?.aborted) {
+              await options?.onAbort?.({
+                steps: inputData?.output?.steps ?? [],
+              });
+
+              controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+              return { callBail: true, outputStream, runState, request, warnings, rawResponse };
+            }
+
+            if (isLastModel) {
               controller.enqueue({
+                type: 'error',
                 runId,
                 from: ChunkFrom.AGENT,
-                type: 'step-start',
-                payload: {
-                  request: request || {},
-                  warnings: [],
-                  messageId: messageId,
+                payload: { error },
+              });
+
+              runState.setState({
+                hasErrored: true,
+                stepResult: {
+                  isContinued: false,
+                  reason: 'error',
                 },
               });
-            },
-            modelStreamSpan,
-          });
-          break;
-        }
-        default: {
-          throw new Error(`Unsupported model version: ${model.specificationVersion}`);
-        }
-      }
+            } else {
+              throw error;
+            }
+          }
 
-      const outputStream = new MastraModelOutput({
-        model: {
-          modelId: model.modelId,
-          provider: model.provider,
-          version: model.specificationVersion,
-        },
-        stream: modelResult as ReadableStream<ChunkType>,
-        messageList,
-        options: {
-          runId,
-          rootSpan: modelStreamSpan,
-          toolCallStreaming,
-          telemetry_settings,
-          includeRawChunks,
-          output,
-        },
-      });
+          return { outputStream, runState, request, warnings, rawResponse };
+        });
 
-      try {
-        await processOutputStream({
-          outputStream,
-          includeRawChunks,
-          model,
-          tools,
+      if (callBail) {
+        const usage = outputStream._getImmediateUsage();
+        const responseMetadata = runState.state.responseMetadata;
+        const text = outputStream._getImmediateText();
+
+        return bail({
           messageId,
-          messageList,
-          runState,
-          options,
-          controller,
-          responseFromModel: {
-            warnings,
-            request,
-            rawResponse,
-          },
-        });
-      } catch (error) {
-        console.log('Error in LLM Execution Step', error);
-        if (isAbortError(error) && options?.abortSignal?.aborted) {
-          await options?.onAbort?.({
-            steps: inputData?.output?.steps ?? [],
-          });
-
-          controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-
-          const usage = outputStream._getImmediateUsage();
-          const responseMetadata = runState.state.responseMetadata;
-          const text = outputStream._getImmediateText();
-
-          return bail({
-            messageId,
-            stepResult: {
-              reason: 'abort',
-              warnings,
-              isContinued: false,
-            },
-            metadata: {
-              providerMetadata: providerOptions,
-              ...responseMetadata,
-              headers: rawResponse?.headers,
-              request,
-            },
-            output: {
-              text,
-              toolCalls: [],
-              usage: usage ?? inputData.output?.usage,
-              steps: [],
-            },
-            messages: {
-              all: messageList.get.all.aiV5.model(),
-              user: messageList.get.input.aiV5.model(),
-              nonUser: messageList.get.response.aiV5.model(),
-            },
-          });
-        }
-
-        controller.enqueue({
-          type: 'error',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: { error },
-        });
-
-        runState.setState({
-          hasErrored: true,
           stepResult: {
+            reason: 'abort',
+            warnings,
             isContinued: false,
-            reason: 'error',
+          },
+          metadata: {
+            providerMetadata: providerOptions,
+            ...responseMetadata,
+            headers: rawResponse?.headers,
+            request,
+          },
+          output: {
+            text,
+            toolCalls: [],
+            usage: usage ?? inputData.output?.usage,
+            steps: [],
+          },
+          messages: {
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
           },
         });
       }
