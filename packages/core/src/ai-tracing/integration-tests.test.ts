@@ -306,8 +306,25 @@ const workflowExecutorTool = createTool({
     const { workflowId, input } = context;
     expect(mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
 
+    // Debug: Check if mastra is wrapped (more accurate proxy detection)
+    const mastraIsProxy = mastra && typeof mastra === 'object' && mastra.constructor === Object;
+    const passesMastraInstanceOf = mastra instanceof Mastra;
+    console.log(
+      `[DEBUG] Mastra: isProxy=${mastraIsProxy}, instanceof=${passesMastraInstanceOf}, constructor=${mastra?.constructor.name}`,
+    );
+
     const workflow = mastra?.getWorkflow(workflowId);
+
+    // Debug: Check if workflow is wrapped/proxied
+    const workflowIsProxy = workflow && typeof workflow === 'object' && workflow.constructor === Object;
+    console.log(`[DEBUG] Workflow: isProxy=${workflowIsProxy}, constructor=${workflow?.constructor.name}`);
+
     const run = await workflow?.createRunAsync();
+
+    // Debug: Check if run is wrapped/proxied
+    const runIsProxy = run && typeof run === 'object' && run.constructor === Object;
+    console.log(`[DEBUG] WorkflowRun: isProxy=${runIsProxy}, constructor=${run?.constructor.name}`);
+
     const result = await run?.start({ inputData: input });
 
     return { result: result?.status === 'success' ? result.result : null };
@@ -841,7 +858,6 @@ describe('AI Tracing Integration Tests', () => {
   });
 
   it('should trace tool used directly as workflow step', async () => {
-    // Create a workflow step that executes a tool directly
     const toolExecutorStep = createStep(calculatorTool);
 
     const toolWorkflow = createWorkflow({
@@ -1127,6 +1143,56 @@ describe('AI Tracing Integration Tests', () => {
       const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
       const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
 
+      expect(agentRunSpans.length).toBe(1); // One agent run
+      if (name == 'generateLegacy' || name == 'streamLegacy') {
+        expect(llmGenerationSpans.length).toBe(2); // tool call + response
+      } else {
+        // TODO: Fix this bug, we should see 2 spans in vNext
+        expect(llmGenerationSpans.length).toBe(1); // tool call
+      }
+      expect(toolCallSpans.length).toBe(1); // tool call
+
+      // TODO: revert these expectations to assert equal to just 1 after we can hide
+      // internal spans.
+      expect(workflowRunSpans.length).toBeGreaterThanOrEqual(1); // One workflow run (simpleWorkflow) + internal vnext agent workflows
+      expect(workflowStepSpans.length).toBeGreaterThanOrEqual(1); // One step (simple-step) + internal vnext agent spans
+
+      testExporter.finalExpectations();
+    });
+  });
+
+  //TODO figure out how to test this correctly
+  describe.skip.each(agentMethods)('workflow launched inside agent directly $name', ({ name, method, model }) => {
+    it(`should trace spans correctly`, async () => {
+      const simpleWorkflow = createSimpleWorkflow();
+
+      const workflowAgent = new Agent({
+        name: 'Workflow Agent',
+        instructions: 'You can execute workflows using the workflow executor tool',
+        model,
+        workflows: {
+          simpleWorkflow,
+        },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        workflows: { simpleWorkflow },
+        agents: { workflowAgent },
+      });
+
+      const agent = mastra.getAgent('workflowAgent');
+      const result = await method(agent, 'Execute the simpleWorkflow with test input');
+      expect(result.text).toBeDefined();
+
+      // Validate spans were created for agent, tool call, and workflow execution
+      const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
+      const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
+      const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
+      const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
+      const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
+
+      // TODO: figure out the write expects for this new test.
       expect(agentRunSpans.length).toBe(1); // One agent run
       if (name == 'generateLegacy' || name == 'streamLegacy') {
         expect(llmGenerationSpans.length).toBe(2); // tool call + response
