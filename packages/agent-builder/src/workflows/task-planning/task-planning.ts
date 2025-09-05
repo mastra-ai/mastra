@@ -75,8 +75,10 @@ const planningIterationStep = createStep({
     try {
       // const filteredMcpTools = await initializeMcpTools();
 
+      const model = await resolveModel({ runtimeContext });
+
       const planningAgent = new Agent({
-        model: resolveModel(runtimeContext),
+        model,
         instructions: taskPlanningPrompts.planningAgent.instructions({
           storedQAPairs,
         }),
