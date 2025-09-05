@@ -1,4 +1,4 @@
-gitimport { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -254,6 +254,11 @@ const calculatorTool = createTool({
   },
 });
 
+const apiToolInputSchema = z.object({
+  endpoint: z.string(),
+  method: z.string().default('GET'),
+});
+
 /**
  * API tool for testing HTTP-like operations.
  * Simulates making API calls with endpoint and method parameters.
@@ -262,15 +267,12 @@ const calculatorTool = createTool({
 const apiTool = createTool({
   id: 'api-call',
   description: 'Makes API calls',
-  inputSchema: z.object({
-    endpoint: z.string(),
-    method: z.string().default('GET'),
-  }),
+  inputSchema: apiToolInputSchema,
   outputSchema: z.object({
     status: z.number(),
     data: z.any(),
   }),
-  execute: async ({ context, tracingContext }) => {
+  execute: async ({ context, tracingContext }: ToolExecutionContext<typeof apiToolInputSchema>) => {
     const { endpoint, method } = context;
     // Example of adding custom metadata
     tracingContext?.currentSpan?.update({
@@ -285,16 +287,16 @@ const apiTool = createTool({
   },
 });
 
-/**
- * Workflow execution tool for testing workflow-in-workflow scenarios.
- * Executes a workflow by ID with given input data.
- * Used to test agent tools that launch workflows and context propagation.
- */
 const workflowToolInputSchema = z.object({
   workflowId: z.string(),
   input: z.any(),
 });
 
+/**
+ * Workflow execution tool for testing workflow-in-workflow scenarios.
+ * Executes a workflow by ID with given input data.
+ * Used to test agent tools that launch workflows and context propagation.
+ */
 const workflowExecutorTool = createTool({
   id: 'workflow-executor',
   description: 'Executes a workflow',
@@ -410,8 +412,11 @@ function getToolCallFromPrompt(prompt: string): { toolName: string; toolCallId: 
     }
   }
 
-  // Calculator tool detection
-  if (lowerPrompt.includes('calculate') || lowerPrompt.includes('add') || lowerPrompt.includes('multiply')) {
+  // Calculator tool detection - more restrictive
+  if (
+    (lowerPrompt.includes('calculate') && (lowerPrompt.includes('+') || lowerPrompt.includes('*'))) ||
+    lowerPrompt.includes('use the calculator tool')
+  ) {
     if (!toolsCalled.has('calculator')) {
       toolsCalled.add('calculator');
       return {
@@ -1197,12 +1202,14 @@ describe('AI Tracing Integration Tests', () => {
   describe.each(agentMethods)('metadata added in tool call using $name', ({ method, model }) => {
     it(`should add metadata correctly`, async () => {
       // Create a tool that adds custom metadata via tracingContext
+      const inputSchema = z.object({ input: z.string() });
+
       const metadataTool = createTool({
         id: 'metadata-tool',
         description: 'A tool that adds custom metadata',
-        inputSchema: z.object({ input: z.string() }),
+        inputSchema,
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context, tracingContext }) => {
+        execute: async ({ context, tracingContext }: ToolExecutionContext<typeof inputSchema>) => {
           // Add custom metadata to the current span
           tracingContext?.currentSpan?.update({
             metadata: {
@@ -1238,7 +1245,7 @@ describe('AI Tracing Integration Tests', () => {
       expect(toolCallSpans.length).toBeGreaterThanOrEqual(1);
 
       // Find the metadata tool span and validate custom metadata
-      const metadataToolSpan = toolCallSpans.find(span => span.name?.includes('metadata-tool'));
+      const metadataToolSpan = toolCallSpans.find(span => span.name?.includes('metadataTool'));
       if (metadataToolSpan) {
         expect(metadataToolSpan.metadata?.toolOperation).toBe('metadata-processing');
         expect(metadataToolSpan.metadata?.customFlag).toBe(true);
@@ -1252,12 +1259,14 @@ describe('AI Tracing Integration Tests', () => {
   describe.each(agentMethods)('child spans added in tool call using $name', ({ method, model }) => {
     it(`should create child spans correctly`, async () => {
       // Create a tool that creates child spans via tracingContext
+      const inputSchema = z.object({ input: z.string() });
+
       const childSpanTool = createTool({
         id: 'child-span-tool',
         description: 'A tool that creates child spans',
-        inputSchema: z.object({ input: z.string() }),
+        inputSchema,
         outputSchema: z.object({ output: z.string() }),
-        execute: async ({ context, tracingContext }) => {
+        execute: async ({ context, tracingContext }: ToolExecutionContext<typeof inputSchema>) => {
           // Create a child span for sub-operation
           const childSpan = tracingContext?.currentSpan?.createChildSpan({
             type: AISpanType.GENERIC,

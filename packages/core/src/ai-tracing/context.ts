@@ -76,7 +76,7 @@ export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingC
  * Creates a tracing-aware Agent proxy that automatically injects
  * AI tracing context into generation method calls
  */
-export function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T {
+function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return agent;
@@ -115,7 +115,7 @@ export function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingCont
  * Creates a tracing-aware Workflow proxy that automatically injects
  * AI tracing context into execution method calls
  */
-export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingContext): T {
+function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return workflow;
@@ -131,25 +131,7 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: Tr
             if (prop === 'createRun' || prop === 'createRunAsync') {
               return async (options: any = {}) => {
                 const run = await (target as any)[prop](options);
-                if (run) {
-                  // Return a proxy that automatically injects tracingContext into start() calls
-                  return new Proxy(run, {
-                    get(runTarget, runProp) {
-                      if (runProp === 'start') {
-                        return (startOptions: any = {}) => {
-                          return runTarget.start({
-                            ...startOptions,
-                            tracingContext: startOptions.tracingContext ?? tracingContext,
-                          });
-                        };
-                      }
-                      // Pass through all other properties and methods unchanged
-                      const value = (runTarget as any)[runProp];
-                      return typeof value === 'function' ? value.bind(runTarget) : value;
-                    },
-                  });
-                }
-                return run;
+                return run ? wrapRun(run, tracingContext) : run;
               };
             }
 
@@ -175,5 +157,44 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: Tr
   } catch (error) {
     console.warn('AI Tracing: Failed to create workflow proxy, using original instance', error);
     return workflow;
+  }
+}
+
+/**
+ * Creates a tracing-aware Run proxy that automatically injects
+ * AI tracing context into start method calls
+ */
+function wrapRun<T extends object>(run: T, tracingContext: TracingContext): T {
+  // Don't wrap if no current span or if using NoOp span
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return run;
+  }
+
+  try {
+    return new Proxy(run, {
+      get(target, prop) {
+        try {
+          if (prop === 'start') {
+            return (startOptions: any = {}) => {
+              return (target as any).start({
+                ...startOptions,
+                tracingContext: startOptions.tracingContext ?? tracingContext,
+              });
+            };
+          }
+
+          // Pass through all other properties and methods unchanged
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
+        } catch (error) {
+          console.warn('AI Tracing: Failed to wrap run method, falling back to original', error);
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
+        }
+      },
+    });
+  } catch (error) {
+    console.warn('AI Tracing: Failed to create run proxy, using original instance', error);
+    return run;
   }
 }
