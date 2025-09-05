@@ -249,6 +249,92 @@ describe('PgVector', () => {
       });
     });
 
+    describe('listIndexes with external vector tables (Issue #6691)', () => {
+      const mastraIndexName = 'mastra_managed_table';
+      const externalTableName = 'dam_embedding_collections';
+      let client: pg.PoolClient;
+
+      beforeAll(async () => {
+        // Get a client to create an external table
+        client = await vectorDB.pool.connect();
+
+        // Create an external table with vector column that is NOT managed by PgVector
+        // This simulates a real-world scenario where other applications use pgvector
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS ${externalTableName} (
+            id SERIAL PRIMARY KEY,
+            name TEXT,
+            centroid_embedding vector(1536),
+            created_at TIMESTAMP DEFAULT NOW()
+          )
+        `);
+
+        // Create a Mastra-managed index
+        await vectorDB.createIndex({
+          indexName: mastraIndexName,
+          dimension: 128,
+        });
+      });
+
+      afterAll(async () => {
+        // Clean up
+        try {
+          await vectorDB.deleteIndex({ indexName: mastraIndexName });
+        } catch (e) {
+          // Ignore if already deleted
+        }
+
+        try {
+          await client.query(`DROP TABLE IF EXISTS ${externalTableName}`);
+        } catch (e) {
+          // Ignore errors
+        }
+
+        client.release();
+      });
+
+      it('should handle initialization when external vector tables exist', async () => {
+        // This test reproduces the bug from issue #6691
+        // When PgVector is initialized, it calls listIndexes() which returns ALL tables with vector columns
+        // Then it tries to call getIndexInfo() on each, which fails for non-Mastra tables
+
+        // Create a new PgVector instance to trigger initialization
+        const newVectorDB = new PgVector({ connectionString });
+
+        // Give initialization time to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // The initialization should not throw errors even with external tables present
+        // Currently this will fail because getIndexInfo is called on 'dam_embedding_collections'
+        // which doesn't have the expected 'embedding' column
+
+        const indexes = await newVectorDB.listIndexes();
+
+        // BUG: This currently returns both tables
+        expect(indexes).toContain(mastraIndexName);
+        expect(indexes).toContain(externalTableName); // This is the problem!
+
+        // Try to describe the external table - this should fail
+        await expect(async () => {
+          await newVectorDB.describeIndex({ indexName: externalTableName });
+        }).rejects.toThrow();
+
+        await newVectorDB.disconnect();
+      });
+
+      it('should only return Mastra-managed tables from listIndexes', async () => {
+        // This test shows what the correct behavior should be
+        const indexes = await vectorDB.listIndexes();
+
+        // Should include Mastra-managed tables
+        expect(indexes).toContain(mastraIndexName);
+
+        // Should NOT include external tables (but currently does - this is the bug)
+        // TODO: Fix this - currently fails
+        expect(indexes).not.toContain(externalTableName);
+      });
+    });
+
     describe('describeIndex', () => {
       const indexName = 'test_query_4';
       beforeAll(async () => {
