@@ -280,13 +280,13 @@ describe('PgVector', () => {
         // Clean up
         try {
           await vectorDB.deleteIndex({ indexName: mastraIndexName });
-        } catch (e) {
+        } catch {
           // Ignore if already deleted
         }
 
         try {
           await client.query(`DROP TABLE IF EXISTS ${externalTableName}`);
-        } catch (e) {
+        } catch {
           // Ignore errors
         }
 
