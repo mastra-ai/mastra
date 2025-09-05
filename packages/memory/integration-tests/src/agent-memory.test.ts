@@ -18,6 +18,7 @@ import { rmSync } from 'node:fs';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
+
   beforeAll(async () => {
     rmSync(dbFile.replace('file:', ''), { force: true });
     rmSync(dbFile.replace('file:', '').replace('.db', '.db-shm'), { force: true });
@@ -175,7 +176,7 @@ describe('Agent Memory Tests', () => {
               semanticRecall: {
                 topK: 5,
                 messageRange: 5,
-                scope: 'resource', // This is the key - resource scope should allow cross-thread memory
+                scope: 'resource',
               },
             },
             storage,
@@ -218,8 +219,6 @@ describe('Agent Memory Tests', () => {
       return result;
     };
 
-    // Send first message to new thread - this should call getMemoryMessages
-    // because resource scope allows cross-thread memory access
     const secondResponse = await agent.generate('What did we discuss about cats?', {
       memory: {
         thread: thread2Id,
@@ -230,12 +229,9 @@ describe('Agent Memory Tests', () => {
     // Restore original method
     (agent as any).getMemoryMessages = originalGetMemoryMessages;
 
-    // The bug is that getMemoryMessages is not called for the first message in a new thread
-    // even when using resource scope, which should allow access to messages from other threads
     expect(getMemoryMessagesCalled).toBe(true);
 
     // Verify that getMemoryMessages actually returned messages from the first thread
-    // Since we're using resource scope, it should find messages from thread1 when searching from thread2
     expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
 
     // Verify that the retrieved messages contain content from the first thread
@@ -244,9 +240,6 @@ describe('Agent Memory Tests', () => {
         msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
     );
     expect(hasMessagesFromFirstThread).toBe(true);
-
-    // Verify that the agent's response shows it has access to the previous conversation
-    // The response should reference the previous discussion about cats
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
   });
 
