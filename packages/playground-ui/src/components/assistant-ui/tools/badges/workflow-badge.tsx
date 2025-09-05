@@ -2,26 +2,33 @@ import { Icon, WorkflowIcon } from '@/ds/icons';
 import { GetWorkflowResponse } from '@mastra/client-js';
 import { ChevronUpIcon } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
-import { useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { WorkflowGraph, WorkflowRunProvider } from '@/domains/workflows';
-import { WorkflowResult } from '@mastra/core';
+
+import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import { useLinkComponent } from '@/lib/framework';
 import { Button } from '@/ds/components/Button';
-import Spinner from '@/components/ui/spinner';
+
+import { useHandleAgentWorkflowStream } from '@/domains/workflows/hooks/use-handle-agent-workflow-stream';
+import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { StreamChunk } from '@/types';
 
 export interface WorkflowBadgeProps {
   workflow: GetWorkflowResponse;
   workflowId: string;
-  result?: {
-    result: WorkflowResult<any, any>;
-    runId: string;
-  };
+  runId?: string;
+  isStreaming?: boolean;
 }
 
-export const WorkflowBadge = ({ workflow, result, workflowId }: WorkflowBadgeProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: WorkflowBadgeProps) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
+    enabled: Boolean(runId) && !isStreaming,
+  });
+  const run = runs?.runs.find(run => run.runId === runId);
+  const isLoading = isRunsLoading || !run;
+
+  const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
   return (
     <div className="mb-2">
@@ -36,7 +43,15 @@ export const WorkflowBadge = ({ workflow, result, workflowId }: WorkflowBadgePro
         <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
       </button>
 
-      {!isCollapsed && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={result?.runId} />}
+      {!isCollapsed && !isStreaming && !isLoading && (
+        <WorkflowRunProvider snapshot={snapshot}>
+          <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
+        </WorkflowRunProvider>
+      )}
+
+      {!isCollapsed && isStreaming && (
+        <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
+      )}
     </div>
   );
 };
@@ -49,39 +64,35 @@ interface WorkflowBadgeExtendedProps {
 
 const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExtendedProps) => {
   const { Link } = useLinkComponent();
-  const { runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, { enabled: Boolean(runId) });
-  const run = runs?.runs.find(run => run.runId === runId);
-
-  const isLoading = isRunsLoading || !run;
 
   return (
     <div className="pt-2">
       <div className="border-sm border-border1 rounded-lg bg-surface4">
         <div className="p-4 border-b-sm border-border1">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-[50vh]">
-              <Spinner />
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 pb-2">
-                <Button as={Link} href={`/workflows/${workflowId}/graph`}>
-                  Go to workflow
-                </Button>
-                <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
-                  See run
-                </Button>
-              </div>
+          <div className="flex items-center gap-2 pb-2">
+            <Button as={Link} href={`/workflows/${workflowId}/graph`}>
+              Go to workflow
+            </Button>
+            <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+              See run
+            </Button>
+          </div>
 
-              <div className="rounded-md overflow-hidden h-[60vh] w-full">
-                <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
-                  <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
-                </WorkflowRunProvider>
-              </div>
-            </>
-          )}
+          <div className="rounded-md overflow-hidden h-[60vh] w-full">
+            <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+          </div>
         </div>
       </div>
     </div>
   );
+};
+
+export const useWorkflowStream = (partialWorkflowOutput?: StreamChunk) => {
+  const streamResult = useHandleAgentWorkflowStream(partialWorkflowOutput);
+  const { setResult } = useContext(WorkflowRunContext);
+
+  useEffect(() => {
+    if (!streamResult) return;
+    setResult(streamResult);
+  }, [streamResult]);
 };

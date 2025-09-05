@@ -1,6 +1,7 @@
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 
 import { WorkflowWatchResult } from '@mastra/client-js';
+import { StreamChunk } from '@/types';
 
 export function convertWorkflowRunStateToWatchResult(runState: WorkflowRunState): WorkflowWatchResult {
   const runId = runState.runId;
@@ -65,12 +66,7 @@ function determineWorkflowStatus(steps: Record<string, any>): 'running' | 'succe
 
 export const mapWorkflowStreamChunkToWatchResult = (
   prev: WorkflowWatchResult,
-  chunk: {
-    type: string;
-    payload: any;
-    runId: string;
-    from: 'AGENT' | 'WORKFLOW';
-  },
+  chunk: StreamChunk,
 ): WorkflowWatchResult => {
   if (chunk.type === 'workflow-start') {
     return {
