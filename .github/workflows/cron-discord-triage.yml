@@ -1,4 +1,6 @@
 name: Discord Triage Cron
+permissions:
+  contents: none
 
 on:
   schedule:
