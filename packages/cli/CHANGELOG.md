@@ -1,5 +1,70 @@
 # mastra
 
+## 0.12.0
+
+### Minor Changes
+
+- a01cf14: Add workflow graph in agent (workflow as tool in agent)
+
+### Patch Changes
+
+- cf4e353: Agent Builder Template - adding in UI components to use agent builder template actions
+- 788e612: Fix playground workflow graph is broken when workflow starts with a branch
+- 5397eb4: Add public URL support when adding files in Multi Modal
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [cf4e353]
+- Updated dependencies [fd83526]
+- Updated dependencies [d0b90ab]
+- Updated dependencies [6f5eb7a]
+- Updated dependencies [a01cf14]
+- Updated dependencies [a9e50ee]
+- Updated dependencies [5397eb4]
+- Updated dependencies [376913a]
+- Updated dependencies [c9f4e4a]
+- Updated dependencies [0acbc80]
+- Updated dependencies [376913a]
+  - @mastra/core@0.16.0
+  - @mastra/deployer@0.16.0
+  - @mastra/loggers@0.10.11
+  - @mastra/mcp@0.11.4
+
+## 0.12.0-alpha.1
+
+### Patch Changes
+
+- 376913a: Update peerdeps
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+- Updated dependencies [376913a]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/loggers@0.10.11-alpha.0
+  - @mastra/mcp@0.11.4-alpha.0
+  - @mastra/deployer@0.16.0-alpha.1
+
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- a01cf14: Add workflow graph in agent (workflow as tool in agent)
+
+### Patch Changes
+
+- cf4e353: Agent Builder Template - adding in UI components to use agent builder template actions
+- 788e612: Fix playground workflow graph is broken when workflow starts with a branch
+- 5397eb4: Add public URL support when adding files in Multi Modal
+- Updated dependencies [cf4e353]
+- Updated dependencies [fd83526]
+- Updated dependencies [d0b90ab]
+- Updated dependencies [6f5eb7a]
+- Updated dependencies [a01cf14]
+- Updated dependencies [a9e50ee]
+- Updated dependencies [5397eb4]
+- Updated dependencies [c9f4e4a]
+- Updated dependencies [0acbc80]
+  - @mastra/deployer@0.16.0-alpha.0
+  - @mastra/core@0.16.0-alpha.0
+
 ## 0.11.3
 
 ### Patch Changes

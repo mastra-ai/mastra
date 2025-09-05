@@ -1679,6 +1679,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
+            tracingContext: { currentSpan: stepAISpan },
           });
         }
       });

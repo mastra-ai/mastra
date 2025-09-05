@@ -267,7 +267,7 @@ export function createStep<
     suspendSchema: params.suspendSchema,
     scorers: params.scorers,
     retries: params.retries,
-    execute: params.execute,
+    execute: params.execute.bind(params),
   };
 }
 
@@ -1381,7 +1381,15 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+  stream({
+    inputData,
+    runtimeContext,
+    tracingContext,
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+  } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
   } {
@@ -1447,7 +1455,12 @@ export class Run<
       type: 'workflow-start',
       payload: { runId: this.runId },
     });
-    this.executionResults = this._start({ inputData, runtimeContext, format: 'aisdk' }).then(result => {
+    this.executionResults = this._start({
+      inputData,
+      runtimeContext,
+      format: 'aisdk',
+      tracingContext,
+    }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }

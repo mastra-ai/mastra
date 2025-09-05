@@ -1372,17 +1372,7 @@ export class Agent<
           mastra: this.#mastra,
           // manually wrap workflow tools with ai tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
-          execute: async ({ context, writer }) => {
-            const toolAISpan = tracingContext.currentSpan?.createChildSpan({
-              type: AISpanType.TOOL_CALL,
-              name: `tool: '${workflowName}'`,
-              input: context,
-              attributes: {
-                toolId: workflowName,
-                toolType: 'workflow',
-              },
-            });
-
+          execute: async ({ context, writer, tracingContext: innerTracingContext }) => {
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
@@ -1400,14 +1390,13 @@ export class Agent<
                 result = await run.start({
                   inputData: context,
                   runtimeContext,
-                  tracingContext: { currentSpan: toolAISpan },
+                  tracingContext: innerTracingContext,
                 });
               } else if (methodType === 'stream') {
-                const streamResult = await run.stream({
+                const streamResult = run.stream({
                   inputData: context,
                   runtimeContext,
-                  // TODO: is this forgottn?
-                  //currentSpan: toolAISpan,
+                  tracingContext: innerTracingContext,
                 });
 
                 if (writer) {
@@ -1434,7 +1423,6 @@ export class Agent<
                 result = await streamResult.result;
               }
 
-              toolAISpan?.end({ output: result });
               return { result, runId: run.runId };
             } catch (err) {
               const mastraError = new MastraError(
@@ -1454,7 +1442,6 @@ export class Agent<
               );
               this.logger.trackException(mastraError);
               this.logger.error(mastraError.toString());
-              toolAISpan?.error({ error: mastraError });
               throw mastraError;
             }
           },
@@ -2141,6 +2128,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           overrideScorers,
           threadId,
           resourceId,
+          tracingContext: { currentSpan: agentAISpan },
         });
 
         const scoringData: {
@@ -2185,6 +2173,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     overrideScorers,
     threadId,
     resourceId,
+    tracingContext,
   }: {
     messageList: MessageList;
     runId: string;
@@ -2197,6 +2186,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
+    tracingContext: TracingContext;
   }) {
     const agentName = this.name;
     const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
@@ -2255,6 +2245,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput: !!structuredOutput,
           threadId,
           resourceId,
+          tracingContext,
         });
       }
     }
@@ -3404,6 +3395,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runtimeContext,
       structuredOutput,
       overrideScorers,
+      tracingContext,
     });
   }
 

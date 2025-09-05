@@ -18,6 +18,7 @@ const withNextra = nextra({
       transformers: [transformerNotationDiff()],
     },
   },
+  unstable_shouldAddLocaleToLinks: true,
 });
 
 const withGT = initGT();

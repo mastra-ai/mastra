@@ -1,5 +1,62 @@
 # @mastra/deployer
 
+## 0.16.0
+
+### Minor Changes
+
+- 376913a: Update peerdeps of @mastra/core
+
+### Patch Changes
+
+- cf4e353: Agent Builder Template - adding in UI components to use agent builder template actions
+- 5397eb4: Add public URL support when adding files in Multi Modal
+- Updated dependencies [8fbf79e]
+- Updated dependencies [cf4e353]
+- Updated dependencies [fd83526]
+- Updated dependencies [d0b90ab]
+- Updated dependencies [6f5eb7a]
+- Updated dependencies [a01cf14]
+- Updated dependencies [a9e50ee]
+- Updated dependencies [5397eb4]
+- Updated dependencies [c9f4e4a]
+- Updated dependencies [0acbc80]
+- Updated dependencies [376913a]
+- Updated dependencies [97eea1f]
+  - @mastra/core@0.16.0
+  - @mastra/server@0.16.0
+
+## 0.16.0-alpha.1
+
+### Minor Changes
+
+- 376913a: Update peerdeps of @mastra/core
+
+### Patch Changes
+
+- Updated dependencies [8fbf79e]
+- Updated dependencies [376913a]
+  - @mastra/core@0.16.0-alpha.1
+  - @mastra/server@0.16.0-alpha.1
+
+## 0.16.0-alpha.0
+
+### Patch Changes
+
+- cf4e353: Agent Builder Template - adding in UI components to use agent builder template actions
+- 5397eb4: Add public URL support when adding files in Multi Modal
+- Updated dependencies [cf4e353]
+- Updated dependencies [fd83526]
+- Updated dependencies [d0b90ab]
+- Updated dependencies [6f5eb7a]
+- Updated dependencies [a01cf14]
+- Updated dependencies [a9e50ee]
+- Updated dependencies [5397eb4]
+- Updated dependencies [c9f4e4a]
+- Updated dependencies [0acbc80]
+- Updated dependencies [97eea1f]
+  - @mastra/server@0.16.0-alpha.0
+  - @mastra/core@0.16.0-alpha.0
+
 ## 0.15.3
 
 ### Patch Changes
