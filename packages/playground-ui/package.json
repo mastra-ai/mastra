@@ -55,6 +55,7 @@
     "@autoform/zod": "^4.0.0",
     "@codemirror/lang-json": "^6.0.2",
     "@dagrejs/dagre": "^1.1.5",
+    "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.1",
     "@lukeed/uuid": "^2.0.1",

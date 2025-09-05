@@ -11,6 +11,7 @@ import { MistralIcon } from '@/ds/icons/MistralIcon';
 
 export const providerMapToIcon = {
   'openai.chat': <OpenaiChatIcon />,
+  'openai.responses': <OpenaiChatIcon />,
   'anthropic.chat': <AnthropicChatIcon />,
   'anthropic.messages': <AnthropicMessagesIcon />,
   AZURE: <AzureIcon />,
