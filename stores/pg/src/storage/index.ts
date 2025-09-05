@@ -21,9 +21,9 @@ import type {
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { ClientConfig } from 'pg';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
-import type { ClientConfig } from 'pg';
 import { LegacyEvalsPG } from './domains/legacy-evals';
 import { MemoryPG } from './domains/memory';
 import { StoreOperationsPG } from './domains/operations';
@@ -61,9 +61,31 @@ export class PostgresStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: PostgresConfig) {
+    // Type guards for better type safety
+    const isConnectionStringConfig = (cfg: PostgresConfig): cfg is PostgresConfig & { connectionString: string } => {
+      return 'connectionString' in cfg;
+    };
+
+    const isHostConfig = (
+      cfg: PostgresConfig,
+    ): cfg is PostgresConfig & {
+      host: string;
+      port: number;
+      database: string;
+      user: string;
+      password: string;
+      ssl?: boolean | ISSLConfig;
+    } => {
+      return 'host' in cfg && 'database' in cfg && 'user' in cfg && 'password' in cfg;
+    };
+
+    const isCloudSqlConfig = (cfg: PostgresConfig): cfg is PostgresConfig & ClientConfig => {
+      return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
+    };
+
     // Validation: connectionString or host/database/user/password must not be empty
     try {
-      if ('connectionString' in config) {
+      if (isConnectionStringConfig(config)) {
         if (
           !config.connectionString ||
           typeof config.connectionString !== 'string' ||
@@ -73,16 +95,12 @@ export class PostgresStore extends MastraStorage {
             'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
           );
         }
-      } else if (
-        // Cloud SQL connector config (stream or password function)
-        'stream' in (config as any) ||
-        typeof (config as any).password === 'function'
-      ) {
+      } else if (isCloudSqlConfig(config)) {
         // valid connector config; no-op
-      } else if ('host' in config) {
-        const required = ['host', 'database', 'user', 'password'];
+      } else if (isHostConfig(config)) {
+        const required = ['host', 'database', 'user', 'password'] as const;
         for (const key of required) {
-          if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
+          if (!config[key] || typeof config[key] !== 'string' || config[key].trim() === '') {
             throw new Error(
               `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
             );
@@ -95,27 +113,27 @@ export class PostgresStore extends MastraStorage {
       }
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
-      if ('connectionString' in config) {
+      if (isConnectionStringConfig(config)) {
         this.#config = {
           connectionString: config.connectionString,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
         } as any;
-      } else if ('stream' in (config as any) || typeof (config as any).password === 'function') {
+      } else if (isCloudSqlConfig(config)) {
         // Cloud SQL connector config
         this.#config = {
-          ...(config as ClientConfig),
-          max: (config as any).max ?? undefined,
-          idleTimeoutMillis: (config as any).idleTimeoutMillis ?? undefined,
+          ...config,
+          max: config.max,
+          idleTimeoutMillis: config.idleTimeoutMillis,
         } as any;
-      } else if ('host' in config) {
+      } else if (isHostConfig(config)) {
         this.#config = {
-          host: (config as any).host,
-          port: (config as any).port,
-          database: (config as any).database,
-          user: (config as any).user,
-          password: (config as any).password,
-          ssl: (config as any).ssl,
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
         } as any;
@@ -123,8 +141,8 @@ export class PostgresStore extends MastraStorage {
         // This should never happen due to validation above, but included for completeness
         this.#config = {
           ...(config as ClientConfig),
-          max: (config as any).max ?? undefined,
-          idleTimeoutMillis: (config as any).idleTimeoutMillis ?? undefined,
+          max: (config as any).max,
+          idleTimeoutMillis: (config as any).idleTimeoutMillis,
         } as any;
       }
       this.stores = {} as StorageDomains;
