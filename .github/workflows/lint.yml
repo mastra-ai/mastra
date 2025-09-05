@@ -183,6 +183,11 @@ jobs:
       - name: bump versions
         run: npx changeset version
 
+      - name: Configure git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
       - name: Commit changes
         run: git commit -am "Bump versions"
 
