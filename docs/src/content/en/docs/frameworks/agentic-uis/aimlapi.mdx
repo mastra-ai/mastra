@@ -97,7 +97,7 @@ You can pass provider-wide options to the AIMLAPI provider:
 import { Agent } from '@mastra/core/agent';
 import { createAIMLAPI } from '@ai-ml.api/aimlapi-vercel-ai';
 
-export const weatherAgent = new Agent({
+export const assistant = new Agent({
     name: 'assistant',
     instructions: 'You are a helpful assistant.',
     model: createAIMLAPI({
