@@ -189,7 +189,7 @@ jobs:
           git config --local user.name "GitHub Action"
 
       - name: Commit changes
-        run: git commit -am "Bump versions"
+        run: git commit -am "Bump versions" || true
 
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs
