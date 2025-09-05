@@ -180,6 +180,12 @@ jobs:
       - name: Install dependencies
         run: npm install semver --no-package-lock
 
+      - name: bump versions
+        run: npx changeset version
+
+      - name: Commit changes
+        run: git commit -am "Bump versions"
+
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs
 
