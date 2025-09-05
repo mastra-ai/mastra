@@ -155,10 +155,6 @@ export class MastraLLMVNext extends MastraBase {
       tools: Object.keys(tools || {}),
     });
 
-    // if (output) {
-    //   output = this._applySchemaCompat(output) as any; // TODO: types for schema compat
-    // }
-
     const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm stream: '${model.modelId}'`,
       type: AISpanType.LLM_GENERATION,
