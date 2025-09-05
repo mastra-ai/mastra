@@ -15,7 +15,7 @@
     "@mastra/fastembed": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.6.1",
     "json-schema": "^0.4.0",
     "zod": "^3.25.76"
   },
