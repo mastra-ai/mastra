@@ -53,10 +53,8 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
   }
 
-  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config?: MemoryConfig) {
-    const mergedConfig = config ? this.getMergedThreadConfig(config) : undefined;
-    const resourceScope =
-      typeof mergedConfig?.semanticRecall === 'object' && mergedConfig?.semanticRecall?.scope === 'resource';
+  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
+    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
 
     const thread = await this.storage.getThreadById({ threadId });
 
@@ -265,8 +263,8 @@ export class Memory extends MastraMemory {
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
     const threadConfig = this.getMergedThreadConfig(config || {});
+    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
