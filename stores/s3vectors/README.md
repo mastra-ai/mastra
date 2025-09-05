@@ -1,8 +1,11 @@
 # @mastra/s3vectors
 
-Vector store implementation for **Amazon S3 Vectors** (Preview) tailored for Mastra. It stores vectors in **vector buckets** and performs similarity queries in **vector indexes** with sub-second performance.
+> ⚠️ Amazon S3 Vectors is a Preview service.
+> Preview features may change or be removed without notice and are not covered by AWS SLAs.
+> Behavior, limits, and regional availability can change at any time.
+> This library may introduce breaking changes to stay aligned with AWS.
 
-> **Note**: Amazon S3 Vectors is a preview feature and subject to change.
+Vector store implementation for **Amazon S3 Vectors** (Preview) tailored for Mastra. It stores vectors in **vector buckets** and performs similarity queries in **vector indexes** with sub-second performance.
 
 ## Installation
 
