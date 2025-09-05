@@ -10,13 +10,26 @@ import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
+import { rmSync } from 'node:fs';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
+
+  beforeAll(async () => {
+    rmSync(dbFile.replace('file:', ''), { force: true });
+    rmSync(dbFile.replace('file:', '').replace('.db', '.db-shm'), { force: true });
+    rmSync(dbFile.replace('file:', '').replace('.db', '.db-wal'), { force: true });
+  });
+
+  afterAll(async () => {
+    rmSync(dbFile.replace('file:', ''), { force: true });
+    rmSync(dbFile.replace('file:', '').replace('.db', '.db-shm'), { force: true });
+    rmSync(dbFile.replace('file:', '').replace('.db', '.db-wal'), { force: true });
+  });
 
   it(`inherits storage from Mastra instance`, async () => {
     const agent = new Agent({
@@ -139,6 +152,103 @@ describe('Agent Memory Tests', () => {
     });
 
     expect(workingMemoryData).toBe('# Resource Memory\n- Shared across threads');
+  });
+
+  it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
+    const storage = new LibSQLStore({
+      url: dbFile,
+    });
+    const vector = new LibSQLVector({
+      connectionUrl: dbFile,
+    });
+
+    const mastra = new Mastra({
+      storage,
+      vectors: { default: vector },
+      agents: {
+        testAgent: new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a helpful assistant',
+          model: openai('gpt-4o-mini'),
+          memory: new Memory({
+            options: {
+              lastMessages: 5,
+              semanticRecall: {
+                topK: 5,
+                messageRange: 5,
+                scope: 'resource', // This is the key - resource scope should allow cross-thread memory
+              },
+            },
+            storage,
+            vector,
+            embedder: fastembed,
+          }),
+        }),
+      },
+    });
+
+    const agent = mastra.getAgent('testAgent');
+    const memory = (await agent.getMemory()) as Memory;
+    const resourceId = 'test-resource-semantic';
+
+    // First, create a thread and add some messages to establish history
+    const thread1Id = randomUUID();
+    await agent.generateVNext('Tell me about cats', {
+      memory: {
+        thread: thread1Id,
+        resource: resourceId,
+      },
+    });
+
+    // Verify first thread has messages
+    const thread1Messages = await memory.query({ threadId: thread1Id, resourceId });
+    expect(thread1Messages.messages.length).toBeGreaterThan(0);
+
+    // Now create a second thread - this should be able to access memory from thread1
+    // due to resource scope, even on the first message
+    const thread2Id = randomUUID();
+
+    // Mock the getMemoryMessages method to track if it's called
+    let getMemoryMessagesCalled = false;
+    let retrievedMemoryMessages: any[] = [];
+    const originalGetMemoryMessages = (agent as any).getMemoryMessages;
+    (agent as any).getMemoryMessages = async (...args: any[]) => {
+      getMemoryMessagesCalled = true;
+      const result = await originalGetMemoryMessages.call(agent, ...args);
+      retrievedMemoryMessages = result || [];
+      return result;
+    };
+
+    // Send first message to new thread - this should call getMemoryMessages
+    // because resource scope allows cross-thread memory access
+    const secondResponse = await agent.generateVNext('What did we discuss about cats?', {
+      memory: {
+        thread: thread2Id,
+        resource: resourceId,
+      },
+    });
+
+    // Restore original method
+    (agent as any).getMemoryMessages = originalGetMemoryMessages;
+
+    // The bug is that getMemoryMessages is not called for the first message in a new thread
+    // even when using resource scope, which should allow access to messages from other threads
+    expect(getMemoryMessagesCalled).toBe(true);
+
+    // Verify that getMemoryMessages actually returned messages from the first thread
+    // Since we're using resource scope, it should find messages from thread1 when searching from thread2
+    expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
+
+    // Verify that the retrieved messages contain content from the first thread
+    const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
+      msg =>
+        msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
+    );
+    expect(hasMessagesFromFirstThread).toBe(true);
+
+    // Verify that the agent's response shows it has access to the previous conversation
+    // The response should reference the previous discussion about cats
+    expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
   });
 
   describe('Agent memory message persistence', () => {
