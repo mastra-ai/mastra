@@ -260,7 +260,7 @@ export const useStreamWorkflow = () => {
         runtimeContext.set(key as keyof RuntimeContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.stream({ runId, inputData, runtimeContext });
+      const stream = await workflow.streamVNext({ runId, inputData, runtimeContext });
 
       if (!stream) throw new Error('No stream returned');
 
@@ -272,10 +272,10 @@ export const useStreamWorkflow = () => {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          if (value.type === 'start') {
+          if (value.type === 'workflow-start') {
             setStreamResult((prev: WorkflowWatchResult) => ({
               ...prev,
-              runId: value.payload.runId,
+              runId: value.runId,
               eventTimestamp: new Date(),
               payload: {
                 ...(prev?.payload || {}),
@@ -287,7 +287,7 @@ export const useStreamWorkflow = () => {
             }));
           }
 
-          if (value.type === 'step-start') {
+          if (value.type === 'workflow-step-start') {
             setIsStreaming(true);
             setStreamResult((prev: WorkflowWatchResult) => {
               const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
@@ -315,7 +315,7 @@ export const useStreamWorkflow = () => {
             });
           }
 
-          if (value.type === 'step-suspended') {
+          if (value.type === 'workflow-step-suspended') {
             setStreamResult((prev: WorkflowWatchResult) => {
               const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
               return {
@@ -345,7 +345,7 @@ export const useStreamWorkflow = () => {
             setIsStreaming(false);
           }
 
-          if (value.type === 'step-waiting') {
+          if (value.type === 'workflow-step-waiting') {
             setStreamResult((prev: WorkflowWatchResult) => {
               const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
               return {
@@ -374,7 +374,7 @@ export const useStreamWorkflow = () => {
             });
           }
 
-          if (value.type === 'step-result') {
+          if (value.type === 'workflow-step-result') {
             status = value.payload.status;
             setStreamResult((prev: WorkflowWatchResult) => {
               const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
@@ -404,20 +404,20 @@ export const useStreamWorkflow = () => {
             });
           }
 
-          if (value.type === 'step-finish') {
-            setStreamResult((prev: WorkflowWatchResult) => {
-              return {
-                ...prev,
-                payload: {
-                  ...prev.payload,
-                  currentStep: undefined,
-                },
-                eventTimestamp: new Date(),
-              };
-            });
-          }
+          // if (value.type === 'workflow-step-finish') {
+          //   setStreamResult((prev: WorkflowWatchResult) => {
+          //     return {
+          //       ...prev,
+          //       payload: {
+          //         ...prev.payload,
+          //         currentStep: undefined,
+          //       },
+          //       eventTimestamp: new Date(),
+          //     };
+          //   });
+          // }
 
-          if (value.type === 'finish') {
+          if (value.type === 'workflow-finish') {
             setStreamResult((prev: WorkflowWatchResult) => {
               return {
                 ...prev,
