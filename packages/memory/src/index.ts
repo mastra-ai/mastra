@@ -53,12 +53,21 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
   }
 
-  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
+  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config?: MemoryConfig) {
+    const mergedConfig = config ? this.getMergedThreadConfig(config) : undefined;
+    const resourceScope =
+      typeof mergedConfig?.semanticRecall === 'object' && mergedConfig?.semanticRecall?.scope === 'resource';
+
     const thread = await this.storage.getThreadById({ threadId });
-    if (!thread) {
+
+    // For resource-scoped semantic recall, we don't need to validate that the specific thread exists
+    // because we're searching across all threads for the resource
+    if (!thread && !resourceScope) {
       throw new Error(`No thread found with id ${threadId}`);
     }
-    if (thread.resourceId !== resourceId) {
+
+    // If thread exists, validate it belongs to the correct resource
+    if (thread && thread.resourceId !== resourceId) {
       throw new Error(
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
       );
@@ -95,7 +104,8 @@ export class Memory extends MastraMemory {
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
   }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
+    const config = this.getMergedThreadConfig(threadConfig || {});
+    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
     const vectorResults: {
       id: string;
@@ -109,8 +119,6 @@ export class Memory extends MastraMemory {
       selectBy,
       threadConfig,
     });
-
-    const config = this.getMergedThreadConfig(threadConfig || {});
 
     this.checkStorageFeatureSupport(config);
 
@@ -257,7 +265,7 @@ export class Memory extends MastraMemory {
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
+    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
     const threadConfig = this.getMergedThreadConfig(config || {});
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {

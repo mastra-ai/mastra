@@ -1812,8 +1812,11 @@ export class Agent<
           });
         }
 
+        const config = memory.getMergedThreadConfig(memoryConfig || {});
+        const hasResourceScopeSemanticRecall =
+          typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
         let [memoryMessages, memorySystemMessage] = await Promise.all([
-          existingThread
+          existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({
                 resourceId,
                 threadId: threadObject.id,
@@ -2847,8 +2850,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           });
         }
 
+        const config = memory.getMergedThreadConfig(memoryConfig || {});
+        const hasResourceScopeSemanticRecall =
+          typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
         let [memoryMessages, memorySystemMessage] = await Promise.all([
-          existingThread
+          existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({
                 resourceId,
                 threadId: threadObject.id,
