@@ -306,25 +306,8 @@ const workflowExecutorTool = createTool({
     const { workflowId, input } = context;
     expect(mastra, 'Mastra instance should be available in tool execution context').toBeTruthy();
 
-    // Debug: Check if mastra is wrapped (more accurate proxy detection)
-    const mastraIsProxy = mastra && typeof mastra === 'object' && mastra.constructor === Object;
-    const passesMastraInstanceOf = mastra instanceof Mastra;
-    console.log(
-      `[DEBUG] Mastra: isProxy=${mastraIsProxy}, instanceof=${passesMastraInstanceOf}, constructor=${mastra?.constructor.name}`,
-    );
-
     const workflow = mastra?.getWorkflow(workflowId);
-
-    // Debug: Check if workflow is wrapped/proxied
-    const workflowIsProxy = workflow && typeof workflow === 'object' && workflow.constructor === Object;
-    console.log(`[DEBUG] Workflow: isProxy=${workflowIsProxy}, constructor=${workflow?.constructor.name}`);
-
     const run = await workflow?.createRunAsync();
-
-    // Debug: Check if run is wrapped/proxied
-    const runIsProxy = run && typeof run === 'object' && run.constructor === Object;
-    console.log(`[DEBUG] WorkflowRun: isProxy=${runIsProxy}, constructor=${run?.constructor.name}`);
-
     const result = await run?.start({ inputData: input });
 
     return { result: result?.status === 'success' ? result.result : null };
