@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
@@ -7,7 +8,6 @@ import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  console.log(`row is`, JSON.stringify(row, null, 2));
   return {
     ...row,
     input: safelyParseJSON(row.input),
@@ -145,7 +145,7 @@ export class ScoresPG extends ScoresStorage {
     try {
       // Generate ID like other storage implementations
       const id = crypto.randomUUID();
-
+      const scoreData = saveScorePayloadSchema.parse(score);
       const {
         scorer,
         preprocessStepResult,
@@ -157,7 +157,7 @@ export class ScoresPG extends ScoresStorage {
         runtimeContext,
         entity,
         ...rest
-      } = score;
+      } = scoreData;
 
       console.log(`saving score with id: ${id}`);
 

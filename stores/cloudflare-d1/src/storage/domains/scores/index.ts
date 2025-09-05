@@ -1,4 +1,5 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
@@ -69,11 +70,10 @@ export class ScoresStorageD1 extends ScoresStorage {
     try {
       const id = crypto.randomUUID();
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
-      const { input, ...rest } = score;
-
+      const scoreData = saveScorePayloadSchema.parse(score);
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
-      for (const [key, value] of Object.entries(rest)) {
+      for (const [key, value] of Object.entries(scoreData)) {
         if (value !== null && value !== undefined) {
           if (typeof value === 'object') {
             serializedRecord[key] = JSON.stringify(value);
@@ -86,7 +86,6 @@ export class ScoresStorageD1 extends ScoresStorage {
       }
 
       serializedRecord.id = id;
-      serializedRecord.input = JSON.stringify(input);
       serializedRecord.createdAt = new Date().toISOString();
       serializedRecord.updatedAt = new Date().toISOString();
 

@@ -1,5 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { TABLE_SCORERS, ScoresStorage, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
@@ -163,6 +164,7 @@ export class ScoresLibSQL extends ScoresStorage {
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      const scoreData = saveScorePayloadSchema.parse(score);
       const id = crypto.randomUUID();
 
       await this.operations.insert({
@@ -171,7 +173,7 @@ export class ScoresLibSQL extends ScoresStorage {
           id,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          ...score,
+          ...scoreData,
         },
       });
 

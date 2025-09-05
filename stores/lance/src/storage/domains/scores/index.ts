@@ -1,5 +1,6 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
@@ -21,7 +22,8 @@ export class StoreScoresLance extends ScoresStorage {
       const allowedFields = new Set(schema.fields.map((f: any) => f.name));
       // Filter out fields not in schema
       const filteredScore: Record<string, any> = {};
-      (Object.keys(score) as (keyof ScoreRowData)[]).forEach(key => {
+      const scoreData = saveScorePayloadSchema.parse(score);
+      (Object.keys(scoreData) as (keyof ScoreRowData)[]).forEach(key => {
         if (allowedFields.has(key)) {
           filteredScore[key] = score[key];
         }
@@ -39,7 +41,8 @@ export class StoreScoresLance extends ScoresStorage {
 
       filteredScore.id = id;
       await table.add([filteredScore], { mode: 'append' });
-      return { score };
+      const scoreFromDb = await this.getScoreById({ id });
+      return { score: scoreFromDb! };
     } catch (error: any) {
       throw new MastraError(
         {

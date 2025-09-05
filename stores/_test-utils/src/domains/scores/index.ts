@@ -8,7 +8,6 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
     beforeEach(async () => {
       await storage.clearTable({ tableName: TABLE_SCORERS });
     });
-
     it('should retrieve scores by scorer id', async () => {
       const scorerId = `scorer-${randomUUID()}`;
 
@@ -39,6 +38,16 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         pagination: { page: 0, perPage: 10 },
       });
       expect(nonExistentScores?.scores).toHaveLength(0);
+    });
+
+    it('should strip invalid fields from payload before saving', async () => {
+      const scorerId = `scorer-${randomUUID()}`;
+      const score = createSampleScore({ scorerId });
+      (score as any).invalidField = 'invalid';
+      await storage.saveScore(score);
+      const result = await storage.getScoresByScorerId({ scorerId, pagination: { page: 0, perPage: 10 } });
+      expect(result.scores).toHaveLength(1);
+      expect((result.scores[0] as any).invalidField).toBeUndefined();
     });
 
     it('should retrieve scores by source', async () => {

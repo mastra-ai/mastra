@@ -1,4 +1,5 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
@@ -54,11 +55,11 @@ export class ScoresStorageCloudflare extends ScoresStorage {
   async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
       const id = crypto.randomUUID();
-      const { input, ...rest } = score;
+      const scoreData = saveScorePayloadSchema.parse(score);
 
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
-      for (const [key, value] of Object.entries(rest)) {
+      for (const [key, value] of Object.entries(scoreData)) {
         if (value !== null && value !== undefined) {
           if (typeof value === 'object') {
             serializedRecord[key] = JSON.stringify(value);
@@ -80,7 +81,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         value: serializedRecord,
       });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
+      const scoreFromDb = await this.getScoreById({ id });
       return { score: scoreFromDb! };
     } catch (error) {
       const mastraError = new MastraError(

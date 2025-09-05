@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
@@ -121,7 +122,8 @@ export class ScoresUpstash extends ScoresStorage {
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    const { key, processedRecord } = processRecord(TABLE_SCORERS, score);
+    const scoreData = saveScorePayloadSchema.parse(score);
+    const { key, processedRecord } = processRecord(TABLE_SCORERS, scoreData);
     try {
       await this.client.set(key, processedRecord);
       return { score };
