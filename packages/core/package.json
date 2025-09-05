@@ -171,7 +171,7 @@
     "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "vitest run --typecheck"
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",

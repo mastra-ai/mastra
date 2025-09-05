@@ -1,50 +1,39 @@
-type RecordToTuple<T> = {
-  [K in keyof T]: [K, T[K]];
-}[keyof T][];
+export interface RuntimeContextInterface {}
 
-export class RuntimeContext<Values extends Record<string, any> | unknown = unknown> {
-  private registry = new Map<string, unknown>();
+type StringKeys<T> = Extract<keyof T, string>;
 
-  constructor(
-    iterable?: Values extends Record<string, any>
-      ? RecordToTuple<Partial<Values>>
-      : Iterable<readonly [string, unknown]>,
-  ) {
+export class RuntimeContext<Mapping extends RuntimeContextInterface = RuntimeContextInterface> {
+  private registry: Map<string, any>;
+
+  constructor(iterable?: Iterable<{ [K in StringKeys<Mapping>]: [K, Mapping[K]] }[StringKeys<Mapping>]>) {
     this.registry = new Map(iterable);
   }
 
   /**
    * set a value with strict typing if `Values` is a Record and the key exists in it.
    */
-  public set<K extends Values extends Record<string, any> ? keyof Values : string>(
-    key: K,
-    value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
-  ): void {
-    // The type assertion `key as string` is safe because K always extends string ultimately.
-    this.registry.set(key as string, value);
+  public set<K extends string, V extends K extends StringKeys<Mapping> ? Mapping[K] : unknown>(key: K, value: V): void {
+    this.registry.set(key, value);
   }
 
   /**
    * Get a value with its type
    */
-  public get<
-    K extends Values extends Record<string, any> ? keyof Values : string,
-    R = Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
-  >(key: K): R {
-    return this.registry.get(key as string) as R;
+  public get<K extends string>(key: K): K extends StringKeys<Mapping> ? Mapping[K] : unknown {
+    return this.registry.get(key) as K extends StringKeys<Mapping> ? Mapping[K] : unknown;
   }
 
   /**
    * Check if a key exists in the container
    */
-  public has<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public has(key: string): boolean {
     return this.registry.has(key);
   }
 
   /**
    * Delete a value by key
    */
-  public delete<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public delete(key: string): boolean {
     return this.registry.delete(key);
   }
 
@@ -58,24 +47,30 @@ export class RuntimeContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Get all keys in the container
    */
-  public keys<R = Values extends Record<string, any> ? keyof Values : string>(): IterableIterator<R> {
-    return this.registry.keys() as IterableIterator<R>;
+  public keys(): MapIterator<StringKeys<Mapping> extends never ? string : StringKeys<Mapping>> {
+    return this.registry.keys() as MapIterator<StringKeys<Mapping> extends never ? string : StringKeys<Mapping>>;
   }
 
   /**
    * Get all values in the container
    */
-  public values<R = Values extends Record<string, any> ? Values[keyof Values] : unknown>(): IterableIterator<R> {
-    return this.registry.values() as IterableIterator<R>;
+  public values(): MapIterator<Mapping[StringKeys<Mapping>]> {
+    return this.registry.values() as MapIterator<Mapping[StringKeys<Mapping>]>;
   }
 
   /**
    * Get all entries in the container
    */
-  public entries<R = Values extends Record<string, any> ? Values[keyof Values] : unknown>(): IterableIterator<
-    [string, R]
+  public entries(): MapIterator<
+    StringKeys<Mapping> extends never
+      ? [string, unknown]
+      : { [P in StringKeys<Mapping>]: [P, Mapping[P]] }[StringKeys<Mapping>]
   > {
-    return this.registry.entries() as IterableIterator<[string, R]>;
+    return this.registry.entries() as MapIterator<
+      StringKeys<Mapping> extends never
+        ? [string, unknown]
+        : { [P in StringKeys<Mapping>]: [P, Mapping[P]] }[StringKeys<Mapping>]
+    >;
   }
 
   /**
@@ -88,8 +83,8 @@ export class RuntimeContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Execute a function for each entry in the container
    */
-  public forEach<T = any>(callbackfn: (value: T, key: string, map: Map<string, any>) => void): void {
-    this.registry.forEach(callbackfn as any);
+  public forEach(callbackfn: (value: unknown, key: string, map: Map<string, unknown>) => void): void {
+    this.registry.forEach(callbackfn);
   }
 
   /**
