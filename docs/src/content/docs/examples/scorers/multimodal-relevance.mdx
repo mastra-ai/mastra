@@ -1,0 +1,419 @@
+---
+title: "Examples: Multimodal Relevance Scorer | Mastra Docs"
+description: Code examples for using the Multimodal Relevance Scorer to evaluate AI responses with text and image contexts
+---
+
+# Multimodal Relevance Scorer Examples
+
+The multimodal relevance scorer evaluates how well AI responses utilize provided multimodal contexts (text, images, or both). This page demonstrates various use cases and configurations.
+
+## Basic Usage
+
+### Text-Only Context
+
+Evaluate responses with purely textual contexts:
+
+```typescript
+import { createMultimodalRelevanceScorer } from '@mastra/evals';
+import { openai } from '@ai-sdk/openai';
+import { createAgentTestRun, createUIMessage } from '@mastra/evals/utils';
+
+const scorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-turbo'),
+});
+
+const result = await scorer.run(
+  createAgentTestRun({
+    inputMessages: [
+      createUIMessage({
+        id: '1',
+        role: 'user',
+        content: 'What are the benefits of regular exercise?'
+      })
+    ],
+    output: [
+      createUIMessage({
+        id: '2',
+        role: 'assistant',
+        content: 'Regular exercise improves cardiovascular health, strengthens muscles, and enhances mental wellbeing.'
+      })
+    ],
+    runtimeContext: {
+      contexts: [
+        {
+          type: 'text',
+          content: 'Medical studies show exercise reduces heart disease risk by 30%, improves muscle strength, and releases mood-boosting endorphins.'
+        }
+      ]
+    }
+  })
+);
+
+console.log(`Score: ${result.score}`);
+console.log(`Reasoning: ${result.reason}`);
+```
+
+### Image Context with Vision Models
+
+Evaluate vision-language model responses:
+
+```typescript
+import { createMultimodalRelevanceScorer } from '@mastra/evals';
+import { openai } from '@ai-sdk/openai';
+
+const scorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-vision-preview'),
+  options: {
+    // Emphasize multimodal handling for vision tasks
+    contextualGroundingWeight: 0.3,
+    multimodalAlignmentWeight: 0.5,
+    queryAlignmentWeight: 0.2,
+  }
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe what you see in this image' },
+          { type: 'image', url: 'https://example.com/landscape.jpg' }
+        ]
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'I can see a mountain landscape with snow-capped peaks and a clear blue lake in the foreground.'
+    }
+  ],
+  runtimeContext: {
+    contexts: [
+      { type: 'image', content: '[Mountain landscape image]' }
+    ]
+  }
+});
+```
+
+## Advanced Configurations
+
+### Custom Weighting Strategies
+
+Configure weights based on your evaluation priorities:
+
+```typescript
+// Context-Heavy Configuration (RAG Systems)
+const ragScorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-turbo'),
+  options: {
+    contextualGroundingWeight: 0.6,  // Prioritize context usage
+    multimodalAlignmentWeight: 0.2,
+    queryAlignmentWeight: 0.2,
+    scale: 1
+  }
+});
+
+// Query-Focused Configuration (Task-Oriented Systems)
+const taskScorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-turbo'),
+  options: {
+    contextualGroundingWeight: 0.2,
+    multimodalAlignmentWeight: 0.2,
+    queryAlignmentWeight: 0.6,  // Prioritize query addressing
+    scale: 1
+  }
+});
+
+// Multimodal-Focused Configuration (Vision-Language Models)
+const visionScorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-vision-preview'),
+  options: {
+    contextualGroundingWeight: 0.2,
+    multimodalAlignmentWeight: 0.6,  // Prioritize multimodal integration
+    queryAlignmentWeight: 0.2,
+    scale: 1
+  }
+});
+```
+
+### Scaled Scoring
+
+Use custom scale for percentage-based scoring:
+
+```typescript
+const scorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-turbo'),
+  options: {
+    scale: 100  // Score from 0-100 instead of 0-1
+  }
+});
+
+const result = await scorer.run(testRun);
+console.log(`Score: ${result.score}%`);
+```
+
+## Complex Multimodal Scenarios
+
+### Multiple Images with Text
+
+Evaluate responses that need to synthesize multiple visual and textual sources:
+
+```typescript
+const scorer = createMultimodalRelevanceScorer({
+  model: anthropic('claude-3-opus-20240229'),
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Compare these two architectural styles' },
+          { type: 'image', url: 'data:image/jpeg;base64,...' }, // Gothic cathedral
+          { type: 'image', url: 'data:image/jpeg;base64,...' }  // Modern building
+        ]
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'The first image shows Gothic architecture with pointed arches and ornate details, while the second displays modern minimalist design with clean lines and glass facades.'
+    }
+  ],
+  groundTruth: {
+    contexts: [
+      {
+        type: 'multimodal',
+        content: {
+          text: 'Gothic architecture features pointed arches, ribbed vaults, and flying buttresses',
+          images: ['cathedral_reference']
+        }
+      },
+      {
+        type: 'multimodal',
+        content: {
+          text: 'Modern architecture emphasizes function and minimal ornamentation',
+          images: ['modern_building_reference']
+        }
+      }
+    ]
+  }
+});
+
+// Access detailed analysis
+console.log('Contextual Grounding:', result.analyzeStepResult?.contextual_grounding);
+console.log('Multimodal Alignment:', result.analyzeStepResult?.multimodal_alignment);
+console.log('Query Alignment:', result.analyzeStepResult?.query_alignment);
+```
+
+### Document Understanding
+
+Evaluate comprehension of documents containing text and diagrams:
+
+```typescript
+const scorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-vision-preview'),
+  options: {
+    contextualGroundingWeight: 0.4,
+    multimodalAlignmentWeight: 0.4,  // Balance text and visual understanding
+    queryAlignmentWeight: 0.2
+  }
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'Explain the process shown in this flowchart'
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'The flowchart illustrates a three-step validation process: input validation, business logic checks, and database verification before approval.'
+    }
+  ],
+  runtimeContext: {
+    contexts: [
+      {
+        type: 'image',
+        content: '[Flowchart diagram showing validation steps]'
+      },
+      {
+        type: 'text',
+        content: 'System validation requirements: All inputs must pass three validation stages'
+      }
+    ]
+  }
+});
+```
+
+## Integration Examples
+
+### With Agent Evaluation
+
+Integrate multimodal relevance scoring into agent evaluation pipelines:
+
+```typescript
+import { Agent } from '@mastra/core';
+import { createMultimodalRelevanceScorer } from '@mastra/evals';
+
+const agent = new Agent({
+  name: 'vision-assistant',
+  model: openai('gpt-4-vision-preview'),
+  instructions: 'You are a helpful visual analysis assistant.',
+  scorers: [
+    createMultimodalRelevanceScorer({
+      model: openai('gpt-4-vision-preview'),
+      options: {
+        multimodalAlignmentWeight: 0.5  // Emphasize visual understanding
+      }
+    })
+  ]
+});
+
+// Agent responses will be automatically scored for multimodal relevance
+const response = await agent.generate(
+  'What items are visible in this image?',
+  {
+    images: ['product-photo.jpg']
+  }
+);
+```
+
+### With Batch Evaluation
+
+Evaluate multiple test cases efficiently:
+
+```typescript
+const scorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-turbo')
+});
+
+const testCases = [
+  {
+    name: 'Product Description',
+    run: {
+      input: { /* ... */ },
+      output: [ /* ... */ ],
+      runtimeContext: {
+        contexts: [
+          { type: 'image', content: '[Product image]' },
+          { type: 'text', content: 'Product specifications...' }
+        ]
+      }
+    }
+  },
+  {
+    name: 'Medical Image Analysis',
+    run: {
+      input: { /* ... */ },
+      output: [ /* ... */ ],
+      runtimeContext: {
+        contexts: [
+          { type: 'image', content: '[X-ray image]' },
+          { type: 'text', content: 'Patient history...' }
+        ]
+      }
+    }
+  }
+];
+
+const results = await Promise.all(
+  testCases.map(async (testCase) => {
+    const result = await scorer.run(testCase.run);
+    return {
+      name: testCase.name,
+      score: result.score,
+      analysis: result.analyzeStepResult
+    };
+  })
+);
+
+// Generate evaluation report
+results.forEach(r => {
+  console.log(`${r.name}: ${r.score}`);
+  console.log(`  - Context: ${r.analysis?.contextual_grounding}`);
+  console.log(`  - Multimodal: ${r.analysis?.multimodal_alignment}`);
+  console.log(`  - Query: ${r.analysis?.query_alignment}`);
+});
+```
+
+## Context Type Detection
+
+The scorer automatically infers context types when not explicitly specified:
+
+```typescript
+const scorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-vision-preview')
+});
+
+// Automatic type inference examples
+const contexts = [
+  // Inferred as 'image' - contains image keyword
+  { content: 'This image shows a sunset over mountains' },
+  
+  // Inferred as 'image' - has image file extension
+  { content: 'screenshot_2024.png' },
+  
+  // Inferred as 'image' - data URI format
+  { content: 'data:image/jpeg;base64,...' },
+  
+  // Inferred as 'text' - plain text content
+  { content: 'Technical specifications for the product' },
+  
+  // Inferred as 'multimodal' - complex object
+  { content: { text: 'Description', visual: 'elements' } }
+];
+```
+
+## Error Handling
+
+Handle edge cases gracefully:
+
+```typescript
+const scorer = createMultimodalRelevanceScorer({
+  model: openai('gpt-4-turbo')
+});
+
+try {
+  const result = await scorer.run({
+    input: { inputMessages: [] },
+    output: [],
+    // No contexts provided - scorer will use fallback
+  });
+  
+  // Scorer creates default context from user input if no contexts found
+  console.log(`Score with fallback context: ${result.score}`);
+} catch (error) {
+  console.error('Scoring failed:', error);
+}
+
+// Handle missing analysis results
+const result = await scorer.run(testRun);
+if (!result.analyzeStepResult) {
+  console.log('Analysis unavailable, score:', result.score);
+} else {
+  console.log('Full analysis:', result.analyzeStepResult);
+}
+```
+
+## Performance Considerations
+
+1. **Model Selection**: Use vision-capable models (e.g., `gpt-4-vision-preview`) when evaluating image contexts
+2. **Context Size**: Large contexts may increase API costs and latency
+3. **Parallel Evaluation**: Run multiple evaluations concurrently for batch processing
+4. **Caching**: Consider caching results for repeated evaluations of the same content
+
+## See Also
+
+- [Multimodal Relevance Reference](/reference/scorers/multimodal-relevance)
+- [Answer Relevancy Examples](/examples/scorers/answer-relevancy)
+- [Context Relevance Examples](/examples/scorers/context-relevance)
+- [Custom Scorer Examples](/examples/scorers/custom-scorers)

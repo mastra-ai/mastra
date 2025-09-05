@@ -1,0 +1,244 @@
+---
+title: "Reference: Multimodal Relevance | Scorers | Mastra Docs"
+description: Documentation for the Multimodal Relevance Scorer in Mastra, which evaluates the relevance of LLM responses to multimodal contexts including text, images, or both.
+---
+
+# Multimodal Relevance Scorer
+
+The `createMultimodalRelevanceScorer()` function evaluates how well an LLM's response utilizes provided multimodal contexts (text, images, or both) to address user queries. It assesses contextual grounding, multimodal alignment, and query alignment to provide comprehensive relevance scoring for vision-language models and multimodal AI systems.
+
+For usage examples, see the [Multimodal Relevance Examples](/examples/scorers/multimodal-relevance).
+
+## Parameters
+
+The `createMultimodalRelevanceScorer()` function accepts a single options object with the following properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      required: true,
+      description: "Configuration for the model used to evaluate multimodal relevance. Should be a vision-capable model for best results.",
+    },
+    {
+      name: "contextualGroundingWeight",
+      type: "number",
+      required: false,
+      defaultValue: "0.4",
+      description: "Weight given to how well the response uses provided contexts (0-1).",
+    },
+    {
+      name: "multimodalAlignmentWeight",
+      type: "number",
+      required: false,
+      defaultValue: "0.3",
+      description: "Weight given to how well the response handles different modalities (0-1).",
+    },
+    {
+      name: "queryAlignmentWeight",
+      type: "number",
+      required: false,
+      defaultValue: "0.3",
+      description: "Weight given to how directly the response addresses the user's question (0-1).",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "Maximum score value.",
+    },
+  ]}
+/>
+
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes multimodal-specific fields as documented below.
+
+## .run() Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Multimodal relevance score (0 to scale, default 0-1)",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the analyze step (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "Object with analysis results: { contextual_grounding: string, multimodal_alignment: string, query_alignment: string, relevance_score: number, reasoning: string }",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the reason step (optional).",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Explanation of the multimodal relevance score.",
+    },
+  ]}
+/>
+
+## Context Types
+
+The scorer automatically detects and processes different types of multimodal contexts:
+
+### Supported Context Types
+
+1. **Text Context**: Plain text information that provides background or reference material
+2. **Image Context**: Visual information including photographs, diagrams, charts, or screenshots
+3. **Multimodal Context**: Combined text and image content that work together
+
+### Context Sources
+
+The scorer extracts contexts from multiple locations:
+
+- `runtimeContext.contexts`: Explicitly provided contexts
+- `groundTruth.contexts`: Ground truth reference contexts
+- `input.messages`: Multimodal message content (text + images)
+
+### Automatic Type Inference
+
+When context types are not explicitly specified, the scorer infers them based on:
+
+- File extensions (`.jpg`, `.png`, `.gif`, etc.)
+- Content patterns (e.g., `data:image/` URIs)
+- Keywords indicating visual content ("image", "visual", "picture")
+- Object structure complexity
+
+## Scoring Details
+
+The scorer evaluates multimodal relevance through three weighted dimensions:
+
+### Evaluation Dimensions
+
+1. **Contextual Grounding (40% default)**
+   - How well the response uses the provided contexts
+   - Whether claims are supported by context information
+   - Appropriate synthesis of multiple context sources
+
+2. **Multimodal Alignment (30% default)**
+   - Proper handling of different content types
+   - Integration of visual and textual information
+   - Appropriate reference to visual elements when present
+
+3. **Query Alignment (30% default)**
+   - Direct addressing of the user's question
+   - Completeness of the response
+   - Focus on requested information
+
+### Scoring Process
+
+1. **Context Extraction**:
+   - Identifies all available contexts
+   - Determines context types (text/image/multimodal)
+   - Prepares context descriptions for analysis
+
+2. **Multimodal Analysis**:
+   - Evaluates each dimension independently
+   - Generates initial relevance assessment
+   - Documents reasoning for each dimension
+
+3. **Score Calculation**:
+   - Applies weighted combination of dimensions
+   - `score = (relevance * contextWeight + relevance * alignmentWeight + relevance * queryWeight) * scale`
+   - Rounds to two decimal places
+
+### Score Interpretation
+
+(0 to scale, default 0-1)
+
+- 1.0: Perfect relevance - fully grounded response using all contexts appropriately
+- 0.7-0.9: High relevance - good context usage with minor gaps
+- 0.4-0.6: Moderate relevance - partial context usage or alignment issues
+- 0.1-0.3: Low relevance - minimal context grounding or poor multimodal handling
+- 0.0: No relevance - ignores contexts or fails to address query
+
+## Weighting Strategies
+
+Different use cases benefit from different weighting configurations:
+
+### Context-Focused (RAG Systems)
+```typescript
+{
+  contextualGroundingWeight: 0.6,
+  multimodalAlignmentWeight: 0.2,
+  queryAlignmentWeight: 0.2
+}
+```
+
+### Query-Focused (Task-Oriented Systems)
+```typescript
+{
+  contextualGroundingWeight: 0.2,
+  multimodalAlignmentWeight: 0.2,
+  queryAlignmentWeight: 0.6
+}
+```
+
+### Multimodal-Focused (Vision-Language Models)
+```typescript
+{
+  contextualGroundingWeight: 0.2,
+  multimodalAlignmentWeight: 0.6,
+  queryAlignmentWeight: 0.2
+}
+```
+
+### Balanced (General Purpose)
+```typescript
+{
+  contextualGroundingWeight: 0.33,
+  multimodalAlignmentWeight: 0.34,
+  queryAlignmentWeight: 0.33
+}
+```
+
+## Use Cases
+
+The multimodal relevance scorer is particularly useful for:
+
+1. **Vision-Language Model Evaluation**: Assessing how well models integrate visual and textual information
+2. **Image Captioning Systems**: Evaluating caption relevance to image content
+3. **Visual Question Answering**: Measuring answer quality for image-based questions
+4. **Multimodal RAG Systems**: Testing retrieval-augmented generation with mixed media
+5. **Document Understanding**: Evaluating comprehension of documents with text and diagrams
+6. **E-commerce Applications**: Assessing product descriptions based on images
+7. **Medical Image Analysis**: Evaluating interpretations of medical imagery with context
+
+## Best Practices
+
+1. **Use Vision-Capable Models**: For best results, use models that can process both text and images (e.g., `gpt-4-vision-preview`, `claude-3-opus`)
+
+2. **Provide Structured Contexts**: Clearly separate different context types for better analysis:
+   ```typescript
+   contexts: [
+     { type: 'text', content: 'Technical specifications...' },
+     { type: 'image', content: '[Product image]' }
+   ]
+   ```
+
+3. **Adjust Weights for Use Case**: Tailor the dimension weights based on what's most important for your application
+
+4. **Include Ground Truth**: When available, provide ground truth contexts for more accurate evaluation
+
+5. **Monitor All Dimensions**: Review individual dimension scores to identify specific areas for improvement
+
+## Related
+
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Context Relevance Scorer](./context-relevance)
+- [Context Precision Scorer](./context-precision)
+- [Faithfulness Scorer](./faithfulness)
