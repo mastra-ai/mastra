@@ -167,14 +167,14 @@ async function runSingleOutputsTest(
     //   //   { role: 'user', content: allSchemas[schemaName].description },
     //   // ],
     //   // prompt: 'test'
-    //   prompt: 'I am testing that I can generate structured outputs from your response. Your sole purpose is to give me any type of response but make sure that you have the requested input somewhere in there.' + '\n' + allSchemas[schemaName].description,
+    //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
     // });
 
     // const responseText = await generateObjectV5({
     //   model: model,
     //   temperature: 0,
     //   schema: testTool.inputSchema!,
-    //   prompt: 'I am testing that I can generate structured outputs from your response. Your sole purpose is to give me any type of response but make sure that you have the requested input somewhere in there.' + '\n' + allSchemas[schemaName].description,
+    //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
     // });
 
     const response = await agent.generateVNext(allSchemas[schemaName].description, generateOptions);
@@ -433,7 +433,7 @@ describe('Tool Schema Compatibility', () => {
   Object.entries(modelsByProviderV2).forEach(([provider, models]) => {
     describe.concurrent(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       ['output', 'structuredOutput'].forEach(outputType => {
-        describe.each(['output', 'structuredOutput'])(`${outputType}`, { timeout: SUITE_TIMEOUT }, () => {
+        describe(`${outputType}`, { timeout: SUITE_TIMEOUT }, () => {
           models.forEach(model => {
             describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
               testTools.forEach(testTool => {
