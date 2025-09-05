@@ -1,13 +1,14 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.2.2-alpha.0",
+  "version": "6.1.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -30,7 +31,7 @@
   },
   "scripts": {
     "build": "tsc && vite build",
-    "dev:playground": "vite build --watch",
+    "dev": "vite build --watch",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
@@ -45,9 +46,10 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
-    "@assistant-ui/react": "^0.7.91",
-    "@assistant-ui/react-markdown": "^0.7.21",
-    "@assistant-ui/react-syntax-highlighter": "^0.7.10",
+    "@assistant-ui/react": "^0.10.45",
+    "@assistant-ui/react-markdown": "^0.10.9",
+    "@assistant-ui/react-syntax-highlighter": "^0.10.10",
+    "@assistant-ui/react-ui": "^0.1.8",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
     "@autoform/zod": "^4.0.0",
@@ -80,7 +82,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@uiw/codemirror-theme-dracula": "^4.23.14",
     "@uiw/react-codemirror": "^4.23.14",
-    "@xyflow/react": "^12.8.2",
+    "@xyflow/react": "^12.8.4",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "json-schema-to-zod": "^2.6.1",
@@ -104,11 +106,11 @@
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "use-debounce": "^10.0.5",
-    "zod": "^4.0.15",
+    "zod": "^4.1.5",
     "zustand": "^5.0.7"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.14.0-0 <0.15.0-0",
+    "@mastra/core": ">=0.16.0-0 <0.17.0-0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
@@ -116,7 +118,7 @@
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
-    "@storybook/addon-docs": "^9.1.2",
+    "@storybook/addon-docs": "^9.1.3",
     "@storybook/react-vite": "^9.1.2",
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.9",
@@ -134,5 +136,14 @@
     "vite": "^6.3.5",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/playground-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

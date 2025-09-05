@@ -1,10 +1,11 @@
 {
   "name": "@mastra/turbopuffer",
-  "version": "0.11.4",
+  "version": "0.11.8",
   "description": "Turbopuffer vector store provider for Mastra",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +28,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@turbopuffer/turbopuffer": "^0.6.17"
   },
@@ -44,6 +45,15 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/turbopuffer"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

@@ -18,6 +18,8 @@ import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import { createScorer } from '../scores';
+import { runScorer } from '../scores/hooks';
 import type { AIV5FullStreamPart } from '../stream/aisdk/v5/output';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
@@ -42,6 +44,10 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   return userInfo;
 });
 
+vi.mock('../scores/hooks', () => ({
+  runScorer: vi.fn(),
+}));
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -60,6 +66,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           finishReason: 'stop',
           usage: { promptTokens: 10, completionTokens: 20 },
           text: `Dummy response`,
+        }),
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
         }),
       });
 
@@ -676,6 +688,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         defaultGenerateOptions: {
           maxSteps: 7,
         },
+        defaultVNextStreamOptions: {
+          maxSteps: 7,
+        },
       });
 
       let response;
@@ -687,11 +702,112 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       } else {
         response = await agent.generateVNext('Call testTool 10 times.', {
           toolChoice: 'required',
+        });
+      }
+
+      expect(response.steps.length).toBe(7);
+    }, 500000);
+
+    it('should reach default max steps / stopWhen', async () => {
+      const agent = new Agent({
+        name: 'Test agent',
+        instructions: 'Test agent',
+        model: openaiModel,
+        tools: integration.getStaticTools(),
+      });
+
+      let response;
+
+      if (version === 'v1') {
+        response = await agent.generate('Call testTool 10 times.', {
+          toolChoice: 'required',
+          maxSteps: 7,
+        });
+      } else {
+        response = await agent.generateVNext('Call testTool 10 times.', {
+          toolChoice: 'required',
           stopWhen: stepCountIs(7),
         });
       }
 
       expect(response.steps.length).toBe(7);
+    }, 500000);
+
+    it('should retry when tool fails and eventually succeed with maxSteps=5', async () => {
+      let toolCallCount = 0;
+      const failuresBeforeSuccess = 2; // Tool will fail 2 times then succeed
+
+      const flakeyTool = createTool({
+        id: 'flakeyTool',
+        description: 'A tool that fails initially but eventually succeeds',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ context }) => {
+          toolCallCount++;
+          if (toolCallCount <= failuresBeforeSuccess) {
+            throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
+          }
+          return { output: `Success on attempt ${toolCallCount}: ${context.input}` };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'retry-agent',
+        instructions: 'Call the flakey tool with input "test data".',
+        model: openaiModel,
+        tools: { flakeyTool },
+      });
+      agent.__setLogger(noopLogger);
+
+      let response;
+      if (version === 'v1') {
+        response = await agent.generate('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      } else {
+        response = await agent.generateVNext('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      }
+
+      // Should have made multiple attempts
+      expect(response.steps.length).toBeGreaterThan(1);
+      expect(response.steps.length).toBeLessThanOrEqual(5);
+
+      // Should have at least 3 tool calls total (2 failures + 1 success)
+      expect(toolCallCount).toBeGreaterThanOrEqual(3);
+
+      // Check that we eventually get a success result
+      let foundSuccess = false;
+      if (version === 'v1') {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (result.toolName === 'flakeyTool' && result.result && result.result.output?.includes('Success')) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      } else {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (
+                result.payload.toolName === 'flakeyTool' &&
+                result.payload.result &&
+                result.payload.result.output?.includes('Success')
+              ) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      expect(foundSuccess).toBe(true);
     }, 500000);
 
     it('should call testTool from TestIntegration', async () => {
@@ -2663,6 +2779,56 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
+  describe(`${version} - agent llmPrompt`, () => {
+    it('should download assets from messages', async () => {
+      const agent = new Agent({
+        name: 'llmPrompt-agent',
+        instructions: 'test agent',
+        model: openaiModel,
+      });
+
+      let result;
+
+      if (version === 'v1') {
+        result = await agent.generate([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      } else {
+        result = await agent.generateVNext([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
+                mimeType: 'image/png',
+              },
+              {
+                type: 'text',
+                text: 'What is the photo?',
+              },
+            ],
+          },
+        ]);
+      }
+
+      expect(result.text.toLowerCase()).toContain('google');
+    });
+  });
+
   describe(`${version} - agent tool handling`, () => {
     it('should handle tool name collisions caused by formatting', async () => {
       // Create two tool names that will collide after truncation to 63 chars
@@ -2742,7 +2908,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
+      await expect(
+        userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} }),
+      ).rejects.toThrow(/same name/i);
     });
 
     it('should sanitize tool names with invalid characters', async () => {
@@ -2814,7 +2982,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools)).toContain('bad___tool_name');
       expect(Object.keys(tools)).not.toContain(badName);
     });
@@ -2888,7 +3056,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
@@ -2962,7 +3130,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
@@ -4381,6 +4549,120 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         ).toBe(true);
       });
 
+      it('should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)', async () => {
+        // This test reproduces the bug where real LLM providers (like OpenRouter)
+        // send multiple response-metadata chunks (after each text-delta)
+        // which causes the message to have multiple text parts, one for each chunks
+        // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
+        // instead of properly formatted messages like:
+        // [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
+        const mockModel =
+          version === 'v1'
+            ? new MockLanguageModelV1({
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+                  stream: convertArrayToReadableStream([
+                    { type: 'text-delta', textDelta: 'Hello' },
+                    { type: 'text-delta', textDelta: ' world' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+                    },
+                  ]),
+                }),
+              })
+            : new MockLanguageModelV2({
+                doStream: async () => ({
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello' },
+                    // add response-metadata in the middle to trigger bug where response metadata is added after each text-delta, splitting text into multiple parts, one per text delta chunk
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-delta', id: '1', delta: ' world' },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                      // Real providers DON'T include formatted messages here
+                    },
+                  ]),
+                }),
+              });
+
+        const agent = new Agent({
+          name: 'test-agent-7050',
+          instructions: 'test',
+          model: mockModel,
+        });
+
+        let capturedStep: any = null;
+
+        if (version === 'v1') {
+          const stream = await agent.stream('test message', {
+            threadId: 'test-thread-7050',
+            resourceId: 'test-resource-7050',
+            savePerStep: true,
+            onStepFinish: async (step: any) => {
+              capturedStep = step;
+            },
+          });
+
+          // Consume the v1 stream (StreamTextResult has textStream property)
+          for await (const _chunk of stream.textStream) {
+            // Just consume the stream
+          }
+        } else {
+          const result = await agent.streamVNext('test message', {
+            format: 'aisdk',
+            memory: {
+              thread: 'test-thread-7050',
+              resource: 'test-resource-7050',
+            },
+            onStepFinish: async (step: any) => {
+              capturedStep = step;
+            },
+          });
+
+          // Consume the v2 stream
+          const reader = result.textStream.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+
+        // Verify that onStepFinish was called with properly formatted messages
+        expect(capturedStep).toBeDefined();
+        expect(capturedStep.response).toBeDefined();
+        expect(capturedStep.response.messages).toBeDefined();
+        expect(Array.isArray(capturedStep.response.messages)).toBe(true);
+        expect(capturedStep.response.messages.length).toBeGreaterThan(0);
+
+        // Check that messages have the correct CoreMessage structure
+        const firstMessage = capturedStep.response.messages[0];
+        expect(firstMessage).toHaveProperty('role');
+        expect(firstMessage).toHaveProperty('content');
+        expect(typeof firstMessage.role).toBe('string');
+        expect(['assistant', 'system', 'user'].includes(firstMessage.role)).toBe(true);
+
+        if (version === `v2`) {
+          // The bug would cause messages to be multiple text parts for each chunk like;
+          // [{ type: 'text', text: 'Hello' }, { type: 'text', text: ' world' }]
+          // Instead of: [{ role: 'assistant', content: [{ type: 'text', text: 'Hello world' }] }]
+          // should only have a single text part of combined text delta chunks
+          expect(firstMessage.content?.filter(p => p.type === `text`)).toHaveLength(1);
+        }
+      });
+
       it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
         const mockMemory = new MockMemory();
         let saveCallCount = 0;
@@ -4851,6 +5133,78 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(secondResponse.response.messages).toEqual([expect.objectContaining({ role: 'assistant' })]);
       }, 30_000);
+
+      it('should include assistant messages in onFinish callback with aisdk format', async () => {
+        const mockModel = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            stream: convertArrayToReadableStream([
+              { type: 'text-delta', id: '1', delta: 'Hello! ' },
+              { type: 'text-delta', id: '2', delta: 'Nice to meet you!' },
+              {
+                type: 'finish',
+                id: '3',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            warnings: [],
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-aisdk-onfinish',
+          name: 'Test AISDK onFinish',
+          model: mockModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let messagesInOnFinish: any[] | undefined;
+        let hasUserMessage = false;
+        let hasAssistantMessage = false;
+
+        const result = await agent.streamVNext('Hello, please respond with a greeting.', {
+          format: 'aisdk',
+          onFinish: props => {
+            // Store the messages from onFinish
+            messagesInOnFinish = props.messages;
+
+            if (props.messages) {
+              props.messages.forEach((msg: any) => {
+                if (msg.role === 'user') hasUserMessage = true;
+                if (msg.role === 'assistant') hasAssistantMessage = true;
+              });
+            }
+          },
+        });
+
+        // Consume the stream
+        await result.consumeStream();
+
+        // Verify that messages were provided in onFinish
+        expect(messagesInOnFinish).toBeDefined();
+        expect(messagesInOnFinish).toBeInstanceOf(Array);
+
+        // response messages should not be user messages
+        expect(hasUserMessage).toBe(false);
+        // Verify that we have assistant messages
+        expect(hasAssistantMessage).toBe(true);
+
+        // Verify the assistant message content
+        const assistantMessage = messagesInOnFinish?.find((m: any) => m.role === 'assistant');
+        expect(assistantMessage).toBeDefined();
+        expect(assistantMessage?.content).toBeDefined();
+
+        // For the v2 model, the assistant message should contain the streamed text
+        if (typeof assistantMessage?.content === 'string') {
+          expect(assistantMessage.content).toContain('Hello!');
+        } else if (Array.isArray(assistantMessage?.content)) {
+          const textContent = assistantMessage.content.find((c: any) => c.type === 'text');
+          expect(textContent?.text).toContain('Hello!');
+        }
+      });
     });
   });
 
@@ -5486,6 +5840,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           stream = await agentWithStreamAbort.stream('Stream abort test');
         } else {
           stream = await agentWithStreamAbort.streamVNext('Stream abort test');
+
+          for await (const chunk of stream.fullStream) {
+            expect(chunk.type).toBe('tripwire');
+            expect(chunk.payload.tripwireReason).toBe('Stream aborted');
+          }
         }
 
         expect(stream.tripwire).toBe(true);
@@ -6073,6 +6432,406 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(result.toolCalls.length).toBeGreaterThan(0);
     }
   }, 10000);
+
+  describe('scorer output data', () => {
+    it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green', {
+          returnScorerData: true,
+        });
+      } else {
+        result = await agent.generateVNext('Make it green', {
+          returnScorerData: true,
+        });
+      }
+
+      expect(result.scoringData).toBeDefined();
+      expect(result.scoringData.input).toMatchObject({
+        inputMessages: expect.any(Array),
+        rememberedMessages: expect.any(Array),
+        systemMessages: expect.any(Array),
+        taggedSystemMessages: expect.any(Object),
+      });
+      expect(result.scoringData.output).toBeInstanceOf(Array);
+    });
+
+    it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green', {
+          returnScorerData: false,
+        });
+      } else {
+        result = await agent.generateVNext('Make it green', {
+          returnScorerData: false,
+        });
+      }
+
+      expect(result.scoringData).toBeUndefined();
+    });
+
+    it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
+      const agent = new Agent({
+        name: 'Scorer Agent',
+        instructions: 'You are an agent that can score things',
+        model: dummyModel,
+      });
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.generate('Make it green');
+      } else {
+        result = await agent.generateVNext('Make it green');
+      }
+
+      expect(result.scoringData).toBeUndefined();
+    });
+  });
+
+  describe('scorer override functionality', () => {
+    let agent: Agent;
+    let mastra: Mastra;
+    let scorerTest: any;
+    let scorer1: any;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      scorerTest = createScorer({
+        name: 'scorerTest',
+        description: 'Test Scorer',
+      }).generateScore(() => 0.95);
+
+      scorer1 = createScorer({
+        name: 'scorer1',
+        description: 'Test Scorer 1',
+      }).generateScore(() => 0.95);
+
+      agent = new Agent({
+        name: 'Test Agent',
+        instructions: 'You are a test agent.',
+        model: dummyModel,
+        scorers: {
+          scorerTest: {
+            scorer: scorerTest,
+          },
+        },
+      });
+
+      mastra = new Mastra({
+        agents: { agent },
+        logger: false,
+        scorers: { scorer1 },
+      });
+    });
+
+    it(`${version} - should call scorerTest when no override is provided`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world');
+      } else {
+        await agent.generateVNext('Hello world');
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorerTest',
+          scorerObject: expect.objectContaining({
+            scorer: scorerTest,
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - should use override scorers when provided in generate options`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: expect.any(Object),
+          }),
+        }),
+      );
+
+      expect(runScorer).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorerTest',
+          scorerObject: expect.objectContaining({
+            scorer: scorerTest,
+          }),
+        }),
+      );
+
+      expect(runScorer).toHaveBeenCalledTimes(1);
+    });
+
+    it(`${version} - should call scorers when provided in stream options`, async () => {
+      let result: any;
+      if (version === 'v1') {
+        result = await agent.stream('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      } else {
+        result = await agent.streamVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: mastra.getScorer('scorer1') },
+          },
+        });
+      }
+      await result.consumeStream();
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: expect.any(Object),
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - can use scorer name for scorer config for generate`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      }
+
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer1',
+          scorerObject: expect.objectContaining({
+            scorer: scorer1,
+          }),
+        }),
+      );
+    });
+
+    it(`${version} - should call runScorer with correct parameters`, async () => {
+      if (version === 'v1') {
+        await agent.generate('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      } else {
+        await agent.generateVNext('Hello world', {
+          scorers: {
+            scorer1: { scorer: scorer1.name },
+          },
+        });
+      }
+
+      // Verify the exact call parameters
+      expect(runScorer).toHaveBeenCalledWith({
+        scorerId: 'scorer1',
+        scorerObject: { scorer: scorer1 },
+        runId: expect.any(String),
+        input: expect.any(Object),
+        output: expect.any(Object),
+        runtimeContext: expect.any(Object),
+        entity: expect.objectContaining({
+          id: 'Test Agent',
+          name: 'Test Agent',
+        }),
+        source: 'LIVE',
+        entityType: 'AGENT',
+        structuredOutput: false,
+        threadId: undefined,
+        resourceId: undefined,
+        tracingContext: expect.any(Object),
+      });
+    });
+  });
+
+  describe('defaultStreamOptions onFinish callback bug', () => {
+    it(`${version} - should call onFinish from defaultStreamOptions when no options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish',
+        name: 'Test Default onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream without passing any options - should use defaultStreamOptions
+      const result = version === 'v1' ? await agent.stream('How are you?') : await agent.streamVNext('How are you?');
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should call onFinish from defaultStreamOptions when empty options are passed to stream`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-default-onfinish-empty',
+        name: 'Test Default onFinish Empty',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: data => {
+                  onFinishCalled = true;
+                  finishData = data;
+                },
+              },
+            }),
+      });
+
+      // Call stream with empty options - should still use defaultStreamOptions
+      const result =
+        version === 'v1' ? await agent.stream('How are you?', {}) : await agent.streamVNext('How are you?', {});
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+
+    it(`${version} - should prioritize passed onFinish over defaultStreamOptions onFinish`, async () => {
+      let defaultOnFinishCalled = false;
+      let passedOnFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-override-onfinish',
+        name: 'Test Override onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+        ...(version === 'v1'
+          ? {
+              defaultStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }
+          : {
+              defaultVNextStreamOptions: {
+                onFinish: () => {
+                  defaultOnFinishCalled = true;
+                },
+              },
+            }),
+      });
+
+      // Call stream with explicit onFinish - should override defaultStreamOptions
+      const result =
+        version === 'v1'
+          ? await agent.stream('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            })
+          : await agent.streamVNext('How are you?', {
+              onFinish: data => {
+                passedOnFinishCalled = true;
+                finishData = data;
+              },
+            });
+
+      // Consume the stream to trigger onFinish
+      if (version === 'v1') {
+        let fullText = '';
+        for await (const chunk of result.textStream) {
+          fullText += chunk;
+        }
+        expect(fullText).toBe('Dummy response');
+      } else {
+        await result.consumeStream();
+      }
+
+      expect(defaultOnFinishCalled).toBe(false);
+      expect(passedOnFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+    });
+  });
 }
 
 describe('Agent Tests', () => {

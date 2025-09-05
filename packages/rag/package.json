@@ -1,10 +1,14 @@
 {
   "name": "@mastra/rag",
-  "version": "1.1.0",
+  "version": "1.2.4",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -20,7 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "buld:watch": "pnpm build --watch",
+    "build:watch": "pnpm build --watch",
     "vitest": "vitest",
     "test": "vitest run",
     "lint": "eslint ."
@@ -36,9 +40,9 @@
     "zeroentropy": "0.1.0-alpha.6"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.14.0-0 <0.15.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
     "ai": "^4.0.0 || ^5.0.0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "^1.2.10",
@@ -55,7 +59,7 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "keywords": [
     "rag",
@@ -72,5 +76,14 @@
     "llm",
     "llms",
     "typescript"
-  ]
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/rag"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
 }

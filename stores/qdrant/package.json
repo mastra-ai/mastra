@@ -1,6 +1,6 @@
 {
   "name": "@mastra/qdrant",
-  "version": "0.11.5",
+  "version": "0.11.10",
   "description": "Qdrant vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -24,9 +24,9 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.15.0"
+    "@qdrant/js-client-rest": "^1.15.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -41,6 +41,19 @@
     "@internal/storage-test-utils": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/qdrant"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

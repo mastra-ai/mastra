@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
 import { MastraAITracing } from './base';
-import { DefaultAITracing, DefaultConsoleExporter, SensitiveDataFilter, aiTracingDefaultConfig } from './default';
+import { DefaultAITracing, SensitiveDataFilter, aiTracingDefaultConfig } from './default';
+import { ConsoleExporter } from './exporters';
 import {
   clearAITracingRegistry,
   getAITracing,
@@ -143,7 +144,6 @@ describe('AI Tracing', () => {
       expect(agentSpan.attributes?.agentId).toBe('agent-123');
       expect(agentSpan.startTime).toBeInstanceOf(Date);
       expect(agentSpan.endTime).toBeUndefined();
-      expect(agentSpan.trace).toBe(agentSpan); // Root span is its own trace
       expect(agentSpan.traceId).toBeValidTraceId();
     });
 
@@ -173,7 +173,6 @@ describe('AI Tracing', () => {
       expect(toolSpan.id).toBeValidSpanId();
       expect(toolSpan.type).toBe(AISpanType.TOOL_CALL);
       expect(toolSpan.attributes?.toolId).toBe('tool-456');
-      expect(toolSpan.trace).toBe(agentSpan); // Child inherits trace from parent
       expect(toolSpan.traceId).toBe(agentSpan.traceId); // Child spans inherit trace ID
     });
 
@@ -548,7 +547,7 @@ describe('AI Tracing', () => {
       const tracing = new DefaultAITracing();
 
       expect(tracing.getExporters()).toHaveLength(1);
-      expect(tracing.getExporters()[0]).toBeInstanceOf(DefaultConsoleExporter);
+      expect(tracing.getExporters()[0]).toBeInstanceOf(ConsoleExporter);
     });
 
     it('should shutdown all components', async () => {
@@ -821,14 +820,15 @@ describe('AI Tracing', () => {
             type: options.type,
             attributes: options.attributes,
             parent: options.parent,
-            trace: options.parent?.trace || ({} as any),
             traceId: 'custom-trace-id',
             startTime: new Date(),
             aiTracing: this,
+            isEvent: false,
             end: () => {},
             error: () => {},
             update: () => {},
             createChildSpan: () => ({}) as any,
+            createEventSpan: () => ({}) as any,
             get isRootSpan() {
               return !options.parent;
             },
@@ -1051,65 +1051,6 @@ describe('AI Tracing', () => {
       });
 
       expect(toolSpan.attributes?.toolId).toBe('calculator');
-    });
-  });
-
-  describe('DefaultConsoleExporter', () => {
-    it('should log span events with proper formatting', async () => {
-      const logger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      };
-
-      const exporter = new DefaultConsoleExporter(logger as any);
-
-      const mockSpan = {
-        id: 'test-span-1',
-        name: 'test-span',
-        type: AISpanType.AGENT_RUN,
-        startTime: new Date(),
-        endTime: new Date(),
-        traceId: 'trace-123',
-        trace: { traceId: 'trace-123' },
-        attributes: { agentId: 'agent-123', normalField: 'visible-data' },
-      };
-
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
-        span: mockSpan as any,
-      });
-
-      // Should log with proper formatting (no filtering happens in exporter anymore)
-      expect(logger.info).toHaveBeenCalledWith('🚀 SPAN_STARTED');
-      expect(logger.info).toHaveBeenCalledWith('   Type: agent_run');
-      expect(logger.info).toHaveBeenCalledWith('   Name: test-span');
-      expect(logger.info).toHaveBeenCalledWith('   ID: test-span-1');
-      expect(logger.info).toHaveBeenCalledWith('   Trace ID: trace-123');
-
-      // Check that attributes are logged (filtering happens at processor level now)
-      const attributesCall = logger.info.mock.calls.find(call => call[0].includes('Attributes:'));
-      expect(attributesCall).toBeDefined();
-      expect(attributesCall![0]).toContain('visible-data');
-    });
-
-    it('should throw error for unknown events', async () => {
-      const logger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      };
-
-      const exporter = new DefaultConsoleExporter(logger as any);
-
-      await expect(
-        exporter.exportEvent({
-          type: 'unknown_event' as any,
-          span: {} as any,
-        }),
-      ).rejects.toThrow('Tracing event type not implemented: unknown_event');
     });
   });
 
@@ -1369,6 +1310,379 @@ describe('AI Tracing', () => {
         const updatedSpan = testExporter.events[1].span; // span_updated event
         expect(updatedSpan.attributes?.['apiKey']).toBe('[REDACTED]');
       });
+    });
+  });
+
+  describe('Event Spans', () => {
+    let aiTracing: MastraAITracing;
+    let testExporter: TestExporter;
+
+    beforeEach(() => {
+      testExporter = new TestExporter();
+      aiTracing = new DefaultAITracing({
+        serviceName: 'test-event-spans',
+        instanceName: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+    });
+
+    it('should create event spans with isEvent=true and no input', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      const eventSpan = rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'llm chunk: text-delta',
+        output: 'Hello world',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+      });
+
+      // Event span should have isEvent=true
+      expect(eventSpan.isEvent).toBe(true);
+
+      // Event span should not have input (only output)
+      expect(eventSpan.input).toBeUndefined();
+      expect(eventSpan.output).toBe('Hello world');
+
+      // Event span should have proper attributes
+      expect(eventSpan.attributes?.chunkType).toBe('text-delta');
+
+      // Event span should be properly linked to parent
+      expect(eventSpan.parent).toBe(rootSpan);
+      expect(eventSpan.traceId).toBe(rootSpan.traceId);
+
+      rootSpan.end();
+    });
+
+    it('should emit only span_ended event on creation (no span_started)', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      // Clear events from root span creation
+      testExporter.events = [];
+
+      const eventSpan = rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'llm chunk: text-delta',
+        output: 'Hello',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+      });
+
+      // Should have emitted exactly one event: span_ended
+      expect(testExporter.events).toHaveLength(1);
+      expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_ENDED);
+      expect(testExporter.events[0].span).toBe(eventSpan);
+
+      rootSpan.end();
+    });
+
+    it('should have endTime undefined for event spans', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      const eventSpan = rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'llm chunk: text-delta',
+        output: 'Hello',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+      });
+
+      // Event spans should not have endTime (event occurs at startTime)
+      expect(eventSpan.endTime).toBeUndefined();
+      expect(eventSpan.startTime).toBeDefined();
+
+      rootSpan.end();
+    });
+
+    it('should never emit span_started or span_updated events for event spans', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      // Clear initial events
+      testExporter.events = [];
+
+      const eventSpan = rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'llm chunk: text-delta',
+        output: 'Hello',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+      });
+
+      // Try to call update on event span (should be no-op)
+      eventSpan.update({
+        output: 'Updated hello',
+        attributes: { chunkType: 'updated-delta' },
+      });
+
+      // Try to call end on event span (should be no-op)
+      eventSpan.end({ output: 'Final hello' });
+
+      // Should still only have the initial span_ended event
+      expect(testExporter.events).toHaveLength(1);
+      expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_ENDED);
+
+      // Event should not include any span_started or span_updated events
+      const eventTypes = testExporter.events.map(e => e.type);
+      expect(eventTypes).not.toContain(AITracingEventType.SPAN_STARTED);
+      expect(eventTypes).not.toContain(AITracingEventType.SPAN_UPDATED);
+
+      rootSpan.end();
+    });
+
+    it('should support all span types as event spans', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      // Test different span types as events
+      const llmChunkEvent = rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'llm chunk event',
+        output: 'chunk data',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+      });
+
+      const toolCallEvent = rootSpan.createEventSpan({
+        type: AISpanType.TOOL_CALL,
+        name: 'tool call event',
+        output: { result: 'success' },
+        attributes: {
+          toolId: 'calculator',
+          success: true,
+        },
+      });
+
+      const genericEvent = rootSpan.createEventSpan({
+        type: AISpanType.GENERIC,
+        name: 'generic event',
+        output: 'generic output',
+        attributes: {},
+      });
+
+      // All should be event spans
+      expect(llmChunkEvent.isEvent).toBe(true);
+      expect(toolCallEvent.isEvent).toBe(true);
+      expect(genericEvent.isEvent).toBe(true);
+
+      // All should have proper type safety
+      expect(llmChunkEvent.type).toBe(AISpanType.LLM_CHUNK);
+      expect(toolCallEvent.type).toBe(AISpanType.TOOL_CALL);
+      expect(genericEvent.type).toBe(AISpanType.GENERIC);
+
+      rootSpan.end();
+    });
+
+    it('should maintain proper span hierarchy with event spans', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      const llmSpan = rootSpan.createChildSpan({
+        type: AISpanType.LLM_GENERATION,
+        name: 'llm generation',
+        attributes: {
+          model: 'gpt-4',
+          streaming: true,
+        },
+      });
+
+      const eventSpan1 = llmSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'chunk 1',
+        output: 'Hello',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+      });
+
+      const eventSpan2 = llmSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'chunk 2',
+        output: ' world',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+      });
+
+      // Event spans should have llmSpan as parent
+      expect(eventSpan1.parent).toBe(llmSpan);
+      expect(eventSpan2.parent).toBe(llmSpan);
+
+      // All spans should share the same traceId
+      expect(eventSpan1.traceId).toBe(rootSpan.traceId);
+      expect(eventSpan2.traceId).toBe(rootSpan.traceId);
+      expect(llmSpan.traceId).toBe(rootSpan.traceId);
+
+      // Event spans should not be root spans
+      expect(eventSpan1.isRootSpan).toBe(false);
+      expect(eventSpan2.isRootSpan).toBe(false);
+
+      // Only rootSpan should be root
+      expect(rootSpan.isRootSpan).toBe(true);
+      expect(llmSpan.isRootSpan).toBe(false);
+
+      llmSpan.end();
+      rootSpan.end();
+    });
+
+    it('should handle metadata correctly in event spans', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      const eventSpan = rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'llm chunk with metadata',
+        output: 'Hello world',
+        attributes: {
+          chunkType: 'text-delta',
+        },
+        metadata: {
+          sequenceNumber: 1,
+          tokenCount: 2,
+          model: 'gpt-4',
+        },
+      });
+
+      // Event span should have metadata
+      expect(eventSpan.metadata).toEqual({
+        sequenceNumber: 1,
+        tokenCount: 2,
+        model: 'gpt-4',
+      });
+
+      rootSpan.end();
+    });
+
+    it('should preserve event span properties in exports', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      // Clear initial events
+      testExporter.events = [];
+
+      rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'exported event span',
+        output: { text: 'Hello', chunkSize: 5 },
+        attributes: {
+          chunkType: 'text-delta',
+          sequenceNumber: 42,
+        },
+        metadata: {
+          model: 'gpt-4',
+          temperature: 0.7,
+        },
+      });
+
+      // Should have exported the event span
+      expect(testExporter.events).toHaveLength(1);
+      const exportedEvent = testExporter.events[0];
+      const exportedSpan = exportedEvent.span as AISpan<AISpanType.LLM_CHUNK>;
+
+      // Verify exported span properties
+      expect(exportedSpan.isEvent).toBe(true);
+      expect(exportedSpan.type).toBe(AISpanType.LLM_CHUNK);
+      expect(exportedSpan.name).toBe('exported event span');
+      expect(exportedSpan.output).toEqual({ text: 'Hello', chunkSize: 5 });
+      expect(exportedSpan.input).toBeUndefined();
+      expect(exportedSpan.endTime).toBeUndefined();
+      expect(exportedSpan.attributes?.chunkType).toBe('text-delta');
+      expect(exportedSpan.attributes?.sequenceNumber).toBe(42);
+      expect(exportedSpan.metadata?.model).toBe('gpt-4');
+      expect(exportedSpan.metadata?.temperature).toBe(0.7);
+
+      rootSpan.end();
+    });
+
+    it('should handle error scenarios gracefully for event spans', () => {
+      const rootSpan = aiTracing.startSpan({
+        type: AISpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-123',
+        },
+      });
+
+      // Create event span with error
+      const eventSpan = rootSpan.createEventSpan({
+        type: AISpanType.LLM_CHUNK,
+        name: 'error event span',
+        output: null,
+        attributes: {
+          chunkType: 'error',
+        },
+      });
+
+      // Try to record error on event span (should be no-op since event spans can't be updated)
+      const testError = new MastraError({
+        id: 'TEST_ERROR',
+        domain: 'TOOL',
+        category: 'USER',
+        details: { test: true },
+      });
+
+      eventSpan.error({
+        error: testError,
+        endSpan: false, // This should be ignored for event spans
+      });
+
+      // Event span should still be properly formed
+      expect(eventSpan.isEvent).toBe(true);
+      expect(eventSpan.name).toBe('error event span');
+
+      // Error info should not be set (since events can't be updated)
+      expect(eventSpan.errorInfo).toBeUndefined();
+
+      rootSpan.end();
     });
   });
 });

@@ -319,6 +319,20 @@ const results = await store.query({
 ### Couchbase
 - Currently does not have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
 
+### Amazon S3 Vectors
+
+* Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date are not allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
+* `$in`/`$nin` require **non-empty arrays of primitives**; Date elements are allowed and normalized to epoch ms. **Array equality** is not supported.
+* Implicit AND is canonicalized (`{a:1,b:2}` → `{$and:[{a:1},{b:2}]}`). Logical operators must contain field conditions, use non-empty arrays, and appear only at the root or within other logical operators (not inside field values).
+* Keys listed in `nonFilterableMetadataKeys` at index creation are stored but not filterable; this setting is immutable.
+* $exists requires a boolean value.
+* undefined/null/empty filters are treated as no filter.
+* Each metadata key name limited to 63 characters.
+* Total metadata per vector: Up to 40 KB (filterable + non-filterable)
+* Total metadata keys per vector: Up to 10
+* Filterable metadata per vector: Up to 2 KB
+* Non-filterable metadata keys per vector index: Up to 10
+
 ## Related
 
 - [Astra](./astra)
@@ -330,3 +344,4 @@ const results = await store.query({
 - [Pinecone](./pinecone)
 - [Qdrant](./qdrant)
 - [Upstash](./upstash)
+- [Amazon S3 Vectors](./s3vectors)

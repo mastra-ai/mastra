@@ -1,10 +1,14 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.11.11-alpha.0",
+  "version": "0.13.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -27,8 +31,7 @@
   "dependencies": {
     "@inngest/realtime": "^0.3.1",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.1",
-    "zod": "^3.25.67"
+    "inngest": "^3.40.1"
   },
   "devDependencies": {
     "inngest-cli": "1.8.2",
@@ -51,6 +54,16 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.14.2-0 <0.15.0-0"
+    "@mastra/core": ">=0.16.0-0 <0.17.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "workflows/inngest"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

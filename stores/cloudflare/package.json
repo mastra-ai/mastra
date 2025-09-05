@@ -1,10 +1,11 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "0.11.7",
+  "version": "0.12.0",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +28,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "cloudflare": "^4.5.0"
   },
@@ -40,13 +41,22 @@
     "@types/node": "^20.19.0",
     "dotenv": "^17.0.0",
     "eslint": "^9.30.1",
-    "miniflare": "^4.20250816.0",
+    "miniflare": "^4.20250816.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.15.0-0"
+    "@mastra/core": ">=0.16.0-0 <0.17.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/cloudflare"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

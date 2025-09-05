@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { AISpan, AISpanType, TracingContext } from '../ai-tracing';
+import type { TracingContext } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -22,7 +22,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorers } from '../scores';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
@@ -33,10 +33,6 @@ export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, Me
 export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
-
-export type AgentAISpanProperties = {
-  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
-};
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
@@ -132,7 +128,7 @@ export type AgentGenerateOptions<
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers;
+  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
   returnScorerData?: boolean;
   /**
@@ -221,6 +217,8 @@ export type AgentStreamOptions<
   inputProcessors?: InputProcessor[];
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
+  /** Scorers to use for this generation */
+  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 } & (
   | {
       /**

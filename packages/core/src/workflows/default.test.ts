@@ -165,5 +165,8 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     expect(wrappedError.domain).toBe(ErrorDomain.MASTRA_WORKFLOW);
     expect(wrappedError.category).toBe(ErrorCategory.USER);
     expect(wrappedError.details).toEqual({ workflowId, runId });
+
+    // Verify that the original stack trace is preserved
+    expect(wrappedError.stack).toContain(regularError.stack?.split('\n')[1] || '');
   });
 });

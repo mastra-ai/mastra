@@ -35,20 +35,21 @@ describe('LangfuseExporter', () => {
     // Set up mocks
     mockGeneration = {
       update: vi.fn(),
-      end: vi.fn(),
+      event: vi.fn(),
     };
 
     mockSpan = {
       update: vi.fn(),
-      end: vi.fn(),
       generation: vi.fn().mockReturnValue(mockGeneration),
       span: vi.fn(),
+      event: vi.fn(),
     };
 
     mockTrace = {
       generation: vi.fn().mockReturnValue(mockGeneration),
       span: vi.fn().mockReturnValue(mockSpan),
       update: vi.fn(),
+      event: vi.fn(),
     };
 
     // Set up circular reference
@@ -89,6 +90,66 @@ describe('LangfuseExporter', () => {
         flushAt: 1,
         flushInterval: 1000,
       });
+    });
+
+    it('should initialize without baseUrl (uses Langfuse default)', () => {
+      const configWithoutBaseUrl = {
+        publicKey: 'test-public-key',
+        secretKey: 'test-secret-key',
+      };
+
+      const exporterWithoutBaseUrl = new LangfuseExporter(configWithoutBaseUrl);
+
+      expect(exporterWithoutBaseUrl.name).toBe('langfuse');
+      expect(LangfuseMock).toHaveBeenCalledWith({
+        publicKey: 'test-public-key',
+        secretKey: 'test-secret-key',
+        baseUrl: undefined,
+      });
+    });
+
+    it('should warn and disable exporter when publicKey is missing', () => {
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const exporterWithMissingKey = new LangfuseExporter({
+        secretKey: 'test-secret-key',
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      // Should create exporter but disable it
+      expect(exporterWithMissingKey.name).toBe('langfuse');
+      expect((exporterWithMissingKey as any).client).toBeNull();
+
+      mockConsoleWarn.mockRestore();
+    });
+
+    it('should warn and disable exporter when secretKey is missing', () => {
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const exporterWithMissingKey = new LangfuseExporter({
+        publicKey: 'test-public-key',
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      // Should create exporter but disable it
+      expect(exporterWithMissingKey.name).toBe('langfuse');
+      expect((exporterWithMissingKey as any).client).toBeNull();
+
+      mockConsoleWarn.mockRestore();
+    });
+
+    it('should warn and disable exporter when both keys are missing', () => {
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const exporterWithMissingKeys = new LangfuseExporter({
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      // Should create exporter but disable it
+      expect(exporterWithMissingKeys.name).toBe('langfuse');
+      expect((exporterWithMissingKeys as any).client).toBeNull();
+
+      mockConsoleWarn.mockRestore();
     });
   });
 
@@ -456,7 +517,7 @@ describe('LangfuseExporter', () => {
   });
 
   describe('Span Ending', () => {
-    it('should end span with success status', async () => {
+    it('should update span with endTime on span end', async () => {
       const span = createMockSpan({
         id: 'test-span',
         name: 'test',
@@ -477,10 +538,7 @@ describe('LangfuseExporter', () => {
         span,
       });
 
-      console.log('BOOP');
-      console.log(span.metadata);
-
-      expect(mockSpan.end).toHaveBeenCalledWith({
+      expect(mockSpan.update).toHaveBeenCalledWith({
         endTime: span.endTime,
         metadata: expect.objectContaining({
           spanType: 'generic',
@@ -488,7 +546,7 @@ describe('LangfuseExporter', () => {
       });
     });
 
-    it('should end span with error status', async () => {
+    it('should update span with error information on span end', async () => {
       const errorSpan = createMockSpan({
         id: 'error-span',
         name: 'failing-operation',
@@ -516,7 +574,7 @@ describe('LangfuseExporter', () => {
         span: errorSpan,
       });
 
-      expect(mockSpan.end).toHaveBeenCalledWith({
+      expect(mockSpan.update).toHaveBeenCalledWith({
         endTime: errorSpan.endTime,
         metadata: expect.objectContaining({
           spanType: 'tool_call',
@@ -525,6 +583,40 @@ describe('LangfuseExporter', () => {
         level: 'ERROR',
         statusMessage: 'Tool execution failed',
       });
+    });
+
+    it('should update root trace and delete from traceMap when root span ends', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span-id',
+        name: 'root-span',
+        type: AISpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      rootSpan.output = { result: 'success' };
+      rootSpan.endTime = new Date();
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        span: rootSpan,
+      });
+
+      // Verify trace was created
+      expect((exporter as any).traceMap.has('root-span-id')).toBe(true);
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_ENDED,
+        span: rootSpan,
+      });
+
+      // Should update trace with output
+      expect(mockTrace.update).toHaveBeenCalledWith({
+        output: { result: 'success' },
+      });
+
+      // Should remove trace from traceMap
+      expect((exporter as any).traceMap.has('root-span-id')).toBe(false);
     });
   });
 
@@ -575,6 +667,138 @@ describe('LangfuseExporter', () => {
           span,
         }),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe('Event Span Handling', () => {
+    let mockEvent: any;
+
+    beforeEach(() => {
+      mockEvent = {
+        update: vi.fn(),
+      };
+      mockTrace.event.mockReturnValue(mockEvent);
+      mockSpan.event.mockReturnValue(mockEvent);
+      mockGeneration.event.mockReturnValue(mockEvent);
+    });
+
+    it('should create Langfuse event for root event spans', async () => {
+      const eventSpan = createMockSpan({
+        id: 'event-span-id',
+        name: 'user-feedback',
+        type: AISpanType.GENERIC,
+        isRoot: true,
+        attributes: {
+          eventType: 'user_feedback',
+          rating: 5,
+        },
+        input: { message: 'Great response!' },
+      });
+      eventSpan.isEvent = true;
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        span: eventSpan,
+      });
+
+      // Should create trace for root event span
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'event-span-id',
+        name: 'user-feedback',
+        input: { message: 'Great response!' },
+        metadata: {
+          spanType: 'generic',
+          eventType: 'user_feedback',
+          rating: 5,
+        },
+      });
+
+      // Should create Langfuse event
+      expect(mockTrace.event).toHaveBeenCalledWith({
+        id: 'event-span-id',
+        name: 'user-feedback',
+        startTime: eventSpan.startTime,
+        input: { message: 'Great response!' },
+        metadata: {
+          spanType: 'generic',
+          eventType: 'user_feedback',
+          rating: 5,
+        },
+      });
+    });
+
+    it('should create Langfuse event for child event spans', async () => {
+      // First create a root span
+      const rootSpan = createMockSpan({
+        id: 'root-span-id',
+        name: 'root-agent',
+        type: AISpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        span: rootSpan,
+      });
+
+      // Then create a child event span
+      const childEventSpan = createMockSpan({
+        id: 'child-event-id',
+        name: 'tool-result',
+        type: AISpanType.GENERIC,
+        isRoot: false,
+        attributes: {
+          toolName: 'calculator',
+          success: true,
+        },
+        output: { result: 42 },
+      });
+      childEventSpan.isEvent = true;
+      childEventSpan.traceId = 'root-span-id';
+      childEventSpan.parent = { id: 'root-span-id' };
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        span: childEventSpan,
+      });
+
+      // Should create event under the parent span
+      expect(mockSpan.event).toHaveBeenCalledWith({
+        id: 'child-event-id',
+        name: 'tool-result',
+        startTime: childEventSpan.startTime,
+        output: { result: 42 },
+        metadata: {
+          spanType: 'generic',
+          toolName: 'calculator',
+          success: true,
+        },
+      });
+    });
+
+    it('should handle event spans with missing parent gracefully', async () => {
+      const orphanEventSpan = createMockSpan({
+        id: 'orphan-event-id',
+        name: 'orphan-event',
+        type: AISpanType.GENERIC,
+        isRoot: false,
+        attributes: {},
+      });
+      orphanEventSpan.isEvent = true;
+      orphanEventSpan.traceId = 'missing-trace-id';
+
+      // Should not throw
+      await expect(
+        exporter.exportEvent({
+          type: AITracingEventType.SPAN_STARTED,
+          span: orphanEventSpan,
+        }),
+      ).resolves.not.toThrow();
+
+      // Should not create any Langfuse objects
+      expect(mockTrace.event).not.toHaveBeenCalled();
+      expect(mockSpan.event).not.toHaveBeenCalled();
     });
   });
 
@@ -657,6 +881,8 @@ function createMockSpan({
     error: vi.fn(),
     update: vi.fn(),
     createChildSpan: vi.fn(),
+    createEventSpan: vi.fn(),
+    isEvent: false,
   } as AnyAISpan;
 
   return mockSpan;

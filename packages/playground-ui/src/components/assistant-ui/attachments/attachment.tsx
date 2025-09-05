@@ -14,7 +14,7 @@ import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
 import Spinner from '@/components/ui/spinner';
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
-import { fileToBase64 } from '@/lib/file';
+import { fileToBase64 } from '@/lib/file/toBase64';
 
 const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
   const { isLoading, text } = useLoadBrowserFile(document.file);
@@ -47,9 +47,15 @@ const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
     };
   }, [document]);
 
+  const isUrl = document.file?.name.startsWith('https://');
+
   return (
     <div className="flex items-center justify-center h-full w-full">
-      {state.isLoading ? <Spinner className="animate-spin" /> : <PdfEntry data={state.text} />}
+      {state.isLoading ? (
+        <Spinner className="animate-spin" />
+      ) : (
+        <PdfEntry data={state.text} url={isUrl ? document.file?.name : undefined} />
+      )}
     </div>
   );
 };
@@ -59,6 +65,8 @@ const AttachmentThumbnail = () => {
   const document = useAttachment(a => (a.type === 'document' ? a : undefined));
   const src = useAttachmentSrc();
   const canRemove = useAttachment(a => a.source !== 'message');
+  const isUrl = document?.file?.name.startsWith('https://');
+  const actualSrc = isUrl ? document?.file?.name : src;
 
   return (
     <>
@@ -69,7 +77,7 @@ const AttachmentThumbnail = () => {
               <TooltipTrigger asChild>
                 <div className="overflow-hidden size-16 rounded-lg bg-surface3 border-sm border-border1 ">
                   {isImage ? (
-                    <ImageEntry src={src ?? ''} />
+                    <ImageEntry src={actualSrc ?? ''} />
                   ) : document?.contentType === 'application/pdf' ? (
                     <ComposerPdfAttachment document={document} />
                   ) : document ? (

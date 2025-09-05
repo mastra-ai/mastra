@@ -76,7 +76,7 @@ import { useChat } from "@ai-sdk/react";
 
 export function Chat() {
   const { messages, input, handleInputChange, handleSubmit } = useChat({
-    api: "api/chat"
+    api: "/api/chat"
   });
   return (
     <div>
@@ -432,24 +432,136 @@ This utility is helpful when you want to fetch messages directly from your stora
 
 ### Enabling stream compatibility
 
-To enable AI SDK v5 compatibility, use the experimental `streamVNext` method with the `format` parameter:
+To enable AI SDK v5 compatibility, use the `@mastra/ai-sdk` package:
 
-```typescript filename="app/api/chat/route.ts" showLineNumbers copy
-import { mastra } from "../../../mastra";
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add @mastra/ai-sdk
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const myAgent = mastra.getAgent("weatherAgent");
-  
-  // Use streamVNext with AI SDK v5 format (experimental)
-  const stream = await myAgent.streamVNext(messages, {
-    format: 'aisdk'
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from '@mastra/core/mastra';
+import { chatRoute } from '@mastra/ai-sdk';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat',
+        agent: 'weatherAgent',
+      }),
+    ],
+  },
+});
+```
+
+In your application call the `useChat()` hook.
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } =
+  useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
   });
-
-  return stream.toUIMessageStreamResponse();
-}
 ```
 
 <Callout type="info">
   **Note**: The `streamVNext` method with format support is experimental and may change as we refine the feature based on feedback. See the [Agent Streaming documentation](/docs/agents/streaming) for more details about streamVNext.
 </Callout>
+
+### Type Inference for Tools
+
+When using tools with TypeScript in AI SDK v5, Mastra provides type inference helpers to ensure type safety for your tool inputs and outputs.
+
+#### InferUITool
+
+The `InferUITool` type helper infers the input and output types of a single Mastra tool:
+
+```typescript filename="app/types.ts" showLineNumbers copy
+import { InferUITool, createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get the current weather",
+  inputSchema: z.object({
+    location: z.string().describe("The city and state"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return {
+      temperature: 72,
+      conditions: "sunny",
+    };
+  },
+});
+
+// Infer the types from the tool
+type WeatherUITool = InferUITool<typeof weatherTool>;
+// This creates:
+// {
+//   input: { location: string };
+//   output: { temperature: number; conditions: string };
+// }
+```
+
+#### InferUITools
+
+The `InferUITools` type helper infers the input and output types of multiple tools:
+
+```typescript filename="app/mastra/tools.ts" showLineNumbers copy
+import { InferUITools, createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+// Using weatherTool from the previous example
+const tools = {
+  weather: weatherTool,
+  calculator: createTool({
+    id: "calculator",
+    description: "Perform basic arithmetic",
+    inputSchema: z.object({
+      operation: z.enum(["add", "subtract", "multiply", "divide"]),
+      a: z.number(),
+      b: z.number(),
+    }),
+    outputSchema: z.object({
+      result: z.number(),
+    }),
+    execute: async ({ context }) => {
+      // implementation...
+      return { result: 0 };
+    },
+  }),
+};
+
+// Infer types from the tool set
+export type MyUITools = InferUITools<typeof tools>;
+// This creates:
+// {
+//   weather: { input: { location: string }; output: { temperature: number; conditions: string } };
+//   calculator: { input: { operation: "add" | "subtract" | "multiply" | "divide"; a: number; b: number }; output: { result: number } };
+// }
+```
+
+These type helpers provide full TypeScript support when using Mastra tools with AI SDK v5 UI components, ensuring type safety across your application.

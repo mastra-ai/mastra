@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-murf",
-  "version": "0.10.9",
+  "version": "0.11.4",
   "description": "Mastra Murf voice integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -43,7 +44,16 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "voice/murf"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

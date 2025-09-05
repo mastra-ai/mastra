@@ -11,16 +11,15 @@ import type {
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
-
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
 // Type for flexible message deletion input
@@ -162,31 +161,63 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const rawMessages = await this.storage.getMessages({
-      threadId,
-      resourceId,
-      format: 'v2',
-      selectBy: {
-        ...selectBy,
-        ...(vectorResults?.length
-          ? {
-              include: vectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                threadId: r.metadata?.thread_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
-          : {}),
-      },
-      threadConfig: config,
-    });
+    // Use paginated method when pagination is requested
+    let rawMessages;
+    if (selectBy?.pagination) {
+      const paginatedResult = await this.storage.getMessagesPaginated({
+        threadId,
+        resourceId,
+        format: 'v2',
+        selectBy: {
+          ...selectBy,
+          ...(vectorResults?.length
+            ? {
+                include: vectorResults.map(r => ({
+                  id: r.metadata?.message_id,
+                  threadId: r.metadata?.thread_id,
+                  withNextMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.after,
+                  withPreviousMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.before,
+                })),
+              }
+            : {}),
+        },
+        threadConfig: config,
+      });
+      rawMessages = paginatedResult.messages;
+    } else {
+      // Fall back to regular getMessages for backward compatibility
+      rawMessages = await this.storage.getMessages({
+        threadId,
+        resourceId,
+        format: 'v2',
+        selectBy: {
+          ...selectBy,
+          ...(vectorResults?.length
+            ? {
+                include: vectorResults.map(r => ({
+                  id: r.metadata?.message_id,
+                  threadId: r.metadata?.thread_id,
+                  withNextMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.after,
+                  withPreviousMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.before,
+                })),
+              }
+            : {}),
+        },
+        threadConfig: config,
+      });
+    }
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
     return {
@@ -794,9 +825,7 @@ export class Memory extends MastraMemory {
 
         if (isZodObject(schema as ZodTypeAny)) {
           // Convert ZodObject to JSON Schema
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny, {
-            $refStrategy: 'none',
-          }) as JSONSchema7;
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny) as JSONSchema7;
         } else {
           // Already a JSON Schema
           convertedSchema = schema as any as JSONSchema7;

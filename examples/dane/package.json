@@ -1,13 +1,14 @@
 {
   "name": "@mastra/dane",
-  "version": "0.0.46-alpha.0",
+  "version": "0.0.50",
   "main": "dist/index.js",
   "type": "module",
   "files": [
     "dist",
     "data",
     "test",
-    "test-files"
+    "test-files",
+    "CHANGELOG.md"
   ],
   "bin": {
     "dane": "./dist/index.js"
@@ -19,7 +20,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
     "@types/node": "^20.17.57",
@@ -29,7 +30,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
-    "@inquirer/prompts": "^7.3.3",
+    "@inquirer/prompts": "^7.8.4",
     "@mastra/core": "workspace:*",
     "@mastra/github": "workspace:*",
     "@mastra/libsql": "workspace:*",
@@ -52,6 +53,15 @@
     "playwright-core": "^1.51.0",
     "sqlite3": "^5.1.7",
     "typescript": "^5.8.3",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "examples/dane"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

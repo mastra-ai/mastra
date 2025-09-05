@@ -1,10 +1,14 @@
 {
   "name": "@mastra/voice-openai-realtime",
-  "version": "0.10.8",
+  "version": "0.11.4",
   "description": "Mastra OpenAI Realtime API integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "exports": {
     ".": {
       "import": {
@@ -28,7 +32,7 @@
   "dependencies": {
     "openai-realtime-api": "^1.0.8",
     "ws": "^8.18.3",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -40,11 +44,20 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "voice/openai-realtime-api"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

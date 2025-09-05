@@ -1,10 +1,11 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.12.3-alpha.0",
+  "version": "0.13.4",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,7 +46,7 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.5.0",
-    "rollup": "~4.47.1"
+    "rollup": "~4.50.0"
   },
   "devDependencies": {
     "@babel/types": "^7.28.2",
@@ -59,10 +60,19 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "deployers/cloudflare"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.1-0 <0.15.0-0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
   }
 }

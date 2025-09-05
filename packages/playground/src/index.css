@@ -142,17 +142,15 @@
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
-}
 
-.cl-internal-1eekank {
-  color: white;
-}
+  *:focus,
+  *:focus-visible {
+    @apply outline-none;
+  }
 
-.gradient-hero {
-  background:
-    linear-gradient(to right, hsl(0deg 0% 20% / 25%) 0.5px, transparent 0.5px),
-    linear-gradient(to bottom, hsl(0deg 0% 20% / 25%) 0.5px, transparent 0.5px);
-  background-size: 14px 14px;
+  *:focus-visible {
+    @apply outline outline-accent1;
+  }
 }
 
 .react-flow__controls-button {

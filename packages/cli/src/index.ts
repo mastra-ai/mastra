@@ -1,7 +1,9 @@
 #! /usr/bin/env node
 import { Command } from 'commander';
 import pc from 'picocolors';
+import type { PackageJson } from 'type-fest';
 
+import pkgJson from '../package.json';
 import type { CLI_ORIGIN } from './analytics/index';
 import { PosthogAnalytics, setAnalytics } from './analytics/index';
 import { addScorer } from './commands/actions/add-scorer';
@@ -13,10 +15,9 @@ import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
-import { DepsService } from './services/service.deps';
 
-const depsService = new DepsService();
-const version = await depsService.getPackageVersion();
+const mastraPkg = pkgJson as PackageJson;
+export const version = mastraPkg.version;
 
 export const analytics = new PosthogAnalytics({
   apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
@@ -48,7 +49,7 @@ program
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras))')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, cerebras or mistral)')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
@@ -121,6 +122,7 @@ program
   .command('start')
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
+  .option('-e, --env <env>', 'Custom env file to include in the start')
   .option('-nt, --no-telemetry', 'Disable telemetry on start')
   .action(startProject);
 

@@ -1,0 +1,91 @@
+{
+  "name": "@mastra/agent-builder",
+  "version": "0.0.2",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "tsup --silent --config tsup.config.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.2.12",
+    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.4",
+    "@ai-sdk/google": "^1.2.22",
+    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.6",
+    "@ai-sdk/groq": "^1.2.9",
+    "@ai-sdk/groq-v5": "npm:@ai-sdk/groq@2.0.10",
+    "@ai-sdk/openai": "^1.3.24",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
+    "@ai-sdk/xai": "^1.2.18",
+    "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.7",
+    "@mastra/memory": "workspace:*",
+    "ai": "^5.0.25",
+    "ignore": "^7.0.5",
+    "semver": "^7.7.2",
+    "swpm": "^2.6.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "^20.19.0",
+    "@types/semver": "^7.7.0",
+    "eslint": "^9.30.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
+    "typescript": ">=5.7.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "agent",
+    "agents",
+    "mastra",
+    "builder",
+    "typescript"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/agent-builder"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
+}

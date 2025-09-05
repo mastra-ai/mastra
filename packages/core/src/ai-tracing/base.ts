@@ -79,36 +79,47 @@ export abstract class MastraAITracing extends MastraBase {
     type: TType;
     name: string;
     input?: any;
+    output?: any;
     attributes?: AISpanTypeMap[TType];
     metadata?: Record<string, any>;
     parent?: AnyAISpan;
     startOptions?: {
       runtimeContext?: RuntimeContext;
     };
+    isEvent?: boolean;
   }): AISpan<TType> {
-    const { type, name, input, attributes, metadata, parent, startOptions } = options;
+    const { type, name, input, output, attributes, metadata, parent, startOptions, isEvent } = options;
     const { runtimeContext } = startOptions || {};
 
     if (!this.shouldSample({ runtimeContext })) {
-      return new NoOpAISpan<TType>({ type, name, input, attributes, metadata, parent }, this);
+      return new NoOpAISpan<TType>(
+        { type, name, input, output, attributes, metadata, parent, isEvent: isEvent === true },
+        this,
+      );
     }
 
     const spanOptions: AISpanOptions<TType> = {
       type,
       name,
       input,
+      output,
       attributes,
       metadata,
       parent,
+      isEvent: isEvent === true,
     };
 
     const span = this.createSpan(spanOptions);
 
-    // Automatically wire up tracing lifecycle
-    this.wireSpanLifecycle(span);
+    if (span.isEvent) {
+      this.emitSpanEnded(span);
+    } else {
+      // Automatically wire up tracing lifecycle
+      this.wireSpanLifecycle(span);
 
-    // Emit span started event
-    this.emitSpanStarted(span);
+      // Emit span started event
+      this.emitSpanStarted(span);
+    }
 
     return span;
   }
@@ -323,7 +334,7 @@ export abstract class MastraAITracing extends MastraBase {
   /**
    * Initialize AI tracing (called by Mastra during component registration)
    */
-  async init(): Promise<void> {
+  init(): void {
     this.logger.debug(`[AI Tracing] Initialization started [name=${this.name}]`);
 
     // Any initialization logic for the AI tracing system

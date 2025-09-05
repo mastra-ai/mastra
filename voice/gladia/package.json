@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-gladia",
-  "version": "0.10.3",
+  "version": "0.11.4",
   "description": "Mastra Gladia AI voice integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -41,7 +42,7 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "keywords": [
     "mastra",
@@ -51,7 +52,16 @@
     "speech-recognition"
   ],
   "peerDependencies": {
-    "@mastra/core": "^0.10.0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "voice/gladia"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

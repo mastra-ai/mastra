@@ -1,0 +1,64 @@
+{
+  "name": "@mastra/deployer-cloud",
+  "version": "0.16.0",
+  "description": "",
+  "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "templates"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@mastra/deployer": "workspace:^",
+    "@mastra/loggers": "workspace:*",
+    "execa": "^9.6.0",
+    "fs-extra": "^11.3.0",
+    "pino": "^9.7.0",
+    "redis": "^5.8.2"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.19.0",
+    "eslint": "^9.30.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "deployers/cloud"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai"
+}

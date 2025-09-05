@@ -1,0 +1,28 @@
+{
+  "name": "@mastra/agent-builder-integration-tests",
+  "private": true,
+  "version": "0.1.2",
+  "scripts": {
+    "test": "vitest run",
+    "test:agent": "vitest run ./src/agent-template-behavior.test.ts",
+    "test:template": "vitest run ./src/template-integration.test.ts",
+    "test:workflow": "vitest run ./src/workflow-builder-integration.test.ts",
+    "dev": "mastra dev"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.0",
+    "@mastra/agent-builder": "workspace:*",
+    "dotenv": "^16.4.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "mastra": "workspace:*",
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.15.2-0 <0.17.0-0"
+  }
+}

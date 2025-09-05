@@ -1,6 +1,6 @@
 {
   "name": "@mastra/libsql",
-  "version": "0.13.4",
+  "version": "0.14.0",
   "description": "Libsql provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -24,9 +24,9 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
-    "@libsql/client": "^0.15.12"
+    "@libsql/client": "^0.15.14"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -41,6 +41,19 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.15.0-0"
+    "@mastra/core": ">=0.16.0-0 <0.17.0-0"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/libsql"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

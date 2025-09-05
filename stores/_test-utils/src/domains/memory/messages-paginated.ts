@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSampleMessageV1, createSampleMessageV2 } from './data';
 import { resetRole, createSampleThread } from './data';
 import { MastraStorage } from '@mastra/core/storage';
@@ -133,14 +133,14 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       await storage.saveMessages({ messages });
 
-      const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+      const retrievedMessages = await storage.getMessages({ threadId: thread.id, format: 'v1' });
 
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
         // @ts-expect-error
-        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
+        expect(msg.content[0]?.text).toBe(messages[idx].content[0]?.text);
       });
     });
 
@@ -484,6 +484,29 @@ export function createMessagesPaginatedTest({ storage }: { storage: MastraStorag
 
       // The content should be the updated one
       expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
+    });
+
+    it('should throw if threadId is an empty string or whitespace only', async () => {
+      // intercept calls to the Error constructor
+      const originalError = global.Error;
+      const errorSpy = vi.fn().mockImplementation((...args) => new originalError(...args));
+      global.Error = errorSpy as any;
+
+      expect((await storage.getMessagesPaginated({ threadId: '' })).messages).toHaveLength(0);
+      expect(errorSpy.mock.calls).toMatchObject([
+        ['threadId must be a non-empty string'],
+        ['Error: threadId must be a non-empty string'],
+      ]);
+      errorSpy.mockClear();
+
+      expect((await storage.getMessagesPaginated({ threadId: '   ' })).messages).toHaveLength(0);
+      expect(errorSpy.mock.calls).toMatchObject([
+        ['threadId must be a non-empty string'],
+        ['Error: threadId must be a non-empty string'],
+      ]);
+      errorSpy.mockClear();
+
+      global.Error = originalError;
     });
   });
 

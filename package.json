@@ -35,8 +35,8 @@
     "build:clients": "pnpm turbo build --filter \"./client-sdks/*\"",
     "build:schema-compat": "pnpm turbo build --filter ./packages/schema-compat",
     "build:auth": "pnpm turbo build --filter \"./auth/*\" --filter \"./packages/auth\"",
-    "build:observability": "pnpm turbo build --filter ./observability/*",
-    "dev:playground": "pnpm turbo run dev:playground --filter ./packages/playground-ui --filter ./packages/cli",
+    "build:observability": "pnpm turbo build --filter \"./observability/*\"",
+    "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
@@ -57,7 +57,9 @@
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
     "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm",
-    "test:observability": "pnpm --filter ./observability/* test",
+    "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
+    "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
+    "test:observability": "pnpm --filter \"./observability/*\" test",
     "lint-staged": "lint-staged",
     "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@internal/playground\" lint",
     "preinstall": "npx only-allow pnpm",
@@ -83,7 +85,9 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "^20.17.57"
+    "@types/node": "^20.17.57",
+    "cookie": ">=0.7.2",
+    "tmp": ">=0.2.4"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",

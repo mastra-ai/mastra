@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "0.14.2",
+  "version": "0.15.0",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@upstash/redis": "^1.35.3",
     "@upstash/vector": "^1.2.2"
@@ -45,6 +45,19 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.15.0-0"
+    "@mastra/core": ">=0.16.0-0 <0.17.0-0"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/upstash"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.24-alpha.0",
+  "version": "0.12.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -20,7 +20,7 @@
   },
   "files": [
     "dist",
-    "src/scripts"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
@@ -77,7 +77,7 @@
     "strip-json-comments": "^5.0.2",
     "tcp-port-used": "^1.0.2",
     "yocto-spinner": "^0.2.3",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -100,7 +100,16 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.2-0 <0.15.0-0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "@mastra/core": ">=0.10.2-0 <0.17.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

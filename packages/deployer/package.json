@@ -1,10 +1,11 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.14.2-alpha.0",
+  "version": "0.16.0",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -115,7 +116,7 @@
     "hono": "^4.8.12",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
-    "rollup": "~4.47.1",
+    "rollup": "~4.50.0",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript-paths": "^1.5.1"
@@ -141,10 +142,19 @@
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.12.0-0 <0.15.0-0",
-    "zod": "^3.0.0 || ^4.0.0"
+    "@mastra/core": ">=0.16.0-0 <0.17.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/deployer"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

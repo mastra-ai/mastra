@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "0.14.3",
+  "version": "0.15.0",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
   },
   "files": [
     "dist",
-    "src"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
@@ -41,7 +41,7 @@
     "electrodb": "^3.4.3"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.13.0-0 <0.15.0-0"
+    "@mastra/core": ">=0.16.0-0 <0.17.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -57,5 +57,14 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/dynamodb"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

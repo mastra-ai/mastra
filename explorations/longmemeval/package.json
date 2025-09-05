@@ -1,6 +1,6 @@
 {
   "name": "@mastra/longmemeval",
-  "version": "0.1.11-alpha.0",
+  "version": "0.1.15",
   "description": "LongMemEval benchmark implementation for Mastra Memory",
   "scripts": {
     "test": "vitest",
@@ -54,5 +54,14 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "explorations/longmemeval"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

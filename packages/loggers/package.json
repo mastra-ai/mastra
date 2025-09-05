@@ -1,11 +1,21 @@
 {
   "name": "@mastra/loggers",
-  "version": "0.10.7",
+  "version": "0.10.11",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/loggers"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
   "exports": {
@@ -76,6 +86,6 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.4-0 <0.15.0-0"
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0"
   }
 }
