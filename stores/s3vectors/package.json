@@ -27,7 +27,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@aws-sdk/client-s3vectors": "^3.864.0",
     "uuid": "^11.1.0"
