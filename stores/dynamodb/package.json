@@ -38,7 +38,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.859.0",
     "@aws-sdk/lib-dynamodb": "^3.859.0",
-    "electrodb": "^3.4.3"
+    "electrodb": "^3.4.5"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.16.0-0 <0.17.0-0"
