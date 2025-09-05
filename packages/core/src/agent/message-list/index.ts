@@ -2061,13 +2061,15 @@ export class MessageList {
       v2Msg.content.experimental_attachments = originalAttachments || [];
     }
 
-    // For AI SDK V4 compatibility: External URLs in file parts need to be in experimental_attachments
-    // Check file parts for any external URLs and move them to experimental_attachments
+    // For AI SDK V4 compatibility: External URLs in file parts may need to be in experimental_attachments
+    // However, we should preserve file parts that have providerMetadata for proper roundtrip conversion
+    // Only move URL file parts to experimental_attachments if they don't have providerMetadata
     const urlFileParts = v2Msg.content.parts.filter(
       p =>
         p.type === 'file' &&
         typeof p.data === 'string' &&
-        (p.data.startsWith('http://') || p.data.startsWith('https://')),
+        (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
+        !p.providerMetadata, // Don't move if it has providerMetadata (needed for roundtrip)
     );
 
     if (urlFileParts.length > 0) {
@@ -2076,7 +2078,7 @@ export class MessageList {
         v2Msg.content.experimental_attachments = [];
       }
 
-      // Move URL file parts to experimental_attachments
+      // Move URL file parts without providerMetadata to experimental_attachments
       for (const urlPart of urlFileParts) {
         if (urlPart.type === 'file') {
           v2Msg.content.experimental_attachments.push({
@@ -2086,13 +2088,14 @@ export class MessageList {
         }
       }
 
-      // Remove URL file parts from parts array
+      // Remove URL file parts (without providerMetadata) from parts array
       v2Msg.content.parts = v2Msg.content.parts.filter(
         p =>
           !(
             p.type === 'file' &&
             typeof p.data === 'string' &&
-            (p.data.startsWith('http://') || p.data.startsWith('https://'))
+            (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
+            !p.providerMetadata
           ),
       );
     }
