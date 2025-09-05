@@ -52,10 +52,10 @@ This template showcases a powerful workflow for making PDF documents accessible 
    OPENAI_API_KEY="your-openai-api-key-here"
    ```
 
-3. **Run the example:**
+3. **Run the template:**
 
    ```bash
-   npx tsx example.ts
+   npm run dev
    ```
 
 ## 🏗️ Architectural Pattern: PDF to Audio Pipeline
@@ -114,11 +114,14 @@ const result = await run.start({
   inputData: {
     pdfUrl: 'https://example.com/document.pdf',
     speaker: 'nova', // Choose voice: alloy, echo, fable, onyx, nova, shimmer
-    speed: 1.2, // Speaking speed (0.25 to 4.0)
+    speed: 1.2, // Speaking speed (0.1 to 4.0)
   },
 });
 
-console.log(result.result.audioInfo);
+console.log(result.result.audioGenerated);
+console.log(result.result.filePath);
+console.log(result.result.speaker);
+console.log(result.result.speed);
 ```
 
 ### Using the PDF to Audio Agent
@@ -149,21 +152,23 @@ const audioStream = await agent.voice.speak('This is a test of the voice capabil
 
 ```typescript
 import { mastra } from './src/mastra/index';
-import { pdfFetcherTool } from './src/mastra/tools/download-pdf-tool';
-import { generateAudioFromTextTool } from './src/mastra/tools/generate-audio-from-text-tool';
+import { pdfFetcherTool } from './src/mastra/tools/summarize-pdf-tool';
+import { textToSpeechTool } from './src/mastra/tools/text-to-speech-tool';
+import { RuntimeContext } from '@mastra/core/di';
 
 // Step 1: Download PDF and generate summary
 const pdfResult = await pdfFetcherTool.execute({
   context: { pdfUrl: 'https://example.com/document.pdf' },
   mastra,
   runtimeContext: new RuntimeContext(),
+  tracingContext: {} as any,
 });
 
 console.log(`Downloaded ${pdfResult.fileSize} bytes from ${pdfResult.pagesCount} pages`);
 console.log(`Generated ${pdfResult.summary.length} character summary`);
 
 // Step 2: Generate audio from summary
-const audioResult = await generateAudioFromTextTool.execute({
+const audioResult = await textToSpeechTool.execute({
   context: {
     extractedText: pdfResult.summary,
     speaker: 'nova',
@@ -171,9 +176,13 @@ const audioResult = await generateAudioFromTextTool.execute({
   },
   mastra,
   runtimeContext: new RuntimeContext(),
+  tracingContext: {} as any,
 });
 
-console.log(`Audio generated: ${audioResult.estimatedDuration} seconds duration`);
+console.log(`Audio generated: ${audioResult.audioGenerated}`);
+console.log(`Audio file: ${audioResult.filePath}`);
+console.log(`Speaker used: ${audioResult.speaker}`);
+console.log(`Speed used: ${audioResult.speed}`);
 ```
 
 ### Expected Output
@@ -181,14 +190,9 @@ console.log(`Audio generated: ${audioResult.estimatedDuration} seconds duration`
 ```javascript
 {
   audioGenerated: true,
-  textLength: 1245,
-  estimatedDuration: 124,
-  audioInfo: {
-    format: 'mp3',
-    quality: 'hd',
-    speaker: 'nova'
-  },
-  success: true
+  filePath: '/path/to/audio/audio-2024-01-15T10-30-45-123Z.mp3',
+  speaker: 'nova',
+  speed: 1.2
 }
 ```
 
@@ -197,14 +201,14 @@ console.log(`Audio generated: ${audioResult.estimatedDuration} seconds duration`
 ### Components
 
 - **`pdfToAudioWorkflow`**: Main workflow orchestrating the PDF-to-audio conversion
-- **`textToAudioAgent`**: Mastra agent specialized in text-to-audio conversion with voice capabilities
+- **`textNaturalizerAgent`**: Mastra agent specialized in text-to-audio conversion with voice capabilities
 - **`pdfToAudioAgent`**: Complete agent that handles the full PDF to audio pipeline with voice synthesis
 - **`pdfSummarizationAgent`**: Enhanced summarization agent with voice capabilities for audio-optimized summaries
 
 ### Tools
 
 - **`pdfFetcherTool`**: Downloads PDF files from URLs, extracts text, and generates AI summaries
-- **`generateAudioFromTextTool`**: Generates high-quality audio from text content using voice synthesis
+- **`textToSpeechTool`**: Generates high-quality audio from text content using voice synthesis
 
 ### Workflow Steps
 
@@ -215,7 +219,7 @@ console.log(`Audio generated: ${audioResult.estimatedDuration} seconds duration`
 
 - ✅ **Professional Voice Synthesis**: High-quality TTS using OpenAI's voice models
 - ✅ **Multiple Voice Options**: Choose from alloy, echo, fable, onyx, nova, shimmer voices
-- ✅ **Configurable Speech**: Adjust speaking speed from 0.25x to 4.0x
+- ✅ **Configurable Speech**: Adjust speaking speed from 0.1x to 4.0x
 - ✅ **AI Summarization**: Intelligent content compression for focused audio
 - ✅ **Token Limit Protection**: Efficient processing of large documents
 - ✅ **Zero System Dependencies**: Pure JavaScript solution
@@ -236,11 +240,12 @@ console.log(`Audio generated: ${audioResult.estimatedDuration} seconds duration`
 
 ### Speed Settings
 
-- **0.25**: Very slow (accessibility)
+- **0.1**: Very slow (accessibility)
 - **0.5**: Slow (complex content)
 - **1.0**: Normal speed (default)
 - **1.5**: Fast (familiar content)
 - **2.0**: Very fast (review/scanning)
+- **4.0**: Maximum speed
 
 ## How It Works
 
@@ -278,12 +283,11 @@ OPENAI_API_KEY=your_openai_api_key_here
 You can customize voice settings in agents:
 
 ```typescript
-export const textToAudioAgent = new Agent({
+export const textNaturalizerAgent = new Agent({
   // ... other config
   voice: new OpenAIVoice({
     speechModel: {
       name: 'tts-1-hd', // or 'tts-1' for faster, lower quality
-      apiKey: process.env.OPENAI_API_KEY,
     },
     speaker: 'nova', // Default voice
   }),
@@ -298,13 +302,13 @@ export const textToAudioAgent = new Agent({
 src/mastra/
 ├── agents/
 │   ├── pdf-to-audio-agent.ts         # PDF processing and audio generation agent
-│   ├── text-to-audio-agent.ts        # Text to audio conversion agent
+│   ├── text-naturalizer-agent.ts     # Text to audio conversion agent
 │   └── pdf-summarization-agent.ts    # PDF summarization agent with voice
 ├── tools/
-│   ├── download-pdf-tool.ts           # PDF download and summarization tool
-│   └── generate-audio-from-text-tool.ts # Audio generation tool
+│   ├── summarize-pdf-tool.ts         # PDF download and summarization tool
+│   └── text-to-speech-tool.ts        # Audio generation tool
 ├── workflows/
-│   └── generate-audio-from-pdf-workflow.ts # Main workflow
+│   └── pdf-to-audio-workflow.ts      # Main workflow
 ├── lib/
 │   └── util.ts                        # PDF text extraction utilities
 └── index.ts                           # Mastra configuration

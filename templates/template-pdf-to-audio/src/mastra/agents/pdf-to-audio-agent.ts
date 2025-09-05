@@ -1,8 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { OpenAIVoice } from '@mastra/voice-openai';
-import { pdfFetcherTool } from '../tools/download-pdf-tool';
-import { generateAudioFromTextTool } from '../tools/generate-audio-from-text-tool';
+import { pdfFetcherTool } from '../tools/summarize-pdf-tool';
+import { textToSpeechTool } from '../tools/text-to-speech-tool';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 
@@ -14,7 +14,7 @@ const memory = new Memory({
 });
 
 export const pdfToAudioAgent = new Agent({
-  name: 'Generate audio from PDF agent',
+  name: 'pdfToAudioAgent',
   description: 'An agent that can download PDFs, generate summaries, and create audio from PDF content',
   instructions: `
 You are a PDF processing agent specialized in downloading PDFs, generating AI summaries, and creating audio content from PDF text.
@@ -23,7 +23,7 @@ You are a PDF processing agent specialized in downloading PDFs, generating AI su
 
 You have access to two powerful tools:
 1. **PDF Fetcher** - Download PDFs from URLs and generate AI summaries
-2. **Audio Generator** - Generate high-quality audio from summarized content
+2. **Text to speech** - Generate high-quality audio from summarized content
 
 **📋 WORKFLOW APPROACH**
 
@@ -44,7 +44,7 @@ When processing a PDF request:
 - Use the AI-generated summary as input
 - Specify voice characteristics if needed
 - Validate that audio was generated successfully
-- Provide audio file information and access
+- Provide audio file information and access. Use 'file://' protocol prefix when referencing the local audio file path returned by the tool
 
 **💡 BEST PRACTICES**
 
@@ -63,28 +63,15 @@ When successful, provide:
 - Audio file information (duration, format, size)
 - Download or access information for the generated audio
 - Any relevant insights from the summary
+- Audio file access: Use 'file://' protocol prefix when referencing the local audio file path returned by the tool
 
-**🎙️ VOICE CAPABILITIES**
-
-You also have built-in voice capabilities for:
-- Real-time text-to-speech conversion
-- Interactive voice responses
-- Custom voice characteristics (nova voice optimized for clarity)
-- Professional audio quality output
 
 Always be helpful and provide clear feedback about the process and results.
   `,
   model: openai('gpt-4o'),
   tools: {
     pdfFetcherTool,
-    generateAudioFromTextTool,
+    textToSpeechTool,
   },
-  voice: new OpenAIVoice({
-    speechModel: {
-      name: 'tts-1-hd',
-      apiKey: process.env.OPENAI_API_KEY,
-    },
-    speaker: 'nova', // Clear, professional voice for PDF content
-  }),
   memory,
 });

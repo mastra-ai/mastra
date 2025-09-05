@@ -2,8 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 
-export const textToAudioAgent = new Agent({
-  name: 'Generate audio from text agent',
+export const textNaturalizerAgent = new Agent({
+  name: 'textNaturalizerAgent',
   description: 'An agent specialized in converting text content to audio using voice synthesis',
   instructions: `
 You're an expert text-to-audio converter who transforms written content into spoken audio. Your goal is to generate high-quality audio output from provided text content.
@@ -58,8 +58,7 @@ The audio should sound natural and professional, making the content easily acces
   model: openai('gpt-4o'),
   voice: new OpenAIVoice({
     speechModel: {
-      name: 'tts-1-hd',
-      apiKey: process.env.OPENAI_API_KEY,
+      name: 'tts-1-hd'
     },
     speaker: 'nova', // Clear, professional voice
   }),

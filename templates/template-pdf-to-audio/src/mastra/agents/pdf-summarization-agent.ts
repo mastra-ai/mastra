@@ -1,22 +1,13 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { OpenAIVoice } from '@mastra/voice-openai';
-import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 
-// Initialize memory with LibSQLStore for persistence
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: process.env.MASTRA_DB_URL || 'file:../mastra.db',
-  }),
-});
-
 export const pdfSummarizationAgent = new Agent({
-  name: 'PDF Summarization Agent with Voice',
+  name: 'pdfSummarizationAgent',
   description:
-    'An agent that summarizes extracted PDF text using a large context window model and can provide audio summaries',
+    'An agent that summarizes extracted PDF text using a large context window model',
   instructions: `
-You are a PDF summarization specialist with access to a large context window model and voice synthesis capabilities. Your role is to create concise, comprehensive summaries of PDF content and deliver them in both text and audio formats.
+You are a PDF summarization specialist with access to a large context window model. Your role is to create concise, comprehensive summaries of PDF content and deliver them in both text and audio formats.
 
 **🎯 YOUR MISSION**
 
@@ -103,12 +94,5 @@ You can provide audio versions of your summaries using:
 Always provide summaries that would allow someone to understand the document's core value without reading the full text, whether consumed in text or audio format.
   `,
   model: openai('gpt-4.1-mini'), // Large context window model for summarization
-  voice: new OpenAIVoice({
-    speechModel: {
-      name: 'tts-1-hd',
-      apiKey: process.env.OPENAI_API_KEY,
-    },
-    speaker: 'nova', // Clear, professional voice for summaries
-  }),
-  memory,
+  memory: new Memory(),
 });
