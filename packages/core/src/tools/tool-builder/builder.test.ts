@@ -1,7 +1,7 @@
-// import { openai } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-// import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
@@ -202,7 +202,7 @@ async function runSingleOutputsTest(
     if (e.message.includes('does not support zod type:')) {
       status = 'expected-error';
     }
-    if (e.name === 'AI_NoObjectGeneratedError') {
+    if (e.name === 'AI_NoObjectGeneratedError' || e.message.toLowerCase().includes('validation failed')) {
       status = 'failure';
     }
     return {
@@ -286,30 +286,29 @@ describe('Tool Schema Compatibility', () => {
   const TEST_TIMEOUT = 60000; // 1 minute
 
   if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
-  // const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+  const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
-  const modelsToTest = [
-    // Language Models V1
+  const modelsToTestV1 = [
     // Anthropic Models
-    // openrouter('anthropic/claude-3.7-sonnet'),
-    // openrouter('anthropic/claude-3.5-sonnet'),
-    // openrouter('anthropic/claude-3.5-haiku'),
+    openrouter('anthropic/claude-3.7-sonnet'),
+    openrouter('anthropic/claude-3.5-sonnet'),
+    openrouter('anthropic/claude-3.5-haiku'),
 
-    // // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
-    // // Unions of objects are not supported
-    // // Google Models
-    // openrouter('google/gemini-2.5-pro-preview-03-25'),
-    // openrouter('google/gemini-2.5-flash'),
-    // openrouter('google/gemini-2.0-flash-lite-001'),
+    // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
+    // Unions of objects are not supported
+    // Google Models
+    openrouter('google/gemini-2.5-pro-preview-03-25'),
+    openrouter('google/gemini-2.5-flash'),
+    openrouter('google/gemini-2.0-flash-lite-001'),
 
-    // // OpenAI Models
-    // openrouter('openai/gpt-4o-mini'),
-    // openrouter('openai/gpt-4.1-mini'),
-    // // // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
-    // openai('o3-mini'),
-    // openai('o4-mini'),
-
-    // Language Models V2
+    // OpenAI Models
+    openrouter('openai/gpt-4o-mini'),
+    openrouter('openai/gpt-4.1-mini'),
+    // // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
+    openai('o3-mini'),
+    openai('o4-mini'),
+  ];
+  const modelsToTestV2 = [
     openrouter_v5('openai/gpt-4o-mini'),
     openrouter_v5('openai/gpt-4.1-mini'),
     openai_v5('o3-mini'),
@@ -359,7 +358,7 @@ describe('Tool Schema Compatibility', () => {
   });
 
   // Group tests by model provider for better organization
-  const modelsByProvider = modelsToTest.reduce(
+  const modelsByProviderV1 = modelsToTestV1.reduce(
     (acc, model) => {
       const provider = model.provider;
       if (!acc[provider]) {
@@ -368,11 +367,23 @@ describe('Tool Schema Compatibility', () => {
       acc[provider].push(model);
       return acc;
     },
-    {} as Record<string, (typeof modelsToTest)[number][]>,
+    {} as Record<string, (typeof modelsToTestV1)[number][]>,
   );
 
-  // Run tests concurrently at both the provider and model level
-  Object.entries(modelsByProvider).forEach(([provider, models]) => {
+  // Group tests by model provider for better organization
+  const modelsByProviderV2 = modelsToTestV2.reduce(
+    (acc, model) => {
+      const provider = model.provider;
+      if (!acc[provider]) {
+        acc[provider] = [];
+      }
+      acc[provider].push(model);
+      return acc;
+    },
+    {} as Record<string, (typeof modelsToTestV2)[number][]>,
+  );
+
+  Object.entries(modelsByProviderV1).forEach(([provider, models]) => {
     describe.concurrent(`Input Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
         describe.concurrent(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
@@ -417,8 +428,10 @@ describe('Tool Schema Compatibility', () => {
         });
       });
     });
+  });
 
-    describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+  Object.entries(modelsByProviderV2).forEach(([provider, models]) => {
+    describe.concurrent(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       ['output', 'structuredOutput'].forEach(outputType => {
         describe.each(['output', 'structuredOutput'])(`${outputType}`, { timeout: SUITE_TIMEOUT }, () => {
           models.forEach(model => {
