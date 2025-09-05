@@ -1397,6 +1397,100 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(usedModelName).toBe('premium');
     });
 
+    it(
+      'should use model list',
+      {
+        skip: version === 'v1',
+      },
+      async () => {
+        let usedModelName = '';
+
+        // Create two different models
+        let premiumModel: MockLanguageModelV1 | MockLanguageModelV2;
+        let standardModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+        premiumModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: `Premium Title`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Premium Title`,
+                },
+              ],
+              warnings: [],
+            };
+          },
+          doStream: async () => {
+            usedModelName = 'premium';
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Premium Title' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+
+        standardModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            usedModelName = 'standard';
+            throw new Error('Simulated generate error');
+          },
+          doStream: async () => {
+            usedModelName = 'standard';
+            const stream = new ReadableStream({
+              pull() {
+                throw new Error('Simulated stream error');
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        const agent = new Agent({
+          name: 'update-model-agent',
+          instructions: 'test agent',
+          model: [
+            {
+              model: standardModel,
+            },
+            {
+              model: premiumModel,
+            },
+          ],
+        });
+
+        await agent.streamVNext('Test message');
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        expect(usedModelName).toBe('premium');
+      },
+    );
+
     it('should handle boolean generateTitle config for backward compatibility', async () => {
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
@@ -6337,6 +6431,124 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(secondUserMessage?.content.metadata).toBeUndefined();
     });
   });
+
+  it(
+    'should take and return model list',
+    {
+      skip: version === 'v1',
+    },
+    async () => {
+      const agent = new Agent({
+        name: 'test',
+        instructions: 'test agent instructions',
+        model: [
+          {
+            model: openaiModel,
+          },
+          {
+            model: openai('gpt-4o-mini'),
+          },
+          {
+            model: openai('gpt-4.1'),
+          },
+        ],
+      });
+
+      const modelList = await agent.getModelList();
+      expect(modelList?.length).toBe(3);
+      const model0 = modelList?.[0].model as LanguageModelV2;
+      expect(model0.modelId).toBe('gpt-4o');
+      const model1 = modelList?.[1].model as LanguageModelV2;
+      expect(model1.modelId).toBe('gpt-4o-mini');
+      const model2 = modelList?.[2].model as LanguageModelV2;
+      expect(model2.modelId).toBe('gpt-4.1');
+    },
+  );
+
+  it(
+    'should reorder model list',
+    {
+      skip: version === 'v1',
+    },
+    async () => {
+      const agent = new Agent({
+        name: 'test',
+        instructions: 'test agent instructions',
+        model: [
+          {
+            model: openaiModel,
+          },
+          {
+            model: openai('gpt-4o-mini'),
+          },
+          {
+            model: openai('gpt-4.1'),
+          },
+        ],
+      });
+
+      const modelList = await agent.getModelList();
+
+      const modelIds = modelList?.map(m => m.id) || [];
+      const reversedModelIds = [...modelIds].reverse();
+
+      agent.reorderModels(reversedModelIds);
+
+      const reorderedModelList = await agent.getModelList();
+
+      expect(reorderedModelList).toBeDefined();
+      expect(reorderedModelList?.length).toBe(3);
+      expect(reorderedModelList?.[0].id).toBe(reversedModelIds[0]);
+      expect(reorderedModelList?.[1].id).toBe(reversedModelIds[1]);
+
+      const model0 = reorderedModelList?.[0].model as LanguageModelV2;
+      expect(model0.modelId).toBe('gpt-4.1');
+      const model1 = reorderedModelList?.[1].model as LanguageModelV2;
+      expect(model1.modelId).toBe('gpt-4o-mini');
+    },
+  );
+
+  it(
+    `should update model list`,
+    {
+      skip: version === 'v1',
+    },
+    async () => {
+      const agent = new Agent({
+        name: 'test',
+        instructions: 'test agent instructions',
+        model: [
+          {
+            model: openaiModel,
+          },
+          {
+            model: openai('gpt-4o-mini'),
+          },
+          {
+            model: openai('gpt-4.1'),
+          },
+        ],
+      });
+
+      const modelList = await agent.getModelList();
+      const model1Id = modelList?.[1].id || '';
+
+      agent.updateModelInModelList({
+        id: model1Id,
+        model: openai('gpt-4'),
+        maxRetries: 5,
+      });
+      const updatedModelList = await agent.getModelList();
+
+      expect(updatedModelList).toBeDefined();
+      expect(updatedModelList?.length).toBe(3);
+      const updatedModel1 = updatedModelList?.[1].model as LanguageModelV2;
+      expect(updatedModel1.modelId).toBe('gpt-4');
+      expect(updatedModelList?.[1]?.maxRetries).toBe(5);
+      const updatedModel2 = updatedModelList?.[2].model as LanguageModelV2;
+      expect(updatedModel2.modelId).toBe('gpt-4.1');
+    },
+  );
 
   it(`${version} - stream - should pass and call client side tools with experimental output`, async () => {
     const userAgent = new Agent({

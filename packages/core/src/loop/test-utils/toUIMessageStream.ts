@@ -11,7 +11,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
-  createTestModel,
+  createTestModels,
   defaultSettings,
   modelWithDocumentSources,
   modelWithFiles,
@@ -28,7 +28,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel(),
+        models: createTestModels(),
         ...defaultSettings(),
       });
 
@@ -81,7 +81,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'stream-start',
@@ -259,7 +259,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'tool-input-start', id: 'call-1', toolName: 'tool1' },
             { type: 'tool-input-delta', id: 'call-1', delta: '{ "value":' },
@@ -296,7 +296,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel(),
+        models: createTestModels(),
         ...defaultSettings(),
       });
 
@@ -408,7 +408,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([{ type: 'error', error: 'error' }]),
         }),
         ...defaultSettings(),
@@ -428,7 +428,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([{ type: 'error', error: 'error' }]),
         }),
         ...defaultSettings(),
@@ -450,7 +450,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'text-start', id: '1' },
@@ -502,7 +502,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'text-start', id: '1' },
@@ -554,7 +554,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -727,7 +727,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: modelWithSources,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
@@ -792,7 +792,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: modelWithDocumentSources,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithDocumentSources }],
         ...defaultSettings(),
       });
 
@@ -859,7 +859,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: modelWithFiles,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -912,7 +912,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel(),
+        models: createTestModels(),
         ...defaultSettings(),
       });
 
@@ -967,7 +967,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel(),
+        models: createTestModels(),
         ...defaultSettings(),
       });
 
@@ -1032,7 +1032,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel(),
+        models: createTestModels(),
         ...defaultSettings(),
       });
 
@@ -1098,7 +1098,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel(),
+        models: createTestModels(),
         _internal: {
           generateId: mockId({ prefix: 'id' }),
         },
@@ -1173,7 +1173,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([{ type: 'error', error: 'error' }]),
         }),
         _internal: {
@@ -1202,7 +1202,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const result = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([{ type: 'error', error: 'error' }]),
         }),
         _internal: {
@@ -1234,7 +1234,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
       const result = await loopFn({
         runId,
-        model: createTestModel(),
+        models: createTestModels(),
         messageList,
       });
 
@@ -1261,7 +1261,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
               controller.enqueue({ type: 'text-start', id: '1' });
@@ -1298,7 +1298,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
               controller.enqueue({ type: 'text-start', id: '1' });
@@ -1335,7 +1335,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
               controller.enqueue({ type: 'text-start', id: '1' });
@@ -1369,7 +1369,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const onErrorCallback = vi.fn();
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
               controller.enqueue({ type: 'text-start', id: '1' });
@@ -1405,7 +1405,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',

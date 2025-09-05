@@ -1,4 +1,4 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
@@ -6,7 +6,7 @@ import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { OutputProcessor } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
+import type { ChunkType, ModelManagerModelConfig } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 
 export type StreamInternal = {
@@ -27,7 +27,7 @@ export type LoopConfig = {
 };
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
-  model: LanguageModelV2;
+  models: ModelManagerModelConfig[];
   logger?: IMastraLogger;
   mode?: 'generate' | 'stream';
   runId?: string;
