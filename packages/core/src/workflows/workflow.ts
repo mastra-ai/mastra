@@ -1263,6 +1263,11 @@ export class Run<
     delay?: number;
   };
 
+  /**
+   * The tracing context for this run (used as fallback when user doesn't provide one)
+   */
+  protected tracingContext?: TracingContext;
+
   constructor(params: {
     workflowId: string;
     runId: string;
@@ -1276,6 +1281,7 @@ export class Run<
     cleanup?: () => void;
     serializedStepGraph: SerializedStepFlowEntry[];
     disableScorers?: boolean;
+    tracingContext?: TracingContext;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -1287,6 +1293,7 @@ export class Run<
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
     this.disableScorers = params.disableScorers;
+    this.tracingContext = params.tracingContext;
   }
 
   public get abortController(): AbortController {
@@ -1373,7 +1380,15 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
-    return this._start({ inputData, runtimeContext, writableStream, tracingContext, format: 'aisdk' });
+    // Use provided tracingContext or fall back to stored tracingContext
+    const effectiveTracingContext = tracingContext ?? this.tracingContext;
+    return this._start({
+      inputData,
+      runtimeContext,
+      writableStream,
+      tracingContext: effectiveTracingContext,
+      format: 'aisdk',
+    });
   }
 
   /**
