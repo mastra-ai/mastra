@@ -6416,7 +6416,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         clientTools: {
           changeColor: {
             id: 'changeColor',
-            description: 'This is a test tool that returns the name and email',
+            description: 'This is a test tool that changes the color of the text',
             inputSchema: z.object({
               color: z.string(),
             }),
