@@ -20,10 +20,10 @@ jobs:
             -H 'Authorization: Bearer ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}' \
             -H 'Referer: https://cloud.mastra.ai/' \
             -H 'User-Agent: Github Action')
-          
+
           # Extract runId from the response
           runId=$(echo "$response" | jq -r '.runId')
-          
+
           if [ "$runId" != "null" ] && [ -n "$runId" ]; then
             echo "Created workflow run with ID: $runId"
             
