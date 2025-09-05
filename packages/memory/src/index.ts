@@ -1,5 +1,3 @@
-import { deepMerge, generateEmptyFromSchema } from '@mastra/core';
-import type { MastraMessageV1, ToolAction } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import type { RequireOnly, Resolve } from '@mastra/core/base';
@@ -13,7 +11,7 @@ import type {
 } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
-import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { deepMerge, generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
 import type { CoreMessage, DeepPartial, TextPart } from 'ai';

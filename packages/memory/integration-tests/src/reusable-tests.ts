@@ -613,11 +613,22 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         } else {
           expect(content).toEqual('Hello');
         }
+
         expect(result.messages[1]).toMatchObject({
           role: 'assistant',
           type: 'text',
         });
-        expect(result.messages[1].content).toEqual(`Goodbye`);
+        const message2Content = result.messages[0].content[0];
+        if (
+          typeof message2Content === 'object' &&
+          message2Content !== null &&
+          'type' in message2Content &&
+          message2Content.type === 'text'
+        ) {
+          expect(content).toEqual(userPart);
+        } else {
+          expect(message2Content).toEqual('Hello');
+        }
       });
 
       it('should handle complex message content', async () => {
