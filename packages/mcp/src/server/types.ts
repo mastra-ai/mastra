@@ -8,6 +8,7 @@ import type {
   Resource,
   ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { z } from 'zod';
 
 export type MCPServerResourceContentCallback = ({
   uri,
