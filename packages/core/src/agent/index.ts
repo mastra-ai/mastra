@@ -1435,7 +1435,7 @@ export class Agent<
               }
 
               toolAISpan?.end({ output: result });
-              return result;
+              return { result, runId: run.runId };
             } catch (err) {
               const mastraError = new MastraError(
                 {
@@ -2141,6 +2141,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           overrideScorers,
           threadId,
           resourceId,
+          tracingContext: { currentSpan: agentAISpan },
         });
 
         const scoringData: {
@@ -2185,6 +2186,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     overrideScorers,
     threadId,
     resourceId,
+    tracingContext,
   }: {
     messageList: MessageList;
     runId: string;
@@ -2197,6 +2199,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
+    tracingContext: TracingContext;
   }) {
     const agentName = this.name;
     const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
@@ -2255,6 +2258,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           structuredOutput: !!structuredOutput,
           threadId,
           resourceId,
+          tracingContext,
         });
       }
     }
@@ -3404,6 +3408,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runtimeContext,
       structuredOutput,
       overrideScorers,
+      tracingContext,
     });
   }
 

@@ -267,7 +267,7 @@ export function createStep<
     suspendSchema: params.suspendSchema,
     scorers: params.scorers,
     retries: params.retries,
-    execute: params.execute,
+    execute: params.execute.bind(params),
   };
 }
 
