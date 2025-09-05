@@ -1,12 +1,4 @@
-import {
-  ReactFlow,
-  MiniMap,
-  Background,
-  useNodesState,
-  useEdgesState,
-  BackgroundVariant,
-  NodeProps,
-} from '@xyflow/react';
+import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { GetWorkflowResponse } from '@mastra/client-js';
 
@@ -75,7 +67,7 @@ export function WorkflowGraphInner({ workflow, onShowTrace, onSendEvent }: Workf
         maxZoom={1}
       >
         <ZoomSlider position="bottom-left" />
-        <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
+
         <Background variant={BackgroundVariant.Dots} gap={12} size={0.5} />
       </ReactFlow>
     </div>

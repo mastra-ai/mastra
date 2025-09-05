@@ -1,13 +1,5 @@
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
-import {
-  ReactFlow,
-  MiniMap,
-  Controls,
-  Background,
-  useNodesState,
-  useEdgesState,
-  BackgroundVariant,
-} from '@xyflow/react';
+import { ReactFlow, Controls, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { contructLegacyNodesAndEdges, WStep } from './utils';
@@ -47,7 +39,7 @@ export function LegacyWorkflowGraphInner({ workflow }: { workflow: LegacyWorkflo
         }}
       >
         <Controls />
-        <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
+
         <Background variant={BackgroundVariant.Dots} gap={12} size={0.5} />
       </ReactFlow>
     </div>
