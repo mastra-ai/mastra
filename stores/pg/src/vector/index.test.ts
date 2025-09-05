@@ -294,9 +294,9 @@ describe('PgVector', () => {
       });
 
       it('should handle initialization when external vector tables exist', async () => {
-        // This test reproduces the bug from issue #6691
-        // When PgVector is initialized, it calls listIndexes() which returns ALL tables with vector columns
-        // Then it tries to call getIndexInfo() on each, which fails for non-Mastra tables
+        // This test verifies the fix for issue #6691
+        // When PgVector is initialized, it should only discover Mastra-managed tables
+        // and ignore external tables with vector columns
 
         // Create a new PgVector instance to trigger initialization
         const newVectorDB = new PgVector({ connectionString });
@@ -305,32 +305,32 @@ describe('PgVector', () => {
         await new Promise(resolve => setTimeout(resolve, 500));
 
         // The initialization should not throw errors even with external tables present
-        // Currently this will fail because getIndexInfo is called on 'dam_embedding_collections'
-        // which doesn't have the expected 'embedding' column
-
         const indexes = await newVectorDB.listIndexes();
 
-        // BUG: This currently returns both tables
+        // FIXED: Now correctly returns only Mastra-managed tables
         expect(indexes).toContain(mastraIndexName);
-        expect(indexes).toContain(externalTableName); // This is the problem!
+        expect(indexes).not.toContain(externalTableName); // Fixed!
 
-        // Try to describe the external table - this should fail
+        // Describing the external table should fail since it's not managed by Mastra
         await expect(async () => {
           await newVectorDB.describeIndex({ indexName: externalTableName });
         }).rejects.toThrow();
+
+        // But describing the Mastra table should work
+        const mastraTableInfo = await newVectorDB.describeIndex({ indexName: mastraIndexName });
+        expect(mastraTableInfo.dimension).toBe(128);
 
         await newVectorDB.disconnect();
       });
 
       it('should only return Mastra-managed tables from listIndexes', async () => {
-        // This test shows what the correct behavior should be
+        // This test verifies listIndexes only returns tables with the exact Mastra structure
         const indexes = await vectorDB.listIndexes();
 
         // Should include Mastra-managed tables
         expect(indexes).toContain(mastraIndexName);
 
-        // Should NOT include external tables (but currently does - this is the bug)
-        // TODO: Fix this - currently fails
+        // Should NOT include external tables - FIXED!
         expect(indexes).not.toContain(externalTableName);
       });
     });
