@@ -977,7 +977,7 @@ export class Agent<
     resourceId?: string;
     threadId?: string;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
+    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -1193,7 +1193,7 @@ export class Agent<
     resourceId?: string;
     threadId?: string;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
+    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     writableStream?: WritableStream<ChunkType>;
   }) {
@@ -1258,7 +1258,7 @@ export class Agent<
     resourceId?: string;
     toolsets: ToolsetsInput;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
+    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -1308,7 +1308,7 @@ export class Agent<
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
+    tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
   }) {
@@ -1348,17 +1348,17 @@ export class Agent<
     threadId,
     resourceId,
     runtimeContext,
-    methodType,
     tracingContext,
+    methodType,
     format,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
+    tracingContext?: TracingContext;
     methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
     format?: 'mastra' | 'aisdk';
-    tracingContext: TracingContext;
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
@@ -1486,7 +1486,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
+    tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
     format?: 'mastra' | 'aisdk';
@@ -1812,8 +1812,11 @@ export class Agent<
           });
         }
 
+        const config = memory.getMergedThreadConfig(memoryConfig || {});
+        const hasResourceScopeSemanticRecall =
+          typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
         let [memoryMessages, memorySystemMessage] = await Promise.all([
-          existingThread
+          existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({
                 resourceId,
                 threadId: threadObject.id,
@@ -2847,8 +2850,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           });
         }
 
+        const config = memory.getMergedThreadConfig(memoryConfig || {});
+        const hasResourceScopeSemanticRecall =
+          typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
         let [memoryMessages, memorySystemMessage] = await Promise.all([
-          existingThread
+          existingThread || hasResourceScopeSemanticRecall
             ? this.getMemoryMessages({
                 resourceId,
                 threadId: threadObject.id,

@@ -141,6 +141,85 @@ describe('Agent Memory Tests', () => {
     expect(workingMemoryData).toBe('# Resource Memory\n- Shared across threads');
   });
 
+  it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
+    const storage = new LibSQLStore({
+      url: dbFile,
+    });
+    const vector = new LibSQLVector({
+      connectionUrl: dbFile,
+    });
+
+    const mastra = new Mastra({
+      storage,
+      vectors: { default: vector },
+      agents: {
+        testAgent: new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a helpful assistant',
+          model: openai('gpt-4o-mini'),
+          memory: new Memory({
+            options: {
+              lastMessages: 5,
+              semanticRecall: {
+                topK: 2,
+                messageRange: 1,
+                scope: 'resource', // This is the key - resource scope should allow cross-thread memory
+              },
+            },
+            storage,
+            vector,
+            embedder: fastembed,
+          }),
+        }),
+      },
+    });
+
+    const agent = mastra.getAgent('testAgent');
+    const memory = (await agent.getMemory()) as Memory;
+    const resourceId = 'test-resource-semantic';
+
+    // First, create a thread and add some messages to establish history
+    const thread1Id = randomUUID();
+    await agent.generate('Tell me about cats', {
+      memory: {
+        thread: thread1Id,
+        resource: resourceId,
+      },
+    });
+
+    // Verify first thread has messages
+    const thread1Messages = await memory.query({ threadId: thread1Id, resourceId });
+    expect(thread1Messages.messages.length).toBeGreaterThan(0);
+
+    // Now create a second thread - this should be able to access memory from thread1
+    // due to resource scope, even on the first message
+    const thread2Id = randomUUID();
+
+    // Mock the getMemoryMessages method to track if it's called
+    let getMemoryMessagesCalled = false;
+    const originalGetMemoryMessages = (agent as any).getMemoryMessages;
+    (agent as any).getMemoryMessages = async (...args: any[]) => {
+      getMemoryMessagesCalled = true;
+      return originalGetMemoryMessages.call(agent, ...args);
+    };
+
+    // Send first message to new thread - this should call getMemoryMessages
+    // because resource scope allows cross-thread memory access
+    await agent.generate('What did we discuss about animals?', {
+      memory: {
+        thread: thread2Id,
+        resource: resourceId,
+      },
+    });
+
+    // Restore original method
+    (agent as any).getMemoryMessages = originalGetMemoryMessages;
+
+    // The bug is that getMemoryMessages is not called for the first message in a new thread
+    // even when using resource scope, which should allow access to messages from other threads
+    expect(getMemoryMessagesCalled).toBe(true);
+  });
+
   describe('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests
     const memory = new Memory({

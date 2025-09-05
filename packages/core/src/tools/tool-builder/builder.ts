@@ -122,7 +122,7 @@ export class CoreToolBuilder extends MastraBase {
 
     const execFunction = async (args: unknown, execOptions: ToolExecutionOptions | ToolCallOptions) => {
       // Create tool span if we have an current span available
-      const toolSpan = options.tracingContext.currentSpan?.createChildSpan({
+      const toolSpan = options.tracingContext?.currentSpan?.createChildSpan({
         type: AISpanType.TOOL_CALL,
         name: `tool: ${options.name}`,
         input: args,
