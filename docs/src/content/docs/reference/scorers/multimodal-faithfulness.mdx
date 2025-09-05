@@ -1,0 +1,249 @@
+---
+title: "Reference: Multimodal Faithfulness | Scorers | Mastra Docs"
+description: Documentation for the Multimodal Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM responses against multimodal contexts including text, images, or both.
+---
+
+# Multimodal Faithfulness Scorer
+
+The `createMultimodalFaithfulnessScorer()` function evaluates whether an LLM's response is factually consistent with provided multimodal contexts (text, images, or both). It extracts claims from responses and verifies them against visual and textual information, making it essential for measuring the reliability of multimodal AI systems including vision-language models and multimodal RAG pipelines.
+
+For usage examples, see the [Multimodal Faithfulness Examples](/examples/scorers/multimodal-faithfulness).
+
+## Parameters
+
+The `createMultimodalFaithfulnessScorer()` function accepts a single options object with the following properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      required: true,
+      description: "Configuration for the model used to evaluate multimodal faithfulness. Should be a vision-capable model for best results with image contexts.",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "Maximum score value. The final score will be normalized to this scale.",
+    },
+    {
+      name: "contexts",
+      type: "MultimodalContext[]",
+      required: false,
+      defaultValue: "[]",
+      description: "Array of predefined multimodal contexts against which claims will be verified.",
+    },
+  ]}
+/>
+
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes multimodal faithfulness-specific fields as documented below.
+
+## MultimodalContext Type
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'text' | 'image' | 'multimodal'",
+      required: true,
+      description: "The type of context content being provided.",
+    },
+    {
+      name: "content",
+      type: "string | any",
+      required: true,
+      description: "The context content. For text contexts, this should be a string. For image contexts, this can be image data, URLs, or descriptions. For multimodal contexts, this can be complex objects containing both text and visual elements.",
+    },
+  ]}
+/>
+
+## .run() Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Multimodal faithfulness score (0 to scale, default 0-1) representing the proportion of claims supported by contexts.",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "Object with extracted claims: { claims: string[] }",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the preprocess step (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "Object with faithfulness verdicts: { verdicts: Array<{ claim: string, verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the analyze step (optional).",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the reason step (optional).",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Detailed explanation of the multimodal faithfulness score, including analysis of supported, contradicted, and unverifiable claims.",
+    },
+  ]}
+/>
+
+## Context Sources
+
+The scorer automatically extracts contexts from multiple sources:
+
+### Automatic Context Extraction
+
+1. **Runtime Context**: Explicitly provided contexts via `runtimeContext.contexts`
+2. **Ground Truth Context**: Reference contexts via `groundTruth.contexts` 
+3. **Input Messages**: Multimodal content from input messages (text + images)
+4. **Tool Invocations**: Results from tool calls (common in RAG systems)
+5. **Fallback**: User input as text context if no other contexts are found
+
+### Context Type Inference
+
+When context types are not explicitly specified, the scorer automatically infers them:
+
+- **Image contexts**: Detected by file extensions, data URIs, or image-related keywords
+- **Multimodal contexts**: Complex objects with mixed content types
+- **Text contexts**: Default fallback for string content
+
+## Scoring Details
+
+The scorer evaluates multimodal faithfulness through systematic claim verification against provided contexts.
+
+### Evaluation Process
+
+1. **Claim Extraction**:
+   - Identifies all factual and speculative assertions in the response
+   - Breaks down compound statements into individual verifiable claims
+   - Extracts visual descriptions and multimodal references
+   - Includes numerical data, relationships, and contextual details
+
+2. **Multimodal Verification**:
+   - Evaluates each claim against textual contexts
+   - Verifies visual claims against image contexts
+   - Assesses spatial relationships and visual attributes
+   - Cross-references information across different modalities
+
+3. **Verdict Assignment**:
+   - **"yes"**: Claim is supported by textual or visual contexts
+   - **"no"**: Claim contradicts available context information
+   - **"unsure"**: Claim cannot be verified from provided contexts
+
+### Scoring Formula
+
+```
+score = (supported_claims / total_claims) × scale
+```
+
+Where:
+- `supported_claims`: Number of claims marked as "yes"
+- `total_claims`: Total number of extracted claims
+- `scale`: Configured maximum score value
+
+### Score Interpretation
+
+(0 to scale, default 0-1)
+
+- **1.0**: Perfect faithfulness - all claims supported by multimodal contexts
+- **0.7-0.9**: High faithfulness - most claims supported, few contradictions
+- **0.4-0.6**: Moderate faithfulness - mix of supported and contradicted claims
+- **0.1-0.3**: Low faithfulness - many contradictions or unverifiable claims
+- **0.0**: No faithfulness - all claims contradicted or completely unverifiable
+
+**Special Case**: If no claims are extracted, the scorer returns the maximum score (perfect faithfulness).
+
+## Multimodal Evaluation Capabilities
+
+The scorer provides specialized evaluation for multimodal scenarios:
+
+### Visual Content Assessment
+
+- **Object Recognition**: Verifies claims about visible objects and entities
+- **Spatial Relationships**: Evaluates positional and compositional descriptions
+- **Visual Attributes**: Checks color, size, style, and appearance claims
+- **Scene Understanding**: Assesses contextual and environmental descriptions
+
+### Cross-Modal Verification
+
+- **Text-Image Alignment**: Ensures textual descriptions match visual content
+- **Complementary Information**: Verifies claims using both text and visual sources
+- **Consistency Checking**: Identifies contradictions between modalities
+- **Contextual Integration**: Assesses how well responses synthesize multimodal information
+
+### Specialized Claims Handling
+
+- **Visual Descriptions**: Claims about what is shown in images
+- **Quantitative Assertions**: Numerical claims verified against contexts
+- **Spatial Claims**: Positional and relational statements
+- **Attribute Claims**: Descriptive properties and characteristics
+- **Temporal Claims**: Time-related assertions when temporal context is available
+
+## Use Cases
+
+The multimodal faithfulness scorer is particularly valuable for:
+
+1. **Vision-Language Model Evaluation**: Testing factual accuracy of image descriptions and visual question answering
+2. **Multimodal RAG Systems**: Verifying retrieval-augmented responses against mixed media sources
+3. **Document Understanding**: Assessing accuracy of information extracted from documents with text and diagrams
+4. **Medical Image Analysis**: Evaluating clinical interpretations against visual and textual evidence
+5. **E-commerce Applications**: Verifying product descriptions against product images and specifications
+6. **Educational Content**: Checking accuracy of explanations that reference visual materials
+7. **Content Moderation**: Assessing factual claims in content containing both text and images
+
+## Best Practices
+
+1. **Use Vision-Capable Models**: For optimal results with image contexts, use models that support vision (e.g., `gpt-4-vision-preview`, `claude-3-opus`)
+
+2. **Provide Comprehensive Contexts**: Include all relevant textual and visual information:
+   ```typescript
+   contexts: [
+     { type: 'text', content: 'Product specifications and features...' },
+     { type: 'image', content: '[Product image data]' },
+     { type: 'multimodal', content: { description: 'Manual', diagrams: ['...'] } }
+   ]
+   ```
+
+3. **Handle Context Quality**: Ensure image contexts are clear and text contexts are comprehensive
+
+4. **Monitor Claim Types**: Review extracted claims to ensure the scorer captures all relevant assertions
+
+5. **Cross-Modal Validation**: Use both text and visual contexts when possible for robust verification
+
+6. **Scale Configuration**: Adjust scale based on your application's scoring requirements
+
+## Comparison with Standard Faithfulness Scorer
+
+| Aspect | Standard Faithfulness | Multimodal Faithfulness |
+|--------|---------------------|------------------------|
+| **Context Types** | Text only | Text, images, multimodal |
+| **Model Requirements** | Any language model | Vision-capable models recommended |
+| **Claim Verification** | Text-based only | Cross-modal verification |
+| **Use Cases** | Text-based RAG, chatbots | Vision-language models, multimodal RAG |
+| **Evaluation Scope** | Textual consistency | Visual and textual consistency |
+
+## Related
+
+- [Faithfulness Scorer](./faithfulness) - Text-only faithfulness evaluation
+- [Multimodal Relevance Scorer](./multimodal-relevance) - Multimodal relevance assessment
+- [Hallucination Scorer](./hallucination) - General hallucination detection
+- [Answer Relevancy Scorer](./answer-relevancy) - Query-response relevance evaluation

@@ -1,0 +1,492 @@
+---
+title: "Examples: Multimodal Faithfulness Scorer | Mastra Docs"
+description: Code examples for using the Multimodal Faithfulness Scorer to verify factual accuracy against text and image contexts
+---
+
+# Multimodal Faithfulness Scorer Examples
+
+The multimodal faithfulness scorer evaluates whether AI responses are factually consistent with provided multimodal contexts (text, images, or both). This page demonstrates various use cases and configurations.
+
+## Basic Usage
+
+### Text Context Verification
+
+Verify factual claims against textual evidence:
+
+```typescript
+import { createMultimodalFaithfulnessScorer } from '@mastra/evals';
+import { openai } from '@ai-sdk/openai';
+import { createAgentTestRun, createUIMessage } from '@mastra/evals/utils';
+
+const scorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-turbo'),
+});
+
+const result = await scorer.run(
+  createAgentTestRun({
+    inputMessages: [
+      createUIMessage({
+        id: '1',
+        role: 'user',
+        content: 'Tell me about the Tesla Model S specifications'
+      })
+    ],
+    output: [
+      createUIMessage({
+        id: '2',
+        role: 'assistant',
+        content: 'The Tesla Model S has a range of 405 miles and can accelerate from 0-60 mph in 1.99 seconds. It was launched in 2012.'
+      })
+    ],
+    runtimeContext: {
+      contexts: [
+        {
+          type: 'text',
+          content: 'Tesla Model S specifications: 405-mile range, 0-60 mph in 1.99 seconds, launched June 2012'
+        }
+      ]
+    }
+  })
+);
+
+console.log(`Faithfulness Score: ${result.score}`);
+console.log(`Claims Evaluated: ${result.preprocessStepResult?.claims.length}`);
+console.log(`Reasoning: ${result.reason}`);
+```
+
+### Image Context Verification
+
+Verify visual claims against image evidence:
+
+```typescript
+import { createMultimodalFaithfulnessScorer } from '@mastra/evals';
+import { openai } from '@ai-sdk/openai';
+
+const scorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-vision-preview'), // Vision-capable model required
+});
+
+const result = await scorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What do you see in this image?' },
+          { type: 'image', url: 'https://example.com/red-car.jpg' }
+        ]
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'I see a red Tesla Model S parked next to a blue building. The car appears to be well-maintained and from around 2020.'
+    }
+  ],
+  runtimeContext: {
+    contexts: [
+      { type: 'image', content: '[Red Tesla Model S next to blue building]' }
+    ]
+  }
+});
+
+// Access detailed verdict information
+result.analyzeStepResult?.verdicts.forEach((verdict, index) => {
+  console.log(`Claim ${index + 1}: "${verdict.claim}" - ${verdict.verdict.toUpperCase()}`);
+  console.log(`Reason: ${verdict.reason}\n`);
+});
+```
+
+## Advanced Configurations
+
+### Custom Scale and Predefined Contexts
+
+Configure scoring scale and provide predefined contexts:
+
+```typescript
+const scorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-vision-preview'),
+  options: {
+    scale: 100, // Score from 0-100 instead of 0-1
+    contexts: [
+      { type: 'text', content: 'Base factual information about the subject...' },
+      { type: 'image', content: '[Reference image data]' }
+    ]
+  }
+});
+
+const result = await scorer.run(testRun);
+console.log(`Faithfulness Score: ${result.score}%`);
+```
+
+### Medical Image Analysis
+
+Evaluate medical interpretations against clinical evidence:
+
+```typescript
+const medicalScorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-vision-preview'),
+  options: {
+    contexts: [
+      {
+        type: 'text',
+        content: 'Patient: 45-year-old male, no previous cardiac history, presenting with chest pain'
+      },
+      {
+        type: 'image',
+        content: '[ECG showing normal sinus rhythm]'
+      }
+    ]
+  }
+});
+
+const result = await medicalScorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'Analyze this patient\'s ECG results'
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'The ECG shows normal sinus rhythm with no signs of arrhythmia or ischemia. Heart rate is approximately 72 bpm, which is within normal range for a 45-year-old patient.'
+    }
+  ]
+});
+
+console.log('Medical Analysis Faithfulness:', result.score);
+```
+
+## Complex Multimodal Scenarios
+
+### Document Understanding
+
+Verify claims about documents containing both text and visual elements:
+
+```typescript
+const documentScorer = createMultimodalFaithfulnessScorer({
+  model: anthropic('claude-3-opus-20240229'),
+});
+
+const result = await documentScorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'Summarize the key findings from this research report'
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'The report shows a 25% increase in user engagement after implementing the new design. The bar chart indicates highest engagement on Tuesdays and Wednesdays. The study involved 1,000 participants over 3 months.'
+    }
+  ],
+  runtimeContext: {
+    contexts: [
+      {
+        type: 'text',
+        content: 'Research Report: User Engagement Study - 1,000 participants, 3-month duration, 25% average engagement increase'
+      },
+      {
+        type: 'image',
+        content: '[Bar chart showing daily engagement patterns with peaks on Tuesday/Wednesday]'
+      }
+    ]
+  }
+});
+
+// Analyze specific claim types
+const claims = result.preprocessStepResult?.claims || [];
+const verdicts = result.analyzeStepResult?.verdicts || [];
+
+claims.forEach((claim, i) => {
+  const verdict = verdicts[i];
+  console.log(`"${claim}": ${verdict?.verdict} - ${verdict?.reason}`);
+});
+```
+
+### Product Description Verification
+
+Verify e-commerce product descriptions against images and specifications:
+
+```typescript
+const productScorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-vision-preview'),
+});
+
+const result = await productScorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'Create a product description for this item'
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'Premium wireless headphones in sleek black finish. Features 30-hour battery life, active noise cancellation, and comfortable over-ear design. Perfect for audiophiles and commuters.'
+    }
+  ],
+  groundTruth: {
+    contexts: [
+      {
+        type: 'image',
+        content: '[Black over-ear headphones product photo]'
+      },
+      {
+        type: 'text',
+        content: 'Product specs: 30hr battery, ANC technology, over-ear design, black color'
+      }
+    ]
+  }
+});
+
+console.log(`Product Description Accuracy: ${result.score}`);
+```
+
+## Batch Evaluation and Analysis
+
+### Comparative Faithfulness Testing
+
+Evaluate multiple responses for the same multimodal context:
+
+```typescript
+const scorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-vision-preview')
+});
+
+const testCases = [
+  {
+    name: 'Accurate Response',
+    response: 'The graph shows quarterly sales increasing from Q1 to Q4, with Q4 reaching $2.5M.'
+  },
+  {
+    name: 'Inaccurate Response',
+    response: 'The graph shows declining sales throughout the year, ending at $1.2M in Q4.'
+  },
+  {
+    name: 'Partially Accurate',
+    response: 'Sales increased over the year, with strong performance in the final quarter reaching approximately $2.6M.'
+  }
+];
+
+const sharedContext = {
+  contexts: [
+    {
+      type: 'image',
+      content: '[Bar chart showing quarterly sales: Q1: $1.5M, Q2: $1.8M, Q3: $2.1M, Q4: $2.5M]'
+    }
+  ]
+};
+
+const results = await Promise.all(
+  testCases.map(async (testCase) => {
+    const result = await scorer.run({
+      input: { inputMessages: [{ role: 'user', content: 'Describe the sales trend' }] },
+      output: [{ role: 'assistant', content: testCase.response }],
+      runtimeContext: sharedContext
+    });
+
+    return {
+      name: testCase.name,
+      score: result.score,
+      supportedClaims: result.analyzeStepResult?.verdicts.filter(v => v.verdict === 'yes').length,
+      contradictedClaims: result.analyzeStepResult?.verdicts.filter(v => v.verdict === 'no').length,
+      totalClaims: result.preprocessStepResult?.claims.length
+    };
+  })
+);
+
+// Generate comparison report
+console.log('Faithfulness Comparison:');
+results.forEach(r => {
+  console.log(`${r.name}: Score ${r.score} (${r.supportedClaims}/${r.totalClaims} claims supported, ${r.contradictedClaims} contradicted)`);
+});
+```
+
+### Multimodal RAG System Evaluation
+
+Evaluate retrieval-augmented generation with mixed media sources:
+
+```typescript
+const ragScorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-vision-preview')
+});
+
+// Simulate RAG system with retrieved multimodal contexts
+const ragResult = await ragScorer.run({
+  input: {
+    inputMessages: [
+      {
+        role: 'user',
+        content: 'How has the company stock performed this quarter?'
+      }
+    ]
+  },
+  output: [
+    {
+      role: 'assistant',
+      content: 'Based on the retrieved information, the company stock has shown strong performance this quarter, rising 15% from $80 to $92. The growth was particularly strong in September, as shown in the stock chart.'
+    }
+  ],
+  runtimeContext: {
+    contexts: [
+      // Simulated retrieval results
+      {
+        type: 'text',
+        content: 'Q3 2024 Stock Performance: Opening price $80, closing price $92, total gain 15%'
+      },
+      {
+        type: 'image',
+        content: '[Stock chart showing upward trend with September spike]'
+      },
+      {
+        type: 'text',
+        content: 'Market analysis: Strong September performance driven by earnings report'
+      }
+    ]
+  }
+});
+
+console.log('RAG Faithfulness Assessment:');
+console.log(`Overall Score: ${result.score}`);
+console.log('Claim Analysis:');
+
+result.analyzeStepResult?.verdicts.forEach((verdict, i) => {
+  const status = verdict.verdict === 'yes' ? '✓' : verdict.verdict === 'no' ? '✗' : '?';
+  console.log(`${status} "${verdict.claim}"`);
+  console.log(`   ${verdict.reason}\n`);
+});
+```
+
+## Error Handling and Edge Cases
+
+### Handling Missing Contexts
+
+```typescript
+const scorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-turbo')
+});
+
+// Test with no explicit contexts (will use fallback)
+const result = await scorer.run({
+  input: { inputMessages: [{ role: 'user', content: 'What is 2+2?' }] },
+  output: [{ role: 'assistant', content: '2+2 equals 4.' }],
+  // No contexts provided - scorer will use user input as fallback context
+});
+
+console.log(`Score with fallback context: ${result.score}`);
+```
+
+### Handling Empty Responses
+
+```typescript
+// Test with empty response (should return perfect score)
+const emptyResult = await scorer.run({
+  input: { inputMessages: [{ role: 'user', content: 'Question' }] },
+  output: [{ role: 'assistant', content: '' }], // Empty response
+  runtimeContext: { contexts: [{ type: 'text', content: 'Context info' }] }
+});
+
+console.log(`Empty response score: ${emptyResult.score}`); // Should be 1.0 (no claims to verify)
+```
+
+### Robust Error Handling
+
+```typescript
+try {
+  const result = await scorer.run(testRun);
+  
+  if (!result.analyzeStepResult) {
+    console.log('Analysis unavailable, raw score:', result.score);
+    return;
+  }
+  
+  const { verdicts } = result.analyzeStepResult;
+  const { claims } = result.preprocessStepResult || { claims: [] };
+  
+  console.log(`Evaluated ${claims.length} claims:`);
+  console.log(`- Supported: ${verdicts.filter(v => v.verdict === 'yes').length}`);
+  console.log(`- Contradicted: ${verdicts.filter(v => v.verdict === 'no').length}`);
+  console.log(`- Unverifiable: ${verdicts.filter(v => v.verdict === 'unsure').length}`);
+  
+} catch (error) {
+  console.error('Faithfulness evaluation failed:', error);
+}
+```
+
+## Integration Examples
+
+### With Agent Evaluation Pipeline
+
+```typescript
+import { Agent } from '@mastra/core';
+
+const agent = new Agent({
+  name: 'multimodal-assistant',
+  model: openai('gpt-4-vision-preview'),
+  instructions: 'You analyze images and provide factual descriptions.',
+  scorers: [
+    createMultimodalFaithfulnessScorer({
+      model: openai('gpt-4-vision-preview')
+    })
+  ]
+});
+
+// Agent responses will be automatically scored for faithfulness
+const response = await agent.generate(
+  'Describe what you see in this medical scan',
+  {
+    images: ['medical-scan.jpg'],
+    contexts: ['Patient history and clinical notes...']
+  }
+);
+```
+
+### Performance Optimization
+
+```typescript
+// For high-volume evaluation, consider parallel processing
+const scorer = createMultimodalFaithfulnessScorer({
+  model: openai('gpt-4-turbo') // Faster and more cost-effective for large batches
+});
+
+const batchResults = await Promise.allSettled(
+  testCases.map(testCase => 
+    scorer.run(testCase).catch(error => ({ error, testCase }))
+  )
+);
+
+// Process results with error handling
+batchResults.forEach((result, index) => {
+  if (result.status === 'fulfilled') {
+    console.log(`Test ${index}: ${result.value.score}`);
+  } else {
+    console.error(`Test ${index} failed:`, result.reason);
+  }
+});
+```
+
+## Best Practices Summary
+
+1. **Use Vision Models**: Always use vision-capable models when evaluating image contexts
+2. **Comprehensive Contexts**: Provide both textual and visual contexts when available
+3. **Monitor Claims**: Review extracted claims to ensure complete coverage
+4. **Handle Errors**: Implement robust error handling for production use
+5. **Batch Processing**: Use parallel evaluation for large datasets
+6. **Context Quality**: Ensure contexts are clear, complete, and relevant
+
+## See Also
+
+- [Multimodal Faithfulness Reference](/reference/scorers/multimodal-faithfulness)
+- [Faithfulness Examples](/examples/scorers/faithfulness) - Text-only faithfulness evaluation
+- [Multimodal Relevance Examples](/examples/scorers/multimodal-relevance) - Multimodal relevance assessment
+- [Custom Scorer Examples](/examples/scorers/custom-scorers)

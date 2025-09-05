@@ -8,3 +8,4 @@ export * from './context-relevance';
 export * from './context-precision';
 export * from './noise-sensitivity';
 export * from './prompt-alignment';
+export * from './multimodal-faithfulness';
