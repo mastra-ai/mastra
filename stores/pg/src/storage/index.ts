@@ -23,6 +23,7 @@ import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
+import type { ClientConfig } from 'pg';
 import { LegacyEvalsPG } from './domains/legacy-evals';
 import { MemoryPG } from './domains/memory';
 import { StoreOperationsPG } from './domains/operations';
@@ -46,6 +47,8 @@ export type PostgresConfig = {
   | {
       connectionString: string;
     }
+  // Support Cloud SQL Connector & pg ClientConfig
+  | ClientConfig
 );
 
 export class PostgresStore extends MastraStorage {
@@ -70,7 +73,13 @@ export class PostgresStore extends MastraStorage {
             'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
           );
         }
-      } else {
+      } else if (
+        // Cloud SQL connector config (stream or password function)
+        'stream' in (config as any) ||
+        typeof (config as any).password === 'function'
+      ) {
+        // valid connector config; no-op
+      } else if ('host' in config) {
         const required = ['host', 'database', 'user', 'password'];
         for (const key of required) {
           if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
@@ -79,23 +88,45 @@ export class PostgresStore extends MastraStorage {
             );
           }
         }
+      } else {
+        throw new Error(
+          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
+        );
       }
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
-      this.#config = {
-        max: config.max,
-        idleTimeoutMillis: config.idleTimeoutMillis,
-        ...(`connectionString` in config
-          ? { connectionString: config.connectionString }
-          : {
-              host: config.host,
-              port: config.port,
-              database: config.database,
-              user: config.user,
-              password: config.password,
-              ssl: config.ssl,
-            }),
-      };
+      if ('connectionString' in config) {
+        this.#config = {
+          connectionString: config.connectionString,
+          max: config.max,
+          idleTimeoutMillis: config.idleTimeoutMillis,
+        } as any;
+      } else if ('stream' in (config as any) || typeof (config as any).password === 'function') {
+        // Cloud SQL connector config
+        this.#config = {
+          ...(config as ClientConfig),
+          max: (config as any).max ?? undefined,
+          idleTimeoutMillis: (config as any).idleTimeoutMillis ?? undefined,
+        } as any;
+      } else if ('host' in config) {
+        this.#config = {
+          host: (config as any).host,
+          port: (config as any).port,
+          database: (config as any).database,
+          user: (config as any).user,
+          password: (config as any).password,
+          ssl: (config as any).ssl,
+          max: config.max,
+          idleTimeoutMillis: config.idleTimeoutMillis,
+        } as any;
+      } else {
+        // This should never happen due to validation above, but included for completeness
+        this.#config = {
+          ...(config as ClientConfig),
+          max: (config as any).max ?? undefined,
+          idleTimeoutMillis: (config as any).idleTimeoutMillis ?? undefined,
+        } as any;
+      }
       this.stores = {} as StorageDomains;
     } catch (e) {
       throw new MastraError(
@@ -117,7 +148,7 @@ export class PostgresStore extends MastraStorage {
     try {
       this.isConnected = true;
       this.#pgp = pgPromise();
-      this.#db = this.#pgp(this.#config);
+      this.#db = this.#pgp(this.#config as any);
 
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
       const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
