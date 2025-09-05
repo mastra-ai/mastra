@@ -180,7 +180,7 @@ async function runSingleOutputsTest(
     const response = await agent.generateVNext(allSchemas[schemaName].description, generateOptions);
 
     if (!response.object) {
-      throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.object);
+      throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
     }
 
     const parsed = testTool.inputSchema?.parse(response.object);
