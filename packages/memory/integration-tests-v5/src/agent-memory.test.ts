@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { rmSync } from 'node:fs';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
@@ -11,25 +10,13 @@ import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
-
-  beforeAll(async () => {
-    rmSync(dbFile.replace('file:', ''), { force: true });
-    rmSync(dbFile.replace('file:', '').replace('.db', '.db-shm'), { force: true });
-    rmSync(dbFile.replace('file:', '').replace('.db', '.db-wal'), { force: true });
-  });
-
-  afterAll(async () => {
-    rmSync(dbFile.replace('file:', ''), { force: true });
-    rmSync(dbFile.replace('file:', '').replace('.db', '.db-shm'), { force: true });
-    rmSync(dbFile.replace('file:', '').replace('.db', '.db-wal'), { force: true });
-  });
 
   it(`inherits storage from Mastra instance`, async () => {
     const agent = new Agent({
