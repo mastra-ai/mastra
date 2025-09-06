@@ -13,11 +13,11 @@
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
     "ai": "^4.3.19",
-    "chalk": "^5.4.1",
-    "dotenv": "^16.3.1",
-    "js-tiktoken": "^1.0.13",
-    "tiktoken": "^1.0.13",
-    "tsx": "^4.6.2",
+    "chalk": "^5.6.0",
+    "dotenv": "^16.6.1",
+    "js-tiktoken": "^1.0.21",
+    "tiktoken": "^1.0.22",
+    "tsx": "^4.20.5",
     "zod": "^3.25.76"
   },
   "pnpm": {
@@ -26,5 +26,5 @@
       "@mastra/memory": "link:../../packages/memory"
     }
   },
-  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
+  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
 }
