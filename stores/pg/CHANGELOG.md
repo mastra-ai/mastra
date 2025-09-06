@@ -1,5 +1,20 @@
 # @mastra/pg
 
+## 0.15.1-alpha.0
+
+### Patch Changes
+
+- b3ad6c3: Fix PgVector listIndexes() to only return Mastra-managed tables instead of all tables with vector columns. This prevents initialization failures when other pgvector tables exist in the database.
+- Updated dependencies [0662d02]
+- Updated dependencies [6189844]
+- Updated dependencies [d7a8f59]
+- Updated dependencies [4dda259]
+- Updated dependencies [defed1c]
+- Updated dependencies [6991ced]
+- Updated dependencies [9cb9c42]
+- Updated dependencies [8334859]
+  - @mastra/core@0.16.1-alpha.0
+
 ## 0.15.0
 
 ### Minor Changes

@@ -1,5 +1,7 @@
 # create-mastra
 
+## 0.12.1-alpha.0
+
 ## 0.12.0
 
 ### Minor Changes

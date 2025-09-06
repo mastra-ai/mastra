@@ -1,5 +1,24 @@
 # @mastra/mcp
 
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- 79b39c1: Update core peerdeps
+
+### Patch Changes
+
+- 4dda259: Revert "feat(mcp): add createMCPTool helper for proper execute types"
+- Updated dependencies [0662d02]
+- Updated dependencies [6189844]
+- Updated dependencies [d7a8f59]
+- Updated dependencies [4dda259]
+- Updated dependencies [defed1c]
+- Updated dependencies [6991ced]
+- Updated dependencies [9cb9c42]
+- Updated dependencies [8334859]
+  - @mastra/core@0.16.1-alpha.0
+
 ## 0.11.4
 
 ### Patch Changes
