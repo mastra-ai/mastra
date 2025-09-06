@@ -79,7 +79,21 @@
     "@mastra/voice-playai": "0.11.4",
     "@mastra/voice-sarvam": "0.11.4",
     "@mastra/voice-speechify": "0.11.4",
-    "@mastra/inngest": "0.13.0"
+    "@mastra/inngest": "0.13.0",
+    "@mastra/s3vectors": "0.2.0"
   },
-  "changesets": []
+  "changesets": [
+    "afraid-eagles-feel",
+    "bumpy-tables-lose",
+    "fair-walls-collect",
+    "plain-trees-boil",
+    "rotten-views-build",
+    "slimy-peas-sell",
+    "spotty-walls-sit",
+    "sweet-parrots-relax",
+    "three-facts-draw",
+    "true-dingos-cough",
+    "unlucky-seas-wash",
+    "young-days-count"
+  ]
 }
