@@ -199,7 +199,7 @@
     "ai-v5": "npm:ai@5.0.28",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
-    "hono": "^4.8.12",
+    "hono": "^4.9.6",
     "hono-openapi": "^0.4.8",
     "json-schema": "^0.4.0",
     "json-schema-to-zod": "^2.6.1",
