@@ -107,6 +107,74 @@ describe('Agent - Repetitive Tool Calls Issue #6827', () => {
     }
   }, 20_000);
 
+  it('should call a final options tool exactly once at end of conversation', async () => {
+    let toolExecutionCount = 0;
+    const callIds: string[] = [];
+
+    const presentChoicesTool = createTool({
+      id: 'present-choices',
+      description: 'Present user with final choices before ending the conversation',
+      inputSchema: z.object({
+        title: z.string().optional().describe('Optional title for the choices list'),
+        choices: z.array(z.string()).min(1).describe('List of choices to present'),
+      }),
+      outputSchema: z.object({
+        presented: z.boolean(),
+        count: z.number(),
+      }),
+      execute: async ({ context }) => {
+        toolExecutionCount++;
+        const id = `present-${Date.now()}-${toolExecutionCount}`;
+        callIds.push(id);
+        console.log(`present-choices executed ${toolExecutionCount} times, ID: ${id}`);
+        return { presented: true, count: toolExecutionCount };
+      },
+    });
+
+    const geminiModel = google('gemini-2.5-pro');
+
+    const agent = new Agent({
+      name: 'OptionsAgent',
+      instructions: `You are a helpful assistant. Provide a concise final answer. Then, as the very last action, call the 'present-choices' tool exactly once to present user options and then stop. Do not call any tool more than once.`,
+      model: geminiModel,
+      tools: {
+        'present-choices': presentChoicesTool,
+      },
+    });
+
+    const stepDetails: any[] = [];
+
+    const result = await agent.generate(
+      'Briefly explain benefits of a standing desk, then at the end present options A, B, C.',
+      {
+        maxSteps: 5,
+        onStepFinish: async step => {
+          stepDetails.push({
+            finishReason: step.finishReason,
+            toolCalls: step.toolCalls?.length || 0,
+            text: step.text,
+          });
+          console.log('Finish reason:', step.finishReason, '- Tools:', step.toolCalls?.length || 0);
+          if (step.text) {
+            console.log('STEP TEXT:', step.text);
+          }
+        },
+      },
+    );
+
+    console.log('RESULT TEXT:', result?.text);
+
+    const totalToolCallsAcrossSteps = stepDetails.reduce((sum, s) => sum + (s.toolCalls || 0), 0);
+
+    console.log('\nFINAL (end-of-convo) toolExecutionCount:', toolExecutionCount);
+    console.log('FINAL (end-of-convo) toolCallsAcrossSteps:', totalToolCallsAcrossSteps);
+    console.log('FINAL (end-of-convo) callIds:', callIds);
+    console.log('FINAL (end-of-convo) stepDetails:', JSON.stringify(stepDetails, null, 2));
+
+    expect(toolExecutionCount).toBe(1);
+    expect(totalToolCallsAcrossSteps).toBeLessThanOrEqual(1);
+  }, 30_000);
+
   it('should test with a more complex scenario to trigger the bug', async () => {
     let toolExecutionCount = 0;
 
