@@ -122,7 +122,7 @@
     "typescript-paths": "^1.5.1"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.17.1",
+    "@hono/node-server": "^1.19.1",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
