@@ -25,20 +25,20 @@ importers:
         specifier: ^4.3.19
         version: 4.3.19(react@19.1.0)(zod@3.25.76)
       chalk:
-        specifier: ^5.4.1
-        version: 5.4.1
+        specifier: ^5.6.0
+        version: 5.6.0
       dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
+        specifier: ^16.6.1
+        version: 16.6.1
       js-tiktoken:
-        specifier: ^1.0.13
-        version: 1.0.20
-      tiktoken:
-        specifier: ^1.0.13
+        specifier: ^1.0.21
         version: 1.0.21
+      tiktoken:
+        specifier: ^1.0.22
+        version: 1.0.22
       tsx:
-        specifier: ^4.6.2
-        version: 4.19.3
+        specifier: ^4.20.5
+        version: 4.20.5
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -251,10 +251,10 @@ packages:
         optional: true
 
   base64-js@1.5.1:
-    resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
+    resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==, tarball: https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz}
 
-  chalk@5.4.1:
-    resolution: {integrity: sha512-zgVZuo2WcZgfUEmsn6eO3kINexW8RAE4maiQ8QNs8CtpPCSyMiYsULR3HQYkm3w8FIA3SberyMJMSldGsW+U3w==}
+  chalk@5.6.0:
+    resolution: {integrity: sha512-46QrSQFyVSEyYAgQ22hQ+zDa60YHA4fBstHmtSApj1Y5vKtG27fWowW03jCk5KcbXEWPZUIR894aARCA/G1kfQ==, tarball: https://registry.npmjs.org/chalk/-/chalk-5.6.0.tgz}
     engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
 
   dequal@2.0.3:
@@ -264,12 +264,12 @@ packages:
   diff-match-patch@1.0.5:
     resolution: {integrity: sha512-IayShXAgj/QMXgB0IWmKx+rOPuGMhqm5w6jvFxmVenXKIzRqTAAsbBPT3kWQeGANj3jGgvcvv4yK6SxqYmikgw==}
 
-  dotenv@16.5.0:
-    resolution: {integrity: sha512-m/C+AwOAr9/W1UOIZUo232ejMNnJAJtYQjUbHoNTBNTJSvqzzDh7vnrei3o3r3m9blf6ZoDkvcw0VmozNRFJxg==}
+  dotenv@16.6.1:
+    resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==, tarball: https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz}
     engines: {node: '>=12'}
 
   esbuild@0.25.3:
-    resolution: {integrity: sha512-qKA6Pvai73+M2FtftpNKRxJ78GIjmFXFxd/1DVBqGo/qNhLSfv+G12n9pNoWdytJC8U00TrViOwpjT0zgqQS8Q==}
+    resolution: {integrity: sha512-qKA6Pvai73+M2FtftpNKRxJ78GIjmFXFxd/1DVBqGo/qNhLSfv+G12n9pNoWdytJC8U00TrViOwpjT0zgqQS8Q==, tarball: https://registry.npmjs.org/esbuild/-/esbuild-0.25.3.tgz}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -279,10 +279,10 @@ packages:
     os: [darwin]
 
   get-tsconfig@4.10.0:
-    resolution: {integrity: sha512-kGzZ3LWWQcGIAmg6iWvXn0ei6WDtV26wzHRMwDSzmAbcXrTEXxHy6IehI6/4eT6VRKyMP1eF1VqwrVUmE/LR7A==}
+    resolution: {integrity: sha512-kGzZ3LWWQcGIAmg6iWvXn0ei6WDtV26wzHRMwDSzmAbcXrTEXxHy6IehI6/4eT6VRKyMP1eF1VqwrVUmE/LR7A==, tarball: https://registry.npmjs.org/get-tsconfig/-/get-tsconfig-4.10.0.tgz}
 
-  js-tiktoken@1.0.20:
-    resolution: {integrity: sha512-Xlaqhhs8VfCd6Sh7a1cFkZHQbYTLCwVJJWiHVxBYzLPxW0XsoxBy1hitmjkdIjD3Aon5BXLHFwU5O8WUx6HH+A==}
+  js-tiktoken@1.0.21:
+    resolution: {integrity: sha512-biOj/6M5qdgx5TKjDnFT1ymSpM5tbd3ylwDtrQvFQSu0Z7bBYko2dF+W/aUkXUPuk6IVpRxk/3Q2sHOzGlS36g==, tarball: https://registry.npmjs.org/js-tiktoken/-/js-tiktoken-1.0.21.tgz}
 
   json-schema@0.4.0:
     resolution: {integrity: sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA==}
@@ -302,7 +302,7 @@ packages:
     engines: {node: '>=0.10.0'}
 
   resolve-pkg-maps@1.0.0:
-    resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
+    resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==, tarball: https://registry.npmjs.org/resolve-pkg-maps/-/resolve-pkg-maps-1.0.0.tgz}
 
   secure-json-parse@2.7.0:
     resolution: {integrity: sha512-6aU+Rwsezw7VR8/nyvKTx8QpWH9FrcYiXXlqC4z5d5XQBDRqtbfsRjnwGyqbi3gddNtWHuEk9OANUotL26qKUw==}
@@ -316,11 +316,11 @@ packages:
     resolution: {integrity: sha512-nt6AMGKW1p/70DF/hGBdJB57B8Tspmbp5gfJ8ilhLnt7kkr2ye7hzD6NVG8GGErk2HWF34igrL2CXmNIkzKqKw==}
     engines: {node: '>=18'}
 
-  tiktoken@1.0.21:
-    resolution: {integrity: sha512-/kqtlepLMptX0OgbYD9aMYbM7EFrMZCL7EoHM8Psmg2FuhXoo/bH64KqOiZGGwa6oS9TPdSEDKBnV2LuB8+5vQ==}
+  tiktoken@1.0.22:
+    resolution: {integrity: sha512-PKvy1rVF1RibfF3JlXBSP0Jrcw2uq3yXdgcEXtKTYn3QJ/cBRBHDnrJ5jHky+MENZ6DIPwNUGWpkVx+7joCpNA==, tarball: https://registry.npmjs.org/tiktoken/-/tiktoken-1.0.22.tgz}
 
-  tsx@4.19.3:
-    resolution: {integrity: sha512-4H8vUNGNjQ4V2EOoGw005+c+dGuPSnhpPBPHBtsZdGZBk/iJb4kguGlPWaZTZ3q5nMtFOEsY0nRDlh9PJyd6SQ==}
+  tsx@4.20.5:
+    resolution: {integrity: sha512-+wKjMNU9w/EaQayHXb7WA7ZaHY6hN8WgfvHNQ3t1PnU91/7O8TcTnIhCDYTZwnt8JsO9IBqZ30Ln1r7pPF52Aw==, tarball: https://registry.npmjs.org/tsx/-/tsx-4.20.5.tgz}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -473,13 +473,13 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  chalk@5.4.1: {}
+  chalk@5.6.0: {}
 
   dequal@2.0.3: {}
 
   diff-match-patch@1.0.5: {}
 
-  dotenv@16.5.0: {}
+  dotenv@16.6.1: {}
 
   esbuild@0.25.3:
     optionalDependencies:
@@ -516,7 +516,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  js-tiktoken@1.0.20:
+  js-tiktoken@1.0.21:
     dependencies:
       base64-js: 1.5.1
 
@@ -525,7 +525,7 @@ snapshots:
   jsondiffpatch@0.6.0:
     dependencies:
       '@types/diff-match-patch': 1.0.36
-      chalk: 5.4.1
+      chalk: 5.6.0
       diff-match-patch: 1.0.5
 
   nanoid@3.3.11: {}
@@ -544,9 +544,9 @@ snapshots:
 
   throttleit@2.1.0: {}
 
-  tiktoken@1.0.21: {}
+  tiktoken@1.0.22: {}
 
-  tsx@4.19.3:
+  tsx@4.20.5:
     dependencies:
       esbuild: 0.25.3
       get-tsconfig: 4.10.0
