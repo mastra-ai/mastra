@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto';
 import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV1 } from '../../memory';
-import type { MastraMessageV2, UIMessageWithMetadata } from '../message-list';
-import type { AIV4Type } from './types';
-import { MessageList } from './index';
+import type { MastraMessageV2, UIMessageWithMetadata } from '../';
+import type { MastraMessageV1 } from '../../../memory';
+import { MessageList } from '../index';
+import type { AIV4Type } from '../types';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;

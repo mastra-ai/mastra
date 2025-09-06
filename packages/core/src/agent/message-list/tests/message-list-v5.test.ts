@@ -2,10 +2,10 @@ import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 
 import { isToolUIPart } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
-import { hasAIV5CoreMessageCharacteristics } from './utils/ai-v4-v5/core-model-message';
-import { hasAIV5UIMessageCharacteristics } from './utils/ai-v4-v5/ui-message';
-import type { MastraMessageV2 } from './index';
-import { MessageList } from './index';
+import type { MastraMessageV2 } from '../index';
+import { MessageList } from '../index';
+import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
+import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
 
 const threadId = 'test-thread';
 const resourceId = 'test-resource';
@@ -929,6 +929,76 @@ describe('MessageList V5 Support', () => {
       if (filePart?.type === 'file') {
         expect(filePart).toHaveProperty('url', 'https://example.com/image.jpg');
         expect(filePart).not.toHaveProperty('data');
+      }
+    });
+
+    it('should preserve external URLs without wrapping them as data URIs', () => {
+      const messageList = new MessageList();
+      const imageUrl = 'https://httpbin.org/image/png';
+
+      // This mimics what happens when the user passes messages to streamVNext
+      // with format: 'aisdk' containing file parts with URLs
+      const v2Message: MastraMessageV2 = {
+        id: 'test-msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Describe this image' },
+            { type: 'file', mimeType: 'image/png', data: imageUrl },
+          ],
+        },
+        createdAt: new Date(),
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+      };
+
+      messageList.add(v2Message, 'user');
+
+      // Get V3 messages (internal format used for message processing)
+      const v3Messages = messageList.get.all.v3();
+      const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
+
+      if (v3FilePart?.type === 'file') {
+        expect(v3FilePart.url).toBe(imageUrl);
+        // It should NOT be wrapped as a malformed data URI
+        expect(v3FilePart.url).not.toContain('data:image/png;base64,https://');
+      }
+
+      // Get V2 messages back (this is what InputProcessors receive)
+      const v2Messages = messageList.get.all.v2();
+      const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
+
+      // The URL should remain unchanged when converting back to V2
+      if (v2FilePart?.type === 'file') {
+        expect(v2FilePart.data).toBe(imageUrl);
+        // It should NOT be a malformed data URI
+        expect(v2FilePart.data).not.toContain('data:image/png;base64,https://');
+      }
+
+      // Get V5 UI messages (used by AI SDK when format: 'aisdk')
+      const v5UIMessages = messageList.get.all.aiV5.ui();
+      const v5FilePart = v5UIMessages[0].parts.find(p => p.type === 'file');
+
+      // The URL should be in the url field, not wrapped as data URI
+      if (v5FilePart?.type === 'file') {
+        expect((v5FilePart as any).url).toBe(imageUrl);
+        // It should NOT be a malformed data URI
+        expect((v5FilePart as any).url).not.toContain('data:image/png;base64,https://');
+      }
+
+      // Get V5 Model messages (what gets sent to the LLM via AI SDK)
+      const v5ModelMessages = messageList.get.all.aiV5.model();
+      const v5ModelContent = v5ModelMessages[0].content;
+
+      // Check the model message content
+      if (Array.isArray(v5ModelContent)) {
+        const filePart = v5ModelContent.find((p: any) => p.type === 'file');
+        if (filePart) {
+          expect((filePart as any).data).toBe(imageUrl);
+          // It should NOT be a malformed data URI
+          expect((filePart as any).data).not.toContain('data:image/png;base64,https://');
+        }
       }
     });
 
