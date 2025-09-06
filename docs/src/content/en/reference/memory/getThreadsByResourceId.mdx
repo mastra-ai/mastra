@@ -1,25 +1,16 @@
-# getThreadsByResourceId Reference
+---
+title: "Reference: Memory.getThreadsByResourceId() | Memory | Mastra Docs"
+description: "Documentation for the `Memory.getThreadsByResourceId()` method in Mastra, which retrieves all threads that belong to a specific resource."
+---
 
-The `getThreadsByResourceId` function retrieves all threads associated with a specific resource ID from storage. Threads can be sorted by creation or modification time in ascending or descending order.
+# Memory.getThreadsByResourceId()
+
+The `.getThreadsByResourceId()` function retrieves all threads associated with a specific resource ID from storage. Threads can be sorted by creation or modification time in ascending or descending order.
 
 ## Usage Example
 
 ```typescript
-import { Memory } from "@mastra/core/memory";
-
-const memory = new Memory(config);
-
-// Basic usage - returns threads sorted by createdAt DESC (default)
-const threads = await memory.getThreadsByResourceId({
-  resourceId: "resource-123",
-});
-
-// Custom sorting by updatedAt in ascending order
-const threadsByUpdate = await memory.getThreadsByResourceId({
-  resourceId: "resource-123",
-  orderBy: "updatedAt",
-  sortDirection: "ASC",
-});
+await memory?.getThreadsByResourceId({ resourceId: "user-123" });
 ```
 
 ## Parameters
@@ -40,24 +31,13 @@ const threadsByUpdate = await memory.getThreadsByResourceId({
     },
     {
       name: "sortDirection",
-      type: "ThreadSortDirection", 
+      type: "ThreadSortDirection",
       description: "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
       isOptional: true,
     },
   ]}
 />
 
-## Type Definitions
-
-```typescript
-type ThreadOrderBy = 'createdAt' | 'updatedAt';
-type ThreadSortDirection = 'ASC' | 'DESC';
-
-interface ThreadSortOptions {
-  orderBy?: ThreadOrderBy;
-  sortDirection?: ThreadSortDirection;
-}
-```
 
 ## Returns
 
@@ -71,6 +51,25 @@ interface ThreadSortOptions {
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript filename="src/test-memory.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const thread = await memory?.getThreadsByResourceId({
+  resourceId: "user-123",
+  orderBy: "updatedAt",
+  sortDirection: "ASC"
+});
+
+console.log(thread);
+```
 
 ### Related
 

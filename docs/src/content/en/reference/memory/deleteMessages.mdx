@@ -1,95 +1,62 @@
 ---
-section: Memory
-title: deleteMessages
-slug: reference/memory/deleteMessages
-categorySlug: reference
-layout: guide
+title: "Reference: Memory.deleteMessages() | Memory | Mastra Docs"
+description: "Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs."
 ---
 
-# `deleteMessages`
+# Memory.deleteMessages()
 
-Deletes one or more messages from the memory storage. This method accepts arrays to delete multiple messages in a single operation.
+The `.deleteMessages()` method deletes multiple messages by their IDs.
 
-## Syntax
+## Usage Example
 
-```typescript
-memory.deleteMessages(input: MessageDeleteInput): Promise<void>
-
-type MessageDeleteInput = 
-  | string[]                  // Array of message IDs
-  | { id: string }[]         // Array of message objects
+```typescript copy
+await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
 ```
 
 ## Parameters
 
-- `input` (required): An array of messages to delete. Must be either:
-  - An array of message IDs (strings)
-  - An array of message objects with `id` properties
+<PropertiesTable
+  content={[
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "Array of message IDs to delete",
+      isOptional: false,
+    },
+  ]}
+/>
 
 ## Returns
 
-A Promise that resolves when all messages have been successfully deleted.
+<PropertiesTable
+  content={[
+    {
+      name: "void",
+      type: "Promise<void>",
+      description: "A promise that resolves when all messages are deleted",
+    },
+  ]}
+/>
 
-## Examples
+## Extended usage example
 
-### Delete a single message
+```typescript filename="src/test-memory.ts" showLineNumbers copy
+import "dotenv/config";
 
-```typescript
-// Using an array with a single string ID
-await memory.deleteMessages(['msg-123']);
+import { mastra } from "./mastra";
+import { UIMessageWithMetadata } from "@mastra/core/agent";
 
-// Using an array with a single message object
-await memory.deleteMessages([{ id: 'msg-123' }]);
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const { uiMessages } = await memory!.query({ threadId: "thread-123" });
+
+const messageIds = uiMessages.map((message: UIMessageWithMetadata) => message.id);
+await memory?.deleteMessages([...messageIds]);
 ```
 
-### Delete multiple messages
+## Related
 
-```typescript
-// Using an array of string IDs
-await memory.deleteMessages(['msg-1', 'msg-2', 'msg-3']);
-
-// Using an array of message objects
-await memory.deleteMessages([
-  { id: 'msg-1' },
-  { id: 'msg-2' },
-  { id: 'msg-3' }
-]);
-```
-
-### Using with client SDK
-
-```typescript
-// Get a thread instance
-const thread = client.getAgent('my-agent').getThread('thread-123');
-
-// Delete a single message
-await thread.deleteMessages(['msg-123']);
-
-// Delete multiple messages
-await thread.deleteMessages(['msg-1', 'msg-2', 'msg-3']);
-
-// Delete using message objects (useful when you have message data)
-const messagesToDelete = messages.map(msg => ({ id: msg.id }));
-await thread.deleteMessages(messagesToDelete);
-```
-
-### Error handling
-
-```typescript
-try {
-  await memory.deleteMessages(['msg-1', 'msg-2', 'msg-3']);
-  console.log('Messages deleted successfully');
-} catch (error) {
-  console.error('Failed to delete messages:', error);
-}
-```
-
-## Notes
-
-- This method requires an array as input, even when deleting a single message
-- Thread timestamps are automatically updated when messages are deleted
-- The method automatically extracts message IDs from message objects
-- All message IDs must be non-empty strings
-- An empty array will result in no operation (no error thrown)
-- Messages from different threads can be deleted in the same operation
-- When using message objects, only the `id` property is required
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [query](/reference/memory/query.mdx)
+- [Getting Started with Memory](/docs/memory/overview.mdx)
