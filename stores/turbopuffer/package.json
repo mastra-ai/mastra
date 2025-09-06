@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@turbopuffer/turbopuffer": "^0.6.17"
+    "@turbopuffer/turbopuffer": "^0.10.18"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
