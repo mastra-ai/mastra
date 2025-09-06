@@ -19,23 +19,23 @@
     "@mastra/pg": "0.0.0-ai-v5-20250625173645",
     "@mastra/rag": "0.0.0-ai-v5-20250625173645",
     "@mastra/server": "0.0.0-ai-v5-20250625173645",
-    "next": "15.4.7",
+    "next": "15.5.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "swr": "^2.3.3",
+    "swr": "^2.3.6",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
+    "@eslint/eslintrc": "^3.3.1",
     "@types/node": "^20",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "eslint": "^9",
     "eslint-config-next": "15.1.7",
     "mastra": "0.0.0-ai-v5-20250625173645",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3"
   },
-  "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
+  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
 }
