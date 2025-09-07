@@ -1,0 +1,123 @@
+---
+title: "Reference: Arize Phoenix Integration | Mastra Observability Docs"
+description: Documentation for integrating Arize Phoenix with Mastra, an open-source AI observability platform for monitoring and evaluating LLM applications.
+---
+
+# Arize Phoenix
+
+Arize Phoenix is an open-source AI observability platform designed for monitoring, evaluating, and improving LLM applications. It can be self-hosted or used via Phoenix Cloud.
+
+> **Note**: Currently, only AI-related calls will contain detailed telemetry data. Other operations will create traces but with limited information.
+
+## Configuration
+
+### Phoenix Cloud
+
+If you're using Phoenix Cloud, configure these environment variables:
+
+```env
+PHOENIX_API_KEY="your-phoenix-api-key"
+PHOENIX_COLLECTOR_ENDPOINT="your-phoenix-hostname"
+```
+
+#### Getting Your Credentials
+
+1. Sign up for an Arize Phoenix account at [app.phoenix.arize.com](https://app.phoenix.arize.com/login)
+2. Grab your API key from the Keys option on the left bar
+3. Note your Phoenix hostname for the collector endpoint
+
+### Self-Hosted Phoenix
+
+If you're running a self-hosted Phoenix instance, configure:
+
+```env
+PHOENIX_COLLECTOR_ENDPOINT="http://localhost:6006"
+# Optional: If authentication enabled
+PHOENIX_API_KEY="your-api-key"
+```
+
+## Installation
+
+Install the necessary packages:
+
+```bash
+npm install @arizeai/openinference-mastra@^2.2.0
+```
+
+## Implementation
+
+Here's how to configure Mastra to use Phoenix with OpenTelemetry:
+
+### Phoenix Cloud Configuration
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  OpenInferenceOTLPTraceExporter,
+  isOpenInferenceSpan,
+} from "@arizeai/openinference-mastra";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "my-mastra-app",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new OpenInferenceOTLPTraceExporter({
+        url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
+        headers: {
+          Authorization: `Bearer ${process.env.PHOENIX_API_KEY}`,
+        },
+        spanFilter: isOpenInferenceSpan,
+      }),
+    },
+  },
+});
+```
+
+### Self-Hosted Phoenix Configuration
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  OpenInferenceOTLPTraceExporter,
+  isOpenInferenceSpan,
+} from "@arizeai/openinference-mastra";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "my-mastra-app",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new OpenInferenceOTLPTraceExporter({
+        url: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
+        // Remove headers if authentication is not enabled
+        spanFilter: isOpenInferenceSpan,
+      }),
+    },
+  },
+});
+```
+
+## What Gets Automatically Traced
+
+Mastra's comprehensive tracing captures:
+
+- **Agent Operations**: All agent generation, streaming, and interaction calls
+- **LLM Interactions**: Complete model calls with input/output messages and metadata
+- **Tool Executions**: Function calls made by agents with parameters and results
+- **Workflow Runs**: Step-by-step workflow execution with timing and dependencies
+- **Memory Operations**: Agent memory queries, updates, and retrieval operations
+
+All traces follow OpenTelemetry standards and include relevant metadata such as model parameters, token usage, execution timing, and error details.
+
+## Dashboard
+
+Once configured, you can view your traces and analytics in Phoenix:
+- **Phoenix Cloud**: [app.phoenix.arize.com](https://app.phoenix.arize.com)
+- **Self-hosted**: Your Phoenix instance URL (e.g., `http://localhost:6006`)
+
+For self-hosting options, see the [Phoenix self-hosting documentation](https://arize.com/docs/phoenix/self-hosting).
