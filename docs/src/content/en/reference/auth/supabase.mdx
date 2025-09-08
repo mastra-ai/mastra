@@ -5,7 +5,7 @@ description: "API reference for the MastraAuthSupabase class, which authenticate
 
 # MastraAuthSupabase
 
-The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthSupabase Class` provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `experimental_auth` option.
 
 ## Usage example
 
@@ -36,7 +36,7 @@ export const mastra = new Mastra({
       defaultValue: "process.env.SUPABASE_URL"
     },
     {
-      name: "anonKey", 
+      name: "anonKey",
       type: "string",
       description: "The anonymous/public key for your Supabase project. Used for client-side authentication.",
       isOptional: true,
@@ -44,7 +44,7 @@ export const mastra = new Mastra({
     },
     {
       name: "name",
-      type: "string", 
+      type: "string",
       description: "Custom name for the auth provider instance.",
       isOptional: true,
     },
@@ -57,13 +57,7 @@ export const mastra = new Mastra({
   ]}
 />
 
-## Environment Variables
-
-When constructor parameters are not provided, `MastraAuthSupabase` will use these environment variables:
-
-- `SUPABASE_URL` - Your Supabase project URL
-- `SUPABASE_ANON_KEY` - Your Supabase anonymous/public key
-
 ## Related
 
 [MastraAuthSupabase](/docs/auth/supabase.mdx)
+
