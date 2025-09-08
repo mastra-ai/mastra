@@ -38,12 +38,16 @@ export async function getInputOptions(
       depsToOptimize.set(pkg, { exports, isWorkspace, rootPath });
     }
 
-    const { output, reverseVirtualReferenceMap } = await bundleExternals(depsToOptimize, '.mastra/.build', noopLogger, {
-      transpilePackages,
-      isDev: true,
-      workspaceRoot,
-      workspaceMap,
-    });
+    const { output, reverseVirtualReferenceMap } = await bundleExternals(
+      depsToOptimize,
+      '.mastra/.build',
+      noopLogger,
+      {
+        transpilePackages,
+        isDev: true,
+      },
+      { workspaceRoot, workspaceMap },
+    );
 
     for (const file of output) {
       if (file.type === 'asset') {

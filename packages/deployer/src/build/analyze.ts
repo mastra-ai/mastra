@@ -4,6 +4,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
+import esmShim from '@rollup/plugin-esm-shim';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -197,10 +198,12 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   logger: IMastraLogger,
-  options?: {
+  bundlerOptions?: {
     externals?: string[];
     transpilePackages?: string[];
     isDev?: boolean;
+  },
+  meta?: {
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
   },
@@ -212,13 +215,8 @@ export async function bundleExternals(
       .join('\n')}`,
   );
 
-  const {
-    externals: customExternals = [],
-    transpilePackages = [],
-    workspaceRoot = null,
-    isDev = false,
-    workspaceMap = new Map(),
-  } = options || {};
+  const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
+  const { workspaceRoot = null, workspaceMap = new Map() } = meta || {};
   const allExternals = [...globalExternals, ...customExternals];
   const reverseVirtualReferenceMap = new Map<string, string>();
   const virtualDependencies = new Map();
@@ -313,6 +311,7 @@ export async function bundleExternals(
         transformMixedEsModules: true,
         ignoreTryCatch: false,
       }),
+      isDev ? esmShim() : undefined,
       nodeResolve({
         preferBuiltins: true,
         exportConditions: ['node'],
