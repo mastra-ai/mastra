@@ -43,8 +43,7 @@
     "ai": "^5.0.25",
     "ignore": "^7.0.5",
     "semver": "^7.7.2",
-    "swpm": "^2.6.0",
-    "zod": "^3.25.76"
+    "swpm": "^2.6.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -56,11 +55,13 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.15.3-0 <0.17.0-0",
-    "typescript": ">=5.7.0"
+    "typescript": ">=5.7.0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
     "typescript": {
