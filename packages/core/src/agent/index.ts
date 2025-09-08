@@ -3117,7 +3117,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         // Handle structuredOutput option by creating an StructuredOutputProcessor
         if (options.structuredOutput) {
-          const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
+          const agentModel = await this.getModel({ runtimeContext: result.runtimeContext! });
+          const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput, agentModel);
           effectiveOutputProcessors = effectiveOutputProcessors
             ? [...effectiveOutputProcessors, structuredProcessor]
             : [structuredProcessor];
@@ -3619,7 +3620,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     let finalOutputProcessors = mergedGenerateOptions.outputProcessors;
     if (mergedGenerateOptions.structuredOutput) {
-      const structuredProcessor = new StructuredOutputProcessor(mergedGenerateOptions.structuredOutput);
+      const agentModel = await this.getModel({ runtimeContext: mergedGenerateOptions.runtimeContext });
+      const structuredProcessor = new StructuredOutputProcessor(mergedGenerateOptions.structuredOutput, agentModel);
       finalOutputProcessors = finalOutputProcessors
         ? [...finalOutputProcessors, structuredProcessor]
         : [structuredProcessor];
