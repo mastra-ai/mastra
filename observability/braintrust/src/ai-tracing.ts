@@ -11,7 +11,6 @@ import type {
   AITracingEvent,
   AnyAISpan,
   LLMGenerationAttributes,
-  WorkflowStepAttributes,
 } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';

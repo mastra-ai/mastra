@@ -447,7 +447,7 @@ describe('BraintrustExporter', () => {
       });
     });
   });
-  
+
   describe('Span Updates', () => {
     it('should log updates to existing spans', async () => {
       // First, start a span
