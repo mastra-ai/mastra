@@ -128,7 +128,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           },
           text: `Cannot filter by entity type: ${entityType}`,
         });
-        this.logger?.error(error.toString());
+        this.logger?.trackException(error);
         throw error;
       }
 
