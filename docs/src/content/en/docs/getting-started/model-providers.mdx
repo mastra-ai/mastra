@@ -1,25 +1,25 @@
 ---
-title: 'Model Providers | Getting Started | Mastra Docs'
-description: 'Learn how to configure and use different model providers with Mastra.'
+title: "Model Providers | Getting Started | Mastra Docs"
+description: "Learn how to configure and use different model providers with Mastra."
 ---
 
-import { Callout } from 'nextra/components'
+import { Callout } from "nextra/components"
 
 # Model Providers
 
 Model providers are used to interact with different language models. Mastra uses [Vercel's AI SDK](https://sdk.vercel.ai) as a model routing layer to provide a similar syntax for many models:
 
 ```typescript showLineNumbers copy {1,7} filename="src/mastra/agents/weather-agent.ts"
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: 'WeatherAgent',
-  instructions: 'Instructions for the agent...',
-  model: openai('gpt-4-turbo'),
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"),
 });
 
-const result = await agent.generate('What is the weather like?');
+const result = await agent.generate("What is the weather like?");
 ```
 
 ## Types of AI SDK model providers
@@ -47,13 +47,13 @@ Official model providers are maintained by the AI SDK team.
 Their packages are usually prefixed with `@ai-sdk/`, e.g. `@ai-sdk/anthropic`, `@ai-sdk/openai`, etc.
 
 ```typescript showLineNumbers copy {1,7} filename="src/mastra/agents/weather-agent.ts"
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: 'WeatherAgent',
-  instructions: 'Instructions for the agent...',
-  model: openai('gpt-4-turbo'),
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("gpt-4-turbo"),
 });
 ```
 
@@ -61,19 +61,19 @@ Additional configuration may be done by importing a helper function from the AI 
 Here's an example using the OpenAI provider:
 
 ```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,4-8,13}
-import { createOpenAI } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
+import { createOpenAI } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
 const openai = createOpenAI({
-  baseUrl: '<your-custom-base-url>',
-  apiKey: '<your-custom-api-key>',
+  baseUrl: "<your-custom-base-url>",
+  apiKey: "<your-custom-api-key>",
   ...otherOptions,
 });
 
 const agent = new Agent({
-  name: 'WeatherAgent',
-  instructions: 'Instructions for the agent...',
-  model: openai('<model-name>'),
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openai("<model-name>"),
 });
 ```
 
@@ -84,13 +84,13 @@ Some language model providers implement the OpenAI API. For these providers, you
 Here's the general setup and provider instance creation:
 
 ```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,4-14,19}
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { Agent } from '@mastra/core/agent';
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { Agent } from "@mastra/core/agent";
 
 const openaiCompatible = createOpenAICompatible({
-  name: '<model-name>',
-  baseUrl: '<base-url>',
-  apiKey: '<api-key>',
+  name: "<model-name>",
+  baseUrl: "<base-url>",
+  apiKey: "<api-key>",
   headers: {},
   queryParams: {},
   fetch: async (url, options) => {
@@ -100,9 +100,9 @@ const openaiCompatible = createOpenAICompatible({
 });
 
 const agent = new Agent({
-  name: 'WeatherAgent',
-  instructions: 'Instructions for the agent...',
-  model: openaiCompatible('<model-name>'),
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: openaiCompatible("<model-name>"),
 });
 ```
 
@@ -119,31 +119,31 @@ We will look at one such provider, the Ollama provider available in the [`ollama
 Here's an example:
 
 ```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,7}
-import { ollama } from 'ollama-ai-provider-v2';
-import { Agent } from '@mastra/core/agent';
+import { ollama } from "ollama-ai-provider-v2";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: 'WeatherAgent',
-  instructions: 'Instructions for the agent...',
-  model: ollama('llama3.2:latest'),
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: ollama("llama3.2:latest"),
 });
 ```
 
 You can also configure the Ollama provider like so:
 
 ```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,4-7,12}
-import { createOllama } from 'ollama-ai-provider-v2';
-import { Agent } from '@mastra/core/agent';
+import { createOllama } from "ollama-ai-provider-v2";
+import { Agent } from "@mastra/core/agent";
 
 const ollama = createOllama({
-  baseUrl: '<your-custom-base-url>',
+  baseUrl: "<your-custom-base-url>",
   ...otherOptions,
 });
 
 const agent = new Agent({
-  name: 'WeatherAgent',
-  instructions: 'Instructions for the agent...',
-  model: ollama('llama3.2:latest'),
+  name: "WeatherAgent",
+  instructions: "Instructions for the agent...",
+  model: ollama("llama3.2:latest"),
 });
 ```
 
