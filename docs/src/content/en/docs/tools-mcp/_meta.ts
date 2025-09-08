@@ -1,7 +1,7 @@
 const meta = {
   overview: "Overview",
   "mcp-overview": "MCP Overview",
-  "dynamic-context": "Dynamic Tool Context",
+  "runtime-context": "Runtime Context",
   "advanced-usage": "Advanced Usage",
 };
 
