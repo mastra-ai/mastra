@@ -48,7 +48,7 @@ export function TraceTimeline({
         </div>
       ) : (
         <div
-          className={cn('overflow-y-auto grid items-start content-start gap-y-[2px] ', 'xl:gap-x-[1rem] xl:py-[1rem]', {
+          className={cn('grid items-start content-start gap-y-[2px]', 'xl:gap-x-[1rem] xl:py-[1rem]', {
             'xl:grid-cols-[3fr_auto]': !overallEndTime,
             'xl:grid-cols-[3fr_2fr]': overallEndTime,
           })}
