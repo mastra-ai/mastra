@@ -379,8 +379,8 @@ describe('BraintrustExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
+            inputTokens: 10,
+            outputTokens: 5,
             totalTokens: 15,
           },
           parameters: {
@@ -403,9 +403,9 @@ describe('BraintrustExporter', () => {
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
         metrics: {
-          promptTokens: 10,
-          completionTokens: 5,
-          totalTokens: 15,
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          tokens: 15,
         },
         metadata: {
           spanType: 'llm_generation',
@@ -445,6 +445,115 @@ describe('BraintrustExporter', () => {
           model: 'gpt-3.5-turbo',
         },
       });
+    });
+
+    it('should treat llm-execution workflow step as LLM with derived attributes', async () => {
+      const wfStepSpan = createMockSpan({
+        id: 'wf-llm-step',
+        name: 'llm-execution',
+        type: AISpanType.WORKFLOW_STEP,
+        isRoot: true,
+        attributes: {
+          stepId: 'llm-execution',
+        },
+        output: {
+          output: {
+            usage: {
+              inputTokens: 10,
+              outputTokens: 5,
+              totalTokens: 15,
+            },
+          },
+          metadata: {
+            modelId: 'gpt-4',
+            providerMetadata: {
+              openai: { usage: {} },
+            },
+          },
+        },
+      });
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        span: wfStepSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'llm-execution',
+          type: 'llm',
+          metrics: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            tokens: 15,
+          },
+          metadata: expect.objectContaining({
+            spanType: 'workflow_step',
+            stepId: 'llm-execution',
+            model: 'gpt-4',
+            provider: 'openai',
+          }),
+        }),
+      );
+    });
+
+    it('should normalize anthropic usage metrics for llm-execution workflow step', async () => {
+      const wfAnthropicSpan = createMockSpan({
+        id: 'wf-llm-step-anthropic',
+        name: 'llm-execution',
+        type: AISpanType.WORKFLOW_STEP,
+        isRoot: true,
+        attributes: {
+          stepId: 'llm-execution',
+        },
+        output: {
+          output: {
+            usage: {
+              inputTokens: 10,
+              outputTokens: 5,
+              totalTokens: 15,
+            },
+          },
+          metadata: {
+            modelId: 'claude-3-5-sonnet-latest',
+            providerMetadata: {
+              anthropic: {
+                usage: {
+                  cache_read_input_tokens: 3,
+                  cache_creation_input_tokens: 2,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      await exporter.exportEvent({
+        type: AITracingEventType.SPAN_STARTED,
+        span: wfAnthropicSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'llm-execution',
+          type: 'llm',
+          // Anthropic normalization sums prompt + cached + cache_creation
+          // and recomputes tokens = prompt_tokens + completion_tokens
+          metrics: expect.objectContaining({
+            prompt_tokens: 15, // 10 + 3 + 2
+            completion_tokens: 5,
+            tokens: 20,
+            prompt_cached_tokens: 3,
+            prompt_cache_creation_tokens: 2,
+          }),
+          metadata: expect.objectContaining({
+            spanType: 'workflow_step',
+            stepId: 'llm-execution',
+            model: 'claude-3-5-sonnet-latest',
+            provider: 'anthropic',
+          }),
+        }),
+      );
     });
   });
 
@@ -514,7 +623,7 @@ describe('BraintrustExporter', () => {
 
       expect(mockSpan.log).toHaveBeenCalledWith({
         output: { content: 'Updated response' },
-        metrics: { totalTokens: 150 },
+        metrics: { tokens: 150 },
         metadata: {
           spanType: 'llm_generation',
           model: 'gpt-4',

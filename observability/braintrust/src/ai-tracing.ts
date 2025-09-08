@@ -6,17 +6,26 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { AITracingExporter, AITracingEvent, AnyAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
+import type {
+  AITracingExporter,
+  AITracingEvent,
+  AnyAISpan,
+  LLMGenerationAttributes,
+  WorkflowStepAttributes,
+} from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { initLogger } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
+import { normalizeUsageMetrics } from './metrics';
 
 export interface BraintrustExporterConfig {
   /** Braintrust API key */
   apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
+  /** Braintrust project name (default: 'mastra-tracing') */
+  projectName?: string;
   /** Logger level for diagnostic messages (default: 'warn') */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Support tuning parameters */
@@ -42,8 +51,12 @@ const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
 };
 
 // Mapping function - returns valid Braintrust span types
-function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool' {
-  return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
+function mapSpanToBraintrustType(span: AnyAISpan): 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool' {
+  if (isWorkflowStepLLMExecutionSpan(span)) {
+    return 'llm';
+  }
+
+  return (SPAN_TYPE_EXCEPTIONS[span.type] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
 export class BraintrustExporter implements AITracingExporter {
@@ -109,7 +122,7 @@ export class BraintrustExporter implements AITracingExporter {
 
     const braintrustSpan = braintrustParent.startSpan({
       name: span.name,
-      type: mapSpanType(span.type),
+      type: mapSpanToBraintrustType(span),
       ...payload,
     });
 
@@ -181,7 +194,7 @@ export class BraintrustExporter implements AITracingExporter {
     // Create zero-duration span for event (convert milliseconds to seconds)
     const braintrustSpan = braintrustParent.startSpan({
       name: span.name,
-      type: mapSpanType(span.type),
+      type: mapSpanToBraintrustType(span),
       startTime: span.startTime.getTime() / 1000,
       ...payload,
     });
@@ -192,7 +205,7 @@ export class BraintrustExporter implements AITracingExporter {
 
   private async initLogger(span: AnyAISpan): Promise<void> {
     const logger = await initLogger({
-      projectName: 'mastra-tracing', // TODO: Make this configurable
+      projectName: this.config.projectName ?? 'mastra-tracing',
       apiKey: this.config.apiKey,
       appUrl: this.config.endpoint,
       ...this.config.tuningParameters,
@@ -266,7 +279,45 @@ export class BraintrustExporter implements AITracingExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.LLM_GENERATION) {
+    if (isWorkflowStepLLMExecutionSpan(span)) {
+      const execOut: any = (span.output ?? {}) as any;
+      const inner = (execOut.output ?? {}) as any;
+      const meta = (execOut.metadata ?? {}) as any;
+
+      // Propagate model information into metadata if present
+      if (meta && meta.modelId) {
+        payload.metadata.model = meta.modelId;
+      }
+
+      // Infer provider from providerMetadata keys when present
+      const providerMeta = meta?.providerMetadata as Record<string, unknown> | undefined;
+      if (providerMeta) {
+        const provider =
+          ('openai' in providerMeta && 'openai') ||
+          ('google' in providerMeta && 'google') ||
+          ('anthropic' in providerMeta && 'anthropic') ||
+          undefined;
+        if (provider) {
+          payload.metadata.provider = provider;
+        }
+      }
+
+      // Propagate usage into metrics if present
+      if (inner && inner.usage && typeof inner.usage === 'object') {
+        const metrics = {
+          ...payload.metrics,
+          ...inner.usage,
+        };
+        payload.metrics = normalizeUsageMetrics(metrics, payload.metadata.provider, meta?.providerMetadata);
+      }
+
+      // Other LLM attributes go to metadata
+      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters']);
+      payload.metadata = {
+        ...payload.metadata,
+        ...otherAttributes,
+      };
+    } else if (span.type === AISpanType.LLM_GENERATION) {
       const llmAttr = attributes as LLMGenerationAttributes;
 
       // Model goes to metadata
@@ -274,12 +325,18 @@ export class BraintrustExporter implements AITracingExporter {
         payload.metadata.model = llmAttr.model;
       }
 
+      // Provider goes to metadata (if provided by attributes)
+      if (llmAttr.provider !== undefined) {
+        payload.metadata.provider = llmAttr.provider;
+      }
+
       // Usage/token info goes to metrics
       if (llmAttr.usage !== undefined) {
-        payload.metrics = {
+        const metrics = {
           ...payload.metrics,
           ...llmAttr.usage,
         };
+        payload.metrics = normalizeUsageMetrics(metrics, payload.metadata.provider);
       }
 
       // Model parameters go to metadata
@@ -329,4 +386,10 @@ export class BraintrustExporter implements AITracingExporter {
     }
     this.traceMap.clear();
   }
+}
+
+function isWorkflowStepLLMExecutionSpan(span: AnyAISpan): boolean {
+  return (
+    span.type === AISpanType.WORKFLOW_STEP && (span.attributes as WorkflowStepAttributes)?.stepId === 'llm-execution'
+  );
 }
