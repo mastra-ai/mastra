@@ -112,12 +112,27 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     let actualWhereClause = whereClause.sql || '';
 
     if (entityId && entityType) {
-      const statement =
-        entityType === 'workflow'
-          ? `json_extract(attributes, '$.workflowId') = ?`
-          : `json_extract(attributes, '$.agentId') = ?`;
+      const statement = `name = ?`;
+      let name = '';
+      if (entityType === 'workflow') {
+        name = `workflow run: '${entityId}'`;
+      } else if (entityType === 'agent') {
+        name = `agent run: '${entityId}'`;
+      } else {
+        const error = new MastraError({
+          id: 'LIBSQL_STORE_GET_AI_TRACES_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            entityType,
+          },
+          text: `Cannot filter by entity type: ${entityType}`,
+        });
+        this.logger?.error(error.toString());
+        throw error;
+      }
 
-      whereClause.args.push(entityId);
+      whereClause.args.push(name);
 
       if (actualWhereClause) {
         actualWhereClause += ` AND ${statement}`;
