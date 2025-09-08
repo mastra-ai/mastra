@@ -891,7 +891,7 @@ export class Agent extends BaseResource {
             break;
           }
 
-          case 'reasoning-delta': { 
+          case 'reasoning-delta': {
             if (currentReasoningTextDetail == null) {
               currentReasoningTextDetail = { type: 'text', text: chunk.payload.text };
               if (currentReasoningPart != null) {
@@ -1217,7 +1217,6 @@ export class Agent extends BaseResource {
                   // @ts-ignore
                   toolInvocation.result = result;
                 }
-       
 
                 // Convert messages to the correct format for the recursive call
                 const originalMessages = processedParams.messages;
