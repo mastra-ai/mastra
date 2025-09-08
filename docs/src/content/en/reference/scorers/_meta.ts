@@ -14,6 +14,7 @@ const meta = {
   "tone-consistency": "ToneConsistency",
   "tool-call-accuracy": "ToolCallAccuracy",
   "prompt-alignment": "PromptAlignment",
+  "noise-sensitivity": "NoiseSensitivity",
   toxicity: "Toxicity",
 };
 

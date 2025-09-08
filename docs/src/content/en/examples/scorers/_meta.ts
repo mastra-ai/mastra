@@ -13,6 +13,7 @@ const meta = {
   "tone-consistency": "Tone Consistency",
   "tool-call-accuracy": "Tool Call Accuracy",
   "prompt-alignment": "Prompt Alignment",
+  "noise-sensitivity": "Noise Sensitivity",
   toxicity: "Toxicity",
 };
 export default meta;
