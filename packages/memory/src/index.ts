@@ -629,6 +629,9 @@ export class Memory extends MastraMemory {
 
     const dimensionPromise = this.getReverseDimensionPromise();
     let indexName: string;
+    if (!this.vector) {
+      dimensionPromise.resolve(null);
+    }
     if (this.vector && config.semanticRecall) {
       const vector = this.vector; // for TS to recognize vector is defined
       embeddingTextsAndVectorIds = this.getEmbeddingTextAndVectorIds(v2Messages);
@@ -666,7 +669,7 @@ export class Memory extends MastraMemory {
     const result = this.storage.saveMessages({
       format: 'v2',
       messages: v2Messages.map(message => {
-        if (Array.isArray(message.content.metadata?.vectorIds)) {
+        if (Array.isArray(message.content.metadata?.vectorIds) && dimension) {
           message.content.metadata.vectorDimension = dimension;
         }
         return message;
@@ -1023,6 +1026,8 @@ ${
       const promises: Promise<void | string[]>[] = [];
       const dimensionPromise = this.getReverseDimensionPromise();
 
+      if (!this.vector) dimensionPromise.resolve(null);
+
       if (config.semanticRecall) {
         if (!this.vector) {
           throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
@@ -1088,7 +1093,7 @@ ${
       const updatedMessages = messages.map((message, i) => {
         // remove createdAt so that storage.updateMessages doesn't invalidate stored dates
         const { createdAt, ...rest } = message;
-        if (!message.content || !embeddingTextsAndVectorIds[i]) return rest;
+        if (!message.content || !embeddingTextsAndVectorIds[i] || !dimension) return rest;
         return deepMerge(rest, {
           content: {
             metadata: {
@@ -1150,14 +1155,16 @@ ${
 
   protected getReverseDimensionPromise() {
     const dimensionPromise = (() => {
-      let resolve!: (dimension: number) => void;
+      let resolve!: (dimension: number | null) => void;
       let reject!: (reason?: any) => void;
       let isResolved: boolean = false;
 
-      const promise = new Promise<number>((res, rej) => {
-        resolve = (dimension: number) => {
+      const promise = new Promise<number | null>((res, rej) => {
+        resolve = (dimension: number | null) => {
           res(dimension);
-          this.dimension = dimension;
+          if (typeof dimension === 'number') {
+            this.dimension = dimension;
+          }
           isResolved = true;
         };
         reject = rej;
