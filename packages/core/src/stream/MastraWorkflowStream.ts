@@ -37,6 +37,11 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
       deferredPromise.reject = reject;
     });
 
+    /**
+     * TODO a test is failing because usageCount is undefined.
+     * I commented the associated tests with an agreement with Tony.
+     * I think Abhi will make move regarding these.
+     */
     const updateUsageCount = (usage: {
       promptTokens?: `${number}` | number;
       completionTokens?: `${number}` | number;

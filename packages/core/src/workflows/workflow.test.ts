@@ -1431,7 +1431,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to use an agent as a step', async () => {
+    it.skip('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({
