@@ -1161,4 +1161,109 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             `);
     });
   });
+
+  describe('providerExecuted tools should not be re-executed', () => {
+    it('should not attempt to execute tools marked as providerExecuted', async () => {
+      const result = await loopFn({
+        runId,
+        messageList: new MessageList(),
+        model: createTestModel({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'claude_code_tool',
+              input: JSON.stringify({ action: 'read_file', path: '/test.txt' }),
+              providerExecuted: true,
+              output: { content: 'File contents from provider' },
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        // Note: we don't define the claude_code_tool here
+        // This simulates the real scenario where provider-executed tools
+        // may not be available in the server's tool registry
+        tools: {},
+        ...defaultSettings(),
+      });
+
+      // This should not throw an error about tool not found
+      const stream = result.aisdk.v5.fullStream;
+      const chunks = await convertAsyncIterableToArray(stream as any);
+
+      // Find the tool-result chunk
+      const toolResultChunk = chunks.find((c: any) => c.type === 'tool-result');
+
+      // The provider-executed tool should have its result
+      expect(toolResultChunk).toBeDefined();
+      expect((toolResultChunk as any)?.payload?.result).toEqual({ content: 'File contents from provider' });
+      expect((toolResultChunk as any)?.payload?.providerExecuted).toBe(true);
+    });
+
+    it('should handle provider-executed tools with existing telemetry', async () => {
+      const telemetryCapture: any[] = [];
+
+      const result = await loopFn({
+        runId,
+        messageList: new MessageList(),
+        model: createTestModel({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'provider_tool',
+              input: JSON.stringify({ query: 'test' }),
+              providerExecuted: true,
+              output: { result: 'Provider executed result' },
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {},
+        telemetry_settings: {
+          isEnabled: true,
+          functionId: 'test-function',
+          tracer: {
+            startSpan: (name: string) => ({
+              setAttributes: (attrs: any) => {
+                telemetryCapture.push({ name, attrs });
+                return { end: () => {} };
+              },
+              end: () => {},
+              setStatus: () => {},
+              recordException: () => {},
+            }),
+          } as any,
+        },
+        ...defaultSettings(),
+      });
+
+      await result.aisdk.v5.consumeStream();
+
+      // Should still have telemetry for provider-executed tools
+      const toolCallTelemetry = telemetryCapture.find((t: any) => t.name === 'mastra.stream.toolCall');
+      expect(toolCallTelemetry).toBeDefined();
+      expect(toolCallTelemetry?.attrs['stream.toolCall.toolName']).toBe('provider_tool');
+    });
+  });
 }
