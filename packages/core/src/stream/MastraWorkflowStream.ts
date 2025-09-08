@@ -37,19 +37,14 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
       deferredPromise.reject = reject;
     });
 
-    /**
-     * TODO a test is failing because usageCount is undefined.
-     * I commented the associated tests with an agreement with Tony.
-     * I think Abhi will make move regarding these.
-     */
     const updateUsageCount = (usage: {
       promptTokens?: `${number}` | number;
       completionTokens?: `${number}` | number;
       totalTokens?: `${number}` | number;
     }) => {
-      this.#usageCount.promptTokens += parseInt(usage.promptTokens?.toString() ?? '0', 10);
-      this.#usageCount.completionTokens += parseInt(usage.completionTokens?.toString() ?? '0', 10);
-      this.#usageCount.totalTokens += parseInt(usage.totalTokens?.toString() ?? '0', 10);
+      this.#usageCount.promptTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
+      this.#usageCount.completionTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
+      this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
     };
 
     super({
@@ -65,7 +60,9 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
                 chunk.payload?.output?.type === 'finish')
             ) {
               const finishPayload = chunk.payload?.output.payload;
-              updateUsageCount(finishPayload.usage);
+              if (finishPayload) {
+                updateUsageCount(finishPayload.usage);
+              }
             }
 
             controller.enqueue(chunk);
@@ -85,7 +82,7 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
 
         for await (const chunk of stream) {
           // update the usage count
-          if (chunk.type === 'step-finish') {
+          if (chunk.type === 'step-finish' && chunk.payload.usage) {
             updateUsageCount(chunk.payload.usage);
           } else if (chunk.type === 'workflow-canceled') {
             workflowStatus = 'canceled';
