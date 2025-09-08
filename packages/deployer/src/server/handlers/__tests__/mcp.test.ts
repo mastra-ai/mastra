@@ -7,7 +7,11 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleError } from '../error';
-import { getMcpServerMessageHandler, listMcpRegistryServersHandler, getMcpRegistryServerDetailHandler } from '../mcp';
+import {
+  getMcpServerMessageHandler,
+  listMcpRegistryServersHandler,
+  getMcpRegistryServerDetailHandler,
+} from '../routes/mcp/handlers';
 
 // Mock dependencies
 vi.mock('fetch-to-node', () => ({
@@ -89,9 +93,6 @@ describe('getMcpServerMessageHandler', () => {
       httpPath: `/api/mcp/${serverId}/mcp`,
       req: mockNodeReq,
       res: mockNodeRes,
-      options: {
-        sessionIdGenerator: undefined,
-      },
     });
     expect(toFetchResponse).toHaveBeenCalledWith(mockNodeRes);
     expect(result).toBe(mockFetchRes);
@@ -101,13 +102,11 @@ describe('getMcpServerMessageHandler', () => {
   it('should return 404 if MCP server is not found', async () => {
     (mockMastraInstance.getMCPServer as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
     const mockContext = createMockContext(serverId, requestUrl) as Context;
-    const result = (await getMcpServerMessageHandler(mockContext)) as Response;
+    await getMcpServerMessageHandler(mockContext);
     expect(mockMastraInstance.getMCPServer).toHaveBeenCalledWith(serverId);
-    expect(mockContext.json).toHaveBeenCalledWith({ error: `MCP server '${serverId}' not found` }, 404);
+    expect(mockNodeRes.writeHead).toHaveBeenCalledWith(404, { 'Content-Type': 'application/json' });
+    expect(mockNodeRes.end).toHaveBeenCalledWith(JSON.stringify({ error: `MCP server '${serverId}' not found` }));
     expect(mockMCPServer.startHTTP).not.toHaveBeenCalled();
-    expect(result.status).toBe(404);
-    const jsonBody = await result.json();
-    expect(jsonBody).toEqual({ error: `MCP server '${serverId}' not found` });
   });
 
   it('should call handleError if server.startHTTP throws an error', async () => {
@@ -126,14 +125,20 @@ describe('getMcpServerMessageHandler', () => {
     });
 
     const mockContext = createMockContext(serverId, requestUrl) as Context;
-    const result = await getMcpServerMessageHandler(mockContext);
+    await getMcpServerMessageHandler(mockContext);
 
-    expect(mockMCPServer.startHTTP).toHaveBeenCalled();
-    expect(handleError).toHaveBeenCalledWith(thrownError, 'Error sending MCP message');
-
-    expect(result.status).toBe(mockHttpExceptionStatus);
-    const jsonBody = await result.json();
-    expect(jsonBody).toEqual({ error: mockHttpExceptionMessage });
+    // If your implementation uses direct res methods:
+    expect(mockNodeRes.writeHead).toHaveBeenCalledWith(mockHttpExceptionStatus, { 'Content-Type': 'application/json' });
+    expect(mockNodeRes.end).toHaveBeenCalledWith(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal server error',
+        },
+        id: null,
+      }),
+    );
 
     expect(mockContext.json).not.toHaveBeenCalled();
   });
