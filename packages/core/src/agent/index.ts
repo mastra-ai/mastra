@@ -1413,6 +1413,7 @@ export class Agent<
                 const streamResult = run.streamVNext({
                   inputData: context,
                   runtimeContext,
+                  tracingContext: innerTracingContext,
                   format,
                 });
 
@@ -2741,10 +2742,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           resourceId,
           runId,
           runtimeContext,
+          tracingContext: { currentSpan: agentAISpan },
           writableStream: options.writableStream,
           methodType,
           format,
-          tracingContext: { currentSpan: agentAISpan },
         });
 
         return {
