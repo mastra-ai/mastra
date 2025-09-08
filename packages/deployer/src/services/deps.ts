@@ -70,6 +70,8 @@ export class Deps extends MastraBase {
 
     let destinationFlag = `--pack-destination ${destination}`;
     if (this.packageManager === 'yarn') {
+      // %s includes an '@' at the start of packages names with an '@'
+      // so we need to use our sanitizedName instead.
       destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
     }
 
