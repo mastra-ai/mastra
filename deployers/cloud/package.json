@@ -35,7 +35,7 @@
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:*",
     "execa": "^9.6.0",
-    "fs-extra": "^11.3.0",
+    "fs-extra": "^11.3.1",
     "pino": "^9.7.0",
     "redis": "^5.8.2"
   },
