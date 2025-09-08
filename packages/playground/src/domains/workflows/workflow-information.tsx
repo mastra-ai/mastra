@@ -48,8 +48,6 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
   const isLoading = isLegacy ? isLegacyWorkflowLoading : isWorkflowLoading;
   const workflowToUse = isLegacy ? legacyWorkflow : workflow;
 
-  console.log('streamResult', streamResult);
-
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
       <EntityHeader icon={<WorkflowIcon />} title={workflowToUse?.name || ''} isLoading={isLoading}>
