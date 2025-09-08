@@ -185,8 +185,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: ^7.69.1
-        version: 7.69.1(express@5.1.0)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))
+        specifier: ^7.69.2
+        version: 7.69.2(express@5.1.0)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10713,8 +10713,8 @@ packages:
     resolution: {integrity: sha512-MCOl/WzRNuc/bbXzTN3L7b7Co+cwrNPMsRV6zV5ZLhiMkl6ROBYtZq1BpY7xX/muTy7DWeYw3JiZp6swbkULiQ==}
     hasBin: true
 
-  '@workos-inc/node@7.69.1':
-    resolution: {integrity: sha512-ml2TqUHjUVkubq4EnIIM1O1g+eR0ctKnpdHUJntG/1PuVt64CfntJrAUi/5ePgR4d12EeXunHyjOTK75k+f9Ww==}
+  '@workos-inc/node@7.69.2':
+    resolution: {integrity: sha512-w22aaed73CWhTL5ndqepzCjkM5S18F3/wnkPQ6oIBjqD5K2t7y+nxCi7d83pNDjdJrVqaQKeJQ5TePvQP4oX7g==}
     engines: {node: '>=16'}
 
   '@xyflow/react@12.8.4':
@@ -25834,7 +25834,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@workos-inc/node@7.69.1(express@5.1.0)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))':
+  '@workos-inc/node@7.69.2(express@5.1.0)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))':
     dependencies:
       iron-session: 6.3.1(express@5.1.0)(next@15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))
       jose: 5.6.3
