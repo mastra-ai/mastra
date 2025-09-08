@@ -6845,19 +6845,18 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       let result: any;
 
+      const onFinish = (data: any) => {
+        onFinishCalled = true;
+        finishData = data;
+      };
+
       if (version === 'v1') {
         result = await agent.stream('How are you?', {
-          onFinish: data => {
-            onFinishCalled = true;
-            finishData = data;
-          },
+          onFinish,
         });
       } else {
         result = await agent.streamVNext('How are you?', {
-          onFinish: data => {
-            onFinishCalled = true;
-            finishData = data;
-          },
+          onFinish,
         });
       }
 
@@ -6869,8 +6868,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finishData).toHaveProperty('usage');
       expect(finishData.usage).toBeDefined();
       expect(typeof finishData.usage).toBe('object');
-
-      console.log(finishData);
 
       // Check for expected usage properties
       if (finishData.usage) {
