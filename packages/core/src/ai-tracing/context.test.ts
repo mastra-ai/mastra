@@ -5,9 +5,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Mastra } from '../mastra';
 import { isMastra, wrapMastra } from './context';
 import type { TracingContext } from './types';
-import { Mastra } from '../mastra';
 
 // Mock classes
 class MockMastra {

@@ -6,11 +6,11 @@
  * tracing context is automatically injected without requiring manual passing by users.
  */
 
+import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
 import type { Workflow } from '../workflows';
 import type { TracingContext, AnyAISpan } from './types';
-import type { MastraPrimitives } from '../action';
 
 const AGENT_GETTERS = ['getAgent', 'getAgentById'];
 const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateVNext', 'streamVNext', 'generateLegacy', 'streamLegacy'];
