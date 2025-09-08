@@ -1373,7 +1373,13 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
-    return this._start({ inputData, runtimeContext, writableStream, tracingContext, format: 'aisdk' });
+    return this._start({
+      inputData,
+      runtimeContext,
+      writableStream,
+      tracingContext,
+      format: 'aisdk',
+    });
   }
 
   /**

@@ -23,6 +23,7 @@ const mastra = new Mastra({
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
+            projectName: "mastra-tracing", // optional
             endpoint: process.env.BRAINTRUST_ENDPOINT, // optional
           }),
         ],
