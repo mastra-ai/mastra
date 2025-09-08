@@ -143,9 +143,6 @@ describe('Answer Similarity Scorer', () => {
 
       const result = await scorer.run(runWithGroundTruth);
 
-      console.log('result', result.score, result.reason);
-      console.log('expectedResult', expectedResult.score, expectedResult.reason);
-
       expect(result).toBeDefined();
       expect(result.score).toBeDefined();
       expect(typeof result.score).toBe('number');
