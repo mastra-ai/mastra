@@ -7,7 +7,6 @@ import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
 
 import { createChildProcessLogger } from '../deploy/log.js';
-import { de } from 'zod/v4/locales';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
