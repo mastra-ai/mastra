@@ -1,0 +1,81 @@
+---
+title: "Reference: Arize AX Integration | Mastra Observability Docs"
+description: Documentation for integrating Arize AX with Mastra, a comprehensive AI observability platform for monitoring and evaluating LLM applications.
+---
+
+# Arize AX
+
+Arize AX is a comprehensive AI observability platform designed specifically for monitoring, evaluating, and improving LLM applications in production.
+
+## Configuration
+
+To use Arize AX with Mastra, you can configure it using either environment variables or directly in your Mastra configuration.
+
+### Using Environment Variables
+
+Set the following environment variables:
+
+```env
+ARIZE_SPACE_ID="your-space-id"
+ARIZE_API_KEY="your-api-key"
+```
+
+### Getting Your Credentials
+
+1. Sign up for an Arize AX account at [app.arize.com](https://app.arize.com)
+2. Navigate to your space settings to find your Space ID and API Key
+
+## Installation
+
+First, install the OpenInference instrumentation package for Mastra:
+
+```bash
+npm install @arizeai/openinference-mastra
+```
+
+## Implementation
+
+Here's how to configure Mastra to use Arize AX with OpenTelemetry:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  isOpenInferenceSpan,
+  OpenInferenceOTLPTraceExporter,
+} from "@arizeai/openinference-mastra";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "your-mastra-app",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new OpenInferenceOTLPTraceExporter({
+        url: "https://otlp.arize.com/v1/traces",
+        headers: {
+          "space_id": process.env.ARIZE_SPACE_ID!,
+          "api_key": process.env.ARIZE_API_KEY!,
+        },
+        spanFilter: isOpenInferenceSpan,
+      }),
+    },
+  },
+});
+```
+
+## What Gets Automatically Traced
+
+Mastra's comprehensive tracing captures:
+
+- **Agent Operations**: All agent generation, streaming, and interaction calls
+- **LLM Interactions**: Complete model calls with input/output messages and metadata
+- **Tool Executions**: Function calls made by agents with parameters and results
+- **Workflow Runs**: Step-by-step workflow execution with timing and dependencies
+- **Memory Operations**: Agent memory queries, updates, and retrieval operations
+
+All traces follow OpenTelemetry standards and include relevant metadata such as model parameters, token usage, execution timing, and error details.
+
+## Dashboard
+
+Once configured, you can view your traces and analytics in the Arize AX dashboard at [app.arize.com](https://app.arize.com)

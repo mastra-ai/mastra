@@ -1,5 +1,7 @@
 const meta = {
   index: "Overview",
+  "arize-ax": "Arize AX",
+  "arize-phoenix": "Arize Phoenix",
   dash0: "Dash0",
   signoz: "SigNoz",
   braintrust: "Braintrust",
