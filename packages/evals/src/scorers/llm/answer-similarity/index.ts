@@ -132,8 +132,8 @@ export function createAnswerSimilarityScorer({
       const totalUnits = analysis.matches.length;
 
       if (totalUnits === 0) {
-        // No ground truth units to compare
-        return mergedOptions.scale;
+        // No ground truth units to compare - return worst possible score
+        return 0;
       }
 
       // Score each match based on quality
