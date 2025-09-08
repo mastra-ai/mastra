@@ -76,10 +76,16 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);
 
+        let workflowStatus = 'success';
+
         for await (const chunk of stream) {
           // update the usage count
           if (chunk.type === 'step-finish') {
             updateUsageCount(chunk.payload.usage);
+          } else if (chunk.type === 'workflow-canceled') {
+            workflowStatus = 'canceled';
+          } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
+            workflowStatus = 'failed';
           }
 
           controller.enqueue(chunk);
@@ -90,9 +96,7 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
           runId: run.runId,
           from: ChunkFrom.WORKFLOW,
           payload: {
-            stepResult: {
-              reason: 'stop',
-            },
+            workflowStatus,
             output: {
               usage: this.#usageCount as any,
             },

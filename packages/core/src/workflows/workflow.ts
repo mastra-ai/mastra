@@ -1504,7 +1504,7 @@ export class Run<
 
     return new MastraWorkflowStream({
       run: this,
-      createStream: writer => {
+      createStream: () => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
             controller.enqueue(chunk);
@@ -1522,7 +1522,8 @@ export class Run<
           }
           isWriting = true;
 
-          let watchWriter = writer.getWriter();
+          let watchWriter = writable.getWriter();
+
           try {
             for (const chunk of chunkToWrite) {
               await watchWriter.write(chunk);
