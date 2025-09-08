@@ -130,12 +130,24 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: Tr
             // Handle createRun and createRunAsync methods differently
             if (prop === 'createRun' || prop === 'createRunAsync') {
               return async (options: any = {}) => {
-                // We need to modify the workflow's method to pass tracingContext to the Run constructor
-                // For now, create the run and inject tracingContext afterward
                 const run = await (target as any)[prop](options);
                 if (run) {
-                  // Inject the tracingContext into the run instance
-                  (run as any).tracingContext = tracingContext;
+                  // Return a proxy that automatically injects tracingContext into start() calls
+                  return new Proxy(run, {
+                    get(runTarget, runProp) {
+                      if (runProp === 'start') {
+                        return (startOptions: any = {}) => {
+                          return runTarget.start({
+                            ...startOptions,
+                            tracingContext: startOptions.tracingContext ?? tracingContext,
+                          });
+                        };
+                      }
+                      // Pass through all other properties and methods unchanged
+                      const value = (runTarget as any)[runProp];
+                      return typeof value === 'function' ? value.bind(runTarget) : value;
+                    },
+                  });
                 }
                 return run;
               };
