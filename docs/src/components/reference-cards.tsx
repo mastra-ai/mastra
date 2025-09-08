@@ -447,6 +447,10 @@ export const ReferenceCards = () => {
             href: "/reference/scorers/answer-relevancy",
           },
           {
+            title: "Answer Similarity",
+            href: "/reference/scorers/answer-similarity",
+          },
+          {
             title: "Bias",
             href: "/reference/scorers/bias",
           },

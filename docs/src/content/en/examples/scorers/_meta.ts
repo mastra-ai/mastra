@@ -1,6 +1,7 @@
 const meta = {
   "custom-scorer": "Custom Scorer",
   "answer-relevancy": "Answer Relevancy",
+  "answer-similarity": "Answer Similarity",
   bias: "Bias",
   completeness: "Completeness",
   "content-similarity": "Content Similarity",

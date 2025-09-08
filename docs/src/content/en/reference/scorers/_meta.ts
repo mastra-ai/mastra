@@ -2,6 +2,7 @@ const meta = {
   "mastra-scorer": "MastraScorer Class",
   "create-scorer": "createScorer",
   "answer-relevancy": "AnswerRelevancy",
+  "answer-similarity": "AnswerSimilarity",
   bias: "Bias",
   completeness: "Completeness",
   "content-similarity": "ContentSimilarity",
