@@ -10,6 +10,7 @@ import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
 import type { Workflow } from '../workflows';
 import type { TracingContext, AnyAISpan } from './types';
+import type { MastraPrimitives } from '../action';
 
 const AGENT_GETTERS = ['getAgent', 'getAgentById'];
 const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateVNext', 'streamVNext', 'generateLegacy', 'streamLegacy'];
@@ -28,12 +29,31 @@ function isNoOpSpan(span: AnyAISpan): boolean {
 }
 
 /**
+ * Checks to see if a passed object is an actual instance of Mastra
+ * (for the purposes of wrapping it for AI Tracing)
+ */
+export function isMastra<T extends Mastra | (Mastra & MastraPrimitives) | MastraPrimitives>(mastra: T): boolean {
+  const hasAgentGetters = AGENT_GETTERS.every(method => typeof (mastra as any)?.[method] === 'function');
+  const hasWorkflowGetters = WORKFLOW_GETTERS.every(method => typeof (mastra as any)?.[method] === 'function');
+
+  return hasAgentGetters && hasWorkflowGetters;
+}
+
+/**
  * Creates a tracing-aware Mastra proxy that automatically injects
  * AI tracing context into agent and workflow method calls
  */
-export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingContext): T {
+export function wrapMastra<T extends Mastra | (Mastra & MastraPrimitives) | MastraPrimitives>(
+  mastra: T,
+  tracingContext: TracingContext,
+): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return mastra;
+  }
+
+  // Check if this object has the methods we want to wrap - if not, return as is
+  if (!isMastra(mastra)) {
     return mastra;
   }
 

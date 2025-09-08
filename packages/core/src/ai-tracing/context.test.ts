@@ -5,8 +5,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { wrapMastra } from './context';
+import { isMastra, wrapMastra } from './context';
 import type { TracingContext } from './types';
+import { Mastra } from '../mastra';
 
 // Mock classes
 class MockMastra {
@@ -335,6 +336,46 @@ describe('AI Tracing Context Integration', () => {
       expect(wrapped.otherMethod()).toBe('works');
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Mastra interface compatibility', () => {
+    it('should verify that real Mastra class has expected AGENT_GETTERS and WORKFLOW_GETTERS methods', () => {
+      // This test ensures that if the Mastra class interface changes,
+      // we'll know to update our AGENT_GETTERS & WORKFLOW_GETTERS
+      // constants in wrapMastra
+
+      const mastra = new Mastra();
+      expect(isMastra(mastra)).toBe(true);
+    });
+
+    it('should detect if wrapMastra would skip wrapping due to missing methods', () => {
+      // Test object with no agent or workflow getters
+      const primitivesMastra = {
+        someOtherMethod: vi.fn(),
+      };
+
+      const wrapped = wrapMastra(primitivesMastra as any, tracingContext);
+
+      // Should return the original object since it has no methods to wrap
+      expect(wrapped).toBe(primitivesMastra);
+    });
+
+    it('should wrap objects that have all agent and workflow getters', () => {
+      // Test object with only agent getters
+      const agentOnlyMastra = {
+        getAgent: vi.fn(),
+        getAgentById: vi.fn(),
+        getWorkflow: vi.fn(),
+        getWorkflowById: vi.fn(),
+        someOtherMethod: vi.fn(),
+      };
+
+      const wrapped = wrapMastra(agentOnlyMastra as any, tracingContext);
+
+      // Should return a proxy (different object) since it has methods to wrap
+      expect(wrapped).not.toBe(agentOnlyMastra);
+      expect(typeof wrapped.getAgent).toBe('function');
     });
   });
 });

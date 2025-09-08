@@ -14,7 +14,6 @@ import { z } from 'zod';
 import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { Mastra } from '../../mastra';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -159,9 +158,8 @@ export class CoreToolBuilder extends MastraBase {
            *
            * TODO: Consider providing full Mastra instance to more tool types for enhanced functionality
            */
-          // Check if we have a full Mastra instance vs just MastraPrimitives
-          const wrappedMastra =
-            options.mastra instanceof Mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
+          // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
+          const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
           result = await tool?.execute?.(
             {
