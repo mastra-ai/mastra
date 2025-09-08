@@ -79,7 +79,31 @@
     "@mastra/voice-playai": "0.11.4",
     "@mastra/voice-sarvam": "0.11.4",
     "@mastra/voice-speechify": "0.11.4",
-    "@mastra/inngest": "0.13.0"
+    "@mastra/inngest": "0.13.0",
+    "@mastra/s3vectors": "0.2.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_deployer-7544-dependencies",
+    "@mastra_deployer-cloud-7544-dependencies",
+    "@mastra_deployer-netlify-7544-dependencies",
+    "@mastra_deployer-vercel-7544-dependencies",
+    "@mastra_evals-7544-dependencies",
+    "afraid-eagles-feel",
+    "bumpy-tables-lose",
+    "create-mastra-7544-dependencies",
+    "fair-walls-collect",
+    "horse-battery-staple",
+    "major-comics-refuse",
+    "mastra-7544-dependencies",
+    "plain-trees-boil",
+    "rotten-views-build",
+    "slimy-peas-sell",
+    "spotty-walls-sit",
+    "sweet-parrots-relax",
+    "three-facts-draw",
+    "true-dingos-cough",
+    "unlucky-seas-wash",
+    "wide-swans-knock",
+    "young-days-count"
+  ]
 }

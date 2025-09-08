@@ -2614,7 +2614,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     if (
       streamOptions?.onFinish &&
-      (streamOptions.onFinish as any).__hasOriginalOnFinish === false &&
+      streamOptions.onFinish.__hasOriginalOnFinish === false &&
       defaultStreamOptions.onFinish
     ) {
       // Create composite callback: telemetry wrapper + default callback
@@ -3061,7 +3061,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             textStream: (async function* () {
               // Empty async generator - yields nothing
             })(),
-            fullStream: new (globalThis as any).ReadableStream({
+            fullStream: new globalThis.ReadableStream({
               start(controller: any) {
                 controller.enqueue({
                   type: 'tripwire',
@@ -3074,7 +3074,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 controller.close();
               },
             }),
-            objectStream: new (globalThis as any).ReadableStream({
+            objectStream: new globalThis.ReadableStream({
               start(controller: any) {
                 controller.close();
               },
@@ -3184,7 +3184,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 ...result,
                 runId,
                 messages: messageList.get.response.aiV5.model(),
-              } as any);
+                usage: payload.usage,
+                totalUsage: payload.totalUsage,
+              });
             },
             onStepFinish: result.onStepFinish,
           },
@@ -3702,7 +3704,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         );
 
         const messagesWithStructuredData = messages.filter(
-          msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+          msg => msg.content.metadata && msg.content.metadata.structuredOutput,
         );
 
         this.logger.debug('Messages with structured data:', messagesWithStructuredData.length);
