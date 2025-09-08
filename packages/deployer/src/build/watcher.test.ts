@@ -22,7 +22,9 @@ describe('watcher', () => {
 
       // Assert
       expect(bundlerGetInputOptions).toHaveBeenCalledWith('test-entry.js', expect.anything(), 'node', env, {
+        isDev: true,
         sourcemap: false,
+        workspaceRoot: expect.any(String),
       });
     });
 
@@ -33,7 +35,9 @@ describe('watcher', () => {
 
       // Assert
       expect(bundlerGetInputOptions).toHaveBeenCalledWith('test-entry.js', expect.anything(), 'node', undefined, {
+        isDev: true,
         sourcemap: false,
+        workspaceRoot: expect.any(String),
       });
     });
   });
