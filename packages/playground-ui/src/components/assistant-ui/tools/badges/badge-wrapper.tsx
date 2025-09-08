@@ -37,9 +37,7 @@ export const BadgeWrapper = ({
 
       {!isCollapsed && (
         <div className="pt-2">
-          <div className="border-sm border-border1 rounded-lg bg-surface4">
-            <div className="p-4 border-b-sm border-border1">{children}</div>
-          </div>
+          <div className="p-4 rounded-lg bg-surface2">{children}</div>
         </div>
       )}
     </div>

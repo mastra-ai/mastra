@@ -20,13 +20,14 @@ export const ToolBadge = ({ toolName, argsText, result }: ToolBadgeProps) => {
 
   return (
     <BadgeWrapper icon={<ToolsIcon className="text-[#ECB047]" />} title={toolName}>
-      <>
-        <div className="border-b-sm border-border1 py-2">
+      <div className="space-y-4">
+        <div>
           <p className="font-medium pb-2">Tool arguments</p>
           {argSlot}
         </div>
+
         {result !== undefined && (
-          <div className="py-2">
+          <div>
             <p className="font-medium pb-2">Tool result</p>
             {typeof result === 'string' ? (
               <pre className="whitespace-pre-wrap">{result}</pre>
@@ -35,7 +36,7 @@ export const ToolBadge = ({ toolName, argsText, result }: ToolBadgeProps) => {
             )}
           </div>
         )}
-      </>
+      </div>
     </BadgeWrapper>
   );
 };
