@@ -108,7 +108,7 @@ describe('getMcpServerMessageHandler', () => {
     expect(mockMCPServer.startHTTP).not.toHaveBeenCalled();
   });
 
-  it('should call handleError if server.startHTTP throws an error', async () => {
+  it('should handle errors from server.startHTTP and return JSON-RPC error response', async () => {
     const errorMessage = 'Failed to start HTTP';
     const thrownError = new Error(errorMessage);
     (mockMCPServer.startHTTP as ReturnType<typeof vi.fn>).mockRejectedValue(thrownError);
