@@ -1,5 +1,6 @@
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
+import { findWorkspacesRoot } from 'find-workspaces';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
@@ -9,8 +10,6 @@ import { noopLogger } from '@mastra/core/logger';
 import { createWorkspacePackageMap } from '../bundler/workspaceDependencies';
 import type { DependencyMetadata } from './types';
 import { getPackageName, getPackageRootPath } from './utils';
-import { findWorkspacesRoot } from 'find-workspaces';
-import { relativeWorkspaceDeps } from './plugins/relative-workspace-deps';
 
 export async function getInputOptions(
   entryFile: string,
@@ -96,7 +95,6 @@ export async function getInputOptions(
 
     inputOptions.plugins = plugins;
     inputOptions.plugins.push(aliasHono());
-    inputOptions.plugins.push(relativeWorkspaceDeps(workspaceMap));
     // fixes imports like lodash/fp/get
     inputOptions.plugins.push(nodeModulesExtensionResolver());
   }
