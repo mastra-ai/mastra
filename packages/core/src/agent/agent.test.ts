@@ -6830,6 +6830,55 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finishData).toBeDefined();
     });
   });
+
+  describe(`${version} - streamVNext onFinish usage bug`, () => {
+    it(`should include usage property in onFinish callback for ${version}`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-usage-onfinish',
+        name: 'Test Usage onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      let result: any;
+
+      if (version === 'v1') {
+        result = await agent.stream('How are you?', {
+          onFinish: data => {
+            onFinishCalled = true;
+            finishData = data;
+          },
+        });
+      } else {
+        result = await agent.streamVNext('How are you?', {
+          onFinish: data => {
+            onFinishCalled = true;
+            finishData = data;
+          },
+        });
+      }
+
+      // Consume the stream to trigger onFinish
+      await result.consumeStream();
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+      expect(finishData).toHaveProperty('usage');
+      expect(finishData.usage).toBeDefined();
+      expect(typeof finishData.usage).toBe('object');
+
+      console.log(finishData);
+
+      // Check for expected usage properties
+      if (finishData.usage) {
+        expect(finishData.usage).toHaveProperty('totalTokens');
+        expect(typeof finishData.usage.totalTokens).toBe('number');
+      }
+    });
+  });
 }
 
 describe('Agent Tests', () => {

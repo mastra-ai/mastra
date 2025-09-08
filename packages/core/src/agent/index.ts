@@ -3184,6 +3184,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 ...result,
                 runId,
                 messages: messageList.get.response.aiV5.model(),
+                usage: payload.usage,
+                totalUsage: payload.totalUsage,
               } as any);
             },
             onStepFinish: result.onStepFinish,
