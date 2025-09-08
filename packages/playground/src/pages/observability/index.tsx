@@ -58,7 +58,6 @@ export default function Observability() {
     isLoading: isLoadingAiTraces,
     isFetchingNextPage,
     hasNextPage,
-    fetchNextPage,
     setEndOfListElement,
   } = useAITraces({
     filters:
