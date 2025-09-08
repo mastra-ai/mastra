@@ -90,12 +90,17 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   };
   /** Model parameters */
   parameters?: {
+    maxOutputTokens?: number;
     temperature?: number;
-    maxTokens?: number;
     topP?: number;
-    frequencyPenalty?: number;
+    topK?: number;
     presencePenalty?: number;
-    stop?: string[];
+    frequencyPenalty?: number;
+    stopSequences?: string[];
+    seed?: number;
+    maxRetries?: number;
+    abortSignal?: any;
+    headers?: Record<string, string | undefined>;
   };
   /** Whether this was a streaming response */
   streaming?: boolean;

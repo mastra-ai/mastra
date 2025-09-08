@@ -197,6 +197,10 @@ export abstract class MastraAITracing extends MastraBase {
       attributes?: Partial<AISpanTypeMap[TType]>;
       metadata?: Record<string, any>;
     }) => {
+      if (span.isEvent) {
+        this.logger.warn(`End event is not available on event spans`);
+        return;
+      }
       originalEnd(options);
       this.emitSpanEnded(span);
     };
@@ -207,6 +211,10 @@ export abstract class MastraAITracing extends MastraBase {
       attributes?: Partial<AISpanTypeMap[TType]>;
       metadata?: Record<string, any>;
     }) => {
+      if (span.isEvent) {
+        this.logger.warn(`Update() is not available on event spans`);
+        return;
+      }
       originalUpdate(options);
       this.emitSpanUpdated(span);
     };
