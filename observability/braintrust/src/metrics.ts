@@ -21,11 +21,9 @@ export interface BraintrustUsageMetrics {
   [key: string]: number | undefined;
 }
 
-export function normalizeUsageMetrics(
-  llmAttr: LLMGenerationAttributes,
-): BraintrustUsageMetrics {
+export function normalizeUsageMetrics(llmAttr: LLMGenerationAttributes): BraintrustUsageMetrics {
   const metrics: BraintrustUsageMetrics = {};
-  
+
   if (llmAttr.usage?.promptTokens !== undefined) {
     metrics.prompt_tokens = llmAttr.usage?.promptTokens;
   }
@@ -44,4 +42,3 @@ export function normalizeUsageMetrics(
 
   return metrics;
 }
-

@@ -6,12 +6,7 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type {
-  AITracingExporter,
-  AITracingEvent,
-  AnyAISpan,
-  LLMGenerationAttributes,
-} from '@mastra/core/ai-tracing';
+import type { AITracingExporter, AITracingEvent, AnyAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { initLogger } from 'braintrust';
