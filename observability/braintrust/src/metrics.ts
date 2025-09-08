@@ -69,19 +69,19 @@ interface AnthropicTokenMetrics {
 }
 
 function finalizeAnthropicTokens(metrics: AnthropicTokenMetrics): AnthropicTokenMetrics {
-  const prompt_tokens =
+  const finalizedPromptTokens =
     (metrics.prompt_tokens || 0) + (metrics.prompt_cached_tokens || 0) + (metrics.prompt_cache_creation_tokens || 0);
 
   return {
     ...metrics,
-    prompt_tokens,
-    tokens: prompt_tokens + (metrics.completion_tokens || 0),
+    prompt_tokens: finalizedPromptTokens,
+    tokens: finalizedPromptTokens + (metrics.completion_tokens || 0),
   };
 }
 
 function extractAnthropicCacheTokens(
-  cacheReadTokens: number = 0,
-  cacheCreationTokens: number = 0,
+  cacheReadTokens: number,
+  cacheCreationTokens: number,
 ): Partial<AnthropicTokenMetrics> {
   const cacheTokens: Partial<AnthropicTokenMetrics> = {};
 
