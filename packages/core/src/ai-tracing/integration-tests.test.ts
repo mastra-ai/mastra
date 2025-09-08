@@ -440,17 +440,25 @@ function getToolCallFromPrompt(prompt: string): { toolName: string; toolCallId: 
   }
 
   // Workflow executor tool detection
-  if (
-    lowerPrompt.includes('execute the simpleworkflow') ||
-    lowerPrompt.includes('execute workflow') ||
-    lowerPrompt.includes('simpleworkflow with')
-  ) {
+  if (lowerPrompt.includes('execute workflows using the workflow executor tool')) {
     if (!toolsCalled.has('workflowExecutor')) {
       toolsCalled.add('workflowExecutor');
       return {
         toolName: 'workflowExecutor',
         toolCallId: 'call-workflow-1',
         args: { workflowId: 'simpleWorkflow', input: { input: 'test input' } },
+      };
+    }
+  }
+
+  // Direct workflow detection
+  if (lowerPrompt.includes('execute workflows that exist in your config')) {
+    if (!toolsCalled.has('simpleWorkflow')) {
+      toolsCalled.add('simpleWorkflow');
+      return {
+        toolName: 'simpleWorkflow',
+        toolCallId: 'call-workflow-1',
+        args: { input: 'test input' },
       };
     }
   }
@@ -798,7 +806,7 @@ describe('AI Tracing Integration Tests', () => {
     testExporter.finalExpectations();
   });
 
-  it.skip('should trace registered workflow nested in step in workflow', async () => {
+  it('should trace registered workflow nested in step in workflow', async () => {
     // Create an registered workflow
     const simpleWorkflow = createSimpleWorkflow();
 
@@ -1150,13 +1158,13 @@ describe('AI Tracing Integration Tests', () => {
   });
 
   //TODO figure out how to test this correctly
-  describe.skip.each(agentMethods)('workflow launched inside agent directly $name', ({ name, method, model }) => {
+  describe.each(agentMethods)('workflow launched inside agent directly $name', ({ name, method, model }) => {
     it(`should trace spans correctly`, async () => {
       const simpleWorkflow = createSimpleWorkflow();
 
       const workflowAgent = new Agent({
         name: 'Workflow Agent',
-        instructions: 'You can execute workflows using the workflow executor tool',
+        instructions: 'You can execute workflows that exist in your config',
         model,
         workflows: {
           simpleWorkflow,
@@ -1180,7 +1188,6 @@ describe('AI Tracing Integration Tests', () => {
       const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
       const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
 
-      // TODO: figure out the write expects for this new test.
       expect(agentRunSpans.length).toBe(1); // One agent run
       if (name == 'generateLegacy' || name == 'streamLegacy') {
         expect(llmGenerationSpans.length).toBe(2); // tool call + response
@@ -1188,7 +1195,7 @@ describe('AI Tracing Integration Tests', () => {
         // TODO: Fix this bug, we should see 2 spans in vNext
         expect(llmGenerationSpans.length).toBe(1); // tool call
       }
-      expect(toolCallSpans.length).toBe(1); // tool call
+      expect(toolCallSpans.length).toBe(1); // tool call (workflow is converted into a tool dynamically)
 
       // TODO: revert these expectations to assert equal to just 1 after we can hide
       // internal spans.

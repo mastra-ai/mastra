@@ -138,7 +138,6 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           args: value.input ? JSON.parse(value.input) : undefined,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
-          output: (value as any).output, // Include output for provider-executed tools
         },
       };
 

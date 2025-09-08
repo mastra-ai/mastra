@@ -2489,6 +2489,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       runtimeContext,
     });
 
+    if (execResults.status === 'canceled') {
+      await emitter.emit('watch-v2', {
+        type: 'workflow-canceled',
+        payload: {},
+      });
+    }
+
     return { result: execResults, stepResults, executionContext };
   }
 }

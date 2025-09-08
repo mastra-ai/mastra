@@ -2,7 +2,6 @@ import { Tag } from "@/components/tag";
 
 const meta = {
   agent: "Agent",
-  getAgent: ".getAgent()",
   generate: ".generate()",
   stream: ".stream()",
   streamVNext: <Tag text="experimental">.streamVNext()</Tag>,

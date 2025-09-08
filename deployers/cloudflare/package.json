@@ -49,7 +49,7 @@
     "rollup": "~4.50.0"
   },
   "devDependencies": {
-    "@babel/types": "^7.28.2",
+    "@babel/types": "^7.28.4",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
