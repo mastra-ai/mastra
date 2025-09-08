@@ -6,7 +6,6 @@ import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo, Server
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleError } from '../error';
 import {
   getMcpServerMessageHandler,
   listMcpRegistryServersHandler,
@@ -114,21 +113,11 @@ describe('getMcpServerMessageHandler', () => {
     const thrownError = new Error(errorMessage);
     (mockMCPServer.startHTTP as ReturnType<typeof vi.fn>).mockRejectedValue(thrownError);
 
-    const mockHttpExceptionMessage = 'Error from handleError';
-    const mockHttpExceptionStatus = 500;
-    (handleError as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      const mockResponse = new Response(JSON.stringify({ error: mockHttpExceptionMessage }), {
-        status: mockHttpExceptionStatus,
-        headers: { 'Content-Type': 'application/json' },
-      });
-      return Promise.resolve(mockResponse);
-    });
-
     const mockContext = createMockContext(serverId, requestUrl) as Context;
     await getMcpServerMessageHandler(mockContext);
 
-    // If your implementation uses direct res methods:
-    expect(mockNodeRes.writeHead).toHaveBeenCalledWith(mockHttpExceptionStatus, { 'Content-Type': 'application/json' });
+    // Check that we handle the error using Node.js response methods
+    expect(mockNodeRes.writeHead).toHaveBeenCalledWith(500, { 'Content-Type': 'application/json' });
     expect(mockNodeRes.end).toHaveBeenCalledWith(
       JSON.stringify({
         jsonrpc: '2.0',
@@ -140,6 +129,7 @@ describe('getMcpServerMessageHandler', () => {
       }),
     );
 
+    // Make sure we don't use Hono's json method
     expect(mockContext.json).not.toHaveBeenCalled();
   });
 
