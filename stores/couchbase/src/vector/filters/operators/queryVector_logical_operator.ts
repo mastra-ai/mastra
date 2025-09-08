@@ -1,21 +1,23 @@
 function qv_and(nodes: any[]): any {
-  if (nodes.length === 0) {
+  const filteredNodes = nodes.filter(node => node && node.length !== 0);
+  if (filteredNodes.length === 0) {
     return '';
   }
-  if (nodes.length === 1) {
-    return nodes[0];
+  if (filteredNodes.length === 1) {
+    return filteredNodes[0];
   }
-  return `(${nodes.join(' AND ')})`;
+  return `(${filteredNodes.join(' AND ')})`;
 }
 
 function qv_or(nodes: any[]): any {
-  if (nodes.length === 0) {
+  const filteredNodes = nodes.filter(node => node && node.length !== 0);
+  if (filteredNodes.length === 0) {
     return '';
   }
-  if (nodes.length === 1) {
-    return nodes[0];
+  if (filteredNodes.length === 1) {
+    return filteredNodes[0];
   }
-  return `(${nodes.join(' OR ')})`;
+  return `(${filteredNodes.join(' OR ')})`;
 }
 
 function qv_not(node: any): any {
@@ -26,10 +28,11 @@ function qv_not(node: any): any {
 }
 
 function qv_nor(nodes: any[]): any {
-  if (nodes.length === 0) {
+  const filteredNodes = nodes.filter(node => node && node.length !== 0);
+  if (filteredNodes.length === 0) {
     return '';
   }
-  return qv_not(qv_or(nodes));
+  return qv_not(qv_or(filteredNodes));
 }
 
 function qv_next_level_handler_for_array(translateNode: (node: any) => any): any {

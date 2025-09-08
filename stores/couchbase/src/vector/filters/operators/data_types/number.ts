@@ -186,7 +186,14 @@ function qv_Number_Handler(field: string, value: Record<string, any>): any {
         throw new Error(`Unsupported operator: ${op} for number field ${field}`);
     }
   }
-  return result.join(' AND ');
+  const filteredResult = result.filter(result => result && result.length !== 0);
+  if (filteredResult.length === 0) {
+    return '';
+  }
+  if (filteredResult.length === 1) {
+    return filteredResult[0];
+  }
+  return filteredResult.join(' AND ');
 }
 
 export { qv_Number_Handler };

@@ -8,7 +8,7 @@ import { QV_CouchbaseFilterTranslator } from './queryVectorFilter';
  * Test cases are organized by operator type and data type combinations.
  * Each test case includes the input filter and expected output translation.
  */
-describe('CouchbaseFilterTranslator - table-driven tests', () => {
+describe('QV_CouchbaseFilterTranslator - table-driven tests', () => {
   const translator = new QV_CouchbaseFilterTranslator();
 
   type TestCase = { name: string; input: any; expected: any };
@@ -218,164 +218,164 @@ describe('CouchbaseFilterTranslator - table-driven tests', () => {
     }
   });
 
-  //   /**
-  //    * Tests for array operators ($in, $nin) with different data types
-  //    */
-  //   describe.skip('translates array operators ($in, $nin)', () => {
-  //     const cases: TestCase[] = [
-  //       {
-  //         name: 'string in array',
-  //         input: { 'meta.years': { $in: ['2019'] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               disjuncts: [{ field: 'meta.years', term: '2019' }],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //       {
-  //         name: 'number in array',
-  //         input: { 'meta.years': { $in: [2019] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               disjuncts: [
-  //                 {
-  //                   field: 'meta.years',
-  //                   min: 2019,
-  //                   max: 2019,
-  //                   inclusive_min: true,
-  //                   inclusive_max: true,
-  //                 },
-  //               ],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //       {
-  //         name: 'date in array',
-  //         input: { 'meta.years': { $in: [new Date('2011-10-05T14:48:00.000Z')] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               disjuncts: [
-  //                 {
-  //                   field: 'meta.years',
-  //                   start: new Date('2011-10-05T14:48:00.000Z'),
-  //                   end: new Date('2011-10-05T14:48:00.000Z'),
-  //                   inclusive_start: true,
-  //                   inclusive_end: true,
-  //                 },
-  //               ],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //       {
-  //         name: 'multiple strings in array',
-  //         input: { 'meta.years': { $in: ['1', '2'] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               disjuncts: [
-  //                 { field: 'meta.years', term: '1' },
-  //                 { field: 'meta.years', term: '2' },
-  //               ],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //       {
-  //         name: 'multiple numbers in array',
-  //         input: { 'meta.years': { $in: [1, 2] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               disjuncts: [
-  //                 { field: 'meta.years', min: 1, max: 1, inclusive_min: true, inclusive_max: true },
-  //                 { field: 'meta.years', min: 2, max: 2, inclusive_min: true, inclusive_max: true },
-  //               ],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //       {
-  //         name: 'string not in array',
-  //         input: { 'meta.years': { $nin: ['2019'] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               conjuncts: [
-  //                 {
-  //                   must_not: {
-  //                     disjuncts: [{ field: 'meta.years', term: '2019' }],
-  //                   },
-  //                 },
-  //               ],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //       {
-  //         name: 'number not in array',
-  //         input: { 'meta.years': { $nin: [2019] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               conjuncts: [
-  //                 {
-  //                   must_not: {
-  //                     disjuncts: [
-  //                       {
-  //                         field: 'meta.years',
-  //                         min: 2019,
-  //                         max: 2019,
-  //                         inclusive_min: true,
-  //                         inclusive_max: true,
-  //                       },
-  //                     ],
-  //                   },
-  //                 },
-  //               ],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //       {
-  //         name: 'date not in array',
-  //         input: { 'meta.years': { $nin: [new Date('2011-10-05T14:48:00.000Z')] } },
-  //         expected: {
-  //           conjuncts: [
-  //             {
-  //               conjuncts: [
-  //                 {
-  //                   must_not: {
-  //                     disjuncts: [
-  //                       {
-  //                         field: 'meta.years',
-  //                         start: new Date('2011-10-05T14:48:00.000Z'),
-  //                         end: new Date('2011-10-05T14:48:00.000Z'),
-  //                         inclusive_start: true,
-  //                         inclusive_end: true,
-  //                       },
-  //                     ],
-  //                   },
-  //                 },
-  //               ],
-  //             },
-  //           ],
-  //         },
-  //       },
-  //     ];
+  /**
+   * Tests for array operators ($in, $nin) with different data types
+   */
+  describe.skip('translates array operators ($in, $nin)', () => {
+    const cases: TestCase[] = [
+      {
+        name: 'string in array',
+        input: { 'meta.years': { $in: ['2019'] } },
+        expected: {
+          conjuncts: [
+            {
+              disjuncts: [{ field: 'meta.years', term: '2019' }],
+            },
+          ],
+        },
+      },
+      {
+        name: 'number in array',
+        input: { 'meta.years': { $in: [2019] } },
+        expected: {
+          conjuncts: [
+            {
+              disjuncts: [
+                {
+                  field: 'meta.years',
+                  min: 2019,
+                  max: 2019,
+                  inclusive_min: true,
+                  inclusive_max: true,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        name: 'date in array',
+        input: { 'meta.years': { $in: [new Date('2011-10-05T14:48:00.000Z')] } },
+        expected: {
+          conjuncts: [
+            {
+              disjuncts: [
+                {
+                  field: 'meta.years',
+                  start: new Date('2011-10-05T14:48:00.000Z'),
+                  end: new Date('2011-10-05T14:48:00.000Z'),
+                  inclusive_start: true,
+                  inclusive_end: true,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        name: 'multiple strings in array',
+        input: { 'meta.years': { $in: ['1', '2'] } },
+        expected: {
+          conjuncts: [
+            {
+              disjuncts: [
+                { field: 'meta.years', term: '1' },
+                { field: 'meta.years', term: '2' },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        name: 'multiple numbers in array',
+        input: { 'meta.years': { $in: [1, 2] } },
+        expected: {
+          conjuncts: [
+            {
+              disjuncts: [
+                { field: 'meta.years', min: 1, max: 1, inclusive_min: true, inclusive_max: true },
+                { field: 'meta.years', min: 2, max: 2, inclusive_min: true, inclusive_max: true },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        name: 'string not in array',
+        input: { 'meta.years': { $nin: ['2019'] } },
+        expected: {
+          conjuncts: [
+            {
+              conjuncts: [
+                {
+                  must_not: {
+                    disjuncts: [{ field: 'meta.years', term: '2019' }],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        name: 'number not in array',
+        input: { 'meta.years': { $nin: [2019] } },
+        expected: {
+          conjuncts: [
+            {
+              conjuncts: [
+                {
+                  must_not: {
+                    disjuncts: [
+                      {
+                        field: 'meta.years',
+                        min: 2019,
+                        max: 2019,
+                        inclusive_min: true,
+                        inclusive_max: true,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        name: 'date not in array',
+        input: { 'meta.years': { $nin: [new Date('2011-10-05T14:48:00.000Z')] } },
+        expected: {
+          conjuncts: [
+            {
+              conjuncts: [
+                {
+                  must_not: {
+                    disjuncts: [
+                      {
+                        field: 'meta.years',
+                        start: new Date('2011-10-05T14:48:00.000Z'),
+                        end: new Date('2011-10-05T14:48:00.000Z'),
+                        inclusive_start: true,
+                        inclusive_end: true,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ];
 
-  //     for (const c of cases) {
-  //       it(c.name, () => {
-  //         const result = translator.translate(c.input as any);
-  //         expect(result).toEqual(c.expected);
-  //       });
-  //     }
-  //   });
+    for (const c of cases) {
+      it(c.name, () => {
+        const result = translator.translate(c.input as any);
+        expect(result).toEqual(c.expected);
+      });
+    }
+  });
 
   /**
    * Tests for edge cases and special situations
@@ -412,186 +412,164 @@ describe('CouchbaseFilterTranslator - table-driven tests', () => {
     }
   });
 
-  //   describe('validates and throws for invalid filters', () => {
-  //     const invalidCases: { name: string; input: any; errorPattern?: RegExp }[] = [
-  //       { name: 'top-level non-logical operator', input: { $eq: 'John' }, errorPattern: /Invalid top-level operator/ },
-  //       {
-  //         name: 'unsupported array operator',
-  //         input: { name: { $in: ['A', 'B'] } },
-  //         errorPattern: /Unsupported operator/,
-  //       },
-  //       { name: '$and requires array', input: { $and: { a: { $eq: 1 } } } },
-  //       {
-  //         name: 'logical at field level',
-  //         input: { name: { $and: [{ $eq: 'a' }, { $eq: 'b' }] } },
-  //         errorPattern: /cannot be used at field level/,
-  //       },
-  //       { name: 'empty $not', input: { $not: {} }, errorPattern: /cannot be empty/ },
-  //       { name: 'type mismatch', input: { price: { $gt: '10' } }, errorPattern: /Unsupported operator/ },
-  //       {
-  //         name: 'nested invalid operator',
-  //         input: { $and: [{ price: { $invalid: 10 } }] },
-  //         errorPattern: /Unsupported operator/,
-  //       },
-  //       {
-  //         name: 'mixed types in operators',
-  //         input: { price: { $gt: 10, $lt: '20' } },
-  //         errorPattern: /Mixed data types/,
-  //       },
-  //       { name: 'undefined field type', input: { price: {} }, errorPattern: /Unsupported field type/ },
-  //       { name: 'invalid $nor structure', input: { $nor: {} } },
-  //       { name: 'invalid logical operator', input: { $xyz: [] }, errorPattern: /Unsupported operator/ },
-  //       {
-  //         name: 'deeply nested invalid operator',
-  //         input: { $and: [{ $or: [{ price: { $invalid: 50 } }] }] },
-  //         errorPattern: /Unsupported operator/,
-  //       },
-  //       {
-  //         name: 'multiple logical operators in field',
-  //         input: { product: { $and: [], $or: [] } },
-  //         errorPattern: /cannot be used at field level/,
-  //       },
-  //       { name: '$not with non-object value', input: { $not: 'invalid' }, errorPattern: /requires an object/ },
-  //     ];
+  describe('validates and throws for invalid filters', () => {
+    const invalidCases: { name: string; input: any; errorPattern?: RegExp }[] = [
+      { name: 'top-level non-logical operator', input: { $eq: 'John' }, errorPattern: /Invalid top-level operator/ },
+      {
+        name: 'unsupported array operator',
+        input: { name: { $in: ['A', 'B'] } },
+        errorPattern: /Unsupported operator/,
+      },
+      { name: '$and requires array', input: { $and: { a: { $eq: 1 } } } },
+      {
+        name: 'logical at field level',
+        input: { name: { $and: [{ $eq: 'a' }, { $eq: 'b' }] } },
+        errorPattern: /cannot be used at field level/,
+      },
+      { name: 'empty $not', input: { $not: {} }, errorPattern: /cannot be empty/ },
+      { name: 'type mismatch', input: { price: { $gt: '10' } }, errorPattern: /Unsupported operator/ },
+      {
+        name: 'nested invalid operator',
+        input: { $and: [{ price: { $invalid: 10 } }] },
+        errorPattern: /Unsupported operator/,
+      },
+      {
+        name: 'mixed types in operators',
+        input: { price: { $gt: 10, $lt: '20' } },
+        errorPattern: /Mixed data types/,
+      },
+      { name: 'undefined field type', input: { price: {} }, errorPattern: /Unsupported field type/ },
+      { name: 'invalid $nor structure', input: { $nor: {} } },
+      { name: 'invalid logical operator', input: { $xyz: [] }, errorPattern: /Unsupported operator/ },
+      {
+        name: 'deeply nested invalid operator',
+        input: { $and: [{ $or: [{ price: { $invalid: 50 } }] }] },
+        errorPattern: /Unsupported operator/,
+      },
+      {
+        name: 'multiple logical operators in field',
+        input: { product: { $and: [], $or: [] } },
+        errorPattern: /cannot be used at field level/,
+      },
+      { name: '$not with non-object value', input: { $not: 'invalid' }, errorPattern: /requires an object/ },
+    ];
 
-  //     for (const c of invalidCases) {
-  //       it(c.name, () => {
-  //         if (c.errorPattern) {
-  //           expect(() => translator.translate(c.input as any)).toThrow(c.errorPattern);
-  //         } else {
-  //           expect(() => translator.translate(c.input as any)).toThrow();
-  //         }
-  //       });
-  //     }
-  //   });
+    for (const c of invalidCases) {
+      it(c.name, () => {
+        if (c.errorPattern) {
+          expect(() => translator.translate(c.input as any)).toThrow(c.errorPattern);
+        } else {
+          expect(() => translator.translate(c.input as any)).toThrow();
+        }
+      });
+    }
+  });
 
-  //   describe('edge cases and empty/falsy values', () => {
-  //     const edgeCases: { name: string; input: any; expected?: any; shouldThrow?: boolean }[] = [
-  //       { name: 'empty object', input: {}, expected: {} },
-  //       { name: 'null filter', input: null, expected: null },
-  //       { name: 'undefined filter', input: undefined, expected: undefined },
-  //       { name: '$and with empty array', input: { $and: [] }, expected: { conjuncts: [{}] } },
-  //       { name: '$or with empty array', input: { $or: [] }, expected: { conjuncts: [{}] } },
-  //       { name: '$and with null value', input: { $and: [null] }, shouldThrow: true },
-  //       {
-  //         name: 'nested empty objects',
-  //         input: { $and: [{ $or: [] }] },
-  //         expected: { conjuncts: [{ conjuncts: [{ conjuncts: [{}] }] }] },
-  //       },
-  //       {
-  //         name: 'boolean false value',
-  //         input: { active: { $eq: false } },
-  //         expected: { conjuncts: [{ conjuncts: [{ field: 'active', bool: false }] }] },
-  //       },
-  //       {
-  //         name: 'boolean true value',
-  //         input: { active: { $eq: true } },
-  //         expected: { conjuncts: [{ conjuncts: [{ field: 'active', bool: true }] }] },
-  //       },
-  //       {
-  //         name: 'zero value',
-  //         input: { count: { $eq: 0 } },
-  //         expected: {
-  //           conjuncts: [{ conjuncts: [{ field: 'count', min: 0, max: 0, inclusive_min: true, inclusive_max: true }] }],
-  //         },
-  //       },
-  //       {
-  //         name: 'negative zero edge case',
-  //         input: { count: { $eq: -0 } },
-  //         expected: {
-  //           conjuncts: [{ conjuncts: [{ field: 'count', min: 0, max: 0, inclusive_min: true, inclusive_max: true }] }],
-  //         },
-  //       },
-  //       { name: 'empty string', input: { name: { $eq: '' } }, expected: { conjuncts: [{ conjuncts: [{}] }] } },
-  //       {
-  //         name: 'field with escaped characters',
-  //         input: { 'a.b': { $eq: 'value' } },
-  //         expected: { conjuncts: [{ conjuncts: [{ field: 'a.b', term: 'value' }] }] },
-  //       },
-  //     ];
+  describe('edge cases and empty/falsy values', () => {
+    const edgeCases: { name: string; input: any; expected?: any; shouldThrow?: boolean }[] = [
+      { name: 'empty object', input: {}, expected: '' },
+      { name: 'null filter', input: null, expected: '' },
+      { name: 'undefined filter', input: undefined, expected: '' },
+      { name: '$and with empty array', input: { $and: [] }, expected: '' },
+      { name: '$or with empty array', input: { $or: [] }, expected: '' },
+      { name: '$and with null value', input: { $and: [null] }, shouldThrow: true },
+      {
+        name: 'nested empty objects',
+        input: { $and: [{ $or: [] }] },
+        expected: '',
+      },
+      {
+        name: 'boolean false value',
+        input: { active: { $eq: false } },
+        expected: '(active = false)',
+      },
+      {
+        name: 'boolean true value',
+        input: { active: { $eq: true } },
+        expected: '(active = true)',
+      },
+      {
+        name: 'zero value',
+        input: { count: { $eq: 0 } },
+        expected: '(count = 0)',
+      },
+      {
+        name: 'negative zero edge case',
+        input: { count: { $eq: -0 } },
+        expected: '(count = 0)',
+      },
+      { name: 'empty string', input: { name: { $eq: '' } }, expected: '' },
+      {
+        name: 'field with escaped characters',
+        input: { 'a.b': { $eq: 'value' } },
+        expected: "(a.b = 'value')",
+      },
+    ];
 
-  //     for (const c of edgeCases) {
-  //       it(c.name, () => {
-  //         if (c.shouldThrow) {
-  //           expect(() => translator.translate(c.input as any)).toThrow();
-  //         } else {
-  //           const result = translator.translate(c.input as any);
-  //           expect(result).toEqual(c.expected);
-  //         }
-  //       });
-  //     }
-  //   });
+    for (const c of edgeCases) {
+      it(c.name, () => {
+        if (c.shouldThrow) {
+          expect(() => translator.translate(c.input as any)).toThrow();
+        } else {
+          const result = translator.translate(c.input as any);
+          expect(result).toEqual(c.expected);
+        }
+      });
+    }
+  });
 
-  //   describe('input validation and field paths', () => {
-  //     it('should handle deeply nested paths correctly', () => {
-  //       const input = {
-  //         'nested.deeply.field': { $eq: 'value' },
-  //       };
-  //       const result = translator.translate(input as any);
-  //       expect(result).toEqual({
-  //         conjuncts: [
-  //           {
-  //             conjuncts: [{ field: 'nested.deeply.field', term: 'value' }],
-  //           },
-  //         ],
-  //       });
-  //     });
+  describe('input validation and field paths', () => {
+    it('should handle deeply nested paths correctly', () => {
+      const input = {
+        'nested.deeply.field': { $eq: 'value' },
+      };
+      const result = translator.translate(input as any);
+      expect(result).toEqual("(nested.deeply.field = 'value')");
+    });
 
-  //     it.skip('should validate arrays in filters', () => {
-  //       // Arrays in field values are allowed for equality
-  //       const validArray = { tags: { $eq: ['tag1', 'tag2'] } };
-  //       const result = translator.translate(validArray as any);
-  //       expect(result).toEqual({
-  //         conjuncts: [
-  //           {
-  //             conjuncts: [{ field: 'tags', term: ['tag1', 'tag2'] }],
-  //           },
-  //         ],
-  //       });
-  //     });
+    it.skip('should validate arrays in filters', () => {
+      // Arrays in field values are allowed for equality
+      const validArray = { tags: { $eq: ['tag1', 'tag2'] } };
+      const result = translator.translate(validArray as any);
+      expect(result).toEqual("(tags = ['tag1', 'tag2'])");
+    });
 
-  //     it('should handle special characters in field names', () => {
-  //       // Field names with special characters should be handled properly
-  //       const specialCharsField = { 'field-with_special$chars': { $eq: 'value' } };
-  //       const result = translator.translate(specialCharsField as any);
-  //       expect(result).toEqual({
-  //         conjuncts: [
-  //           {
-  //             conjuncts: [{ field: 'field-with_special$chars', term: 'value' }],
-  //           },
-  //         ],
-  //       });
-  //     });
+    it('should handle special characters in field names', () => {
+      // Field names with special characters should be handled properly
+      const specialCharsField = { 'field-with_special$chars': { $eq: 'value' } };
+      const result = translator.translate(specialCharsField as any);
+      expect(result).toEqual("(field-with_special$chars = 'value')");
+    });
 
-  //     it('should validate Date objects in filters', () => {
-  //       const date = new Date('2023-01-01T00:00:00Z');
-  //       const dateFilter = { timestamp: { $gt: date } };
-  //       const result = translator.translate(dateFilter as any);
-  //       expect(result).toHaveProperty('conjuncts');
-  //     });
-  //   });
+    it('should validate Date objects in filters', () => {
+      const date = new Date('2023-01-01T00:00:00Z');
+      const dateFilter = { timestamp: { $gt: date } };
+      const result = translator.translate(dateFilter as any);
+      expect(result).toEqual("(timestamp > '2023-01-01T00:00:00.000Z')");
+    });
+  });
 
-  //   describe('translateNode error handling', () => {
-  //     it('throws with invalid operator', () => {
-  //       expect(() => {
-  //         // @ts-ignore - Testing invalid input
-  //         CouchbaseFilterTranslator.translateNode({ $invalid: 'value' });
-  //       }).toThrow(/not a valid operator/);
-  //     });
+  describe('translateNode error handling', () => {
+    it('throws with invalid operator', () => {
+      expect(() => {
+        // @ts-ignore - Testing invalid input
+        QV_CouchbaseFilterTranslator.translateNode({ $invalid: 'value' });
+      }).toThrow(/not a valid operator/);
+    });
 
-  //     it('handles unexpected input types gracefully', () => {
-  //       // Empty inputs should return empty result
-  //       expect(CouchbaseFilterTranslator.translateNode({})).toEqual({ conjuncts: [] });
+    it('handles unexpected input types gracefully', () => {
+      // Empty inputs should return empty result
+      expect(QV_CouchbaseFilterTranslator.translateNode({})).toEqual('');
 
-  //       // Logical operator handling should be robust
-  //       const result = CouchbaseFilterTranslator.translateNode({
-  //         $and: [
-  //           { name: { $eq: 'test' } },
-  //           {}, // Empty object should be handled
-  //         ],
-  //       });
+      // Logical operator handling should be robust
+      const result = QV_CouchbaseFilterTranslator.translateNode({
+        $and: [
+          { name: { $eq: 'test' } },
+          {}, // Empty object should be handled
+        ],
+      });
 
-  //       expect(result).toHaveProperty('conjuncts');
-  //     });
-  //   });
+      expect(result).toEqual("(name = 'test')");
+    });
+  });
 });

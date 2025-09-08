@@ -329,7 +329,7 @@ describe('Integration Testing CouchbaseQueryStore', async () => {
       expect(firstResult.content.embedding[0]).toBeCloseTo(1.0, 1);
     }, 50000);
 
-    it.skip('should query vectors with filtering', async () => {
+    it('should query vectors with filtering', async () => {
       const queryVector = [1.0, 0.1, 0.1];
       const topK = 3;
 

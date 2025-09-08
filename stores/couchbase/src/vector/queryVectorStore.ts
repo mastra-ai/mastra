@@ -16,8 +16,8 @@ import type {
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect } from 'couchbase';
 // Local imports
-import type { CouchbaseVectorFilter } from './filters/filter';
-import { CouchbaseFilterTranslator } from './filters/filter';
+import type { QV_CouchbaseVectorFilter } from './filters';
+import { QV_CouchbaseFilterTranslator } from './filters';
 // Local constants
 import type { CouchbaseVectorParams } from './index';
 
@@ -45,7 +45,7 @@ type CouchbaseQueryVectorIndexStats = IndexStats & {
   fields_to_index?: FieldsToIndex[];
 };
 
-export class CouchbaseQueryStore extends MastraVector<CouchbaseVectorFilter> {
+export class CouchbaseQueryStore extends MastraVector<QV_CouchbaseVectorFilter> {
   private clusterPromise: Promise<Cluster>;
   private cluster: Cluster;
   private bucketName: string;
@@ -340,8 +340,8 @@ export class CouchbaseQueryStore extends MastraVector<CouchbaseVectorFilter> {
     queryVector,
     topK = 10,
     includeVector = false,
-    filter = {} as CouchbaseVectorFilter,
-  }: QueryVectorParams<CouchbaseVectorFilter>): Promise<QueryResult[]> {
+    filter = {} as QV_CouchbaseVectorFilter,
+  }: QueryVectorParams<QV_CouchbaseVectorFilter>): Promise<QueryResult[]> {
     try {
       // Get the collection
       await this.getCollection();
@@ -357,7 +357,7 @@ export class CouchbaseQueryStore extends MastraVector<CouchbaseVectorFilter> {
       }
 
       // Translating the filter
-      const translator = new CouchbaseFilterTranslator(); // TODO: The filter translator is left to be done
+      const translator = new QV_CouchbaseFilterTranslator();
       const transformed_filter = translator.translate(filter);
 
       // Create the SQL++ query
@@ -370,7 +370,7 @@ export class CouchbaseQueryStore extends MastraVector<CouchbaseVectorFilter> {
                 "${QUERY_VECTOR_INDEX_DISTANCE_MAPPING[index_stats.metric as MastraMetric]}"
             ) AS score
             FROM ${this.bucketName}.${this.scopeName}.${this.collectionName} AS c
-            ${Object.keys(transformed_filter).length > 0 ? `WHERE ${transformed_filter}` : ''}
+            ${transformed_filter.length > 0 ? `WHERE ${transformed_filter}` : ''}
             ORDER BY score ASC
             LIMIT ${topK};`;
 
@@ -423,13 +423,11 @@ export class CouchbaseQueryStore extends MastraVector<CouchbaseVectorFilter> {
       if (!(await this.listIndexes()).includes(indexName)) {
         throw new Error(`Index ${indexName} does not exist`);
       }
-      await this.cluster
-        .queryIndexes()
-        .dropIndex(this.bucketName, indexName, {
-          scopeName: this.scopeName,
-          collectionName: this.collectionName,
-          ignoreIfNotExists: true,
-        });
+      await this.cluster.queryIndexes().dropIndex(this.bucketName, indexName, {
+        scopeName: this.scopeName,
+        collectionName: this.collectionName,
+        ignoreIfNotExists: true,
+      });
       this.vector_dimension = null as unknown as number;
     } catch (error) {
       if (error instanceof MastraError) {
