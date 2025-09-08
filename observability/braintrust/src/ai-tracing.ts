@@ -51,8 +51,8 @@ const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
 };
 
 // Mapping function - returns valid Braintrust span types
-function mapSpanToType(span_type: AISpanType): 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool' {
-  return (SPAN_TYPE_EXCEPTIONS[span_type] as any) ?? DEFAULT_SPAN_TYPE;
+function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool' {
+  return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
 export class BraintrustExporter implements AITracingExporter {
@@ -118,7 +118,7 @@ export class BraintrustExporter implements AITracingExporter {
 
     const braintrustSpan = braintrustParent.startSpan({
       name: span.name,
-      type: mapSpanToType(span.type),
+      type: mapSpanType(span.type),
       ...payload,
     });
 
@@ -190,7 +190,7 @@ export class BraintrustExporter implements AITracingExporter {
     // Create zero-duration span for event (convert milliseconds to seconds)
     const braintrustSpan = braintrustParent.startSpan({
       name: span.name,
-      type: mapSpanToType(span.type),
+      type: mapSpanType(span.type),
       startTime: span.startTime.getTime() / 1000,
       ...payload,
     });
