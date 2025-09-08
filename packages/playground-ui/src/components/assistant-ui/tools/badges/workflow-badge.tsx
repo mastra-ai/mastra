@@ -1,9 +1,7 @@
-import { Icon, WorkflowIcon } from '@/ds/icons';
+import { WorkflowIcon } from '@/ds/icons';
 import { GetWorkflowResponse } from '@mastra/client-js';
-import { ChevronUpIcon } from 'lucide-react';
-import { Badge } from '@/ds/components/Badge';
-import { useContext, useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
+
+import { useContext, useEffect } from 'react';
 
 import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -12,6 +10,7 @@ import { Button } from '@/ds/components/Button';
 import { useHandleAgentWorkflowStream } from '@/domains/workflows/hooks/use-handle-agent-workflow-stream';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { StreamChunk } from '@/types';
+import { BadgeWrapper } from './badge-wrapper';
 
 export interface WorkflowBadgeProps {
   workflow: GetWorkflowResponse;
@@ -21,7 +20,6 @@ export interface WorkflowBadgeProps {
 }
 
 export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: WorkflowBadgeProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
@@ -31,28 +29,15 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: Work
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
   return (
-    <div className="mb-2">
-      <button
-        onClick={() => setIsCollapsed(s => !s)}
-        className="flex items-center gap-2 disabled:cursor-not-allowed"
-        type="button"
-      >
-        <Icon>
-          <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-        </Icon>
-        <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
-      </button>
-
-      {!isCollapsed && !isStreaming && !isLoading && (
+    <BadgeWrapper icon={<WorkflowIcon className="text-accent3" />} title={workflow.name} initialCollapsed={false}>
+      {!isStreaming && !isLoading && (
         <WorkflowRunProvider snapshot={snapshot}>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
         </WorkflowRunProvider>
       )}
 
-      {!isCollapsed && isStreaming && (
-        <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
-      )}
-    </div>
+      {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+    </BadgeWrapper>
   );
 };
 
@@ -66,24 +51,20 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   const { Link } = useLinkComponent();
 
   return (
-    <div className="pt-2">
-      <div className="border-sm border-border1 rounded-lg bg-surface4">
-        <div className="p-4 border-b-sm border-border1">
-          <div className="flex items-center gap-2 pb-2">
-            <Button as={Link} href={`/workflows/${workflowId}/graph`}>
-              Go to workflow
-            </Button>
-            <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
-              See run
-            </Button>
-          </div>
-
-          <div className="rounded-md overflow-hidden h-[60vh] w-full">
-            <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
-          </div>
-        </div>
+    <>
+      <div className="flex items-center gap-2 pb-2">
+        <Button as={Link} href={`/workflows/${workflowId}/graph`}>
+          Go to workflow
+        </Button>
+        <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+          See run
+        </Button>
       </div>
-    </div>
+
+      <div className="rounded-md overflow-hidden h-[60vh] w-full">
+        <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+      </div>
+    </>
   );
 };
 
