@@ -109,7 +109,10 @@ export type StreamVNextParams<
   output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-  structuredOutput?: STRUCTURED_OUTPUT extends ZodSchema ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+  // Can't serialize the model, so we need to omit it, falls back to agent's model
+  structuredOutput?: STRUCTURED_OUTPUT extends ZodSchema
+    ? Omit<StructuredOutputOptions<STRUCTURED_OUTPUT>, 'model'>
+    : never;
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT>,
