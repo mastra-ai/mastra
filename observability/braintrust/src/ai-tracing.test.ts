@@ -403,9 +403,9 @@ describe('BraintrustExporter', () => {
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
         metrics: {
-          promptTokens: 10,
-          completionTokens: 5,
-          totalTokens: 15,
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          tokens: 15,
         },
         metadata: {
           spanType: 'llm_generation',
@@ -514,7 +514,7 @@ describe('BraintrustExporter', () => {
 
       expect(mockSpan.log).toHaveBeenCalledWith({
         output: { content: 'Updated response' },
-        metrics: { totalTokens: 150 },
+        metrics: { tokens: 150 },
         metadata: {
           spanType: 'llm_generation',
           model: 'gpt-4',
