@@ -805,6 +805,7 @@ export class Agent<
             content: JSON.stringify(partsToGen),
           },
         ],
+        messageList: new MessageList(),
       });
 
       text = await result.text;
@@ -2020,12 +2021,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               ];
             }
             if (responseMessages) {
-              // Remove IDs from response messages to ensure the custom ID generator is used
-              const messagesWithoutIds = responseMessages.map((m: any) => {
-                const { id, ...messageWithoutId } = m;
-                return messageWithoutId;
-              });
-              messageList.add(messagesWithoutIds, 'response');
+              messageList.add(responseMessages, 'response');
             }
 
             if (!threadExists) {
@@ -3148,8 +3144,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
               const messageList = inputData['prepare-memory-step'].messageList as MessageList;
 
-              messageList.add(payload.response.messages, 'response');
-
               try {
                 const outputText = messageList.get.all
                   .core()
@@ -3194,6 +3188,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             temperature: 0,
             ...(options.modelSettings || {}),
           },
+          messageList: inputData['prepare-memory-step'].messageList,
         };
 
         return loopOptions;
@@ -3296,16 +3291,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
 
         if (responseMessages) {
-          // Remove IDs from response messages to ensure the custom ID generator is used
           // @TODO: PREV VERSION DIDNT RETURN USER MESSAGES, SO WE FILTER THEM OUT
-          const messagesWithoutIds = responseMessages
-            .map((m: any) => {
-              const { id, ...messageWithoutId } = m;
-              return messageWithoutId;
-            })
-            .filter((m: any) => m.role !== 'user');
-
-          messageList.add(messagesWithoutIds, 'response');
+          const filteredMessages = responseMessages.filter((m: any) => m.role !== 'user');
+          messageList.add(filteredMessages, 'response');
         }
 
         if (!threadExists) {
@@ -3553,6 +3541,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const mergedGenerateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultGenerateOptions,
       ...generateOptions,
+      experimental_generateMessageId:
+        defaultGenerateOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions, 'generate');
@@ -3932,6 +3922,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...defaultStreamOptions,
       ...streamOptions,
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
+      experimental_generateMessageId:
+        defaultStreamOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');

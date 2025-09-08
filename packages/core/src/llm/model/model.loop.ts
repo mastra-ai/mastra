@@ -136,6 +136,7 @@ export class MastraLLMVNext extends MastraBase {
     returnScorerData,
     providerOptions,
     tracingContext,
+    messageList,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -171,12 +172,6 @@ export class MastraLLMVNext extends MastraBase {
     });
 
     try {
-      const messageList = new MessageList({
-        threadId,
-        resourceId,
-      });
-      messageList.add(messages, 'input');
-
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         messageList,
         model: this.#model,

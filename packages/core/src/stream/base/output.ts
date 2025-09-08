@@ -299,6 +299,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 response = {
                   ...otherMetadata,
                   messages: messageList.get.response.aiV5.model(),
+                  uiMessages: messageList.get.response.aiV5.ui(),
                 };
               }
 
@@ -338,6 +339,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     response = {
                       ...otherMetadata,
                       messages: messageList.get.response.aiV5.model(),
+                      uiMessages: messageList.get.response.aiV5.ui(),
                     };
                   }
                 } else {

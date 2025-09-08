@@ -9,6 +9,7 @@ import type {
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
+import type { MessageList } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
 import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
@@ -46,4 +47,5 @@ export type ModelLoopStreamArgs<
   resourceId?: string;
   threadId?: string;
   returnScorerData?: boolean;
+  messageList: MessageList;
 } & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;
