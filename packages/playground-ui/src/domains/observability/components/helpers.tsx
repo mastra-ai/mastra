@@ -27,7 +27,7 @@ export function getTraceInfo(trace: AISpanRecord | undefined) {
       label: 'Entity Type',
       value: [
         {
-          id: '',
+          id: trace?.attributes?.agentId || trace?.attributes?.workflowId,
           name: trace?.attributes?.agentId ? 'Agent' : trace?.attributes?.workflowId ? 'Workflow' : '-',
           path: trace?.attributes?.agentId ? `/agents` : trace?.attributes?.workflowId ? `/workflows` : undefined,
         },
@@ -66,7 +66,7 @@ export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: get
     {
       key: 'createdAt',
       label: 'Created at',
-      value: span?.createdAt ? format(new Date(span.createdAt), 'MMM dd, HH:mm:ss.SSS') : '-',
+      value: span?.createdAt ? format(new Date(span?.createdAt), 'MMM dd, HH:mm:ss.SSS') : '-',
     },
     {
       key: 'startedAt',

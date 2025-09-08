@@ -11,7 +11,7 @@ export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
   const rootSpans: UISpan[] = [];
 
   // First pass: create UISpan objects and initialize spans array
-  spans?.forEach(spanRecord => {
+  spans.forEach(spanRecord => {
     const startDate = new Date(spanRecord.startedAt);
     const endDate = spanRecord.endedAt ? new Date(spanRecord.endedAt) : undefined;
 
@@ -29,10 +29,10 @@ export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
   });
 
   // Second pass: organize into tree structure
-  spans?.forEach(spanRecord => {
+  spans.forEach(spanRecord => {
     const uiSpan = spanMap.get(spanRecord.spanId)!;
 
-    if (spanRecord.parentSpanId === null) {
+    if (spanRecord?.parentSpanId === null) {
       // This is a root span
       rootSpans.push(uiSpan);
     } else {

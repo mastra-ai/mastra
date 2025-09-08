@@ -43,7 +43,6 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         head_cell: 'text-[0.625rem] text-muted-foreground',
         ...classNames,
       }}
-      components={{}}
       {...props}
     />
   );

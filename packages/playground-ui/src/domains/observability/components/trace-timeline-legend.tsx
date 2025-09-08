@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils';
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
+import { AISpanRecord } from '@mastra/core';
 
 type TraceTimelineLegendProps = {
-  spans?: any[];
+  spans?: AISpanRecord[];
 };
 
 export function TraceTimelineLegend({ spans = [] }: TraceTimelineLegendProps) {
@@ -18,7 +19,7 @@ export function TraceTimelineLegend({ spans = [] }: TraceTimelineLegendProps) {
         return (
           <div key={item} className={cn('flex items-center gap-[.5rem]')}>
             <span className={cn('[&>svg]:w-[1.2em] [&>svg]:h-[1.2em]')} style={{ color: spanUI?.color }}>
-              {spanUI?.icon}
+              {spanUI?.icon && spanUI.icon}
             </span>
             {spanUI?.label}
           </div>

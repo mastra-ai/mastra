@@ -1,6 +1,6 @@
 'use client';
 
-import { format, isValid } from 'date-fns';
+import { format, formatDate, isValid } from 'date-fns';
 import { CalendarIcon, CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
@@ -18,7 +18,7 @@ type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> 
   minValue?: Date | null;
   maxValue?: Date | null;
   defaultTimeStrValue?: string;
-  onValueChange: (date: Date | undefined | null) => void;
+  onValueChange: (date: Date | undefined) => void;
 };
 
 export type DateTimePickerProps =
@@ -34,7 +34,6 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   children,
   className,
   placeholder,
-  classNames,
   ...props
 }) => {
   const [openPopover, setOpenPopover] = React.useState(false);
@@ -72,13 +71,13 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   );
 };
 
-function getCompoundDate({ date, timeStr = '' }: { date: Date; timeStr?: string }) {
+function getCompoundDate({ date, timeStr = '' }: { date: Date; timeStr?: string }): Date | null {
   if (!isValid(date)) {
-    return '';
+    return null;
   }
 
   if (timeStr) {
-    const dateStr = format(date, 'yyy-MM-dd');
+    const dateStr = format(date, 'yyyy-MM-dd');
     const newDate = new Date(`${dateStr} ${timeStr}`);
     if (isValid(newDate)) {
       return newDate;
@@ -105,7 +104,7 @@ export const DateTimePickerContent = ({
 }) => {
   const [localErrorMsg, setLocalErrorMsg] = React.useState<string | null>(null);
   const [dateInputValue, setDateInputValue] = React.useState<string>(
-    value ? format(getCompoundDate({ date: value, timeStr: defaultTimeStrValue }), 'PP p') : '',
+    value ? format(getCompoundDate({ date: value, timeStr: defaultTimeStrValue }) || '', 'PP p') : '',
   );
   const [timeStrValue, setTimeStrValue] = React.useState<string>(defaultTimeStrValue || '');
   const [selected, setSelected] = React.useState<Date | undefined>(value ? new Date(value) : undefined);
@@ -116,11 +115,11 @@ export const DateTimePickerContent = ({
       onValueChange?.(date);
       setOpenPopover?.(false);
     }
-  }, 2000);
+  }, 500);
 
   const handleInputChange: React.ChangeEventHandler<HTMLInputElement> = e => {
     setDateInputValue(e.currentTarget.value);
-    const date = new Date(e.target.value);
+    const date = new Date(e.currentTarget.value);
     debouncedDateUpdate(date);
   };
 
@@ -144,13 +143,13 @@ export const DateTimePickerContent = ({
 
   const dateInputValueDate = new Date(dateInputValue);
   const dateInputValueIsValid = isValid(dateInputValueDate);
-  const newValueDefined = dateInputValueIsValid && dateInputValueDate !== value;
+  const newValueDefined = dateInputValueIsValid && dateInputValueDate.getTime() !== value?.getTime();
 
   const handleDaySelect = (date: Date | undefined) => {
     setSelected(date);
     if (date) {
       const newDate = getCompoundDate({ date, timeStr: timeStrValue });
-      updateInputValue(newDate);
+      updateInputValue(newDate || '');
     } else {
       updateInputValue('');
     }
@@ -160,7 +159,7 @@ export const DateTimePickerContent = ({
     setSelected(date);
     if (date) {
       const newDate = getCompoundDate({ date, timeStr: timeStrValue });
-      updateInputValue(newDate);
+      updateInputValue(newDate || '');
     } else {
       updateInputValue('');
     }
@@ -171,7 +170,7 @@ export const DateTimePickerContent = ({
 
     if (dateInputValueIsValid) {
       const newDate = getCompoundDate({ date: dateInputValueDate, timeStr: val });
-      updateInputValue(newDate);
+      updateInputValue(newDate || '');
     }
   };
 
@@ -180,12 +179,14 @@ export const DateTimePickerContent = ({
   };
 
   const handleApply = () => {
-    onValueChange(dateInputValueDate);
+    if (isValid(dateInputValueDate)) {
+      onValueChange(dateInputValueDate);
+    }
     setOpenPopover?.(false);
   };
 
   const handleClear = () => {
-    onValueChange(null);
+    onValueChange(undefined);
     setSelected(undefined);
     setDateInputValue('');
     setTimeStrValue('');
@@ -231,7 +232,11 @@ export const DateTimePickerContent = ({
         {...props}
       />
 
-      <TimePicker onValueChange={handleTimeStrChange} className="m-4 mt-0 w-auto" defaultValue={defaultTimeStrValue} />
+      <TimePicker
+        onValueChange={handleTimeStrChange}
+        className="m-4 mt-0 w-auto"
+        defaultValue={value ? formatDate(new Date(value), 'hh:mm a') : defaultTimeStrValue}
+      />
 
       <div className="grid grid-cols-[1fr_auto] gap-[0.5rem] m-4 mt-0">
         <Button

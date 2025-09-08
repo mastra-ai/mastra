@@ -17,12 +17,12 @@ export function getSpanTypeUi(type: string) {
     },
     workflow: {
       icon: <WorkflowIcon />,
-      color: 'oklch(.75 0.15 200)',
+      color: 'oklch(0.75 0.15 200)',
       label: 'Workflow',
     },
     llm: {
       icon: <BrainIcon />,
-      color: 'oklch(.75 0.15 320)',
+      color: 'oklch(0.75 0.15 320)',
       label: 'LLM',
     },
     tool: {
@@ -32,10 +32,8 @@ export function getSpanTypeUi(type: string) {
     },
   };
 
-  const elements = spanTypeToUiElements[typePrefix as keyof typeof spanTypeToUiElements];
-
-  if (elements) {
-    return elements;
+  if (typePrefix in spanTypeToUiElements) {
+    return spanTypeToUiElements[typePrefix];
   }
 
   return null;

@@ -1,33 +1,35 @@
 import { cn } from '@/lib/utils';
 import { TraceTimelineSpan } from './trace-timeline-span';
-import { type UISpan } from '../types';
-import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { SideDialogHeading } from '@/components/ui/elements';
-import { useMemo } from 'react';
 import { ListTreeIcon } from 'lucide-react';
 import { TraceTimelineLegend } from './trace-timeline-legend';
 import Spinner from '@/components/ui/spinner';
+import { AISpanRecord } from '@mastra/core';
+import { UISpan } from '../types';
 
 type TraceTimelineProps = {
-  spans?: any;
-  onSpanClick: (span: UISpan) => void;
+  spans?: AISpanRecord[];
+  hierarchicalSpans: UISpan[];
+  onSpanClick: (id: string) => void;
   selectedSpanId?: string;
   isLoading?: boolean;
   className?: string;
 };
 
-export function TraceTimeline({ spans = [], onSpanClick, selectedSpanId, isLoading, className }: TraceTimelineProps) {
-  const hierarchicalSpans = useMemo(() => {
-    if (!spans) return [];
-    return formatHierarchicalSpans(spans || []);
-  }, [spans]);
-
+export function TraceTimeline({
+  spans = [],
+  hierarchicalSpans = [],
+  onSpanClick,
+  selectedSpanId,
+  isLoading,
+  className,
+}: TraceTimelineProps) {
   const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
   const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
 
   return (
     <div className={cn('grid gap-[1rem]', className)}>
-      <div className="flex w-full justify-between pr-[4rem]">
+      <div className="flex w-full justify-between pr-[2.5rem]">
         <SideDialogHeading as="h2">
           <ListTreeIcon /> Timeline
         </SideDialogHeading>
@@ -46,11 +48,11 @@ export function TraceTimeline({ spans = [], onSpanClick, selectedSpanId, isLoadi
       ) : (
         <div
           className={cn(
-            'overflow-y-auto  grid items-start content-start gap-y-[2px] xl:py-[1rem] ',
+            'overflow-y-auto grid items-start content-start gap-y-[2px] xl:py-[1rem]',
             'xl:grid-cols-[3fr_2fr] xl:gap-x-[1rem]',
           )}
         >
-          {hierarchicalSpans?.map((span: UISpan) => (
+          {hierarchicalSpans?.map(span => (
             <TraceTimelineSpan
               key={span.id}
               span={span}

@@ -11,12 +11,12 @@ export function EntryListItem({
 }: {
   item: any;
   selectedItemId?: string;
-  onClick?: (score: string) => void;
+  onClick?: (itemId: string) => void;
   children?: React.ReactNode;
   columns?: Column[];
   isLoading?: boolean;
 }) {
-  const isSelected = selectedItemId && selectedItemId === item.id;
+  const isSelected = selectedItemId === item.id;
 
   const handleClick = () => {
     return onClick && onClick(item?.id);

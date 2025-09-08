@@ -23,24 +23,22 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
   const tokensByProvider = generationSpans.reduce(
     (acc, span) => {
       const spanUsage = span.attributes?.usage || {};
-      const spanProvider = `${span.attributes?.provider ? span.attributes?.provider : ''}${span.attributes?.provider && span.attributes?.model ? ' / ' : ''}${span.attributes?.model ? span.attributes?.model : ''}`;
+      const model = span?.attributes?.model || '';
+      const provider = span?.attributes?.provider || '';
+      const spanModelProvider = `${provider}${provider && model ? ' / ' : ''}${model}`;
 
-      if (!acc?.[spanProvider]) {
-        acc[spanProvider] = { promptTokens: 0, completionTokens: 0 };
+      if (!acc?.[spanModelProvider]) {
+        acc[spanModelProvider] = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
       }
 
-      acc[spanProvider].promptTokens += spanUsage.promptTokens || 0;
-      acc[spanProvider].completionTokens += spanUsage.completionTokens || 0;
+      acc[spanModelProvider].promptTokens += spanUsage.promptTokens || 0;
+      acc[spanModelProvider].completionTokens += spanUsage.completionTokens || 0;
+      acc[spanModelProvider].totalTokens += (spanUsage.promptTokens || 0) + (spanUsage.completionTokens || 0);
 
       return acc;
     },
-    {} as Record<string, { promptTokens: number; completionTokens: number }>,
+    {} as Record<string, { promptTokens: number; completionTokens: number; totalTokens: number }>,
   );
-
-  Object.keys(tokensByProvider).forEach(provider => {
-    const { promptTokens, completionTokens } = tokensByProvider[provider];
-    tokensByProvider[provider] = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
-  });
 
   const traceTokensBasedOnSpans: { promptTokens: number; completionTokens: number; totalTokens: number } = Object.keys(
     tokensByProvider,

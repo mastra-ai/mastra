@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 export type SideDialogHeadingProps = {
   children?: React.ReactNode;
   className?: string;
-  as?: 'h1' | 'h2' | 'h3';
+  as?: 'h1' | 'h2';
 };
 
 export function SideDialogHeading({ children, className, as = 'h1' }: SideDialogHeadingProps) {
@@ -12,8 +12,12 @@ export function SideDialogHeading({ children, className, as = 'h1' }: SideDialog
   return (
     <HeadingTag
       className={cn(
-        'flex items-center text-icon4 text-[1.125rem] font-semibold gap-[1rem]',
+        'flex items-start text-icon4 text-[1.125rem] font-semibold gap-[1rem]',
         '[&>svg]:w-[1.5em] [&>svg]:h-[1.5em]',
+        {
+          'text-[1.125rem]': as === 'h1',
+          'text-[1rem]': as === 'h2',
+        },
         className,
       )}
     >

@@ -32,7 +32,6 @@ export function EntryList({
   hasMore?: boolean;
   onNextPage?: () => void;
   onPrevPage?: () => void;
-  onLoadMore?: () => void;
   perPage?: number;
   columns?: Column[];
   searchTerm?: string;

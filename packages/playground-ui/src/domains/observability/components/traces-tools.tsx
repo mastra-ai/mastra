@@ -49,7 +49,7 @@ export function TracesTools({
           placeholder="From"
           value={selectedDateFrom}
           maxValue={selectedDateTo}
-          onValueChange={date => onDateChange?.(date || undefined, 'from')}
+          onValueChange={date => onDateChange?.(date, 'from')}
           className="min-w-[15rem]"
           defaultTimeStrValue="12:00 AM"
           disabled={isLoading}
@@ -58,7 +58,7 @@ export function TracesTools({
           placeholder="To"
           value={selectedDateTo}
           minValue={selectedDateFrom}
-          onValueChange={date => onDateChange?.(date || undefined, 'to')}
+          onValueChange={date => onDateChange?.(date, 'to')}
           className="min-w-[15rem]"
           defaultTimeStrValue="11:59 PM"
           disabled={isLoading}

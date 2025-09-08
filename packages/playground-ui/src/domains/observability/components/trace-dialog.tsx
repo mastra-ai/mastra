@@ -8,9 +8,8 @@ import {
   SideDialogHeader,
   SideDialogHeading,
 } from '@/components/ui/elements';
-import { type UISpan } from '../types';
 import { PanelLeftIcon, HashIcon, EyeIcon, ChevronsLeftRightEllipsisIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
 import { useLinkComponent } from '@/lib/framework';
@@ -18,9 +17,11 @@ import { AISpanRecord } from '@mastra/core';
 import { getTraceInfo, getSpanInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { SpanDetails } from './span-details';
+import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
+import { UISpan } from '../types';
 
 type TraceDialogProps = {
-  traceSpans?: any[];
+  traceSpans?: AISpanRecord[];
   traceId?: string;
   traceDetails?: AISpanRecord;
   isOpen: boolean;
@@ -46,37 +47,59 @@ export function TraceDialog({
   const [combinedView, setCombinedView] = useState<boolean>(false);
   const selectedSpan = traceSpans.find(span => span.spanId === selectedSpanId);
 
-  const handleSpanClick = (span: UISpan) => {
-    setSelectedSpanId(span.id);
+  const hierarchicalSpans = useMemo(() => {
+    return formatHierarchicalSpans(traceSpans);
+  }, [traceSpans]);
+
+  const flatSpans = useMemo(() => {
+    const flattenSpans = (spans: UISpan[]): UISpan[] => {
+      const result: UISpan[] = [];
+
+      const traverse = (span: UISpan) => {
+        result.push(span);
+        if (span.spans && span.spans.length > 0) {
+          span.spans.forEach(traverse);
+        }
+      };
+
+      spans.forEach(traverse);
+      return result;
+    };
+
+    return flattenSpans(hierarchicalSpans);
+  }, [hierarchicalSpans]);
+
+  const handleSpanClick = (id: string) => {
+    setSelectedSpanId(id);
     setDialogIsOpen(true);
   };
 
   const toNextSpan = () => {
-    const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
-    const nextSpan = traceSpans[currentIndex - 1];
+    const currentIndex = flatSpans.findIndex(span => span.id === selectedSpanId);
+    const nextItem = flatSpans[currentIndex + 1];
 
-    if (nextSpan) {
-      setSelectedSpanId(nextSpan.spanId);
+    if (nextItem) {
+      setSelectedSpanId(nextItem.id);
     }
   };
 
   const toPreviousSpan = () => {
-    const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
-    const previousSpan = traceSpans[currentIndex + 1];
+    const currentIndex = flatSpans.findIndex(span => span.id === selectedSpanId);
+    const previousItem = flatSpans[currentIndex - 1];
 
-    if (previousSpan) {
-      setSelectedSpanId(previousSpan.spanId);
+    if (previousItem) {
+      setSelectedSpanId(previousItem.id);
     }
   };
 
   const thereIsNextSpan = () => {
-    const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
-    return currentIndex > 0;
+    const currentIndex = flatSpans.findIndex(span => span.id === selectedSpanId);
+    return currentIndex < flatSpans.length - 1;
   };
 
   const thereIsPreviousSpan = () => {
-    const currentIndex = traceSpans.findIndex(span => span.spanId === selectedSpanId);
-    return currentIndex < traceSpans.length - 1;
+    const currentIndex = flatSpans.findIndex(span => span.id === selectedSpanId);
+    return currentIndex > 0;
   };
 
   const traceInfo = getTraceInfo(traceDetails);
@@ -99,7 +122,7 @@ export function TraceDialog({
         </SideDialogTop>
 
         <div
-          className={cn('pt-[1.5rem] pl-[2rem] grid-rows-[auto_1fr] grid h-full overflow-y-auto', {
+          className={cn('pt-[1.5rem] pl-[2.5rem] grid-rows-[auto_1fr] grid h-full overflow-y-auto', {
             'grid-rows-[auto_1fr_1fr]': selectedSpan && combinedView,
           })}
         >
@@ -118,16 +141,17 @@ export function TraceDialog({
               <TraceSpanUsage
                 traceUsage={traceDetails?.metadata?.usage}
                 traceSpans={traceSpans}
-                className="mt-[3rem] pr-[1.5rem]"
+                className="mt-[2rem] pr-[1.5rem]"
               />
             )}
             <KeyValueList data={traceInfo} LinkComponent={Link} className="mt-[2rem]" />
             <TraceTimeline
+              hierarchicalSpans={hierarchicalSpans}
               spans={traceSpans}
               onSpanClick={handleSpanClick}
               selectedSpanId={selectedSpanId}
               isLoading={isLoadingSpans}
-              className="pr-[1.5rem] pt-[2.5rem]"
+              className="pr-[2.5rem] pt-[2.5rem]"
             />
           </div>
 
@@ -138,9 +162,6 @@ export function TraceDialog({
                 <SideDialogTop
                   onNext={thereIsNextSpan() ? toNextSpan : undefined}
                   onPrevious={thereIsPreviousSpan() ? toPreviousSpan : undefined}
-                  //onNext={toNextSpan}
-                  //onPrevious={toPreviousSpan}
-
                   showInnerNav={true}
                   className="pl-0"
                 >
@@ -163,7 +184,7 @@ export function TraceDialog({
 
               <div className="grid grid-cols-[20rem_1fr] gap-[1rem] overflow-y-auto">
                 <div className="overflow-y-auto grid content-start p-[1.5rem] pl-0 gap-[2rem]">
-                  <SideDialogHeading>
+                  <SideDialogHeading as="h2">
                     <ChevronsLeftRightEllipsisIcon /> {selectedSpan?.name}
                   </SideDialogHeading>
                   {selectedSpan?.attributes?.usage && (
@@ -174,7 +195,7 @@ export function TraceDialog({
                   )}
                   <KeyValueList data={selectedSpanInfo} LinkComponent={Link} />
                 </div>
-                <div className="overflow-y-auto pr-[1.5rem] pt-[2rem]">
+                <div className="overflow-y-auto pr-[2.5rem] pt-[2rem]">
                   <SpanDetails span={selectedSpan} />
                 </div>
               </div>

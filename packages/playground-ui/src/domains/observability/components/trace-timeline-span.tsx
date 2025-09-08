@@ -18,11 +18,9 @@ import { useLinkComponent } from '@/lib/framework';
 type TraceTimelineSpanProps = {
   span: UISpan;
   depth?: number;
-  onSpanClick?: (span: UISpan) => void;
+  onSpanClick?: (id: string) => void;
   selectedSpanId?: string;
-  isFirstChild?: boolean;
   isLastChild?: boolean;
-  isNextToLastChild?: boolean;
   overallLatency?: number;
   overallStartTime?: string;
 };
@@ -32,9 +30,7 @@ export function TraceTimelineSpan({
   depth = 0,
   onSpanClick,
   selectedSpanId,
-  isFirstChild,
   isLastChild,
-  isNextToLastChild,
   overallLatency,
   overallStartTime,
 }: TraceTimelineSpanProps) {
@@ -53,7 +49,7 @@ export function TraceTimelineSpan({
   return (
     <>
       <button
-        onClick={() => onSpanClick?.(span)}
+        onClick={() => onSpanClick?.(span.id)}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         type="button"
@@ -69,14 +65,7 @@ export function TraceTimelineSpan({
         style={{ paddingLeft: `${depth * 1.4}rem` }}
       >
         <div className="flex items-center gap-[1rem] w-full">
-          {!isRootSpan && (
-            <TreePositionMark
-              isLastChild={isLastChild}
-              isNextToLastChild={isNextToLastChild}
-              isFirstChild={isFirstChild}
-              hasChildren={Boolean(hasChildren)}
-            />
-          )}
+          {!isRootSpan && <TreePositionMark isLastChild={isLastChild} hasChildren={Boolean(hasChildren)} />}
           <div className={cn('text-[0.875rem] flex items-center text-left break-all gap-[0.5rem] text-[#fff]  w-full')}>
             {spanUI?.icon && (
               <span className="[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0" style={{ color: spanUI?.color }}>
@@ -115,7 +104,7 @@ export function TraceTimelineSpan({
                 style={{
                   transform:
                     percentageSpanStartTime && percentageSpanStartTime > 70
-                      ? 'translateX(calc((100% + 2rem) * -1)'
+                      ? 'translateX(calc((100% + 2rem) * -1))'
                       : 'none',
                 }}
               >
@@ -125,7 +114,7 @@ export function TraceTimelineSpan({
           </div>
           <div className="relative w-full bg-surface5  h-[3px] ">
             <div
-              className={cn('bg-icon1 h-full absolute rounded-full', {})}
+              className={cn('bg-icon1 h-full absolute rounded-full')}
               style={{
                 width: `${percentageSpanLatency}%`,
                 left: `${percentageSpanStartTime}%`,
@@ -185,9 +174,7 @@ export function TraceTimelineSpan({
 
       {hasChildren &&
         span.spans?.map((childSpan: UISpan, idx: number, array: UISpan[]) => {
-          const isFirstChild = idx === 0;
           const isLastChild = idx === array.length - 1;
-          const isNextToLastChild = idx === array.length - 2;
 
           return (
             <TraceTimelineSpan
@@ -196,9 +183,7 @@ export function TraceTimelineSpan({
               depth={depth + 1}
               onSpanClick={onSpanClick}
               selectedSpanId={selectedSpanId}
-              isFirstChild={isFirstChild}
               isLastChild={isLastChild}
-              isNextToLastChild={isNextToLastChild}
               overallLatency={overallLatency}
               overallStartTime={overallStartTime}
             />
@@ -210,12 +195,10 @@ export function TraceTimelineSpan({
 
 type TreeSymbolProps = {
   isLastChild?: boolean;
-  isNextToLastChild?: boolean;
-  isFirstChild?: boolean;
   hasChildren?: boolean;
 };
 
-function TreePositionMark({ isLastChild, isNextToLastChild, hasChildren }: TreeSymbolProps & { hasChildren: boolean }) {
+function TreePositionMark({ isLastChild, hasChildren = false }: TreeSymbolProps) {
   return (
     <div
       className={cn(
@@ -224,7 +207,6 @@ function TreePositionMark({ isLastChild, isNextToLastChild, hasChildren }: TreeS
         'before:content-[""] before:absolute before:left-0  before:top-[50%] before:w-full before:h-[0px] before:border-b-[0.5px] before:border-white before:border-dashed',
         {
           'after:bottom-[50%]': isLastChild,
-          //     'after:bg-gray-500 after:bottom-auto after:h-[200rem] ': isNextToLastChild,
         },
       )}
     >
