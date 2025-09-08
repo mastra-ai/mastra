@@ -2989,6 +2989,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           outputProcessors,
           returnScorerData: options.returnScorerData,
           tracingContext,
+          _internal: {
+            generateId: inputData.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
+          },
         });
 
         if (format === 'aisdk') {

@@ -136,6 +136,7 @@ export class MastraLLMVNext extends MastraBase {
     providerOptions,
     tracingContext,
     messageList,
+    _internal,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -183,6 +184,7 @@ export class MastraLLMVNext extends MastraBase {
           ...this.experimental_telemetry,
           ...telemetry_settings,
         },
+        _internal,
         output,
         outputProcessors,
         returnScorerData,
