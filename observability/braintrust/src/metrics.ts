@@ -1,9 +1,31 @@
+/**
+ * BraintrustUsageMetrics
+ *
+ * Canonical metric keys expected by Braintrust for LLM usage accounting.
+ * These map various provider/SDK-specific usage fields to a common schema.
+ * - prompt_tokens: input-side tokens (aka inputTokens/promptTokens)
+ * - completion_tokens: output-side tokens (aka outputTokens/completionTokens)
+ * - tokens: total tokens (provided or derived)
+ * - completion_reasoning_tokens: reasoning tokens, when available
+ * - prompt_cached_tokens: tokens served from cache (provider-specific)
+ * - prompt_cache_creation_tokens: tokens used to create cache (provider-specific)
+ */
+export interface BraintrustUsageMetrics {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  tokens?: number;
+  completion_reasoning_tokens?: number;
+  prompt_cached_tokens?: number;
+  prompt_cache_creation_tokens?: number;
+  [key: string]: number | undefined;
+}
+
 export function normalizeUsageMetrics(
   usage: unknown,
   provider?: string,
   providerMetadata?: Record<string, unknown>,
-): Record<string, number> {
-  const metrics: Record<string, number> = {};
+): BraintrustUsageMetrics {
+  const metrics: BraintrustUsageMetrics = {};
 
   // Standard AI SDK usage fields
   const inputTokens =
@@ -59,14 +81,7 @@ function getNumberProperty(obj: unknown, key: string): number | undefined {
   return typeof value === 'number' ? value : undefined;
 }
 
-interface AnthropicTokenMetrics {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  prompt_cached_tokens?: number;
-  prompt_cache_creation_tokens?: number;
-  tokens?: number;
-  [key: string]: number | undefined;
-}
+type AnthropicTokenMetrics = BraintrustUsageMetrics;
 
 function finalizeAnthropicTokens(metrics: AnthropicTokenMetrics): AnthropicTokenMetrics {
   const finalizedPromptTokens =
