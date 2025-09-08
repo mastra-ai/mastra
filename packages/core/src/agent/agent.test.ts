@@ -6876,6 +6876,61 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       }
     });
   });
+
+  describe(`${version} - streamVNext onFinish providerMetadata`, () => {
+    it(`should include providerMetadata in onFinish callback for ${version}`, async () => {
+      const providerMeta = { testProvider: { testKey: 'testValue' } };
+
+      const testModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Hello' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              providerMetadata: providerMeta,
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-provider-metadata-onfinish',
+        name: 'Test ProviderMetadata onFinish',
+        model: testModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const onFinish = (data: any) => {
+        onFinishCalled = true;
+        finishData = data;
+      };
+
+      const result = await agent.streamVNext('Hello', { onFinish });
+
+      await result.consumeStream();
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+      expect(finishData).toHaveProperty('providerMetadata');
+      expect(finishData.providerMetadata).toStrictEqual(providerMeta);
+    });
+  });
 }
 
 describe('Agent Tests', () => {

@@ -3188,6 +3188,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 messages: messageList.get.response.aiV5.model(),
                 usage: payload.usage,
                 totalUsage: payload.totalUsage,
+                providerMetadata: payload.providerMetadata,
               });
             },
             onStepFinish: result.onStepFinish,
