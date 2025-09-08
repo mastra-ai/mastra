@@ -6,16 +6,17 @@
  * tracing context is automatically injected without requiring manual passing by users.
  */
 
+import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
 import type { Workflow } from '../workflows';
 import type { TracingContext, AnyAISpan } from './types';
 
 const AGENT_GETTERS = ['getAgent', 'getAgentById'];
-const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateVNext', 'streamVNext'];
+const AGENT_METHODS_TO_WRAP = ['generate', 'stream', 'generateVNext', 'streamVNext', 'generateLegacy', 'streamLegacy'];
 
 const WORKFLOW_GETTERS = ['getWorkflow', 'getWorkflowById'];
-const WORKFLOW_METHODS_TO_WRAP = ['execute'];
+const WORKFLOW_METHODS_TO_WRAP = ['execute', 'createRun', 'createRunAsync'];
 
 /**
  * Helper function to detect NoOp spans to avoid unnecessary wrapping
@@ -28,12 +29,31 @@ function isNoOpSpan(span: AnyAISpan): boolean {
 }
 
 /**
+ * Checks to see if a passed object is an actual instance of Mastra
+ * (for the purposes of wrapping it for AI Tracing)
+ */
+export function isMastra<T extends Mastra | (Mastra & MastraPrimitives) | MastraPrimitives>(mastra: T): boolean {
+  const hasAgentGetters = AGENT_GETTERS.every(method => typeof (mastra as any)?.[method] === 'function');
+  const hasWorkflowGetters = WORKFLOW_GETTERS.every(method => typeof (mastra as any)?.[method] === 'function');
+
+  return hasAgentGetters && hasWorkflowGetters;
+}
+
+/**
  * Creates a tracing-aware Mastra proxy that automatically injects
  * AI tracing context into agent and workflow method calls
  */
-export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingContext): T {
+export function wrapMastra<T extends Mastra | (Mastra & MastraPrimitives) | MastraPrimitives>(
+  mastra: T,
+  tracingContext: TracingContext,
+): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return mastra;
+  }
+
+  // Check if this object has the methods we want to wrap - if not, return as is
+  if (!isMastra(mastra)) {
     return mastra;
   }
 
@@ -76,7 +96,7 @@ export function wrapMastra<T extends Mastra>(mastra: T, tracingContext: TracingC
  * Creates a tracing-aware Agent proxy that automatically injects
  * AI tracing context into generation method calls
  */
-export function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T {
+function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return agent;
@@ -115,7 +135,7 @@ export function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingCont
  * Creates a tracing-aware Workflow proxy that automatically injects
  * AI tracing context into execution method calls
  */
-export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingContext): T {
+function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return workflow;
@@ -127,6 +147,15 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: Tr
         try {
           // Wrap workflow execution methods with tracing context
           if (WORKFLOW_METHODS_TO_WRAP.includes(prop as string)) {
+            // Handle createRun and createRunAsync methods differently
+            if (prop === 'createRun' || prop === 'createRunAsync') {
+              return async (options: any = {}) => {
+                const run = await (target as any)[prop](options);
+                return run ? wrapRun(run, tracingContext) : run;
+              };
+            }
+
+            // Handle other methods like execute
             return (input: any, options: any = {}) => {
               return (target as any)[prop](input, {
                 ...options,
@@ -148,5 +177,44 @@ export function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: Tr
   } catch (error) {
     console.warn('AI Tracing: Failed to create workflow proxy, using original instance', error);
     return workflow;
+  }
+}
+
+/**
+ * Creates a tracing-aware Run proxy that automatically injects
+ * AI tracing context into start method calls
+ */
+function wrapRun<T extends object>(run: T, tracingContext: TracingContext): T {
+  // Don't wrap if no current span or if using NoOp span
+  if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
+    return run;
+  }
+
+  try {
+    return new Proxy(run, {
+      get(target, prop) {
+        try {
+          if (prop === 'start') {
+            return (startOptions: any = {}) => {
+              return (target as any).start({
+                ...startOptions,
+                tracingContext: startOptions.tracingContext ?? tracingContext,
+              });
+            };
+          }
+
+          // Pass through all other properties and methods unchanged
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
+        } catch (error) {
+          console.warn('AI Tracing: Failed to wrap run method, falling back to original', error);
+          const value = (target as any)[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
+        }
+      },
+    });
+  } catch (error) {
+    console.warn('AI Tracing: Failed to create run proxy, using original instance', error);
+    return run;
   }
 }
