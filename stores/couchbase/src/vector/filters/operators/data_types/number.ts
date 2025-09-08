@@ -111,3 +111,82 @@ function Number_Handler(field: string, value: Record<string, any>): any {
 }
 
 export { Number_Handler };
+
+function qv_eq_for_numbers(field: string, value: number): any {
+  if (null_or_undefined_or_nan_or_infinite(value)) {
+    return '';
+  }
+  value = normalize_number(value);
+  return `(${field} = ${value})`;
+}
+
+function qv_ne_for_numbers(field: string, value: number): any {
+  return `(${field} != ${value})`;
+}
+
+function qv_gt_for_numbers(field: string, value: number): any {
+  if (null_or_undefined_or_nan_or_infinite(value)) {
+    return '';
+  }
+  value = normalize_number(value);
+  return `(${field} > ${value})`;
+}
+
+function qv_gte_for_numbers(field: string, value: number): any {
+  if (null_or_undefined_or_nan_or_infinite(value)) {
+    return '';
+  }
+  value = normalize_number(value);
+  return `(${field} >= ${value})`;
+}
+
+function qv_lt_for_numbers(field: string, value: number): any {
+  if (null_or_undefined_or_nan_or_infinite(value)) {
+    return '';
+  }
+  value = normalize_number(value);
+  return `(${field} < ${value})`;
+}
+
+function qv_lte_for_numbers(field: string, value: number): any {
+  if (null_or_undefined_or_nan_or_infinite(value)) {
+    return '';
+  }
+  value = normalize_number(value);
+  return `(${field} <= ${value})`;
+}
+
+function qv_Number_Handler(field: string, value: Record<string, any>): any {
+  if (value === null || value === undefined || Object.keys(value).length === 0) {
+    return '';
+  }
+
+  const result: string[] = [];
+  for (const op in value) {
+    switch (op) {
+      case '$eq':
+        result.push(qv_eq_for_numbers(field, value[op]));
+        break;
+      case '$ne':
+        result.push(qv_ne_for_numbers(field, value[op]));
+        break;
+      case '$gt':
+        result.push(qv_gt_for_numbers(field, value[op]));
+        break;
+      case '$gte':
+        result.push(qv_gte_for_numbers(field, value[op]));
+        break;
+      case '$lt':
+        result.push(qv_lt_for_numbers(field, value[op]));
+        break;
+      case '$lte':
+        result.push(qv_lte_for_numbers(field, value[op]));
+        break;
+      default:
+        throw new Error(`Unsupported operator: ${op} for number field ${field}`);
+    }
+  }
+  return result.join(' AND ');
+}
+
+export { qv_Number_Handler };

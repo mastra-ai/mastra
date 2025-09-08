@@ -35,4 +35,39 @@ function Boolean_Handler(field: string, value: Record<string, any>): any {
   return result;
 }
 
-export { Boolean_Handler };
+function qv_eq_for_booleans(field: string, value: boolean): any {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return `(${field} = ${value})`;
+}
+
+function qv_ne_for_booleans(field: string, value: boolean): any {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return `(${field} != ${value})`;
+}
+
+function qv_Boolean_Handler(field: string, value: Record<string, any>): any {
+  if (value === null || value === undefined || Object.keys(value).length === 0) {
+    return '';
+  }
+
+  const result: string[] = [];
+  for (const op in value) {
+    switch (op) {
+      case '$eq':
+        result.push(qv_eq_for_booleans(field, value[op]));
+        break;
+      case '$ne':
+        result.push(qv_ne_for_booleans(field, value[op]));
+        break;
+      default:
+        throw new Error(`Unsupported operator: ${op} for boolean field ${field}`);
+    }
+  }
+  return result.join(' AND ');
+}
+
+export { Boolean_Handler, qv_Boolean_Handler };

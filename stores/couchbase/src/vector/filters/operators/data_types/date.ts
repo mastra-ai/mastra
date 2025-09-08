@@ -99,3 +99,80 @@ function Date_Handler(field: string, value: Record<string, any>): any {
 }
 
 export { Date_Handler };
+
+function qv_eq_for_dates(field: string, value: Date): any {
+  if (null_or_undefined_or_nan(value)) {
+    return '';
+  }
+  return `(${field} = '${value.toISOString()}')`;
+}
+
+function qv_ne_for_dates(field: string, value: Date): any {
+  if (null_or_undefined_or_nan(value)) {
+    return '';
+  }
+  return `(${field} != '${value.toISOString()}')`;
+}
+
+function qv_gt_for_dates(field: string, value: Date): any {
+  if (null_or_undefined_or_nan(value)) {
+    return '';
+  }
+  return `(${field} > '${value.toISOString()}')`;
+}
+
+function qv_gte_for_dates(field: string, value: Date): any {
+  if (null_or_undefined_or_nan(value)) {
+    return '';
+  }
+  return `(${field} >= '${value.toISOString()}')`;
+}
+
+function qv_lt_for_dates(field: string, value: Date): any {
+  if (null_or_undefined_or_nan(value)) {
+    return '';
+  }
+  return `(${field} < '${value.toISOString()}')`;
+}
+
+function qv_lte_for_dates(field: string, value: Date): any {
+  if (null_or_undefined_or_nan(value)) {
+    return '';
+  }
+  return `(${field} <= '${value.toISOString()}')`;
+}
+
+function qv_Date_Handler(field: string, value: Record<string, any>): any {
+  if (value === null || value === undefined || Object.keys(value).length === 0) {
+    return '';
+  }
+
+  const result: string[] = [];
+  for (const op in value) {
+    switch (op) {
+      case '$eq':
+        result.push(qv_eq_for_dates(field, value[op]));
+        break;
+      case '$ne':
+        result.push(qv_ne_for_dates(field, value[op]));
+        break;
+      case '$gt':
+        result.push(qv_gt_for_dates(field, value[op]));
+        break;
+      case '$gte':
+        result.push(qv_gte_for_dates(field, value[op]));
+        break;
+      case '$lt':
+        result.push(qv_lt_for_dates(field, value[op]));
+        break;
+      case '$lte':
+        result.push(qv_lte_for_dates(field, value[op]));
+        break;
+      default:
+        throw new Error(`Unsupported operator: ${op} for date field ${field}`);
+    }
+  }
+  return result.join(' AND ');
+}
+
+export { qv_Date_Handler };
