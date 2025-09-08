@@ -185,10 +185,11 @@ describe('Agent Builder Handlers', () => {
         'workflow-builder': serializeWorkflow(reusableWorkflow),
       });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -209,10 +210,11 @@ describe('Agent Builder Handlers', () => {
         'workflow-builder': serializeWorkflow(reusableWorkflow),
       });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -263,10 +265,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result).toEqual(serializeWorkflow(mockWorkflow));
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -307,10 +310,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result.steps['test-step'].status).toEqual('success');
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -331,10 +335,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result.steps['test-step'].status).toEqual('success');
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -384,10 +389,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result).toBeDefined();
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -425,11 +431,11 @@ describe('Agent Builder Handlers', () => {
       });
 
       expect(result).toEqual({
+        error: undefined,
         status: 'success',
         result: { result: 'success' },
         payload: {},
         steps: {
-          input: {},
           'test-step': {
             status: 'success',
             output: { result: 'success' },
@@ -440,10 +446,11 @@ describe('Agent Builder Handlers', () => {
         },
       });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -478,10 +485,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result).toEqual({ runId: 'test-run' });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -528,10 +536,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result).toEqual({ message: 'Workflow run started' });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -569,10 +578,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -618,9 +628,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result).toEqual({ message: 'Workflow run resumed' });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
+          'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -646,10 +658,11 @@ describe('Agent Builder Handlers', () => {
         total: 0,
       });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -667,10 +680,11 @@ describe('Agent Builder Handlers', () => {
 
       expect(result.total).toEqual(1);
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });
@@ -687,10 +701,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow();
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -715,10 +730,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow();
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -741,10 +757,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow(); // Will throw because streaming is complex to mock
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -767,10 +784,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow(); // Will throw because streaming is complex to mock
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -793,10 +811,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow(); // Will throw because watching is complex to mock
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -826,10 +845,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow('Workflow not found');
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -848,10 +868,11 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow();
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        expect.objectContaining({
+        {
           'merge-template': expect.anything(),
           'workflow-builder': expect.anything(),
-        }),
+        },
+        mockMastra,
       );
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
     });

@@ -1,15 +1,17 @@
-import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
-import { EntryListCell } from './entry-list-cell';
+import { ArrowLeftIcon, ArrowRightIcon, TriangleAlertIcon } from 'lucide-react';
+import { EntryListTextCell } from './entry-list-cell';
 import { EntryListItem } from './entry-list-item';
 import { getColumnTemplate, type Column } from './shared';
 
 import { cn } from '@/lib/utils';
+import { isValidElement } from 'react';
 
 export function EntryList({
-  items,
-  selectedItem,
+  items: dataItems,
+  selectedItemId,
   onItemClick,
   isLoading,
+  isLoadingNextPage,
   total,
   page,
   hasMore,
@@ -18,11 +20,14 @@ export function EntryList({
   perPage,
   columns,
   searchTerm,
+  setEndOfListElement,
+  errorMsg,
 }: {
-  items: any[];
-  selectedItem: Record<string, any> | null;
+  items: Record<string, any>[];
+  selectedItemId?: string;
   onItemClick?: (item: string) => void;
   isLoading?: boolean;
+  isLoadingNextPage?: boolean;
   total?: number;
   page?: number;
   hasMore?: boolean;
@@ -31,16 +36,23 @@ export function EntryList({
   perPage?: number;
   columns?: Column[];
   searchTerm?: string;
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
+  errorMsg?: string;
 }) {
-  console.log('selectedItem', selectedItem);
+  const loadingItems: Record<string, any>[] = Array.from({ length: 3 }).map((_, index) => {
+    return {
+      id: `loading-${index + 1}`,
+      ...(columns || []).reduce(
+        (acc, col) => {
+          acc[col.name] = `...`;
+          return acc;
+        },
+        {} as Record<string, any>,
+      ),
+    };
+  });
 
-  if (isLoading) {
-    return (
-      <div className="flex border border-border1 w-full h-[3.5rem] items-center justify-center text-[0.875rem] text-icon3 rounded-lg">
-        Loading...
-      </div>
-    );
-  }
+  const items = isLoading ? loadingItems : dataItems;
 
   return (
     <div className="grid mb-[3rem]">
@@ -55,7 +67,22 @@ export function EntryList({
         </div>
       </div>
 
-      {items?.length === 0 && (
+      {errorMsg && !isLoading && (
+        <div className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none">
+          <p
+            className={cn(
+              'text-[0.875rem] text-center items-center flex justify-center p-[2.5rem] gap-[1rem] text-icon3',
+              '[&>svg]:w-[1.5em]',
+              '[&>svg]:h-[1.5em]',
+              '[&>svg]:text-red-500',
+            )}
+          >
+            <TriangleAlertIcon /> {errorMsg || 'Something went wrong while fetching the data.'}
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !errorMsg && items?.length === 0 && (
         <div className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none">
           <p className="text-icon3 text-[0.875rem] text-center h-[3.5rem] items-center flex justify-center">
             {searchTerm ? `No results found for "${searchTerm}"` : 'No entries found'}
@@ -63,25 +90,44 @@ export function EntryList({
         </div>
       )}
 
-      {items?.length > 0 && (
+      {!errorMsg && items?.length > 0 && (
         <>
-          <ul className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none overflow-hidden">
+          <ul className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none overflow-y-auto">
             {items.map(item => {
               return (
                 <EntryListItem
                   key={item.id}
                   item={item}
-                  selectedItem={selectedItem}
-                  onClick={onItemClick}
+                  selectedItemId={selectedItemId}
+                  onClick={isLoading ? undefined : onItemClick}
                   columns={columns}
+                  isLoading={isLoading}
                 >
-                  {(columns || []).map(col => (
-                    <EntryListCell key={col.name}>{item?.[col.name]}</EntryListCell>
-                  ))}
+                  {(columns || []).map(col => {
+                    const isValidReactElement = isValidElement(item?.[col.name]);
+
+                    return isValidReactElement ? (
+                      item?.[col.name]
+                    ) : (
+                      <EntryListTextCell key={col.name} isLoading={isLoading}>
+                        {item?.[col.name]}
+                      </EntryListTextCell>
+                    );
+                  })}
                 </EntryListItem>
               );
             })}
           </ul>
+
+          {setEndOfListElement && (
+            <div
+              ref={setEndOfListElement}
+              className="text-[0.875rem] text-icon3 opacity-50 flex mt-[2rem] justify-center"
+            >
+              {isLoadingNextPage && 'Loading...'}
+              {!hasMore && !isLoadingNextPage && !isLoading && 'No more data to load'}
+            </div>
+          )}
 
           {typeof page === 'number' && typeof perPage === 'number' && typeof total === 'number' && (
             <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
