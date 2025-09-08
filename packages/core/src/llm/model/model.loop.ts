@@ -14,7 +14,6 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives } from '../../action';
-import { MessageList } from '../../agent';
 import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
