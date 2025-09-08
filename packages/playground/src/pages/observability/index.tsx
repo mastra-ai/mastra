@@ -211,7 +211,6 @@ export default function Observability() {
               isLoading={isLoadingAiTraces}
               isLoadingNextPage={isFetchingNextPage}
               hasMore={!!hasNextPage}
-              onLoadMore={fetchNextPage}
               setEndOfListElement={setEndOfListElement}
             />
           </div>
