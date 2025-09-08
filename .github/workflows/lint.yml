@@ -163,7 +163,7 @@ jobs:
     name: Validate peer dependencies
     runs-on: ubuntu-latest
     # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     permissions:
       pull-requests: read
 
@@ -179,6 +179,17 @@ jobs:
 
       - name: Install dependencies
         run: npm install semver --no-package-lock
+
+      - name: bump versions
+        run: npx changeset version
+
+      - name: Configure git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Commit changes
+        run: git commit -am "Bump versions" || true
 
       - name: Run peerdeps validator
         run: node ./scripts/validate-peerdeps.mjs

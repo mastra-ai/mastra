@@ -55,7 +55,7 @@ export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined 
   mastra?: MastraUnion;
   runtimeContext: RuntimeContext;
   writer?: ToolStream<any>;
-  tracingContext: TracingContext;
+  tracingContext?: TracingContext;
 }
 
 export interface ToolAction<
