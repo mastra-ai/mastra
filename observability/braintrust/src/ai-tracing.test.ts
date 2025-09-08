@@ -379,8 +379,8 @@ describe('BraintrustExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            inputTokens: 10,
-            outputTokens: 5,
+            promptTokens: 10,
+            completionTokens: 5,
             totalTokens: 15,
           },
           parameters: {

@@ -6,12 +6,14 @@ export function normalizeUsageMetrics(
   const metrics: Record<string, number> = {};
 
   // Standard AI SDK usage fields
-  const inputTokens = getNumberProperty(usage, 'inputTokens');
+  const inputTokens =
+    getNumberProperty(usage, 'inputTokens') ?? getNumberProperty(usage, 'promptTokens');
   if (inputTokens !== undefined) {
     metrics.prompt_tokens = inputTokens;
   }
 
-  const outputTokens = getNumberProperty(usage, 'outputTokens');
+  const outputTokens =
+    getNumberProperty(usage, 'outputTokens') ?? getNumberProperty(usage, 'completionTokens');
   if (outputTokens !== undefined) {
     metrics.completion_tokens = outputTokens;
   }
