@@ -4,6 +4,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
+import esmShim from '@rollup/plugin-esm-shim';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -18,14 +19,9 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
-import { getPackageName, getPackageRootPath } from './utils';
+import { getCompiledDepCachePath, getPackageName, getPackageRootPath } from './utils';
 import { createWorkspacePackageMap, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
-
-interface DependencyMetadata {
-  exports: string[];
-  rootPath: string | null;
-  isWorkspace: boolean;
-}
+import type { DependencyMetadata } from './types';
 
 // TODO: Make this extendable or find a rollup plugin that can do this
 const globalExternals = [
@@ -66,13 +62,6 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
   }
 
   return null;
-}
-
-/**
- * Check if a path is relative without relying on `isAbsolute()` as we want to allow package names (e.g. `@pkg/name`)
- */
-function isRelativePath(id: string): boolean {
-  return id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../');
 }
 
 /**
@@ -209,10 +198,14 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   logger: IMastraLogger,
-  options?: {
+  bundlerOptions?: {
     externals?: string[];
     transpilePackages?: string[];
     isDev?: boolean;
+  },
+  meta?: {
+    workspaceRoot?: string;
+    workspaceMap?: Map<string, WorkspacePackageInfo>;
   },
 ) {
   logger.info('Optimizing dependencies...');
@@ -222,12 +215,32 @@ export async function bundleExternals(
       .join('\n')}`,
   );
 
-  const { externals: customExternals = [], transpilePackages = [] } = options || {};
+  const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
+  const { workspaceRoot = null, workspaceMap = new Map() } = meta || {};
   const allExternals = [...globalExternals, ...customExternals];
   const reverseVirtualReferenceMap = new Map<string, string>();
   const virtualDependencies = new Map();
-  for (const [dep, { exports }] of depsToOptimize.entries()) {
-    const name = dep.replaceAll('/', '-');
+
+  for (const [dep, { exports, isWorkspace, rootPath }] of depsToOptimize.entries()) {
+    let name = dep.replaceAll('/', '-');
+
+    if (isWorkspace && rootPath && isDev && workspaceRoot) {
+      const absolutePath = getCompiledDepCachePath(rootPath, name);
+
+      /**
+       * Further below `[name].mjs` is used. By making the name something like `packages/bar/node_modules/.cache/@monorepo-bar` Rollup writes the file to that path. For this also the `dir` needs adjusting.
+       */
+      name = absolutePath
+        /**
+         * The Rollup output.entryFileNames option doesn't allow relative or absolute paths, so the cacheDirAbsolutePath needs to be converted to a name relative to the workspace root.
+         */
+        .replace(workspaceRoot, '')
+        /**
+         * Remove leading slashes/backslashes
+         */
+        .replace(/^[/\\]+/, '');
+    }
+
     reverseVirtualReferenceMap.set(name, dep);
 
     const virtualFile: string[] = [];
@@ -270,8 +283,6 @@ export async function bundleExternals(
       },
       {} as Record<string, string>,
     ),
-    // this dependency breaks the build, so we need to exclude it
-    // TODO actually fix this so we don't need to exclude it
     external: allExternals,
     treeshake: 'smallest',
     plugins: [
@@ -284,24 +295,6 @@ export async function bundleExternals(
           {} as Record<string, string>,
         ),
       ),
-      options?.isDev
-        ? ({
-            name: 'external-resolver',
-            async resolveId(id, importer, options) {
-              const pathsToTranspile = [...transpilePackagesMap.values()];
-              if (importer && pathsToTranspile.some(p => importer?.startsWith(p)) && !isRelativePath(id)) {
-                const resolved = await this.resolve(id, importer, { skipSelf: true, ...options });
-
-                return {
-                  ...resolved,
-                  external: true,
-                };
-              }
-
-              return null;
-            },
-          } as Plugin)
-        : null,
       transpilePackagesMap.size
         ? esbuild({
             format: 'esm',
@@ -318,9 +311,12 @@ export async function bundleExternals(
         transformMixedEsModules: true,
         ignoreTryCatch: false,
       }),
+      isDev ? esmShim() : undefined,
       nodeResolve({
         preferBuiltins: true,
         exportConditions: ['node'],
+        // Do not embed external dependencies into files that we write to `node_modules/.cache` (for the mastra dev + workspace use case)
+        ...(workspaceMap.size > 0 && isDev ? { resolveOnly: Array.from(workspaceMap.keys()) } : {}),
       }),
       // hono is imported from deployer, so we need to resolve from here instead of the project root
       aliasHono(),
@@ -330,7 +326,12 @@ export async function bundleExternals(
 
   const { output } = await bundler.write({
     format: 'esm',
-    dir: outputDir,
+    /**
+     * If Mastra is used inside a monorepo, we need to find the workspace root so that Rollup can use it as base for the output dir. This should only happen during `mastra dev`.
+     *
+     * Otherwise, use outputDir as normal.
+     */
+    dir: isDev ? (workspaceRoot ? workspaceRoot : outputDir) : outputDir,
     entryFileNames: '[name].mjs',
     chunkFileNames: '[name].mjs',
     hoistTransitiveImports: false,
