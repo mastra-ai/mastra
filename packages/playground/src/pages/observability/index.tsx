@@ -59,6 +59,8 @@ export default function Observability() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
+    error: aiTracesError,
+    isError: isAiTracesError,
   } = useAITraces({
     filters:
       selectedEntityOption?.type === 'all'
@@ -211,6 +213,7 @@ export default function Observability() {
               isLoadingNextPage={isFetchingNextPage}
               hasMore={!!hasNextPage}
               setEndOfListElement={setEndOfListElement}
+              errorMsg={isAiTracesError ? aiTracesError.message : undefined}
             />
           </div>
         </div>
