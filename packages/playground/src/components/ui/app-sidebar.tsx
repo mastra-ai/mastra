@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, EyeIcon } from 'lucide-react';
+import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy, EyeIcon, PackageIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -154,6 +154,11 @@ const links = [
     name: 'Runtime Context',
     url: '/runtime-context',
     icon: Globe,
+  },
+  {
+    name: 'Templates',
+    url: '/templates',
+    icon: PackageIcon,
   },
 ];
 

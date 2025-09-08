@@ -424,11 +424,10 @@ export function MastraRuntimeProvider({
                     content += chunk.payload.text;
                   }
 
-                  console.log(chunk.payload.text, 'VALUE');
-
                   updater();
                   break;
                 }
+
                 case 'tool-call': {
                   // Update the messages state
                   setMessages(currentConversation => {

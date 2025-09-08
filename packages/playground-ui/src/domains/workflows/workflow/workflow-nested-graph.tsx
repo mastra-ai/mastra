@@ -88,7 +88,11 @@ export function WorkflowNestedGraph({
                 steps[`${workflowName}.${e.data?.previousStepId}`]?.status === 'success' &&
                 steps[`${workflowName}.${e.data?.nextStepId}`]
                   ? '#22c55e'
-                  : undefined,
+                  : e.data?.conditionNode &&
+                      !steps[`${workflowName}.${e.data?.previousStepId}`] &&
+                      Boolean(steps[`${workflowName}.${e.data?.nextStepId}`]?.status)
+                    ? '#22c55e'
+                    : undefined,
             },
           }))}
           fitView

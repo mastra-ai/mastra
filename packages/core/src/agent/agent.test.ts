@@ -733,6 +733,83 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(response.steps.length).toBe(7);
     }, 500000);
 
+    it('should retry when tool fails and eventually succeed with maxSteps=5', async () => {
+      let toolCallCount = 0;
+      const failuresBeforeSuccess = 2; // Tool will fail 2 times then succeed
+
+      const flakeyTool = createTool({
+        id: 'flakeyTool',
+        description: 'A tool that fails initially but eventually succeeds',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ context }) => {
+          toolCallCount++;
+          if (toolCallCount <= failuresBeforeSuccess) {
+            throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
+          }
+          return { output: `Success on attempt ${toolCallCount}: ${context.input}` };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'retry-agent',
+        instructions: 'Call the flakey tool with input "test data".',
+        model: openaiModel,
+        tools: { flakeyTool },
+      });
+      agent.__setLogger(noopLogger);
+
+      let response;
+      if (version === 'v1') {
+        response = await agent.generate('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      } else {
+        response = await agent.generateVNext('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+      }
+
+      // Should have made multiple attempts
+      expect(response.steps.length).toBeGreaterThan(1);
+      expect(response.steps.length).toBeLessThanOrEqual(5);
+
+      // Should have at least 3 tool calls total (2 failures + 1 success)
+      expect(toolCallCount).toBeGreaterThanOrEqual(3);
+
+      // Check that we eventually get a success result
+      let foundSuccess = false;
+      if (version === 'v1') {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (result.toolName === 'flakeyTool' && result.result && result.result.output?.includes('Success')) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      } else {
+        for (const step of response.steps) {
+          if (step.toolResults) {
+            for (const result of step.toolResults) {
+              if (
+                result.payload.toolName === 'flakeyTool' &&
+                result.payload.result &&
+                result.payload.result.output?.includes('Success')
+              ) {
+                foundSuccess = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      expect(foundSuccess).toBe(true);
+    }, 500000);
+
     it('should call testTool from TestIntegration', async () => {
       const testAgent = new Agent({
         name: 'Test agent',
@@ -2831,9 +2908,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      await expect(
-        userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} }),
-      ).rejects.toThrow(/same name/i);
+      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
     });
 
     it('should sanitize tool names with invalid characters', async () => {
@@ -2905,7 +2980,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
       expect(Object.keys(tools)).toContain('bad___tool_name');
       expect(Object.keys(tools)).not.toContain(badName);
     });
@@ -2979,7 +3054,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
       expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
@@ -3053,7 +3128,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
@@ -6341,7 +6416,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         clientTools: {
           changeColor: {
             id: 'changeColor',
-            description: 'This is a test tool that returns the name and email',
+            description: 'This is a test tool that changes the color of the text',
             inputSchema: z.object({
               color: z.string(),
             }),
@@ -6597,6 +6672,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         structuredOutput: false,
         threadId: undefined,
         resourceId: undefined,
+        tracingContext: expect.any(Object),
       });
     });
   });

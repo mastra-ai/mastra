@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.11.3",
+  "version": "0.12.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -67,7 +67,7 @@
     "commander": "^12.1.0",
     "dotenv": "^16.6.1",
     "execa": "^9.6.0",
-    "fs-extra": "^11.3.0",
+    "fs-extra": "^11.3.1",
     "get-port": "^7.1.0",
     "open": "^10.1.2",
     "picocolors": "^1.1.1",
@@ -100,7 +100,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.2-0 <0.16.0-0",
+    "@mastra/core": ">=0.10.2-0 <0.17.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

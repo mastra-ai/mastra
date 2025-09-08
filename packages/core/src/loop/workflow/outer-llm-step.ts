@@ -165,7 +165,7 @@ export function createOuterLLMWorkflow<
       }
       return inputData.output.toolCalls || [];
     })
-    .foreach(toolCallStep)
+    .foreach(toolCallStep, { concurrency: 10 })
     .then(llmMappingStep)
     .commit();
 }
