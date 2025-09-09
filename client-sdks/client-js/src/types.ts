@@ -79,6 +79,18 @@ export interface GetAgentResponse {
   modelVersion: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
+  modelList:
+    | Array<{
+        id: string;
+        enabled: boolean;
+        maxRetries: number;
+        model: {
+          modelId: string;
+          provider: string;
+          modelVersion: string;
+        };
+      }>
+    | undefined;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -123,6 +135,20 @@ export type StreamVNextParams<
 export type UpdateModelParams = {
   modelId: string;
   provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+};
+
+export type UpdateModelInModelListParams = {
+  modelConfigId: string;
+  model?: {
+    modelId: string;
+    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  };
+  maxRetries?: number;
+  enabled?: boolean;
+};
+
+export type ReorderModelListParams = {
+  reorderedModelIds: string[];
 };
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {

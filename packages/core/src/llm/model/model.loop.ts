@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+// import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -23,18 +23,19 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
+import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
 
 export class MastraLLMVNext extends MastraBase {
-  #model: LanguageModelV2;
+  #models: ModelManagerModelConfig[];
   #mastra?: Mastra;
 
-  constructor({ model, mastra }: { model: LanguageModelV2; mastra?: Mastra }) {
+  constructor({ mastra, models }: { mastra?: Mastra; models: ModelManagerModelConfig[] }) {
     super({ name: 'aisdk' });
 
-    this.#model = model;
+    this.#models = models;
 
     if (mastra) {
       this.#mastra = mastra;
@@ -59,19 +60,19 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   getProvider() {
-    return this.#model.provider;
+    return this.#models[0]!.model?.provider;
   }
 
   getModelId() {
-    return this.#model.modelId;
+    return this.#models[0]!.model?.modelId;
   }
 
   getModel() {
-    return this.#model;
+    return this.#models[0]!.model;
   }
 
   private _applySchemaCompat(schema: OutputSchema): Schema {
-    const model = this.#model;
+    const model = this.#models[0]?.model;
 
     const schemaCompatLayers = [];
 
@@ -138,6 +139,7 @@ export class MastraLLMVNext extends MastraBase {
     tracingContext,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
+    const firstModel = this.#models[0]?.model!;
     let stopWhenToUse;
 
     if (maxSteps && typeof maxSteps === 'number') {
@@ -146,7 +148,6 @@ export class MastraLLMVNext extends MastraBase {
       stopWhenToUse = stopWhen;
     }
 
-    const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
       threadId,
@@ -156,12 +157,12 @@ export class MastraLLMVNext extends MastraBase {
     });
 
     const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
-      name: `llm stream: '${model.modelId}'`,
+      name: `llm stream: '${firstModel.modelId}'`,
       type: AISpanType.LLM_GENERATION,
       input: messages,
       attributes: {
-        model: model.modelId,
-        provider: model.provider,
+        model: firstModel.modelId,
+        provider: firstModel.provider,
         streaming: true,
       },
       metadata: {
@@ -179,7 +180,7 @@ export class MastraLLMVNext extends MastraBase {
 
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         messageList,
-        model: this.#model,
+        models: this.#models,
         tools: tools as Tools,
         stopWhen: stopWhenToUse,
         toolChoice,
@@ -205,8 +206,8 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: model.modelId,
-                    modelProvider: model.provider,
+                    modelId: props.model.modelId,
+                    modelProvider: props.model.provider,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
@@ -250,8 +251,8 @@ export class MastraLLMVNext extends MastraBase {
                   domain: ErrorDomain.LLM,
                   category: ErrorCategory.USER,
                   details: {
-                    modelId: model.modelId,
-                    modelProvider: model.provider,
+                    modelId: props.model.modelId,
+                    modelProvider: props.model.provider,
                     runId: runId ?? 'unknown',
                     threadId: threadId ?? 'unknown',
                     resourceId: resourceId ?? 'unknown',
@@ -291,8 +292,8 @@ export class MastraLLMVNext extends MastraBase {
           domain: ErrorDomain.LLM,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            modelId: model.modelId,
-            modelProvider: model.provider,
+            modelId: firstModel.modelId,
+            modelProvider: firstModel.provider,
             runId: runId ?? 'unknown',
             threadId: threadId ?? 'unknown',
             resourceId: resourceId ?? 'unknown',

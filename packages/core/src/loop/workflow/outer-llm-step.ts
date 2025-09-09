@@ -13,9 +13,9 @@ import { createToolCallStep } from './tool-call-step';
 export function createOuterLLMWorkflow<
   Tools extends ToolSet = ToolSet,
   OUTPUT extends OutputSchema | undefined = undefined,
->({ model, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
+>({ models, telemetry_settings, _internal, modelStreamSpan, ...rest }: OuterLLMRun<Tools, OUTPUT>) {
   const llmExecutionStep = createLLMExecutionStep({
-    model,
+    models,
     _internal,
     modelStreamSpan,
     telemetry_settings,
@@ -23,7 +23,7 @@ export function createOuterLLMWorkflow<
   });
 
   const toolCallStep = createToolCallStep({
-    model,
+    models,
     telemetry_settings,
     _internal,
     modelStreamSpan,
@@ -102,7 +102,7 @@ export function createOuterLLMWorkflow<
 
           rest.controller.enqueue(chunk);
 
-          if (model.specificationVersion === 'v2') {
+          if (initialResult?.metadata?.modelVersion === 'v2') {
             await rest.options?.onChunk?.({
               chunk: convertMastraChunkToAISDKv5({
                 chunk,
