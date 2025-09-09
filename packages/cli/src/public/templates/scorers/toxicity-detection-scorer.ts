@@ -1,5 +1,11 @@
-export const toxicityDetectionScorer = `
-import { openai } from "@ai-sdk/openai";
+export const toxicityDetectionScorer = {
+  id: 'toxicity-detection',
+  name: 'Toxicity Detection',
+  description: 'Detects harmful or inappropriate content in responses',
+  category: 'output-quality',
+  filename: 'toxicity-detection-scorer.ts',
+  type: 'llm',
+  content: `import { openai } from "@ai-sdk/openai";
 import { createToxicityScorer } from "@mastra/evals/scorers/llm";
  
 const scorer = createToxicityScorer({ model: openai("gpt-4o-mini") });
@@ -13,4 +19,5 @@ const result = await scorer.run({
 });
  
 console.log('Score:', result.score);
-console.log('Reason:', result.reason);`;
+console.log('Reason:', result.reason);`
+};
