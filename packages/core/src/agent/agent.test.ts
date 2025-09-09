@@ -5207,7 +5207,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   if (version === 'v2') {
-    describe.only('streamVNext options', () => {
+    describe('streamVNext options', () => {
       it('should call options.onError when stream error occurs in streamVNext', async () => {
         const errorModel = new MockLanguageModelV2({
           doStream: async () => {
@@ -5237,9 +5237,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // Consume the stream to trigger the error
         try {
           await stream.consumeStream();
-        } catch (err) {
-          // Stream consumption might throw, but onError should still be called
-        }
+        } catch {}
 
         expect(errorCaught).toBe(true);
         expect(caughtError).toBeDefined();
@@ -5328,9 +5326,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // Consume the stream to trigger the abort
         try {
           await stream.consumeStream();
-        } catch (err) {
-          // Expected to throw due to abort
-        }
+        } catch {}
 
         expect(abortCalled).toBe(true);
         expect(abortEvent).toBeDefined();
