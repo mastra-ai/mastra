@@ -1,5 +1,11 @@
-export const answerRelevancyScorer = `
-import { openai } from "@ai-sdk/openai";
+export const answerRelevancyScorer = {
+  id: 'answer-relevancy',
+  name: 'Answer Relevancy',
+  description: 'Evaluates how well responses address the input query using LLM',
+  category: 'accuracy-and-reliability',
+  filename: 'answer-relevancy-scorer.ts',
+  type: 'llm',
+  content: `import { openai } from "@ai-sdk/openai";
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/llm";
  
 const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") });
@@ -11,5 +17,5 @@ const result = await scorer.run({
   input: inputMessages,
   output: outputMessage,
 });
-console.log(result);
-`;
+console.log(result);`
+};

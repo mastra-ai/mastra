@@ -1,5 +1,11 @@
-export const faithfulnessScorer = `
-import { openai } from "@ai-sdk/openai";
+export const faithfulnessScorer = {
+  id: 'faithfulness',
+  name: 'Faithfulness',
+  description: 'Measures how accurately responses represent provided context',
+  category: 'accuracy-and-reliability',
+  filename: 'faithfulness-scorer.ts',
+  type: 'llm',
+  content: `import { openai } from "@ai-sdk/openai";
 import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
  
 const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
@@ -18,4 +24,5 @@ const result = await scorer.run({
   output: { text: response },
 });
  
-console.log(result);`;
+console.log(result);`
+};

@@ -1,5 +1,11 @@
-export const hallucinationScorer = `
-import { openai } from "@ai-sdk/openai";
+export const hallucinationScorer = {
+  id: 'hallucination',
+  name: 'Hallucination Detection',
+  description: 'Detects facts or claims not present in provided context',
+  category: 'accuracy-and-reliability',
+  filename: 'hallucination-scorer.ts',
+  type: 'llm',
+  content: `import { openai } from "@ai-sdk/openai";
 import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
  
 const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
@@ -18,4 +24,5 @@ const result = await scorer.run({
   output: { text: response },
 });
  
-console.log(result);`;
+console.log(result);`
+};

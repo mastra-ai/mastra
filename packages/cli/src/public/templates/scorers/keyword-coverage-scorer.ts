@@ -1,5 +1,11 @@
-export const keywordCoverageScorer = `
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
+export const keywordCoverageScorer = {
+  id: 'keyword-coverage',
+  name: 'Keyword Coverage',
+  description: 'Assesses how well output covers important keywords from input',
+  category: 'output-quality',
+  filename: 'keyword-coverage-scorer.ts',
+  type: 'code',
+  content: `import { createKeywordCoverageScorer } from "@mastra/evals/scorers/code";
  
 const scorer = createKeywordCoverageScorer();
  
@@ -12,4 +18,5 @@ const result = await scorer.run({
 });
  
 console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);`;
+console.log('AnalyzeStepResult:', result.analyzeStepResult);`
+};

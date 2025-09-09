@@ -1,5 +1,11 @@
-export const completenessScorer = `
-import { openai } from "@ai-sdk/openai";
+export const completenessScorer = {
+  id: 'completeness',
+  name: 'Completeness',
+  description: 'Checks if responses include all necessary information',
+  category: 'accuracy-and-reliability',
+  filename: 'completeness-scorer.ts',
+  type: 'code',
+  content: `import { openai } from "@ai-sdk/openai";
 import { createCompletenessScorer } from "@mastra/evals/scorers/llm";
  
 const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini") });
@@ -13,4 +19,5 @@ const result = await scorer.run({
   output: { text: response },
 });
  
-console.log(result);`;
+console.log(result);`
+};

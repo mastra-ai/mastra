@@ -1,4 +1,11 @@
-export const biasDetectionScorer = `
+export const biasScorer = {
+    id: 'bias',
+    name: 'Bias Detection',
+    description: 'Evaluates whether output contains biases',
+    category: 'output-quality',
+    filename: 'bias-scorer.ts',
+    type: 'llm',
+    content:`
 import { openai } from "@ai-sdk/openai";
 import { createBiasScorer } from "@mastra/evals/scorers/llm";
  
@@ -12,5 +19,7 @@ const result = await scorer.run({
   input: [{ role: 'user', content: query }],
   output: { text: response },
 });
-console.log(result);
-`;
+ 
+console.log(result);    
+`
+}

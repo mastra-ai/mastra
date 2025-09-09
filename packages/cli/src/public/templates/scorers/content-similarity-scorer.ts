@@ -1,5 +1,11 @@
-export const contentSimilarityScorer = `
-import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+export const contentSimilarityScorer = {
+  id: 'content-similarity',
+  name: 'Content Similarity',
+  description: 'Evaluates consistency of information across different phrasings',
+  category: 'accuracy-and-reliability',
+  filename: 'content-similarity-scorer.ts',
+  type: 'code',
+  content: `import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
  
 const scorer = createContentSimilarityScorer();
  
@@ -11,5 +17,5 @@ const result = await scorer.run({
   output: { text: response },
 });
  
-console.log(result);
-`;
+console.log(result);`
+};

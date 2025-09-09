@@ -1,5 +1,11 @@
-export const textualDifferenceScorer = `
-import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
+export const textualDifferenceScorer = {
+  id: 'textual-difference',
+  name: 'Textual Difference',
+  description: 'Measures textual differences between strings',
+  category: 'accuracy-and-reliability',
+  filename: 'textual-difference-scorer.ts',
+  type: 'code',
+  content: `import { createTextualDifferenceScorer } from "@mastra/evals/scorers/code";
  
 const scorer = createTextualDifferenceScorer();
  
@@ -12,5 +18,5 @@ const result = await scorer.run({
 });
  
 console.log('Score:', result.score);
-console.log('AnalyzeStepResult:', result.analyzeStepResult);
-`;
+console.log('AnalyzeStepResult:', result.analyzeStepResult);`
+};
