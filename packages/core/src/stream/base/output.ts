@@ -602,8 +602,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     let fullStream = this.teeStream();
 
-    // Output processors are now applied in the baseStream transform
-    // so we don't need to apply them here anymore
 
     return fullStream
       .pipeThrough(
