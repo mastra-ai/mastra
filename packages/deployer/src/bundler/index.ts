@@ -70,6 +70,7 @@ export abstract class Bundler extends MastraBundler {
 
     // add telemetry dependencies
     dependenciesMap.set('@opentelemetry/core', '^2.0.1');
+    dependenciesMap.set('@opentelemetry/api', '^1.9.0');
     dependenciesMap.set('@opentelemetry/auto-instrumentations-node', '^0.59.0');
     dependenciesMap.set('@opentelemetry/exporter-trace-otlp-grpc', '^0.201.0');
     dependenciesMap.set('@opentelemetry/exporter-trace-otlp-http', '^0.201.0');
