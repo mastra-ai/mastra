@@ -1,25 +1,31 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { DepsService } from '../../services/service.deps';
-import { toCamelCase } from '../../utils/string';
 import { AVAILABLE_SCORERS } from './available-scorers';
 import { writeScorer } from './file-utils';
 import type { ScorerTemplate } from './types';
 
 export async function selectScorer(): Promise<ScorerTemplate[] | null> {
-  const options = [];
+  const groupedScorers = AVAILABLE_SCORERS.reduce(
+    (acc, curr) => {
+      if (!acc[curr.type]) {
+        acc[curr.type] = [];
+      }
+      let obj = acc[curr.type];
+      if (!obj) return acc;
+      obj.push({
+        value: curr.id,
+        label: `${curr.name}`,
+        hint: `${curr.description}`,
+      });
+      return acc;
+    },
+    {} as Record<string, Array<{ value: string; label: string; hint: string }>>,
+  );
 
-  for (const scorer of AVAILABLE_SCORERS) {
-    options.push({
-      value: scorer.id,
-      label: `${scorer.name}`,
-      hint: `${scorer.description}`,
-    });
-  }
-
-  const selectedIds = await p.multiselect({
+  const selectedIds = await p.groupMultiselect({
     message: 'Choose a scorer to add:',
-    options,
+    options: groupedScorers,
   });
 
   if (p.isCancel(selectedIds) || typeof selectedIds !== 'object') {
@@ -60,10 +66,8 @@ export async function addNewScorer(scorerId?: string, customDir?: string) {
     return;
   }
 
-  const { id, filename } = foundScorer;
-
   try {
-    const res = await initializeScorer(id, filename, customDir);
+    const res = await initializeScorer(foundScorer, customDir);
     if (!res.ok) {
       return;
     }
@@ -78,13 +82,10 @@ export async function addNewScorer(scorerId?: string, customDir?: string) {
   }
 }
 
-async function initializeScorer(scorerId: string, filename: string, customPath?: string) {
+async function initializeScorer(scorer: ScorerTemplate, customPath?: string) {
   try {
-    const templatePath = `../../templates/scorers/${filename}`;
-    const templateModule = await import(templatePath);
-    const key = `${toCamelCase(scorerId)}Scorer`;
-    const templateContent = templateModule[key];
-    const res = writeScorer(filename, templateContent, customPath);
+    const templateContent = scorer.content;
+    const res = writeScorer(scorer.filename, templateContent, customPath);
     return res;
   } catch (error) {
     throw error;
@@ -133,8 +134,7 @@ async function showInteractivePrompt(providedCustomDir?: string) {
 
   const result = await Promise.allSettled(
     selectedScorers.map(scorer => {
-      const { id, filename } = scorer;
-      return initializeScorer(id, filename, customPath);
+      return initializeScorer(scorer, customPath);
     }),
   );
 
