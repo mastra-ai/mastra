@@ -1,5 +1,6 @@
 ---
 "@mastra/core": patch
+"@mastra/server": patch
 ---
 
-Pass loop options to streamVnext stream
+Flatten loop config in stream options and pass to loop options
