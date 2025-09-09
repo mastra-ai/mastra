@@ -13,7 +13,6 @@ const meta = {
   sleepUntil: ".sleepUntil()",
   waitForEvent: ".waitForEvent()",
   sendEvent: ".sendEvent()",
-  execute: ".execute()",
   "create-run": ".createRunAsync()",
   run: "Run Class",
   "run-methods": { title: "Methods", theme: { collapsed: false } },
