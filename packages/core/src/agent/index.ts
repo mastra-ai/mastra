@@ -816,10 +816,7 @@ export class Agent<
         messageList,
       });
 
-      console.log('DEBUG result', JSON.stringify(result, null, 2));
-
       text = await result.text;
-      console.log('DEBUG text', text);
     } else {
       const result = await (llm as MastraLLMV1).__text({
         runtimeContext,
@@ -859,7 +856,6 @@ export class Agent<
     try {
       if (userMessage) {
         const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
-        console.log('DEBUG normMessage', normMessage);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
