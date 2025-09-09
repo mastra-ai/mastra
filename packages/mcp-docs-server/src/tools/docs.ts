@@ -6,7 +6,7 @@ import { fromPackageRoot, getMatchingPaths } from '../utils';
 
 const docsBaseDir = fromPackageRoot('.docs/raw/');
 
-type ReadMdxResult = { found: true; content: string } | { found: false };
+type ReadMdxResult = { found: true; content: string; isSecurityViolation: boolean } | { found: false; isSecurityViolation: boolean };
 
 // Helper function to list contents of a directory
 async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files: string[] }> {
@@ -39,7 +39,7 @@ async function readMdxContent(docPath: string, queryKeywords: string[]): Promise
   const fullPath = path.resolve(path.join(docsBaseDir, docPath));
   if (!fullPath.startsWith(path.resolve(docsBaseDir))) {
     void logger.error(`Path traversal attempt detected`);
-    return { found: false };
+    return { found: false, isSecurityViolation: true };
   }
   void logger.debug(`Reading MDX content from: ${fullPath}`);
 
@@ -77,17 +77,17 @@ async function readMdxContent(docPath: string, queryKeywords: string[]): Promise
 
       const suggestions = ['---', '', contentBasedSuggestions, ''].join('\n');
 
-      return { found: true, content: dirListing + fileContents + suggestions };
+      return { found: true, content: dirListing + fileContents + suggestions, isSecurityViolation: false };
     }
 
     // If it's a file, just read it
     const content = await fs.readFile(fullPath, 'utf-8');
-    return { found: true, content };
+    return { found: true, content, isSecurityViolation: false };
   } catch (error: any) {
     void logger.error(`Failed to read MDX content: ${fullPath}`, error);
     if (error.code === 'ENOENT') {
       // Only fallback for not found
-      return { found: false };
+      return { found: false, isSecurityViolation: false };
     }
     // Unexpected error: rethrow
     throw error;
@@ -206,6 +206,13 @@ export const docsTool = {
                 path,
                 content: result.content,
                 error: null,
+              };
+            }
+            if (result.isSecurityViolation) {
+              return {
+                path,
+                content: null,
+                error: "Invalid path"
               };
             }
             const directorySuggestions = await findNearestDirectory(path, availablePaths);
