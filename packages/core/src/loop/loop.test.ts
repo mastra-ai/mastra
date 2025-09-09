@@ -13,14 +13,14 @@ import { mockDate } from './test-utils/utils';
 
 describe('Loop Tests', () => {
   describe('AISDK v5', () => {
-    // beforeEach(() => {
-    //   vi.useFakeTimers();
-    //   vi.setSystemTime(mockDate);
-    // });
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(mockDate);
+    });
 
-    // afterEach(() => {
-    //   vi.useRealTimers();
-    // });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
     textStreamTests({ loopFn: loop, runId: 'test-run-id' });
     fullStreamTests({ loopFn: loop, runId: 'test-run-id' });
