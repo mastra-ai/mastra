@@ -370,7 +370,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finalText).toContain('Donald Trump');
     });
 
-    it('should get a structured response from the agent', async () => {
+    it('should get a structured response from the agent with', async () => {
       const electionAgent = new Agent({
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
@@ -440,6 +440,69 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       expect(response.object.length).toBeGreaterThan(1);
       expect(response.object).toMatchObject([
+        {
+          year: '2012',
+          winner: 'Barack Obama',
+        },
+        {
+          year: '2016',
+          winner: 'Donald Trump',
+        },
+      ]);
+    });
+    it.only('should support JSONSchema7 structured output type', async () => {
+      const electionAgent = new Agent({
+        name: 'US Election agent',
+        instructions: 'You know about the past US elections',
+        model: openaiModel,
+      });
+
+      const mastra = new Mastra({
+        agents: { electionAgent },
+        logger: false,
+      });
+
+      const agentOne = mastra.getAgent('electionAgent');
+
+      let response;
+      if (version === 'v1') {
+        response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
+          output: {
+            type: 'object',
+            properties: {
+              winners: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { winner: { type: 'string' }, year: { type: 'string' } },
+                  required: ['winner', 'year'],
+                },
+              },
+            },
+            required: ['winners'],
+          },
+        });
+      } else {
+        response = await agentOne.generateVNext('Give me the winners of 2012 and 2016 US presidential elections', {
+          output: {
+            type: 'object',
+            properties: {
+              winners: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { winner: { type: 'string' }, year: { type: 'string' } },
+                  required: ['winner', 'year'],
+                },
+              },
+            },
+            required: ['winners'],
+          },
+        });
+      }
+
+      expect(response.object.winners.length).toBeGreaterThan(1);
+      expect(response.object.winners).toMatchObject([
         {
           year: '2012',
           winner: 'Barack Obama',
