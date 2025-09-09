@@ -3,11 +3,11 @@ import child_process from 'node:child_process';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
 import type { PackageManager } from '../../utils/package-manager.js';
 import { getPackageManager } from '../utils.js';
+import { interactivePrompt } from '../init/utils';
 
 const exec = util.promisify(child_process.exec);
 
@@ -93,6 +93,8 @@ export const createMastraProject = async ({
       placeholder: 'my-mastra-app',
       defaultValue: 'my-mastra-app',
     }));
+
+  const result = await interactivePrompt();
 
   if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');
@@ -206,7 +208,7 @@ export const createMastraProject = async ({
     p.outro('Project created successfully');
     console.log('');
 
-    return { projectName };
+    return { projectName, result };
   } catch (error) {
     s.stop();
 
