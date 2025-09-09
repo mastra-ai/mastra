@@ -1210,11 +1210,12 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       // Should complete without "tool not found" error
       const stream = result.aisdk.v5.fullStream;
-      const chunks = await convertAsyncIterableToArray(stream as any);
+      const chunks = await convertAsyncIterableToArray(stream);
 
       // Verify tool-result chunk exists with provider output
       const toolResultChunk = chunks.find((c: any) => c.type === 'tool-result');
       expect(toolResultChunk).toBeDefined();
+      // as any because we're testing a case where there's a provider defined tool that's not added to tools: {} in agent definition, so there's no output type
       expect((toolResultChunk as any)?.output).toEqual({
         content: '// app.ts file content\nexport function main() {\n  console.log("Hello");\n}',
         line_count: 4,
