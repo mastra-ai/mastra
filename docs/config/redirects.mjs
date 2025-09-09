@@ -733,4 +733,69 @@ export const redirectList = [
     destination: "/:locale/reference/core/getAgent",
     permanent: true,
   },
+  {
+    source: "/:locale/reference/workflows/branch",
+    destination: "/:locale/reference/workflows/workflow-methods/branch",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/commit",
+    destination: "/:locale/reference/workflows/workflow-methods/commit",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/create-run",
+    destination: "/:locale/reference/workflows/workflow-methods/create-run",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/dountil",
+    destination: "/:locale/reference/workflows/workflow-methods/dountil",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/dowhile",
+    destination: "/:locale/reference/workflows/workflow-methods/dowhile",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/foreach",
+    destination: "/:locale/reference/workflows/workflow-methods/foreach",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/map",
+    destination: "/:locale/reference/workflows/workflow-methods/map",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/parallel",
+    destination: "/:locale/reference/workflows/workflow-methods/parallel",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/sendEvent",
+    destination: "/:locale/reference/workflows/workflow-methods/sendEvent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/sleep",
+    destination: "/:locale/reference/workflows/workflow-methods/sleep",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/sleepUntil",
+    destination: "/:locale/reference/workflows/workflow-methods/sleepUntil",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/then",
+    destination: "/:locale/reference/workflows/workflow-methods/then",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/waitForEvent",
+    destination: "/:locale/reference/workflows/workflow-methods/waitForEvent",
+    permanent: true,
+  },
 ];
