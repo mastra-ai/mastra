@@ -9,7 +9,7 @@ export const listScorers = async (args: any) => {
     command: 'scorers-list',
     args,
     execution: async () => {
-      listAllScorers();
+      return listAllScorers();
     },
     origin,
   });
