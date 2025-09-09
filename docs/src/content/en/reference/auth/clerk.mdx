@@ -30,33 +30,36 @@ export const mastra = new Mastra({
 <PropertiesTable
   content={[
     {
-      name: "jwksUri",
-      type: "string",
-      description: "The JWKS URI from your Clerk application. If not provided, uses MASTRA_JWKS_URI environment variable.",
-      isOptional: true,
-    },
-    {
       name: "publishableKey",
       type: "string",
-      description: "Your Clerk publishable key. If not provided, uses MASTRA_PUBLISHABLE_KEY environment variable.",
+      description: "Your Clerk publishable key. Can be found in your Clerk Dashboard under API Keys.",
       isOptional: true,
+      defaultValue: "process.env.CLERK_PUBLISHABLE_KEY"
     },
     {
       name: "secretKey",
       type: "string",
-      description: "Your Clerk secret key. If not provided, uses MASTRA_SECRET_KEY environment variable.",
+      description: "Your Clerk secret key. Used for server-side authentication and token verification.",
       isOptional: true,
+      defaultValue: "process.env.CLERK_SECRET_KEY"
+    },
+    {
+      name: "jwksUri",
+      type: "string",
+      description: "The JWKS URI from your Clerk application. Used to verify JWT signatures.",
+      isOptional: true,
+      defaultValue: "process.env.CLERK_JWKS_URI"
     },
     {
       name: "name",
       type: "string",
-      description: "Optional name for the auth instance. Inherits from base auth class.",
+      description: "Custom name for the auth provider instance.",
       isOptional: true,
     },
     {
       name: "authorizeUser",
-      type: "(jwtPayload: any, honoRequest: any) => Promise<boolean>",
-      description: "Custom authorization function to validate users beyond JWT verification. Inherits from base auth class.",
+      type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
+      description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users.",
       isOptional: true,
     },
   ]}
