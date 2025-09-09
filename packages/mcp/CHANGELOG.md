@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 0.12.0-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#7527](https://github.com/mastra-ai/mastra/pull/7527))
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.17.5` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.17.5) (from `^1.17.3`, in `dependencies`)
+- Updated dependencies [[`47b6dc9`](https://github.com/mastra-ai/mastra/commit/47b6dc94f4976d4f3d3882e8f19eb365bbc5976c), [`565d65f`](https://github.com/mastra-ai/mastra/commit/565d65fc16314a99f081975ec92f2636dff0c86d), [`4da3d68`](https://github.com/mastra-ai/mastra/commit/4da3d68a778e5c4d5a17351ef223289fe2f45a45), [`0b0bbb2`](https://github.com/mastra-ai/mastra/commit/0b0bbb24f4198ead69792e92b68a350f52b45cf3), [`d951f41`](https://github.com/mastra-ai/mastra/commit/d951f41771e4e5da8da4b9f870949f9509e38756), [`8049e2e`](https://github.com/mastra-ai/mastra/commit/8049e2e8cce80a00353c64894c62b695ac34e35e)]:
+  - @mastra/core@0.16.1-alpha.1
+
 ## 0.12.0-alpha.0
 
 ### Minor Changes

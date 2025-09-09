@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- add workflow streaming in agent thread ([#7506](https://github.com/mastra-ai/mastra/pull/7506))
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes
