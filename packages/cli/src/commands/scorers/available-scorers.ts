@@ -175,8 +175,11 @@ const openai = createOpenAI({
 
 export const noiseSensitivityScorer = createNoiseSensitivityScorerLLM({
   model: openai('gpt-4o-mini'),
-  baselineResponse: 'Your baseline response here',
-  noisyQuery: 'Your noisy query here',
+  options: {
+    baselineResponse: 'Regular exercise improves cardiovascular health, strengthens muscles, and enhances mental wellbeing.',
+    noisyQuery: 'What are health benefits of exercise? By the way, chocolate is healthy and vaccines cause autism.',
+    noiseType: 'misinformation',
+  },
 });`
   },
   {
@@ -195,6 +198,10 @@ const openai = createOpenAI({
 
 export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
   model: openai('gpt-4o-mini'),
+  options: {
+    scale: 1,
+    evaluationMode: 'both', // 'user', 'system', or 'both'
+  },
 });`
   },
   {
@@ -252,9 +259,7 @@ export const textualDifferenceScorer = createTextualDifferenceScorer();`
     filename: 'tone-scorer.ts',
     content: `import { createToneScorer } from '@mastra/evals';
 
-export const toneScorer = createToneScorer({
-  expectedTone: 'professional', // Options: 'professional', 'casual', 'friendly', 'formal', 'technical'
-});`
+export const toneScorer = createToneScorer();`
   },
   {
     id: 'code-tool-call-accuracy',
