@@ -5206,6 +5206,138 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
+  if (version === 'v2') {
+    describe.only('streamVNext options', () => {
+      it('should call options.onError when stream error occurs in streamVNext', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw new Error('Simulated stream error');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-options-onerror',
+          name: 'Test Options OnError',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let errorCaught = false;
+        let caughtError: any = null;
+
+        const stream = await agent.streamVNext('Hello', {
+          options: {
+            onError: ({ error }) => {
+              errorCaught = true;
+              caughtError = error;
+            },
+          },
+        });
+
+        // Consume the stream to trigger the error
+        try {
+          await stream.consumeStream();
+        } catch (err) {
+          // Stream consumption might throw, but onError should still be called
+        }
+
+        expect(errorCaught).toBe(true);
+        expect(caughtError).toBeDefined();
+        expect(caughtError.message).toMatch(/Simulated stream error/);
+      });
+
+      it('should call options.onChunk when streaming in streamVNext', async () => {
+        const agent = new Agent({
+          id: 'test-options-onchunk',
+          name: 'Test Options OnChunk',
+          model: dummyModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const chunks: any[] = [];
+
+        const stream = await agent.streamVNext('Hello', {
+          options: {
+            onChunk: (event: any) => {
+              chunks.push(event.chunk);
+            },
+          },
+        });
+
+        // Consume the stream to trigger chunks
+        await stream.consumeStream();
+
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks[0]).toHaveProperty('type');
+      });
+
+      it('should call options.onAbort when stream is aborted in streamVNext', async () => {
+        const abortController = new AbortController();
+        let pullCalls = 0;
+
+        const abortModel = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              pull(controller) {
+                switch (pullCalls++) {
+                  case 0:
+                    controller.enqueue({
+                      type: 'stream-start',
+                      warnings: [],
+                    });
+                    break;
+                  case 1:
+                    controller.enqueue({
+                      type: 'text-start',
+                      id: '1',
+                    });
+                    break;
+                  case 2:
+                    // Abort during streaming
+                    abortController.abort();
+                    controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                    break;
+                }
+              },
+            }),
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-options-onabort',
+          name: 'Test Options OnAbort',
+          model: abortModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let abortCalled = false;
+        let abortEvent: any = null;
+
+        const stream = await agent.streamVNext('Hello', {
+          options: {
+            onAbort: event => {
+              abortCalled = true;
+              abortEvent = event;
+            },
+            abortSignal: abortController.signal,
+          },
+        });
+
+        // Consume the stream to trigger the abort
+        try {
+          await stream.consumeStream();
+        } catch (err) {
+          // Expected to throw due to abort
+        }
+
+        expect(abortCalled).toBe(true);
+        expect(abortEvent).toBeDefined();
+      });
+    });
+  }
+
   describe(`${version} - dynamic memory configuration`, () => {
     let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
     if (version === 'v1') {

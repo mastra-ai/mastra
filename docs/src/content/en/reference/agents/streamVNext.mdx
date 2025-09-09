@@ -611,6 +611,35 @@ for await (const part of stream.fullStream) {
 return stream.toUIMessageStreamResponse();
 ```
 
+### Using Callbacks with Options
+
+```typescript showLineNumbers copy
+const stream = await agent.streamVNext("Tell me a story", {
+  onFinish: (result) => {
+    console.log('Streaming finished:', result);
+  },
+  onStepFinish: (step) => {
+    console.log('Step completed:', step);
+  },
+  options: {
+    onChunk: (chunk) => {
+      console.log('Received chunk:', chunk);
+    },
+    onError: ({ error }) => {
+      console.error('Streaming error:', error);
+    },
+    onAbort: (event) => {
+      console.log('Stream aborted:', event);
+    },
+  }
+});
+
+// Process the stream
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
+```
+
 ### Advanced Example with Options
 
 ```typescript showLineNumbers copy

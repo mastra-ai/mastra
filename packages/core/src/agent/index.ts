@@ -2994,6 +2994,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           outputProcessors,
           returnScorerData: options.returnScorerData,
           tracingContext,
+          options: options.options,
         });
 
         if (format === 'aisdk') {
