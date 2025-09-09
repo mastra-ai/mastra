@@ -21,11 +21,20 @@ function formatTable(scorers: ScorerTemplate[]): string {
 
   // Create header
   const header = `${color.bold('Name'.padEnd(nameWidth))} │ ${color.bold('ID'.padEnd(idWidth))} │ ${color.bold('Type'.padEnd(typeWidth))} │ ${color.bold('Description'.padEnd(descWidth))}`;
-  const separator = '─'.repeat(nameWidth) + '─┼─' + '─'.repeat(idWidth) + '─┼─' + '─'.repeat(typeWidth) + '─┼─' + '─'.repeat(descWidth) + '─';
+  const separator =
+    '─'.repeat(nameWidth) +
+    '─┼─' +
+    '─'.repeat(idWidth) +
+    '─┼─' +
+    '─'.repeat(typeWidth) +
+    '─┼─' +
+    '─'.repeat(descWidth) +
+    '─';
 
   // Create rows
-  const rows = scorers.map(scorer => 
-    `${scorer.name.padEnd(nameWidth)} │ ${color.dim(scorer.id.padEnd(idWidth))} │ ${scorer.type.padEnd(typeWidth)} │ ${color.dim(scorer.description.padEnd(descWidth))}`
+  const rows = scorers.map(
+    scorer =>
+      `${scorer.name.padEnd(nameWidth)} │ ${color.dim(scorer.id.padEnd(idWidth))} │ ${scorer.type.padEnd(typeWidth)} │ ${color.dim(scorer.description.padEnd(descWidth))}`,
   );
 
   return [header, separator, ...rows].join('\n');

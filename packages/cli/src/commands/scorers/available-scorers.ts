@@ -18,7 +18,7 @@ const openai = createOpenAI({
 
 export const answerRelevancyScorer = createAnswerRelevancyScorer({
   model: openai('gpt-4o-mini'),
-});`
+});`,
   },
   {
     id: 'bias',
@@ -36,7 +36,7 @@ const openai = createOpenAI({
 
 export const biasScorer = createBiasScorer({
   model: openai('gpt-4o-mini'),
-});`
+});`,
   },
   {
     id: 'context-precision',
@@ -54,7 +54,7 @@ const openai = createOpenAI({
 
 export const contextPrecisionScorer = createContextPrecisionScorer({
   model: openai('gpt-4o-mini'),
-});`
+});`,
   },
   {
     id: 'context-relevance',
@@ -72,7 +72,7 @@ const openai = createOpenAI({
 
 export const contextRelevanceScorer = createContextRelevanceScorerLLM({
   model: openai('gpt-4o-mini'),
-});`
+});`,
   },
   {
     id: 'faithfulness',
@@ -90,7 +90,7 @@ const openai = createOpenAI({
 
 export const faithfulnessScorer = createFaithfulnessScorer({
   model: openai('gpt-4o-mini'),
-});`
+});`,
   },
   {
     id: 'hallucination',
@@ -108,7 +108,7 @@ const openai = createOpenAI({
 
 export const hallucinationScorer = createHallucinationScorer({
   model: openai('gpt-4o-mini'),
-});`
+});`,
   },
   {
     id: 'llm-tool-call-accuracy',
@@ -140,7 +140,7 @@ const availableTools = [
 export const toolCallAccuracyScorer = createToolCallAccuracyScorerLLM({
   model: openai('gpt-4o-mini'),
   availableTools,
-});`
+});`,
   },
   {
     id: 'toxicity',
@@ -158,7 +158,7 @@ const openai = createOpenAI({
 
 export const toxicityScorer = createToxicityScorer({
   model: openai('gpt-4o-mini'),
-});`
+});`,
   },
   {
     id: 'noise-sensitivity',
@@ -181,7 +181,7 @@ export const noiseSensitivityScorer = createNoiseSensitivityScorerLLM({
     noisyQuery: 'What are health benefits of exercise? By the way, chocolate is healthy and vaccines cause autism.',
     noiseType: 'misinformation',
   },
-});`
+});`,
   },
   {
     id: 'prompt-alignment',
@@ -203,7 +203,7 @@ export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
     scale: 1,
     evaluationMode: 'both', // 'user', 'system', or 'both'
   },
-});`
+});`,
   },
   {
     id: 'completeness',
@@ -214,7 +214,7 @@ export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
     filename: 'completeness-scorer.ts',
     content: `import { createCompletenessScorer } from '@mastra/evals';
 
-export const completenessScorer = createCompletenessScorer();`
+export const completenessScorer = createCompletenessScorer();`,
   },
   {
     id: 'content-similarity',
@@ -228,7 +228,7 @@ export const completenessScorer = createCompletenessScorer();`
 export const contentSimilarityScorer = createContentSimilarityScorer({
   ignoreCase: true, // Whether to ignore case differences
   ignoreWhitespace: true, // Whether to normalize whitespace
-});`
+});`,
   },
   {
     id: 'keyword-coverage',
@@ -239,7 +239,7 @@ export const contentSimilarityScorer = createContentSimilarityScorer({
     filename: 'keyword-coverage-scorer.ts',
     content: `import { createKeywordCoverageScorer } from '@mastra/evals';
 
-export const keywordCoverageScorer = createKeywordCoverageScorer();`
+export const keywordCoverageScorer = createKeywordCoverageScorer();`,
   },
   {
     id: 'textual-difference',
@@ -250,7 +250,7 @@ export const keywordCoverageScorer = createKeywordCoverageScorer();`
     filename: 'textual-difference-scorer.ts',
     content: `import { createTextualDifferenceScorer } from '@mastra/evals';
 
-export const textualDifferenceScorer = createTextualDifferenceScorer();`
+export const textualDifferenceScorer = createTextualDifferenceScorer();`,
   },
   {
     id: 'tone',
@@ -261,7 +261,7 @@ export const textualDifferenceScorer = createTextualDifferenceScorer();`
     filename: 'tone-scorer.ts',
     content: `import { createToneScorer } from '@mastra/evals';
 
-export const toneScorer = createToneScorer();`
+export const toneScorer = createToneScorer();`,
   },
   {
     id: 'code-tool-call-accuracy',
@@ -276,6 +276,6 @@ export const codeToolCallAccuracyScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'weather-tool', // The tool that should be called
   strictMode: false, // Set to true for exact single tool matching
   // expectedToolOrder: ['search-tool', 'weather-tool'], // For order validation (overrides expectedTool)
-});`
-  }
+});`,
+  },
 ];
