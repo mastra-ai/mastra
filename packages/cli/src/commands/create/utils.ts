@@ -94,13 +94,12 @@ export const createMastraProject = async ({
       defaultValue: 'my-mastra-app',
     }));
 
-  const result = await interactivePrompt();
-
   if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');
     process.exit(0);
   }
 
+  const result = await interactivePrompt();
   const s = p.spinner();
 
   try {
