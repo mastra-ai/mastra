@@ -33,18 +33,23 @@ export type ZodLikePartialSchema<T = any> = (
   safeParse(value: unknown): { success: boolean; data?: Partial<T>; error?: any };
 };
 
+export function asJsonSchema(schema: OutputSchema): JSONSchema7 | undefined {
+  if (!schema) {
+    return undefined;
+  }
+  // Handle JSONSchema7 directly
+  if (schema && typeof schema === 'object' && ('type' in schema || 'properties' in schema || 'enum' in schema)) {
+    return schema as JSONSchema7;
+  }
+  // Handle Zod schemas and AI SDK Schema types
+  return asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>).jsonSchema;
+}
+
 export function getTransformedSchema<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
   let jsonSchema: JSONSchema7 | undefined;
 
-  if (!schema) {
-    jsonSchema = undefined;
-  } else if (schema && typeof schema === 'object' && ('type' in schema || 'properties' in schema || 'enum' in schema)) {
-    // Handle JSONSchema7 directly
-    jsonSchema = schema as JSONSchema7;
-  } else {
-    // Handle Zod schemas and AI SDK Schema types
-    jsonSchema = asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>).jsonSchema;
-  }
+  jsonSchema = asJsonSchema(schema);
+
   if (!jsonSchema) {
     return undefined;
   }

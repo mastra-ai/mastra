@@ -1,6 +1,6 @@
 import { TransformStream } from 'stream/web';
-import { asSchema, isDeepEqualData, parsePartialJson } from 'ai-v5';
-import type { Schema } from 'ai-v5';
+import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
+import type { JSONSchema7, Schema } from 'ai-v5';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
 import { safeValidateTypes } from '../aisdk/v5/compat';
@@ -74,7 +74,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
       typeof schema === 'object' &&
       ('type' in schema || 'properties' in schema || 'enum' in schema)
     ) {
-      this.schema = schema as Schema<InferSchemaOutput<OUTPUT>>;
+      this.schema = jsonSchema(schema as JSONSchema7);
     } else {
       this.schema = asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>);
     }
