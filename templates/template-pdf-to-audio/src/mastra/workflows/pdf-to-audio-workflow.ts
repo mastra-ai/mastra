@@ -1,7 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { RuntimeContext } from '@mastra/core/di';
-import { pdfFetcherTool } from '../tools/summarize-pdf-tool';
+import { summarizePdfTool } from '../tools/summarize-pdf-tool';
 import { textToSpeechTool } from '../tools/text-to-speech-tool';
 
 // Define schemas for input and outputs
@@ -37,7 +37,7 @@ const downloadAndSummarizePdfStep = createStep({
     console.log('Executing Step: download-and-summarize-pdf');
     const { pdfUrl, speaker, speed } = inputData;
 
-    const result = await pdfFetcherTool.execute({
+    const result = await summarizePdfTool.execute({
       context: { pdfUrl },
       mastra,
       runtimeContext: new RuntimeContext(),

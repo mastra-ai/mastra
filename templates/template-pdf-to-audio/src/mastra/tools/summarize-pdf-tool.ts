@@ -2,8 +2,8 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { extractTextFromPDF } from '../lib/util';
 
-export const pdfFetcherTool = createTool({
-  id: 'pdfFetcherTool',
+export const summarizePdfTool = createTool({
+  id: 'summarizePdfTool',
   description: 'Summarizes a PDF from a given URL',
   inputSchema: z.object({
     pdfUrl: z.string().describe('URL to the PDF file to download'),
