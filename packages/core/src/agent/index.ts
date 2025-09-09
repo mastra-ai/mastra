@@ -3191,6 +3191,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               });
             },
             onStepFinish: result.onStepFinish,
+            onChunk: options.onChunk,
+            onError: options.onError,
+            onAbort: options.onAbort,
+            activeTools: options.activeTools,
+            abortSignal: options.abortSignal,
           },
           output: options.output,
           outputProcessors: effectiveOutputProcessors,

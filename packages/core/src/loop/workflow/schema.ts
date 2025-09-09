@@ -18,6 +18,8 @@ export const toolCallInputSchema = z.object({
   toolName: z.string(),
   args: z.any(),
   providerMetadata: z.any(),
+  providerExecuted: z.boolean().optional(),
+  output: z.any().optional(),
 });
 
 export const toolCallOutputSchema = toolCallInputSchema.extend({

@@ -97,6 +97,7 @@ export function createOuterLLMWorkflow<
               toolName: toolCall.toolName,
               result: toolCall.result,
               providerMetadata: toolCall.providerMetadata,
+              providerExecuted: toolCall.providerExecuted,
             },
           };
 

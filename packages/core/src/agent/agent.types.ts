@@ -64,13 +64,21 @@ export type AgentExecutionOptions<
   /** Provider-specific options passed to the language model */
   providerOptions?: LoopOptions['providerOptions'];
 
-  /** Advanced loop configuration options */
-  options?: Omit<LoopConfig, 'onStepFinish' | 'onFinish'>;
-
   /** Callback fired after each execution step. Type varies by format */
   onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
   /** Callback fired when execution completes. Type varies by format */
   onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
+
+  /** Callback fired for each streaming chunk received */
+  onChunk?: LoopConfig['onChunk'];
+  /** Callback fired when an error occurs during streaming */
+  onError?: LoopConfig['onError'];
+  /** Callback fired when streaming is aborted */
+  onAbort?: LoopConfig['onAbort'];
+  /** Tools that are active for this execution */
+  activeTools?: LoopConfig['activeTools'];
+  /** Signal to abort the streaming operation */
+  abortSignal?: LoopConfig['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessor[];
