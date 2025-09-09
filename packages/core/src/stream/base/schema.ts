@@ -38,7 +38,12 @@ export function asJsonSchema(schema: OutputSchema): JSONSchema7 | undefined {
     return undefined;
   }
   // Handle JSONSchema7 directly
-  if (schema && typeof schema === 'object' && ('type' in schema || 'properties' in schema || 'enum' in schema)) {
+  if (
+    schema &&
+    typeof schema === 'object' &&
+    !(schema as z3.ZodType<any> | z4.ZodType<any, any>).safeParse &&
+    !(schema as Schema<any>).jsonSchema
+  ) {
     return schema as JSONSchema7;
   }
   // Handle Zod schemas and AI SDK Schema types

@@ -72,7 +72,8 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
     } else if (
       schema &&
       typeof schema === 'object' &&
-      ('type' in schema || 'properties' in schema || 'enum' in schema)
+      !(schema as z3.ZodType<any> | z4.ZodType<any, any>).safeParse &&
+      !(schema as Schema<any>).jsonSchema
     ) {
       this.schema = jsonSchema(schema as JSONSchema7);
     } else {
