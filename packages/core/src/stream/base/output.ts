@@ -129,14 +129,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   public messageList: MessageList;
 
   constructor({
-    stream,
-    options,
     model: _model,
+    stream,
     messageList,
+    options,
   }: {
     model: {
-      modelId: string;
-      provider: string;
+      modelId: string | undefined;
+      provider: string | undefined;
       version: 'v1' | 'v2';
     };
     stream: ReadableStream<ChunkType<OUTPUT>>;
@@ -394,9 +394,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#tripwire = true;
                   self.#tripwireReason = error.message;
                   self.#delayedPromises.finishReason.resolve('other');
+                  self.#delayedPromises.text.resolve('');
                 } else {
                   self.#error = error instanceof Error ? error.message : String(error);
                   self.#delayedPromises.finishReason.resolve('error');
+                  self.#delayedPromises.text.resolve('');
                 }
                 self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
               }
