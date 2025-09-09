@@ -69,18 +69,29 @@ The suite uses data-driven testing to validate all agent generation methods comp
    - Custom metadata injection via `tracingContext`
    - Child span creation and hierarchy
 
-### **✅ Parameterized Agent Testing (12 tests)**
+### **✅ Parameterized Agent Testing**
 
-**Agent with multiple tools (4 tests)**:
+Each test below ran with:
+
+- `generateLegacy`
+- `generateVNext`
+- `streamLegacy`
+- `streamVNext`
+
+**Agent with multiple tools**:
 
 - Tests all 4 generation methods with intelligent tool calling
 - Validates `AGENT_RUN`, `LLM_GENERATION`, `TOOL_CALL` spans
 - Realistic multi-turn conversations with up to 10 tool calls
 
-**TracingContext in tool calls (8 tests)**:
+**TracingContext in tool calls**:
 
 - **Custom metadata (4 tests)**: All methods × metadata injection
 - **Child spans (4 tests)**: All methods × child span creation
+
+**workflow launched inside agent tool**
+
+- tracing context correctly propegates to workflow
 
 ### **✅ Specialized Features (2 tests)**
 
@@ -103,7 +114,7 @@ These tests reveal specific areas needing AI tracing implementation work:
 #### **Context Propagation Issues**
 
 - agent launched inside workflow step
-- workflow launched inside agent tool
+- workflow launched inside agent directly
 
 #### **Workflow Nesting Issues**
 

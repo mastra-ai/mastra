@@ -11,7 +11,7 @@ import {
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
-import { AISpanType } from '../../ai-tracing';
+import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
@@ -140,13 +140,33 @@ export class CoreToolBuilder extends MastraBase {
           // Handle Vercel tools (AI SDK tools)
           result = await tool?.execute?.(args, execOptions as ToolExecutionOptions);
         } else {
-          // Handle Mastra tools
+          // Handle Mastra tools - wrap mastra instance with tracing context for context propagation
+
+          /**
+           * MASTRA INSTANCE TYPES IN TOOL EXECUTION:
+           *
+           * Full Mastra & MastraPrimitives (has getAgent, getWorkflow, etc.):
+           * - Auto-generated workflow tools from agent.getWorkflows()
+           * - These get this.#mastra directly and can be wrapped
+           *
+           * MastraPrimitives only (limited interface):
+           * - Memory tools (from memory.getTools())
+           * - Assigned tools (agent.tools)
+           * - Toolset tools (from toolsets)
+           * - Client tools (passed as tools in generate/stream options)
+           * - These get mastraProxy and have limited functionality
+           *
+           * TODO: Consider providing full Mastra instance to more tool types for enhanced functionality
+           */
+          // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
+          const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
+
           result = await tool?.execute?.(
             {
               context: args,
               threadId: options.threadId,
               resourceId: options.resourceId,
-              mastra: options.mastra,
+              mastra: wrappedMastra,
               memory: options.memory,
               runId: options.runId,
               runtimeContext: options.runtimeContext ?? new RuntimeContext(),

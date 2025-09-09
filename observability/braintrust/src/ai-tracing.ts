@@ -11,12 +11,15 @@ import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { initLogger } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
+import { normalizeUsageMetrics } from './metrics';
 
 export interface BraintrustExporterConfig {
   /** Braintrust API key */
   apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
+  /** Braintrust project name (default: 'mastra-tracing') */
+  projectName?: string;
   /** Logger level for diagnostic messages (default: 'warn') */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Support tuning parameters */
@@ -192,7 +195,7 @@ export class BraintrustExporter implements AITracingExporter {
 
   private async initLogger(span: AnyAISpan): Promise<void> {
     const logger = await initLogger({
-      projectName: 'mastra-tracing', // TODO: Make this configurable
+      projectName: this.config.projectName ?? 'mastra-tracing',
       apiKey: this.config.apiKey,
       appUrl: this.config.endpoint,
       ...this.config.tuningParameters,
@@ -274,13 +277,13 @@ export class BraintrustExporter implements AITracingExporter {
         payload.metadata.model = llmAttr.model;
       }
 
-      // Usage/token info goes to metrics
-      if (llmAttr.usage !== undefined) {
-        payload.metrics = {
-          ...payload.metrics,
-          ...llmAttr.usage,
-        };
+      // Provider goes to metadata (if provided by attributes)
+      if (llmAttr.provider !== undefined) {
+        payload.metadata.provider = llmAttr.provider;
       }
+
+      // Usage/token info goes to metrics
+      payload.metrics = normalizeUsageMetrics(llmAttr);
 
       // Model parameters go to metadata
       if (llmAttr.parameters !== undefined) {
