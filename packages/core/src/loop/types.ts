@@ -51,6 +51,24 @@ export type LoopConfig = {
   prepareStep?: PrepareStepFunction<any>;
 };
 
+export type OutputSettings = {
+  /**
+   * Validate partial chunks as they are streamed
+   * @default true
+   */
+  validatePartialChunks?: boolean;
+  /**
+   * Emit an error if the partial validation fails
+   * @default true
+   */
+  emitErrorOnPartialValidationFailure?: boolean;
+  /**
+   * Emit an error if the final validation fails
+   * @default true
+   */
+  emitErrorOnFinalValidationFailure?: boolean;
+};
+
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
   model: LanguageModelV2;
   logger?: IMastraLogger;
@@ -73,6 +91,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   maxSteps?: number;
   _internal?: StreamInternal;
   output?: OUTPUT;
+  outputSettings?: OutputSettings;
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;

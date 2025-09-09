@@ -22,6 +22,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   outputProcessors,
   returnScorerData,
   llmAISpan,
+  outputSettings,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -88,6 +89,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     modelSettings,
     outputProcessors,
     llmAISpan,
+    outputSettings,
     ...rest,
   };
 
@@ -110,6 +112,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
       output: rest.output,
+      outputSettings,
       outputProcessors,
       returnScorerData,
     },

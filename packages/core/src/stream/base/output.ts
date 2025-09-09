@@ -8,6 +8,7 @@ import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import type { AIV5Type } from '../../agent/message-list/types';
 import { MastraBase } from '../../base';
+import type { OutputSettings } from '../../loop/types';
 import type { OutputProcessor } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
@@ -43,6 +44,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   onStepFinish?: (event: Record<string, any>) => Promise<void> | void;
   includeRawChunks?: boolean;
   output?: OUTPUT;
+  outputSettings?: OutputSettings;
   outputProcessors?: OutputProcessor[];
   returnScorerData?: boolean;
 };
@@ -601,6 +603,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         createObjectStreamTransformer({
           schema: self.#options.output,
           onFinish: data => self.#delayedPromises.object.resolve(data),
+          outputSettings: self.#options.outputSettings,
         }),
       )
       .pipeThrough(

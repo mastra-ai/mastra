@@ -81,6 +81,193 @@ export function verifyNoObjectGeneratedError(
 
 export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('loopFn', () => {
+    describe('outputSettings', () => {
+      it('should emit an error if the partial validation fails with emitErrorOnPartialValidationFailure: true', async () => {
+        const result = loopFn({
+          model: createTestModel({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: '{ ' },
+              { type: 'text-delta', id: '1', delta: '"content": ' },
+              { type: 'text-delta', id: '1', delta: `123` },
+              { type: 'text-delta', id: '1', delta: ' }' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+                providerMetadata: {
+                  testProvider: {
+                    testKey: 'testValue',
+                  },
+                },
+              },
+            ]),
+          }),
+          output: z.object({ content: z.string() }),
+          outputSettings: {
+            validatePartialChunks: true,
+            emitErrorOnPartialValidationFailure: true,
+            emitErrorOnFinalValidationFailure: false,
+          },
+          messageList: new MessageList(),
+        });
+
+        await convertAsyncIterableToArray(result.objectStream);
+
+        expect(result.error).toBeDefined();
+        expect((result.error as Error).message).toContain('Expected string, received number');
+      });
+
+      it('should NOT emit an error if the partial validation fails with emitErrorOnPartialValidationFailure: false', async () => {
+        const result = loopFn({
+          model: createTestModel({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: '{ ' },
+              { type: 'text-delta', id: '1', delta: '"content": ' },
+              { type: 'text-delta', id: '1', delta: `123` },
+              { type: 'text-delta', id: '1', delta: ' }' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+                providerMetadata: {
+                  testProvider: {
+                    testKey: 'testValue',
+                  },
+                },
+              },
+            ]),
+          }),
+          output: z.object({ content: z.string() }),
+          outputSettings: {
+            validatePartialChunks: true,
+            emitErrorOnPartialValidationFailure: false,
+            emitErrorOnFinalValidationFailure: false,
+          },
+          messageList: new MessageList(),
+        });
+
+        await convertAsyncIterableToArray(result.objectStream);
+
+        expect(result.error).toBeUndefined();
+      });
+
+      it('should validate partial object chunks using zod schema.partial()', async () => {
+        const result = loopFn({
+          model: createTestModel({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: '{ ' },
+              { type: 'text-delta', id: '1', delta: '"content": ' },
+              { type: 'text-delta', id: '1', delta: `"Hello, ` },
+              { type: 'text-delta', id: '1', delta: `world` },
+              { type: 'text-delta', id: '1', delta: `!",` },
+              // extra field that doesn't exist in the schema. Should be stripped out when using zod parse.
+              { type: 'text-delta', id: '1', delta: `"extra": "value"` },
+              { type: 'text-delta', id: '1', delta: ' }' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+                providerMetadata: {
+                  testProvider: {
+                    testKey: 'testValue',
+                  },
+                },
+              },
+            ]),
+          }),
+          output: z.object({ content: z.string() }),
+          outputSettings: {
+            validatePartialChunks: true,
+            emitErrorOnPartialValidationFailure: true,
+            emitErrorOnFinalValidationFailure: true,
+          },
+          messageList: new MessageList(),
+        });
+
+        expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(`
+          [
+            {},
+            {
+              "content": "Hello, ",
+            },
+            {
+              "content": "Hello, world",
+            },
+            {
+              "content": "Hello, world!",
+            },
+          ]
+        `);
+
+        const obj = await result.object;
+        expect(obj).toStrictEqual({
+          content: 'Hello, world!',
+        });
+      });
+
+      it('should emit an error if the final validation fails with emitErrorOnFinalValidationFailure: true', async () => {
+        const result = loopFn({
+          model: createTestModel({
+            stream: convertArrayToReadableStream([
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: '{ "content": 123 }' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: testUsage,
+              },
+            ]),
+          }),
+          output: z.object({ content: z.string() }),
+          outputSettings: { emitErrorOnFinalValidationFailure: true },
+          messageList: new MessageList(),
+        });
+
+        await convertAsyncIterableToArray(result.objectStream);
+
+        expect(result.error).toBeDefined();
+        console.log('result.error', result.error);
+        expect((result.error as Error).message).toContain('Expected string, received number');
+      });
+    });
+
     describe('result.object auto consume promise', () => {
       it('should resolve object promise without manual stream consumption', async () => {
         const result = loopFn({

@@ -1,6 +1,7 @@
 import { TransformStream } from 'stream/web';
 import { asSchema, isDeepEqualData, parsePartialJson } from 'ai-v5';
 import type { Schema } from 'ai-v5';
+import type { OutputSettings } from '../../loop/types';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -23,6 +24,8 @@ interface ProcessPartialChunkResult {
   emitValue?: unknown;
   /** New previous result state for next iteration */
   newPreviousResult?: unknown;
+  /** Error if validation failed */
+  error?: Error;
 }
 
 type ValidateAndTransformFinalResult<OUTPUT extends OutputSchema = undefined> =
@@ -43,6 +46,12 @@ type ValidateAndTransformFinalResult<OUTPUT extends OutputSchema = undefined> =
       error: Error;
     };
 
+const defaultOutputSettings: OutputSettings = {
+  validatePartialChunks: true,
+  emitErrorOnPartialValidationFailure: true,
+  emitErrorOnFinalValidationFailure: true,
+};
+
 /**
  * Base class for all output format handlers.
  * Each handler implements format-specific logic for processing partial chunks
@@ -55,26 +64,30 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    */
   readonly schema: Schema<InferSchemaOutput<OUTPUT>> | undefined;
 
+  readonly outputSettings?: OutputSettings;
   /**
-   * Whether to validate partial chunks. @planned
-   */
-  readonly validatePartialChunks: boolean = false;
-  /**
-   * Partial schema for validating partial chunks as they are streamed. @planned
+   * Partial schema for validating partial chunks as they are streamed.
    */
   readonly partialSchema?: ZodLikePartialSchema<InferSchemaOutput<OUTPUT>> | undefined;
 
-  constructor(schema?: OUTPUT, options: { validatePartialChunks?: boolean } = {}) {
+  constructor(schema?: OUTPUT, outputSettings?: OutputSettings) {
     if (!schema) {
       this.schema = undefined;
     } else {
       this.schema = asSchema(schema);
     }
-    if (options.validatePartialChunks) {
-      if (schema !== undefined && 'partial' in schema && typeof schema.partial === 'function') {
-        this.validatePartialChunks = true;
-        this.partialSchema = schema.partial() as ZodLikePartialSchema<InferSchemaOutput<OUTPUT>>;
-      }
+    if (outputSettings) {
+      this.outputSettings = { ...defaultOutputSettings, ...outputSettings };
+    } else {
+      this.outputSettings = defaultOutputSettings;
+    }
+    if (
+      this.outputSettings?.validatePartialChunks === true &&
+      schema !== undefined &&
+      'partial' in schema &&
+      typeof schema.partial === 'function'
+    ) {
+      this.partialSchema = schema.partial() as ZodLikePartialSchema<InferSchemaOutput<OUTPUT>>;
     }
   }
 
@@ -103,29 +116,33 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
 class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'object' as const;
 
+  async validatePartialObject(currentObjectJson: unknown, previousObject: unknown): Promise<ProcessPartialChunkResult> {
+    const result = this.partialSchema?.safeParse(currentObjectJson);
+    if (result?.error) {
+      return {
+        shouldEmit: !!this.outputSettings?.emitErrorOnPartialValidationFailure,
+        error: result.error,
+      };
+    }
+
+    if (result?.success && result.data && result.data !== undefined && !isDeepEqualData(previousObject, result.data)) {
+      return {
+        shouldEmit: true,
+        emitValue: result.data,
+        newPreviousResult: result.data,
+      };
+    } else {
+      return {
+        shouldEmit: false,
+      };
+    }
+  }
+
   async processPartialChunk({
     accumulatedText,
     previousObject,
   }: ProcessPartialChunkParams): Promise<ProcessPartialChunkResult> {
     const { value: currentObjectJson, state } = await parsePartialJson(accumulatedText);
-
-    // TODO: test partial object chunk validation with schema.partial()
-    if (this.validatePartialChunks && this.partialSchema) {
-      const result = this.partialSchema?.safeParse(currentObjectJson);
-      if (result.success && result.data && result.data !== undefined && !isDeepEqualData(previousObject, result.data)) {
-        return {
-          shouldEmit: true,
-          emitValue: result.data,
-          newPreviousResult: result.data,
-        };
-      }
-      /**
-       * TODO: emit error chunk if partial validation fails?
-       * maybe we need to either not emit the object chunk,
-       * emit our error chunk, or wait until final parse to emit the error chunk?
-       */
-      return { shouldEmit: false };
-    }
 
     if (
       currentObjectJson !== undefined &&
@@ -133,12 +150,21 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
       typeof currentObjectJson === 'object' &&
       !isDeepEqualData(previousObject, currentObjectJson) // avoid emitting duplicates
     ) {
+      if (
+        this.outputSettings?.validatePartialChunks === true &&
+        this.partialSchema &&
+        ['successful-parse', 'repaired-parse'].includes(state)
+      ) {
+        return await this.validatePartialObject(currentObjectJson, previousObject);
+      }
+
       return {
         shouldEmit: ['successful-parse', 'repaired-parse'].includes(state),
         emitValue: currentObjectJson,
         newPreviousResult: currentObjectJson,
       };
     }
+
     return { shouldEmit: false };
   }
 
@@ -171,6 +197,12 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
         value: value as InferSchemaOutput<OUTPUT>,
       };
     }
+    if (!value) {
+      return {
+        success: false,
+        error: new Error('No value generated: could not parse the response.'),
+      };
+    }
 
     try {
       const result = await safeValidateTypes({ value, schema: this.schema });
@@ -183,7 +215,7 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
       } else {
         return {
           success: false,
-          error: result.error ?? new Error('Validation failed', { cause: result.error }),
+          error: result.error ?? new Error(`Validation failed`, { cause: result.error }),
         };
       }
     } catch (error) {
@@ -431,18 +463,20 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
 function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
   schema,
   transformedSchema,
+  outputSettings,
 }: {
   schema?: OUTPUT;
   transformedSchema: ReturnType<typeof getTransformedSchema<OUTPUT>>;
+  outputSettings?: OutputSettings;
 }) {
   switch (transformedSchema?.outputFormat) {
     case 'array':
-      return new ArrayFormatHandler(schema);
+      return new ArrayFormatHandler(schema, outputSettings);
     case 'enum':
-      return new EnumFormatHandler(schema);
+      return new EnumFormatHandler(schema, outputSettings);
     case 'object':
     default:
-      return new ObjectFormatHandler(schema);
+      return new ObjectFormatHandler(schema, outputSettings);
   }
 }
 
@@ -460,6 +494,7 @@ function createOutputHandler<OUTPUT extends OutputSchema = undefined>({
 export function createObjectStreamTransformer<OUTPUT extends OutputSchema = undefined>({
   schema,
   onFinish,
+  outputSettings,
 }: {
   schema?: OUTPUT;
   /**
@@ -467,10 +502,11 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
    * @param data The final parsed object / array
    */
   onFinish: (data: InferSchemaOutput<OUTPUT>) => void;
+  outputSettings?: OutputSettings;
 }) {
   const responseFormat = getResponseFormat(schema);
   const transformedSchema = getTransformedSchema(schema);
-  const handler = createOutputHandler({ transformedSchema, schema });
+  const handler = createOutputHandler({ transformedSchema, schema, outputSettings });
 
   let accumulatedText = '';
   let previousObject: any = undefined;
@@ -503,7 +539,14 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
           previousObject,
         });
 
-        if (result.shouldEmit) {
+        if (result.error && result.shouldEmit) {
+          controller.enqueue({
+            from: chunk.from,
+            runId: chunk.runId,
+            type: 'error',
+            payload: { error: result.error },
+          });
+        } else if (result.shouldEmit) {
           previousObject = result.newPreviousResult ?? previousObject;
           controller.enqueue({
             from: chunk.from,
@@ -519,6 +562,10 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
     },
 
     async flush(controller) {
+      const outputSettingsToUse = {
+        ...defaultOutputSettings,
+        ...outputSettings,
+      };
       if (responseFormat?.type !== 'json') {
         // Not JSON mode, no final validation needed - exit
         return;
@@ -531,13 +578,15 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
 
       const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
-      if (!finalResult.success) {
+      if (!finalResult.success && outputSettingsToUse.emitErrorOnFinalValidationFailure) {
         controller.enqueue({
           from: ChunkFrom.AGENT,
           runId: currentRunId ?? '',
           type: 'error',
           payload: { error: finalResult.error ?? new Error('Validation failed') },
         });
+        return;
+      } else if (!finalResult.success) {
         return;
       }
 
