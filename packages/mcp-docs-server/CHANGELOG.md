@@ -1,5 +1,23 @@
 # @mastra/mcp-docs-server
 
+## 0.13.19-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#7527](https://github.com/mastra-ai/mastra/pull/7527))
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.17.5` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.17.5) (from `^1.17.3`, in `dependencies`)
+- Updated dependencies [[`0f7b8c0`](https://github.com/mastra-ai/mastra/commit/0f7b8c0c22d2a677a0f71c35ad1bc2d60b063d39), [`47b6dc9`](https://github.com/mastra-ai/mastra/commit/47b6dc94f4976d4f3d3882e8f19eb365bbc5976c), [`565d65f`](https://github.com/mastra-ai/mastra/commit/565d65fc16314a99f081975ec92f2636dff0c86d), [`4da3d68`](https://github.com/mastra-ai/mastra/commit/4da3d68a778e5c4d5a17351ef223289fe2f45a45), [`0b0bbb2`](https://github.com/mastra-ai/mastra/commit/0b0bbb24f4198ead69792e92b68a350f52b45cf3), [`d951f41`](https://github.com/mastra-ai/mastra/commit/d951f41771e4e5da8da4b9f870949f9509e38756), [`8049e2e`](https://github.com/mastra-ai/mastra/commit/8049e2e8cce80a00353c64894c62b695ac34e35e)]:
+  - @mastra/mcp@0.12.0-alpha.1
+  - @mastra/core@0.16.1-alpha.1
+
+## 0.13.19-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0662d02`](https://github.com/mastra-ai/mastra/commit/0662d02ef16916e67531890639fcd72c69cfb6e2), [`6189844`](https://github.com/mastra-ai/mastra/commit/61898448e65bda02bb814fb15801a89dc6476938), [`d7a8f59`](https://github.com/mastra-ai/mastra/commit/d7a8f59154b0621aec4f41a6b2ea2b3882f03cb7), [`4dda259`](https://github.com/mastra-ai/mastra/commit/4dda2593b6343f9258671de5fb237aeba3ef6bb7), [`defed1c`](https://github.com/mastra-ai/mastra/commit/defed1ca8040cc8d42e645c5a50a1bc52a4918d7), [`79b39c1`](https://github.com/mastra-ai/mastra/commit/79b39c1def3bbd5d6ee2d2cc1e89ea378a940477), [`6991ced`](https://github.com/mastra-ai/mastra/commit/6991cedcb5a44a49d9fe58ef67926e1f96ba55b1), [`9cb9c42`](https://github.com/mastra-ai/mastra/commit/9cb9c422854ee81074989dd2d8dccc0500ba8d3e), [`8334859`](https://github.com/mastra-ai/mastra/commit/83348594d4f37b311ba4a94d679c5f8721d796d4)]:
+  - @mastra/core@0.16.1-alpha.0
+  - @mastra/mcp@0.12.0-alpha.0
+
 ## 0.13.18
 
 ### Patch Changes

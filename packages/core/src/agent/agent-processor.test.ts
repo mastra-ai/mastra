@@ -1827,8 +1827,8 @@ describe('v1 model - output processors', () => {
     it('should process structured output through output processors', async () => {
       let processedObject: any = null;
 
-      class StructuredOutputProcessor implements Processor {
-        readonly name = 'structured-output-processor';
+      class TestStructuredOutputProcessor implements Processor {
+        readonly name = 'test-structured-output-processor';
 
         async processOutputResult({ messages }) {
           // Process the final generated text and extract the structured data
@@ -1873,7 +1873,7 @@ describe('v1 model - output processors', () => {
             usage: { completionTokens: 10, promptTokens: 10 },
           }),
         }),
-        outputProcessors: [new StructuredOutputProcessor()],
+        outputProcessors: [new TestStructuredOutputProcessor()],
       });
 
       const result = await agent.generate('Who won the 2012 US presidential election?', {

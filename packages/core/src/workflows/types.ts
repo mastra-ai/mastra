@@ -148,6 +148,10 @@ export type WorkflowStreamEvent =
       payload: {};
     }
   | {
+      type: 'workflow-canceled';
+      payload: {};
+    }
+  | {
       type: 'workflow-step-start';
       id: string;
       payload: {

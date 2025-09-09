@@ -984,6 +984,8 @@ export class Workflow<
     return scorers;
   }
 
+  // This method should only be called internally for nested workflow execution, as well as from mastra server handlers
+  // To run a workflow use `.createRunAsync` and then `.start` or `.resume`
   async execute({
     runId,
     inputData,
@@ -1373,7 +1375,13 @@ export class Run<
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
-    return this._start({ inputData, runtimeContext, writableStream, tracingContext, format: 'aisdk' });
+    return this._start({
+      inputData,
+      runtimeContext,
+      writableStream,
+      tracingContext,
+      format: 'aisdk',
+    });
   }
 
   /**
@@ -1492,13 +1500,19 @@ export class Run<
   streamVNext({
     inputData,
     runtimeContext,
+    tracingContext,
     format,
-  }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext; format?: 'aisdk' | 'mastra' | undefined } = {}) {
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+    tracingContext?: TracingContext;
+    format?: 'aisdk' | 'mastra' | undefined;
+  } = {}) {
     this.closeStreamAction = async () => {};
 
     return new MastraWorkflowStream({
       run: this,
-      createStream: writer => {
+      createStream: () => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
             controller.enqueue(chunk);
@@ -1516,7 +1530,8 @@ export class Run<
           }
           isWriting = true;
 
-          let watchWriter = writer.getWriter();
+          let watchWriter = writable.getWriter();
+
           try {
             for (const chunk of chunkToWrite) {
               await watchWriter.write(chunk);
@@ -1555,15 +1570,19 @@ export class Run<
           }
         };
 
-        const executionResults = this._start({ inputData, runtimeContext, writableStream: writable, format }).then(
-          result => {
-            if (result.status !== 'suspended') {
-              this.closeStreamAction?.().catch(() => {});
-            }
+        const executionResults = this._start({
+          inputData,
+          runtimeContext,
+          tracingContext,
+          writableStream: writable,
+          format,
+        }).then(result => {
+          if (result.status !== 'suspended') {
+            this.closeStreamAction?.().catch(() => {});
+          }
 
-            return result;
-          },
-        );
+          return result;
+        });
         this.executionResults = executionResults;
 
         return readable;
