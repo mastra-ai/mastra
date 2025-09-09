@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.16.1-alpha.2
+
+### Patch Changes
+
+- Fixed provider defined tools for stream/generate vnext ([#7642](https://github.com/mastra-ai/mastra/pull/7642))
+
+- Change to createRunAsync ([#7632](https://github.com/mastra-ai/mastra/pull/7632))
+
+- Flatten loop config in stream options and pass to loop options ([#7643](https://github.com/mastra-ai/mastra/pull/7643))
+
+- Fix issue with response message id consistency between stream/generate response and the message ids saveed in the DB. Also fixed the custom generatorId implementation to work with this. ([#7606](https://github.com/mastra-ai/mastra/pull/7606))
+
 ## 0.16.1-alpha.1
 
 ### Patch Changes

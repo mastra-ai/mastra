@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#7612](https://github.com/mastra-ai/mastra/pull/7612))
+  - Updated dependency [`inngest@^3.40.2` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.2) (from `^3.40.1`, in `dependencies`)
+- Updated dependencies [[`827d876`](https://github.com/mastra-ai/mastra/commit/827d8766f36a900afcaf64a040f7ba76249009b3), [`7eaf1d1`](https://github.com/mastra-ai/mastra/commit/7eaf1d1cec7e828d7a98efc2a748ac395bbdba3b), [`f3427cd`](https://github.com/mastra-ai/mastra/commit/f3427cdaf9eecd63360dfc897a4acbf5f4143a4e), [`05f13b8`](https://github.com/mastra-ai/mastra/commit/05f13b8fb269ccfc4de98e9db58dbe16eae55a5e)]:
+  - @mastra/core@0.16.1-alpha.2
+
 ## 0.13.0
 
 ### Minor Changes
