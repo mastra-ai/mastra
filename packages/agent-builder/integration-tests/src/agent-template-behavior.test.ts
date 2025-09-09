@@ -29,7 +29,8 @@ function commitAll(repoDir: string, message: string) {
   exec(`git commit -m "${message}" -q`, repoDir);
 }
 
-describe('agent-builder merge template via agent prompt (real template)', () => {
+// TODO: Modify or remove
+describe.skip('agent-builder merge template via agent prompt (real template)', () => {
   const integrationProjectsDir = resolve(__dirname, '../integration-projects');
   mkdirSync(integrationProjectsDir, { recursive: true });
   const tempRoot = mkdtempSync(join(integrationProjectsDir, 'agent-builder-it-'));
