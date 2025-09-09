@@ -44,7 +44,6 @@ export function listAllScorers(): void {
   p.intro(color.inverse(' Available Scorers '));
 
   const groupedScorers = AVAILABLE_SCORERS.reduce(
-  const groupedScorers = AVAILABLE_SCORERS.reduce(
     (acc, scorer) => {
       if (!acc[scorer.category]) {
         acc[scorer.category] = [];
