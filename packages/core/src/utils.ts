@@ -224,7 +224,7 @@ export interface ToolOptions {
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
-  tracingContext: TracingContext;
+  tracingContext?: TracingContext;
   memory?: MastraMemory;
   agentName?: string;
   model?: MastraLanguageModel;

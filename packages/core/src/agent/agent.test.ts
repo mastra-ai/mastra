@@ -2908,9 +2908,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      await expect(
-        userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} }),
-      ).rejects.toThrow(/same name/i);
+      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
     });
 
     it('should sanitize tool names with invalid characters', async () => {
@@ -2982,7 +2980,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
       expect(Object.keys(tools)).toContain('bad___tool_name');
       expect(Object.keys(tools)).not.toContain(badName);
     });
@@ -3056,7 +3054,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
       expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
@@ -3130,7 +3128,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), tracingContext: {} });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
@@ -6418,7 +6416,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         clientTools: {
           changeColor: {
             id: 'changeColor',
-            description: 'This is a test tool that returns the name and email',
+            description: 'This is a test tool that changes the color of the text',
             inputSchema: z.object({
               color: z.string(),
             }),
@@ -6830,6 +6828,52 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(defaultOnFinishCalled).toBe(false);
       expect(passedOnFinishCalled).toBe(true);
       expect(finishData).toBeDefined();
+    });
+  });
+
+  describe(`${version} - streamVNext onFinish usage bug`, () => {
+    it(`should include usage property in onFinish callback for ${version}`, async () => {
+      let onFinishCalled = false;
+      let finishData: any = null;
+
+      const agent = new Agent({
+        id: 'test-usage-onfinish',
+        name: 'Test Usage onFinish',
+        model: dummyModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      let result: any;
+
+      const onFinish = (data: any) => {
+        onFinishCalled = true;
+        finishData = data;
+      };
+
+      if (version === 'v1') {
+        result = await agent.stream('How are you?', {
+          onFinish,
+        });
+      } else {
+        result = await agent.streamVNext('How are you?', {
+          onFinish,
+        });
+      }
+
+      // Consume the stream to trigger onFinish
+      await result.consumeStream();
+
+      expect(onFinishCalled).toBe(true);
+      expect(finishData).toBeDefined();
+      expect(finishData).toHaveProperty('usage');
+      expect(finishData.usage).toBeDefined();
+      expect(typeof finishData.usage).toBe('object');
+
+      // Check for expected usage properties
+      if (finishData.usage) {
+        expect(finishData.usage).toHaveProperty('totalTokens');
+        expect(typeof finishData.usage.totalTokens).toBe('number');
+      }
     });
   });
 }

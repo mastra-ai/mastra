@@ -3,20 +3,20 @@ import { Column, getColumnTemplate } from './shared';
 
 export function EntryListItem({
   item,
-  selectedItem,
+  selectedItemId,
   onClick,
   children,
   columns,
+  isLoading,
 }: {
   item: any;
-  selectedItem: any | null;
-  onClick?: (score: string) => void;
+  selectedItemId?: string;
+  onClick?: (itemId: string) => void;
   children?: React.ReactNode;
   columns?: Column[];
+  isLoading?: boolean;
 }) {
-  const isSelected = selectedItem && selectedItem?.id === item.id;
-
-  console.log('selectedItem', selectedItem, item, isSelected);
+  const isSelected = selectedItemId === item.id;
 
   const handleClick = () => {
     return onClick && onClick(item?.id);
@@ -30,8 +30,11 @@ export function EntryListItem({
     >
       <button
         onClick={handleClick}
-        className={cn('grid w-full px-[1.5rem] gap-[2rem] text-left items-center min-h-[3rem]', 'hover:bg-surface5')}
+        className={cn('grid w-full px-[1.5rem] gap-[2rem] text-left items-center min-h-[3rem]', {
+          'hover:bg-surface5': !isLoading,
+        })}
         style={{ gridTemplateColumns: getColumnTemplate(columns) }}
+        disabled={isLoading}
       >
         {children}
       </button>

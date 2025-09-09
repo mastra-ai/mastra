@@ -93,9 +93,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    * @param finalValue - The final parsed value to validate
    * @returns Promise resolving to validation result
    */
-  abstract validateAndTransformFinal(
-    finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
+  abstract validateAndTransformFinal(finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
 }
 
 /**
@@ -144,25 +142,38 @@ class ObjectFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseF
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(
-    finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
-    if (!finalValue) {
+  async validateAndTransformFinal(finalRawValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+    if (!finalRawValue) {
       return {
         success: false,
         error: new Error('No object generated: could not parse the response.'),
       };
     }
 
+    let rawValue = finalRawValue;
+    /**
+     * If the final value is a string and includes ```json,
+     * extract the JSON string from the code block.
+     * This is a workaround for models that dont support structured output natively
+     */
+    if (typeof finalRawValue === 'string' && finalRawValue?.includes?.('```json')) {
+      const match = finalRawValue.match(/```json\s*\n?([\s\S]*?)\n?\s*```/);
+      if (match && match[1]) {
+        // match the first string between (```json) and (```)
+        rawValue = match[1].trim();
+      }
+    }
+    const { value } = await parsePartialJson(rawValue);
+
     if (!this.schema) {
       return {
         success: true,
-        value: finalValue,
+        value: value as InferSchemaOutput<OUTPUT>,
       };
     }
 
     try {
-      const result = await safeValidateTypes({ value: finalValue, schema: this.schema });
+      const result = await safeValidateTypes({ value, schema: this.schema });
 
       if (result.success) {
         return {
@@ -253,9 +264,7 @@ class ArrayFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFo
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(
-    _finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+  async validateAndTransformFinal(_finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
     const resultValue = this.textPreviousFilteredArray;
 
     if (!resultValue) {
@@ -362,9 +371,16 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(
-    finalValue: InferSchemaOutput<OUTPUT>,
-  ): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+  async validateAndTransformFinal(rawFinalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+    const { value } = await parsePartialJson(rawFinalValue);
+    if (!(typeof value === 'object' && value !== null && 'result' in value)) {
+      return {
+        success: false,
+        error: new Error('Invalid enum format: expected object with result property'),
+      };
+    }
+    const finalValue = (value as { result: InferSchemaOutput<OUTPUT> }).result;
+
     // For enums, check the wrapped format and unwrap
     if (!finalValue || typeof finalValue !== 'object' || typeof finalValue.result !== 'string') {
       return {
@@ -513,7 +529,7 @@ export function createObjectStreamTransformer<OUTPUT extends OutputSchema = unde
         return;
       }
 
-      const finalResult = await handler.validateAndTransformFinal(previousObject);
+      const finalResult = await handler.validateAndTransformFinal(accumulatedText);
 
       if (!finalResult.success) {
         controller.enqueue({

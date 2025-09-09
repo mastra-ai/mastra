@@ -60,7 +60,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> For more details, check out the [Suspend workflow example](/examples/workflows/human-in-the-loop#suspend-workflow).
+> For more details, check out the [Suspend workflow example](../../examples/workflows/human-in-the-loop.mdx#suspend-workflow).
 
 ### Identifying suspended steps
 
@@ -89,8 +89,6 @@ if (result.status === "suspended") {
 }
 ```
 
-> See [Run Workflow Results](/docs/workflows/overview#run-workflow-results) for more details.
-
 In this case, the logic resumes the first step listed in the `suspended` array. A `step` can also be defined using it's `id`, for example: 'step-1'.
 
 ```json
@@ -110,6 +108,8 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
   ]
 }
 ```
+
+> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
 
 ## Providing user feedback with suspend
 
@@ -168,7 +168,7 @@ In this case, the reason provided explains that the user must confirm to continu
 }
 ```
 
-> See [Run Workflow Results](/docs/workflows/overview#run-workflow-results) for more details.
+> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
 
 ## Resuming a workflow with `resume()`
 

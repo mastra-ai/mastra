@@ -11,11 +11,12 @@ import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
 import { downloadAssetsFromMessages } from './prompt/download-assets';
 import {
-  imageContentToString,
-  imageContentToDataUri,
-  getImageCacheKey,
-  parseDataUri,
+  categorizeFileData,
   createDataUri,
+  getImageCacheKey,
+  imageContentToDataUri,
+  imageContentToString,
+  parseDataUri,
 } from './prompt/image-utils';
 import type { AIV4Type, AIV5Type } from './types';
 import { getToolName } from './utils/ai-v5/tool';
@@ -1366,6 +1367,28 @@ export class MessageList {
                 data: part.data.toString(),
                 mimeType: part.mimeType,
               });
+            } else if (typeof part.data === 'string') {
+              const categorized = categorizeFileData(part.data, part.mimeType);
+
+              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+                // It's a URL or data URI, use it directly
+                parts.push({
+                  type: 'file',
+                  data: part.data,
+                  mimeType: categorized.mimeType || 'image/png',
+                });
+              } else {
+                // Raw data, convert to base64
+                try {
+                  parts.push({
+                    type: 'file',
+                    mimeType: categorized.mimeType || 'image/png',
+                    data: convertDataContentToBase64String(part.data),
+                  });
+                } catch (error) {
+                  console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+                }
+              }
             } else {
               // If it's binary data, convert to base64 and add to parts
               try {
@@ -2045,10 +2068,12 @@ export class MessageList {
     // Restore original content from metadata if it exists
     const originalContent = (v3Msg.content.metadata as any)?.__originalContent;
     if (originalContent !== undefined) {
-      if (
-        typeof originalContent !== `string` ||
-        v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`)
-      ) {
+      // Only restore original content if:
+      // 1. It's a string (simple text content), OR
+      // 2. We only have text/step-start parts (no file, tool, reasoning parts)
+      const hasOnlyTextOrStepStart = v2Msg.content.parts.every(p => p.type === `step-start` || p.type === `text`);
+
+      if (typeof originalContent === `string` || hasOnlyTextOrStepStart) {
         v2Msg.content.content = originalContent;
       }
     }
@@ -2063,14 +2088,21 @@ export class MessageList {
 
     // For AI SDK V4 compatibility: External URLs in file parts may need to be in experimental_attachments
     // However, we should preserve file parts that have providerMetadata for proper roundtrip conversion
-    // Only move URL file parts to experimental_attachments if they don't have providerMetadata
-    const urlFileParts = v2Msg.content.parts.filter(
-      p =>
-        p.type === 'file' &&
-        typeof p.data === 'string' &&
-        (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
-        !p.providerMetadata, // Don't move if it has providerMetadata (needed for roundtrip)
-    );
+    // Also preserve file parts that came from AI SDK v5 format (which have URLs in file parts)
+    // We can detect V5 format by checking if __originalContent is an array with file parts
+    const originalContentIsV5 =
+      Array.isArray((v3Msg.content.metadata as any)?.__originalContent) &&
+      (v3Msg.content.metadata as any)?.__originalContent.some((part: any) => part.type === 'file');
+
+    const urlFileParts = originalContentIsV5
+      ? []
+      : v2Msg.content.parts.filter(
+          p =>
+            p.type === 'file' &&
+            typeof p.data === 'string' &&
+            (p.data.startsWith('http://') || p.data.startsWith('https://')) &&
+            !p.providerMetadata, // Don't move if it has providerMetadata (needed for roundtrip)
+        );
 
     if (urlFileParts.length > 0) {
       // Initialize experimental_attachments if not present
@@ -2205,15 +2237,21 @@ export class MessageList {
           break;
 
         case 'file': {
-          // Check if it's an external URL (http/https)
-          if (typeof part.data === 'string' && (part.data.startsWith('http://') || part.data.startsWith('https://'))) {
-            // External URLs should use the 'url' field
+          // Categorize the file data
+          const categorized =
+            typeof part.data === 'string'
+              ? categorizeFileData(part.data, part.mimeType)
+              : { type: 'raw' as const, mimeType: part.mimeType, data: part.data };
+
+          if (categorized.type === 'url' && typeof part.data === 'string') {
+            // It's a URL, use the 'url' field directly
             parts.push({
               type: 'file',
               url: part.data,
-              mediaType: part.mimeType || 'image/png',
+              mediaType: categorized.mimeType || 'image/png',
               providerMetadata: part.providerMetadata,
             });
+            fileUrls.add(part.data);
           } else {
             // For AI SDK V5 compatibility with inline images (especially Google Gemini),
             // file parts need a 'data' field with base64 content (without data URI prefix)
@@ -2223,9 +2261,16 @@ export class MessageList {
             // Parse data URI if present to extract base64 content and MIME type
             if (typeof part.data === 'string') {
               const parsed = parseDataUri(part.data);
-              filePartData = parsed.base64Content;
-              if (parsed.isDataUri && parsed.mimeType) {
-                extractedMimeType = extractedMimeType || parsed.mimeType;
+
+              if (parsed.isDataUri) {
+                // It's already a data URI, extract the base64 content and MIME type
+                filePartData = parsed.base64Content;
+                if (parsed.mimeType) {
+                  extractedMimeType = extractedMimeType || parsed.mimeType;
+                }
+              } else {
+                // It's not a data URI, treat it as raw base64 or plain text
+                filePartData = part.data;
               }
             } else {
               filePartData = part.data;
@@ -2234,8 +2279,15 @@ export class MessageList {
             // Ensure we always have a valid MIME type - default to image/png for better compatibility
             const finalMimeType = extractedMimeType || 'image/png';
 
-            // Create a data URI from the base64 data
-            const dataUri = createDataUri(filePartData, finalMimeType);
+            // Only create a data URI if it's not already one
+            let dataUri: string;
+            if (typeof filePartData === 'string' && filePartData.startsWith('data:')) {
+              // Already a data URI
+              dataUri = filePartData;
+            } else {
+              // Create a data URI from the base64 data
+              dataUri = createDataUri(filePartData, finalMimeType);
+            }
 
             parts.push({
               type: 'file',
@@ -2558,34 +2610,44 @@ export class MessageList {
                   providerMetadata: part.providerOptions,
                 });
               }
+            } else if (typeof part.data === 'string') {
+              // Categorize the file data and extract MIME type if present
+              const categorized = categorizeFileData(part.data, part.mediaType);
+
+              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+                // It's a URL or data URI, use it directly
+                parts.push({
+                  type: 'file',
+                  url: part.data,
+                  mediaType: categorized.mimeType || 'application/octet-stream',
+                  providerMetadata: part.providerOptions,
+                });
+              } else {
+                // Raw data, convert to base64 and create data URI
+                try {
+                  const base64Data = convertDataContentToBase64String(part.data);
+                  const dataUri = createDataUri(base64Data, categorized.mimeType || 'image/png');
+                  parts.push({
+                    type: 'file',
+                    url: dataUri,
+                    mediaType: categorized.mimeType || 'image/png',
+                    providerMetadata: part.providerOptions,
+                  });
+                } catch (error) {
+                  console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+                }
+              }
             } else {
+              // Binary data, convert to base64
               try {
                 const base64Data = convertDataContentToBase64String(part.data);
-                let extractedMimeType = part.mediaType;
-
-                // Parse data URI if present to extract base64 and MIME type
-                const parsed = parseDataUri(base64Data);
-                if (parsed.isDataUri) {
-                  if (!extractedMimeType && parsed.mimeType) {
-                    extractedMimeType = parsed.mimeType;
-                  }
-
-                  const dataUri = createDataUri(parsed.base64Content, extractedMimeType || 'image/png');
-                  parts.push({
-                    type: 'file',
-                    url: dataUri,
-                    mediaType: extractedMimeType || 'image/png',
-                    providerMetadata: part.providerOptions,
-                  });
-                } else {
-                  const dataUri = createDataUri(base64Data, part.mediaType || 'image/png');
-                  parts.push({
-                    type: 'file',
-                    url: dataUri,
-                    mediaType: part.mediaType || 'image/png',
-                    providerMetadata: part.providerOptions,
-                  });
-                }
+                const dataUri = createDataUri(base64Data, part.mediaType || 'image/png');
+                parts.push({
+                  type: 'file',
+                  url: dataUri,
+                  mediaType: part.mediaType || 'image/png',
+                  providerMetadata: part.providerOptions,
+                });
               } catch (error) {
                 console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
               }
