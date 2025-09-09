@@ -1,0 +1,44 @@
+---
+title: "Reference: Mastra.getWorkflows() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.getWorkflows()` method in Mastra, which retrieves all configured workflows."
+---
+
+# Mastra.getWorkflows()
+
+The `.getWorkflows()` method is used to retrieve all workflows that have been configured in the Mastra instance. The method accepts an optional options object.
+
+## Usage example
+
+```typescript copy
+mastra.getWorkflows();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ serialized?: boolean }",
+      description: "Optional configuration object. When `serialized` is true, returns simplified workflow objects with only the name property instead of full workflow instances.",
+      optional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Record<string, Workflow>",
+      description: "A record of all configured workflows, where keys are workflow IDs and values are workflow instances (or simplified objects if serialized is true).",
+    },
+  ]}
+/>
+
+## Related
+
+- [Workflows overview](../../docs/workflows/overview.mdx)
+- [Dynamic workflows](../../docs/workflows/dynamic-workflows.mdx)
