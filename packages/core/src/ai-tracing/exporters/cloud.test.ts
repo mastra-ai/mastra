@@ -1,11 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AITracingEvent, AnyAISpan } from '../types';
-import { AISpanType, AITracingEventType } from '../types';
-import { CloudExporter } from './cloud';
+import { AISpanType, AITracingEvent, AITracingEventType, AnyAISpan } from '..';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock global fetch
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+import { CloudExporter } from './cloud';
+import { fetchWithRetry } from '../../utils';
+
+// Mock fetchWithRetry
+vi.mock('../../utils', () => ({
+  fetchWithRetry: vi.fn(),
+}));
+
+const mockFetchWithRetry = vi.mocked(fetchWithRetry);
 
 // Helper to create a valid JWT token for testing
 function createTestJWT(payload: { teamId: string; projectId: string }): string {
@@ -21,25 +25,15 @@ describe('CloudExporter', () => {
   let exporter: CloudExporter;
   const testJWT = createTestJWT({ teamId: 'team-123', projectId: 'project-456' });
 
-  // Mock logger to suppress console output during tests
-  const mockLogger = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    trackException: vi.fn(),
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset mock implementation to default success
-    mockFetch.mockReset();
-    mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+    mockFetchWithRetry.mockReset();
+    mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
 
     exporter = new CloudExporter({
       accessToken: testJWT,
       endpoint: 'http://localhost:3000',
-      logger: mockLogger as any,
     });
   });
 
@@ -310,7 +304,6 @@ describe('CloudExporter', () => {
         accessToken: createTestJWT({ teamId: 'test-team', projectId: 'test-project' }),
         endpoint: 'http://localhost:3000',
         maxBatchSize: 2, // Small batch size for testing
-        logger: mockLogger as any,
       });
 
       const flushSpy = vi.spyOn(smallBatchExporter as any, 'flush');
@@ -602,7 +595,7 @@ describe('CloudExporter', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-      mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
     });
 
     it('should call cloud API with correct URL and headers', async () => {
@@ -614,14 +607,18 @@ describe('CloudExporter', () => {
       // Trigger immediate flush
       await (exporter as any).flush();
 
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:3000', {
-        method: 'POST',
-        headers: {
-          Authorization: expect.stringMatching(/^Bearer .+/),
-          'Content-Type': 'application/json',
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'http://localhost:3000',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: expect.stringMatching(/^Bearer .+/),
+            'Content-Type': 'application/json',
+          },
+          body: expect.any(String),
         },
-        body: expect.any(String),
-      });
+        3,
+      );
     });
 
     it('should send spans in correct format', async () => {
@@ -632,7 +629,7 @@ describe('CloudExporter', () => {
 
       await (exporter as any).flush();
 
-      const callArgs = mockFetch.mock.calls[0];
+      const callArgs = mockFetchWithRetry.mock.calls[0];
       const requestOptions = callArgs[1] as RequestInit;
       const requestBody = JSON.parse(requestOptions.body as string);
 
@@ -659,7 +656,6 @@ describe('CloudExporter', () => {
       const authExporter = new CloudExporter({
         accessToken: testJWT,
         endpoint: 'http://localhost:3000',
-        logger: mockLogger as any,
       });
 
       await authExporter.exportEvent({
@@ -669,7 +665,7 @@ describe('CloudExporter', () => {
 
       await (authExporter as any).flush();
 
-      const callArgs = mockFetch.mock.calls[0];
+      const callArgs = mockFetchWithRetry.mock.calls[0];
       const requestOptions = callArgs[1] as RequestInit;
       const headers = requestOptions.headers as Record<string, string>;
 
@@ -692,7 +688,7 @@ describe('CloudExporter', () => {
 
       await (exporter as any).flush();
 
-      const callArgs = mockFetch.mock.calls[0];
+      const callArgs = mockFetchWithRetry.mock.calls[0];
       const requestOptions = callArgs[1] as RequestInit;
       const requestBody = JSON.parse(requestOptions.body as string);
 
@@ -747,7 +743,7 @@ describe('CloudExporter', () => {
       vi.useFakeTimers();
       vi.clearAllMocks();
       // Reset mock to default success behavior
-      mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
     });
 
     afterEach(() => {
@@ -755,17 +751,14 @@ describe('CloudExporter', () => {
     });
 
     it('should retry on API failures using fetchWithRetry', async () => {
-      vi.useFakeTimers();
-
       const retryExporter = new CloudExporter({
         accessToken: createTestJWT({ teamId: 'retry-team', projectId: 'retry-project' }),
         endpoint: 'http://localhost:3000',
         maxRetries: 3,
-        logger: mockLogger as any,
       });
 
       // Mock API to fail first two times, succeed on third
-      mockFetch
+      mockFetchWithRetry
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Server error'))
         .mockResolvedValueOnce(new Response('{}', { status: 200 }));
@@ -775,18 +768,14 @@ describe('CloudExporter', () => {
         span: mockSpan,
       });
 
-      const flushPromise = (retryExporter as any).flush();
+      await (retryExporter as any).flush();
 
-      // Advance timers to handle retry delays
-      await vi.runAllTimersAsync();
-
-      await flushPromise;
-
-      // fetch should be called 3 times due to retries (2 failures + 1 success)
-      expect(mockFetch).toHaveBeenCalledTimes(3);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:3000', expect.any(Object));
-
-      vi.useRealTimers();
+      // fetchWithRetry should be called with maxRetries parameter
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'http://localhost:3000',
+        expect.any(Object),
+        3, // maxRetries passed to fetchWithRetry
+      );
     });
 
     it('should pass maxRetries to fetchWithRetry correctly', async () => {
@@ -794,10 +783,9 @@ describe('CloudExporter', () => {
         accessToken: createTestJWT({ teamId: 'custom-team', projectId: 'custom-project' }),
         endpoint: 'http://localhost:3000',
         maxRetries: 5, // Custom retry count
-        logger: mockLogger as any,
       });
 
-      mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
 
       await customRetryExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
@@ -806,23 +794,24 @@ describe('CloudExporter', () => {
 
       await (customRetryExporter as any).flush();
 
-      expect(mockFetch).toHaveBeenCalledWith(expect.any(String), expect.any(Object));
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        5, // Custom maxRetries value
+      );
     });
 
     it('should drop batch after fetchWithRetry exhausts all retries', async () => {
-      vi.useFakeTimers();
-
       const retryExporter = new CloudExporter({
         accessToken: createTestJWT({ teamId: 'fail-team', projectId: 'fail-project' }),
         endpoint: 'http://localhost:3000',
         maxRetries: 2,
-        logger: mockLogger as any,
       });
 
       const loggerErrorSpy = vi.spyOn((retryExporter as any).logger, 'error');
 
-      // Mock fetch to always fail
-      mockFetch.mockRejectedValue(new Error('Persistent failure'));
+      // Mock fetchWithRetry to always fail after exhausting retries
+      mockFetchWithRetry.mockRejectedValue(new Error('Persistent failure'));
 
       await retryExporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
@@ -830,26 +819,19 @@ describe('CloudExporter', () => {
       });
 
       // Flush should not throw - errors are caught and logged
-      const flushPromise = (retryExporter as any).flush();
-
-      // Advance timers to handle retry delays
-      await vi.runAllTimersAsync();
-
-      await flushPromise;
+      await (retryExporter as any).flush();
 
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Batch upload failed after all retries, dropping batch',
         expect.any(Object),
       );
-
-      vi.useRealTimers();
     });
 
     it('should handle flush errors gracefully in background', async () => {
       const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
 
       // Mock fetchWithRetry to fail
-      mockFetch.mockRejectedValue(new Error('API down'));
+      mockFetchWithRetry.mockRejectedValue(new Error('API down'));
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,

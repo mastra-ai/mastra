@@ -31,6 +31,10 @@ describe('AI Tracing Registry', () => {
     clearAITracingRegistry();
   });
 
+  afterEach(async () => {
+    await shutdownAITracingRegistry();
+  });
+
   describe('Registry', () => {
     it('should register and retrieve tracing instances', () => {
       const tracing = new DefaultAITracing({
@@ -247,9 +251,6 @@ describe('AI Tracing Registry', () => {
       expect(tracing?.getConfig().serviceName).toBe('test-service');
       expect(tracing?.getConfig().sampling?.type).toBe(SamplingStrategyType.ALWAYS); // Should default to ALWAYS
       expect(getDefaultAITracing()).toBe(tracing); // First one becomes default
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should use ALWAYS sampling by default when sampling is not specified', async () => {
@@ -266,9 +267,6 @@ describe('AI Tracing Registry', () => {
 
       const tracing = getAITracing('test');
       expect(tracing?.getConfig().sampling?.type).toBe(SamplingStrategyType.ALWAYS);
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should configure AI tracing with custom implementation', async () => {
@@ -314,9 +312,6 @@ describe('AI Tracing Registry', () => {
       expect(tracing).toBeDefined();
       expect(tracing).toBe(customInstance);
       expect(tracing?.getConfig().serviceName).toBe('custom-service');
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should support mixed configuration (config + instance)', async () => {
@@ -353,9 +348,6 @@ describe('AI Tracing Registry', () => {
       expect(customTracing).toBeDefined();
       expect(customTracing).toBe(customInstance);
       expect(customTracing?.getConfig().serviceName).toBe('custom-service');
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should handle registry shutdown during Mastra shutdown', async () => {
@@ -459,9 +451,6 @@ describe('AI Tracing Registry', () => {
       expect(getSelectedAITracing(agentContext)).toBe(getAITracing('langfuse'));
       expect(getSelectedAITracing(workflowContext)).toBe(getAITracing('datadog'));
       expect(getSelectedAITracing(genericContext)).toBe(getDefaultAITracing()); // Falls back to default (console)
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
   });
 
@@ -499,9 +488,6 @@ describe('AI Tracing Registry', () => {
       const processors = defaultInstance?.getProcessors();
       expect(processors).toHaveLength(1);
       expect(processors?.[0]).toBeInstanceOf(SensitiveDataFilter);
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should not create default config when disabled', async () => {
@@ -521,9 +507,6 @@ describe('AI Tracing Registry', () => {
       // Custom config should be the default
       const customInstance = getAITracing('custom');
       expect(getDefaultAITracing()).toBe(customInstance);
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should not create default config when default property is not provided', async () => {
@@ -538,9 +521,6 @@ describe('AI Tracing Registry', () => {
 
       const defaultInstance = getAITracing('default');
       expect(defaultInstance).toBeUndefined();
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should throw error when custom config named "default" conflicts with default config', () => {
@@ -571,9 +551,6 @@ describe('AI Tracing Registry', () => {
       const defaultInstance = getAITracing('default');
       expect(defaultInstance).toBeDefined();
       expect(defaultInstance?.getConfig().serviceName).toBe('my-custom-default');
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should work with both default and custom configs', async () => {
@@ -607,9 +584,6 @@ describe('AI Tracing Registry', () => {
       const custom2 = getAITracing('custom2');
       expect(custom2).toBeDefined();
       expect(custom2?.getConfig().serviceName).toBe('custom-service-2');
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should work with selector when default config is enabled', async () => {
@@ -642,9 +616,6 @@ describe('AI Tracing Registry', () => {
 
       // Should route to custom config
       expect(getSelectedAITracing(customContext)).toBe(getAITracing('custom'));
-
-      // Cleanup
-      await shutdownAITracingRegistry();
     });
 
     it('should handle CloudExporter gracefully when token is missing', async () => {

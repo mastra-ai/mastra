@@ -408,7 +408,7 @@ export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
  * Configuration for a single AI tracing instance
  */
 export interface AITracingInstanceConfig {
-  /** name from the registry */
+  /** Unique identifier for this config in the ai tracing registry */
   name: string;
   /** Service name for tracing */
   serviceName: string;
