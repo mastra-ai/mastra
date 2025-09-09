@@ -228,7 +228,9 @@ touch tsconfig.json
 
 Add the following configuration:
 
-```json filename="tsconfig.json" copy
+Mastra requires `module` and `moduleResolution` values that support **ES modules**. Older settings like `CommonJS` or `node` are incompatible with Mastra’s ESM-only packages and will cause resolution errors.
+
+```json {4-5} filename="tsconfig.json" copy
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -247,7 +249,7 @@ Add the following configuration:
 }
 ```
 
-> This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
+> Set `module` to `ES2022` and `moduleResolution` to `bundler` to ensure compatibility with Mastra’s ESM-only packages. Alternatives like `Node16` or `NodeNext` are also supported.
 
 ### Set up your API key
 

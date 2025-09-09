@@ -7,7 +7,7 @@ description: "Learn how to configure and deploy a production-ready Mastra server
 
 When deploying your Mastra application to production, it runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. This page covers how to configure and customize the server for a production environment.
 
-## Server Architecture
+## Server architecture
 
 Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. When you build a Mastra application using `mastra build`, it generates a Hono-based HTTP server in the `.mastra` directory.
 
@@ -45,7 +45,32 @@ The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
 `"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
 invoked for any HTTP method that matches the path.
 
-## Custom CORS Config
+## Typescript configuration
+
+Mastra requires `module` and `moduleResolution` values that support **ES modules**. Older settings like `CommonJS` or `node` are incompatible with Mastra’s ESM-only packages and will cause resolution errors.
+
+```json {4-5} filename="tsconfig.json" copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*"
+  ]
+}
+```
+
+> Set `module` to `ES2022` and `moduleResolution` to `bundler` to ensure compatibility with Mastra’s ESM-only packages. Alternatives like `Node16` or `NodeNext` are also supported.
+
+## CORS configuration
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
