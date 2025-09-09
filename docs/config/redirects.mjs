@@ -728,4 +728,9 @@ export const redirectList = [
     destination: "/:locale/docs/streaming/overview",
     permanent: true,
   },
+  {
+    source: "/:locale/reference/agents/getAgent",
+    destination: "/:locale/reference/core/getAgent",
+    permanent: true,
+  },
 ];
