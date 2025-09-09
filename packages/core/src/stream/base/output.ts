@@ -7,16 +7,17 @@ import type { FinishReason, TelemetrySettings } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import type { AIV5Type } from '../../agent/message-list/types';
-import { MastraBase } from '../../base';
+import { ProcessorRunner } from '../../processors/runner';
 import type { OutputProcessor } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import { ProcessorRunner } from '../../processors/runner';
+import { MastraBase } from '../../base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import { DelayedPromise } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
 import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
 import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import { ChunkFrom } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
@@ -162,7 +163,42 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     const self = this;
 
-    this.#baseStream = stream.pipeThrough(
+    // Apply output processors to the stream BEFORE accumulating messages
+    let processedStream = stream;
+    if (this.processorRunner) {
+      const processorStates = new Map<string, ProcessorState>();
+      processedStream = stream.pipeThrough(
+        new TransformStream({
+          async transform(chunk, controller) {
+            const {
+              part: processedPart,
+              blocked,
+              reason,
+            } = await self.processorRunner!.processPart(chunk as any, processorStates);
+
+            if (blocked) {
+              // Send tripwire part and close stream for abort
+              controller.enqueue({
+                type: 'tripwire',
+                runId: self.runId || '',
+                from: ChunkFrom.AGENT,
+                payload: {
+                  tripwireReason: reason || 'Output processor blocked content',
+                },
+              } as ChunkType<OUTPUT>);
+              controller.terminate();
+              return;
+            }
+
+            if (processedPart) {
+              controller.enqueue(processedPart as ChunkType<OUTPUT>);
+            }
+          },
+        }),
+      );
+    }
+
+    this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
@@ -171,6 +207,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#bufferedByStep.sources.push(chunk);
               break;
             case 'text-delta':
+              // The text has already been processed by the first TransformStream if processorRunner exists
+              // Just buffer the text as-is
               self.#bufferedText.push(chunk.payload.text);
               self.#bufferedByStep.text += chunk.payload.text;
               if (chunk.payload.id) {
@@ -292,6 +330,42 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
+              // Update the chunk's messages with the buffered (processed) text
+              const bufferedText = self.#bufferedText.join('');
+              if (bufferedText && chunk.payload.messages) {
+                // Update messages in the chunk to use the processed text
+                if (chunk.payload.messages.all && Array.isArray(chunk.payload.messages.all)) {
+                  chunk.payload.messages.all = chunk.payload.messages.all.map((msg: any) => {
+                    if (msg.role === 'assistant' && msg.content) {
+                      // Replace the assistant message content with the processed text
+                      return {
+                        ...msg,
+                        content: {
+                          ...msg.content,
+                          parts: [{ type: 'text', text: bufferedText }],
+                        },
+                      };
+                    }
+                    return msg;
+                  });
+                }
+                if (chunk.payload.messages.nonUser && Array.isArray(chunk.payload.messages.nonUser)) {
+                  chunk.payload.messages.nonUser = chunk.payload.messages.nonUser.map((msg: any) => {
+                    if (msg.role === 'assistant' && msg.content) {
+                      // Replace the assistant message content with the processed text
+                      return {
+                        ...msg,
+                        content: {
+                          ...msg.content,
+                          parts: [{ type: 'text', text: bufferedText }],
+                        },
+                      };
+                    }
+                    return msg;
+                  });
+                }
+              }
+
               let response = {};
               if (chunk.payload.metadata) {
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
@@ -308,6 +382,33 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               try {
                 if (self.processorRunner) {
+                  // If we have processed text in the buffer, update the messageList
+                  // The bufferedText already contains the processed text from streaming
+                  const responseMessages = self.messageList.get.response.v2();
+
+                  // Check if we have processors that worked on the stream
+                  const hasStreamProcessors = options.outputProcessors?.some(
+                    (p: OutputProcessor) => 'processOutputStream' in p && p.processOutputStream,
+                  );
+
+                  // If we processed the stream, update messages with the processed text
+                  if (hasStreamProcessors && bufferedText && responseMessages.length > 0) {
+                    // Find the last assistant message and update its content
+                    for (let i = responseMessages.length - 1; i >= 0; i--) {
+                      const msg = responseMessages[i];
+                      if (msg && msg.role === 'assistant') {
+                        // Update the message content directly with already-processed text
+                        if (msg.content && msg.content.parts) {
+                          msg.content.parts = [{ type: 'text', text: bufferedText }];
+                        }
+                        break;
+                      }
+                    }
+                  }
+
+                  // Now run output processors on the messageList
+                  // If we already processed the stream, processors that only implement
+                  // processOutputResult will see the processed text
                   self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
                   const outputText = self.messageList.get.response.aiV4
                     .core()
@@ -558,43 +659,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   get fullStream() {
     const self = this;
 
+    // Processors are already applied to the base stream, so just tee and return
     let fullStream = this.teeStream();
 
-    const processorStates = new Map<string, ProcessorState>();
-
     return fullStream
-      .pipeThrough(
-        new TransformStream({
-          async transform(chunk, controller) {
-            // Process all stream parts through output processors
-            if (self.processorRunner) {
-              const {
-                part: processedPart,
-                blocked,
-                reason,
-              } = await self.processorRunner.processPart(chunk as any, processorStates);
-
-              if (blocked) {
-                // Send tripwire part and close stream for abort
-                controller.enqueue({
-                  type: 'tripwire',
-                  payload: {
-                    tripwireReason: reason || 'Output processor blocked content',
-                  },
-                });
-                controller.terminate();
-                return;
-              }
-
-              if (processedPart) {
-                controller.enqueue(processedPart);
-              }
-            } else {
-              controller.enqueue(chunk);
-            }
-          },
-        }),
-      )
       .pipeThrough(
         createObjectStreamTransformer({
           schema: self.#options.output,
