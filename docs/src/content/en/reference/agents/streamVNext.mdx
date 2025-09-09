@@ -63,12 +63,54 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       type: "MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>",
       isOptional: true,
       description: "Evaluation scorers to run on the execution results.",
+      properties: [
+        {
+          parameters: [{
+            name: "scorer",
+            type: "string",
+            isOptional: false,
+            description: "Name of the scorer to use."
+          }]
+        },
+        {
+          parameters: [{
+            name: "sampling",
+            type: "ScoringSamplingConfig",
+            isOptional: true,
+            description: "Sampling configuration for the scorer.",
+            properties: [
+              {
+                parameters: [{
+                  name: "type",
+                  type: "'none' | 'ratio'",
+                  isOptional: false,
+                  description: "Type of sampling strategy. Use 'none' to disable sampling or 'ratio' for percentage-based sampling."
+                }]
+              },
+              {
+                parameters: [{
+                  name: "rate",
+                  type: "number",
+                  isOptional: true,
+                  description: "Sampling rate (0-1). Required when type is 'ratio'."
+                }]
+              }
+            ]
+          }]
+        }
+      ]
     },
     {
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
       description: "AI tracing context for span hierarchy and metadata.",
+    },
+    {
+      name: "returnScorerData",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to return detailed scoring data in the response.",
     },
     {
       name: "options",
@@ -128,7 +170,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
     },
     {
       name: "context",
-      type: "CoreMessage[]",
+      type: "ModelMessage[]",
       isOptional: true,
       description: "Additional context messages to provide to the agent.",
     },
@@ -150,8 +192,8 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
           parameters: [{
             name: "model",
             type: "MastraLanguageModel",
-            isOptional: false,
-            description: "Model to use for the internal structuring agent."
+            isOptional: true,
+            description: "Model to use for the internal structuring agent. If not provided, falls back to the agent's model."
           }]
         },
         {
