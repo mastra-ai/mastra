@@ -1,4 +1,4 @@
-export type Category = 'output-quality' | 'accuracy-and-reliability';
+export type Category = 'output-quality' | 'accuracy-and-reliability' | 'context-quality';
 
 export interface ScorerTemplate {
   id: string;
@@ -6,4 +6,6 @@ export interface ScorerTemplate {
   description: string;
   category: Category;
   filename: string;
+  type: 'llm' | 'code'
+  content?: string; 
 }
