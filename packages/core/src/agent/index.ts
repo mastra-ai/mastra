@@ -285,11 +285,7 @@ export class Agent<
     }
 
     if (typeof this.#outputProcessors === 'function') {
-      if (!runtimeContext) {
-        // Create a default runtime context if none provided
-        return [];
-      }
-      return await this.#outputProcessors({ runtimeContext });
+      return await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
     }
 
     return this.#outputProcessors;
