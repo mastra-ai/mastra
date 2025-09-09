@@ -1,7 +1,7 @@
 import { client } from '@/lib/client';
-import { refineTraces } from '../utils/refine-traces';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
+import { refineRootTraces } from '../utils/refine-traces';
 
 const fetchFn = async ({ componentName, page, perPage }: { componentName: string; page: number; perPage: number }) => {
   try {
@@ -34,7 +34,7 @@ export const useTraces = (componentName: string, isWorkflow: boolean = false) =>
       }
       return lastPageParam + 1;
     },
-    select: data => refineTraces(data.pages.flat() || [], isWorkflow),
+    select: data => refineRootTraces(data.pages.flat() || [], isWorkflow),
     staleTime: 0,
     gcTime: 0,
   });

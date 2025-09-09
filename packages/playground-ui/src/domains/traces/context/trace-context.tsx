@@ -15,6 +15,11 @@ export type TraceContextType = {
   span: Span | null;
   setSpan: React.Dispatch<React.SetStateAction<Span | null>>;
   clearData: () => void;
+  // New properties for async loading
+  traceId: string | null;
+  setTraceId: React.Dispatch<React.SetStateAction<string | null>>;
+  isLoadingTrace: boolean;
+  setIsLoadingTrace: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 export const TraceContext = createContext<TraceContextType>({} as TraceContextType);
@@ -30,14 +35,22 @@ export function TraceProvider({
   const [trace, setTrace] = useState<Span[] | null>(null);
   const [currentTraceIndex, setCurrentTraceIndex] = useState(0);
   const [span, setSpan] = useState<Span | null>(null);
+  // New state for async loading
+  const [traceId, setTraceId] = useState<string | null>(null);
+  const [isLoadingTrace, setIsLoadingTrace] = useState(false);
 
   const nextTrace = () => {
     if (currentTraceIndex < traces.length - 1) {
       const nextIndex = currentTraceIndex + 1;
+      const nextTraceData = traces[nextIndex];
+
       setCurrentTraceIndex(nextIndex);
-      const nextTrace = traces[nextIndex].trace;
-      setTrace(nextTrace);
-      const parentSpan = nextTrace.find(span => span.parentSpanId === null) || nextTrace[0];
+      setTraceId(nextTraceData.traceId);
+      setIsLoadingTrace(true);
+
+      // Set the root span immediately while loading detailed spans
+      setTrace(nextTraceData.trace);
+      const parentSpan = nextTraceData.trace.find(span => span.parentSpanId === null) || nextTraceData.trace[0];
       setSpan(parentSpan);
     }
   };
@@ -45,10 +58,15 @@ export function TraceProvider({
   const prevTrace = () => {
     if (currentTraceIndex > 0) {
       const prevIndex = currentTraceIndex - 1;
+      const prevTraceData = traces[prevIndex];
+
       setCurrentTraceIndex(prevIndex);
-      const prevTrace = traces[prevIndex].trace;
-      setTrace(prevTrace);
-      const parentSpan = prevTrace.find(span => span.parentSpanId === null) || prevTrace[0];
+      setTraceId(prevTraceData.traceId);
+      setIsLoadingTrace(true);
+
+      // Set the root span immediately while loading detailed spans
+      setTrace(prevTraceData.trace);
+      const parentSpan = prevTraceData.trace.find(span => span.parentSpanId === null) || prevTraceData.trace[0];
       setSpan(parentSpan);
     }
   };
@@ -57,6 +75,8 @@ export function TraceProvider({
     setOpen(false);
     setTrace(null);
     setSpan(null);
+    setTraceId(null);
+    setIsLoadingTrace(false);
   };
 
   return (
@@ -74,6 +94,10 @@ export function TraceProvider({
         span,
         setSpan,
         clearData,
+        traceId,
+        setTraceId,
+        isLoadingTrace,
+        setIsLoadingTrace,
       }}
     >
       {children}

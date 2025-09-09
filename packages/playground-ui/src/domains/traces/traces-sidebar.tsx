@@ -6,9 +6,10 @@ export interface TracesSidebarProps {
   className?: string;
   onResize?: (width: number) => void;
   width: number;
+  TraceLoader?: React.ComponentType;
 }
 
-export const TracesSidebar = ({ onResize }: TracesSidebarProps) => {
+export const TracesSidebar = ({ onResize, TraceLoader }: TracesSidebarProps) => {
   return (
     <MastraResizablePanel
       className="h-full absolute right-0 inset-y-0 bg-surface2"
@@ -19,7 +20,7 @@ export const TracesSidebar = ({ onResize }: TracesSidebarProps) => {
     >
       <div className="h-full grid grid-cols-2">
         <div className="overflow-x-scroll w-full h-[calc(100%-40px)]">
-          <TraceDetails />
+          <TraceDetails TraceLoader={TraceLoader} />
         </div>
 
         <div className="h-[calc(100%-40px)] overflow-x-scroll w-full border-l border-border1">

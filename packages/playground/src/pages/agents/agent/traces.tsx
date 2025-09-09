@@ -3,6 +3,7 @@ import { useParams } from 'react-router';
 
 import { useAgent } from '@/hooks/use-agents';
 import { useTraces } from '@/domains/traces/hooks/use-traces';
+import { TraceLoader } from '@/domains/traces/components/trace-loader';
 
 function AgentTracesPage() {
   const { agentId } = useParams();
@@ -16,6 +17,7 @@ function AgentTracesPage() {
       isLoading={isAgentLoading || isTracesLoading}
       error={error}
       setEndOfListElement={setEndOfListElement}
+      TraceLoader={TraceLoader}
     />
   );
 }

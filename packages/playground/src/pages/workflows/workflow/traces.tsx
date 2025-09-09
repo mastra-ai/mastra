@@ -3,6 +3,7 @@ import { TracesView } from '@mastra/playground-ui';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 import { useTraces } from '@/domains/traces/hooks/use-traces';
+import { TraceLoader } from '@/domains/traces/components/trace-loader';
 
 function WorkflowTracesPage() {
   const { workflowId } = useParams();
@@ -25,6 +26,7 @@ function WorkflowTracesPage() {
       setEndOfListElement={setEndOfListElement}
       runId={runId || undefined}
       stepName={stepName || undefined}
+      TraceLoader={TraceLoader}
     />
   );
 }

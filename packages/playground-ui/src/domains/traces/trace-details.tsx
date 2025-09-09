@@ -6,13 +6,18 @@ import { Button } from '@/ds/components/Button';
 import { TraceContext } from './context/trace-context';
 import SpanView from './trace-span-view';
 import { Txt } from '@/ds/components/Txt';
+// TraceLoader will be imported from the playground package when used
 
 import { Icon } from '@/ds/icons';
 import { Header } from '@/ds/components/Header';
 import { Badge } from '@/ds/components/Badge';
 
-export function TraceDetails() {
-  const { trace, currentTraceIndex, prevTrace, nextTrace, traces } = useContext(TraceContext);
+interface TraceDetailsProps {
+  TraceLoader?: React.ComponentType;
+}
+
+export function TraceDetails({ TraceLoader }: TraceDetailsProps = {}) {
+  const { trace, currentTraceIndex, prevTrace, nextTrace, traces, isLoadingTrace } = useContext(TraceContext);
 
   const actualTrace = traces[currentTraceIndex];
 
@@ -23,6 +28,7 @@ export function TraceDetails() {
 
   return (
     <aside>
+      {TraceLoader && <TraceLoader />}
       <Header>
         <div className="flex items-center gap-1">
           <Button className="bg-transparent border-none" onClick={prevTrace} disabled={currentTraceIndex === 0}>
@@ -54,7 +60,15 @@ export function TraceDetails() {
       </Header>
 
       <div className="p-5">
-        <SpanView trace={trace} />
+        {isLoadingTrace ? (
+          <div className="flex items-center justify-center p-4">
+            <Txt variant="ui-md" className="text-icon3">
+              Loading trace details...
+            </Txt>
+          </div>
+        ) : (
+          <SpanView trace={trace} />
+        )}
       </div>
     </aside>
   );

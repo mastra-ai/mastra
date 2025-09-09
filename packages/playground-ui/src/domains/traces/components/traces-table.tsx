@@ -1,9 +1,7 @@
-import { Skeleton } from '@/components/ui/skeleton';
 import { Table, Tbody, Th, Row, Cell, DateTimeCell, UnitCell, TxtCell } from '@/ds/components/Table';
 import { Thead } from '@/ds/components/Table';
 import type { RefinedTrace } from '@/domains/traces/types';
 import { Badge } from '@/ds/components/Badge';
-import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { useOpenTrace } from '../hooks/use-open-trace';
 import { Txt } from '@/ds/components/Txt';
 import { useContext } from 'react';
@@ -45,15 +43,10 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
   const hasFailure = trace.trace.some(span => span.status.code === 2);
 
   return (
-    <Row className={isActive ? 'bg-surface4' : ''} onClick={() => openTrace(trace.trace, index)}>
+    <Row className={isActive ? 'bg-surface4' : ''} onClick={() => openTrace(trace.traceId, index, trace.trace[0])}>
       <DateTimeCell dateTime={new Date(trace.started / 1000)} />
       <TxtCell title={trace.traceId}>{trace.traceId.substring(0, 7)}...</TxtCell>
       <UnitCell unit="ms">{toSigFigs(trace.duration / 1000, 3)}</UnitCell>
-      <Cell>
-        <button onClick={() => openTrace(trace.trace, index)}>
-          <Badge icon={<TraceIcon />}>{trace.trace.length}</Badge>
-        </button>
-      </Cell>
       <Cell>
         {hasFailure ? (
           <Badge variant="error" icon={<X />}>
@@ -80,7 +73,6 @@ export const TracesTable = ({ traces, error }: TracesTableProps) => {
         <Th width={120}>Time</Th>
         <Th width="auto">Trace Id</Th>
         <Th width={120}>Duration</Th>
-        <Th width={120}>Spans</Th>
         <Th width={120}>Status</Th>
       </Thead>
       {error ? (

@@ -7,7 +7,7 @@ export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
-export * from './domains/traces/index';
+
 export * from './domains/observability/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
@@ -36,7 +36,8 @@ export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
 
-export type { TraceContextType } from './domains/traces/context/trace-context';
+export { TracesView, TraceContext, TraceProvider } from './domains/traces/index';
+export type { TracesViewProps, TraceContextType } from './domains/traces/index';
 
 export * from './store/playground-store';
 export * from './lib/framework';

@@ -1,5 +1,35 @@
 import { Span, RefinedTrace } from '@mastra/playground-ui';
 
+export const refineRootTraces = (rootSpans: Span[], isWorkflow: boolean = false): RefinedTrace[] => {
+  const newName = (name: string) => {
+    if (name?.startsWith('workflow.') && isWorkflow) {
+      return name?.split('.')?.slice(2)?.join('.');
+    }
+    if (name?.startsWith('agent.') && !isWorkflow) {
+      return name?.split('.')?.slice(1)?.join('.');
+    }
+    return name;
+  };
+
+  return rootSpans.map(span => {
+    const processedSpan = {
+      ...span,
+      name: newName(span.name),
+      duration: span.endTime - span.startTime,
+    };
+
+    return {
+      traceId: span.traceId,
+      serviceName: processedSpan.name,
+      duration: processedSpan.duration,
+      status: span.status,
+      started: span.startTime,
+      trace: [processedSpan], // Only root span initially
+      runId: span.attributes?.runId ? String(span.attributes.runId) : undefined,
+    };
+  });
+};
+
 export const refineTraces = (traces: Span[], isWorkflow: boolean = false): RefinedTrace[] => {
   const listOfSpanIds = new Set<string>();
 

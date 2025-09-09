@@ -14,6 +14,7 @@ export interface TracesViewProps {
   stepName?: string;
   className?: string;
   setEndOfListElement: (element: HTMLDivElement | null) => void;
+  TraceLoader?: React.ComponentType;
 }
 
 export function TracesView({
@@ -24,6 +25,7 @@ export function TracesView({
   stepName,
   className,
   setEndOfListElement,
+  TraceLoader,
 }: TracesViewProps) {
   if (isLoading) {
     return <TracesViewSkeleton />;
@@ -38,6 +40,7 @@ export function TracesView({
         stepName={stepName}
         className={className}
         setEndOfListElement={setEndOfListElement}
+        TraceLoader={TraceLoader}
       />
     </TraceProvider>
   );
@@ -50,9 +53,18 @@ interface TracesViewInnerProps {
   stepName?: string;
   className?: string;
   setEndOfListElement: (element: HTMLDivElement | null) => void;
+  TraceLoader?: React.ComponentType;
 }
 
-function TracesViewInner({ traces, error, runId, stepName, className, setEndOfListElement }: TracesViewInnerProps) {
+function TracesViewInner({
+  traces,
+  error,
+  runId,
+  stepName,
+  className,
+  setEndOfListElement,
+  TraceLoader,
+}: TracesViewInnerProps) {
   // This is a hack. To fix, The provider should not resolve the data like this.
   // We should resolve the data first and pass them to the provider instead of having the proving setState on the result.
   const hasRunRef = useRef(false);
@@ -83,7 +95,7 @@ function TracesViewInner({ traces, error, runId, stepName, className, setEndOfLi
         <div aria-hidden ref={setEndOfListElement} />
       </div>
 
-      {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}
+      {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} TraceLoader={TraceLoader} />}
     </div>
   );
 }
