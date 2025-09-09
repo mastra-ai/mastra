@@ -2,7 +2,7 @@ import type { ReadableStream } from 'stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { ToolSet } from 'ai-v5';
-import type { MessageList } from '../../agent/message-list';
+import { MessageList } from '../../agent/message-list';
 import { execute } from '../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { convertMastraChunkToAISDKv5 } from '../../stream/aisdk/v5/transform';
@@ -396,19 +396,69 @@ export function createLLMExecutionStep<
 
       switch (model.specificationVersion) {
         case 'v2': {
-          const inputMessages = await messageList.get.all.aiV5.llmPrompt({
+          const messageListPromptArgs = {
             downloadRetries,
             downloadConcurrency,
             supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
-          });
+          };
+          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+
+          // Call prepareStep callback if provided
+          let stepModel = model;
+          let stepToolChoice = toolChoice;
+          let stepTools = tools;
+
+          if (options?.prepareStep) {
+            try {
+              const prepareStepResult = await options.prepareStep({
+                stepNumber: inputData.output?.steps?.length || 0,
+                steps: inputData.output?.steps || [],
+                model,
+                messages: messageList.get.all.aiV5.model(),
+              });
+
+              if (prepareStepResult) {
+                if (prepareStepResult.model) {
+                  stepModel = prepareStepResult.model;
+                }
+                if (prepareStepResult.toolChoice) {
+                  stepToolChoice = prepareStepResult.toolChoice;
+                }
+                if (prepareStepResult.activeTools && stepTools) {
+                  const activeToolsSet = new Set(prepareStepResult.activeTools);
+                  stepTools = Object.fromEntries(
+                    Object.entries(stepTools).filter(([toolName]) => activeToolsSet.has(toolName)),
+                  ) as typeof tools;
+                }
+                if (prepareStepResult.messages) {
+                  const newMessages = prepareStepResult.messages;
+                  const newMessageList = new MessageList();
+
+                  for (const message of newMessages) {
+                    if (message.role === 'system') {
+                      newMessageList.addSystem(message);
+                    } else if (message.role === 'user') {
+                      newMessageList.add(message, 'input');
+                    } else if (message.role === 'assistant' || message.role === 'tool') {
+                      newMessageList.add(message, 'response');
+                    }
+                  }
+
+                  inputMessages = await newMessageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+                }
+              }
+            } catch (error) {
+              console.error('Error in prepareStep callback:', error);
+            }
+          }
 
           modelResult = execute({
             runId,
-            model,
+            model: stepModel,
             providerOptions,
             inputMessages,
-            tools,
-            toolChoice,
+            tools: stepTools,
+            toolChoice: stepToolChoice,
             options,
             modelSettings,
             telemetry_settings,

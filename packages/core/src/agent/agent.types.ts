@@ -6,7 +6,7 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
 import type { TracingContext } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
-import type { LoopConfig, LoopOptions } from '../loop/types';
+import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
@@ -95,6 +95,9 @@ export type AgentExecutionOptions<
   returnScorerData?: boolean;
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
+
+  /** Callback function called before each step of multi-step execution */
+  prepareStep?: PrepareStepFunction<any>;
 };
 
 export type InnerAgentExecutionOptions<

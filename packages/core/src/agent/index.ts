@@ -3140,6 +3140,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           maxSteps: result.maxSteps,
           providerOptions: result.providerOptions,
           options: {
+            ...(options.prepareStep && { prepareStep: options.prepareStep }),
             onFinish: async (payload: any) => {
               if (payload.finishReason === 'error') {
                 this.logger.error('Error in agent stream', {

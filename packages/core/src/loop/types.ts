@@ -1,6 +1,15 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
-import type { CallSettings, IdGenerator, StopCondition, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import type {
+  CallSettings,
+  IdGenerator,
+  StopCondition,
+  TelemetrySettings,
+  ToolChoice,
+  ToolSet,
+  StepResult,
+  ModelMessage,
+} from 'ai-v5';
 import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
@@ -15,6 +24,21 @@ export type StreamInternal = {
   currentDate?: () => Date;
 };
 
+export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
+  model?: LanguageModelV2;
+  toolChoice?: ToolChoice<TOOLS>;
+  activeTools?: Array<keyof TOOLS>;
+  system?: string;
+  messages?: Array<ModelMessage>;
+};
+
+export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
+  steps: Array<StepResult<TOOLS>>;
+  stepNumber: number;
+  model: LanguageModelV2;
+  messages: Array<ModelMessage>;
+}) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
+
 export type LoopConfig = {
   onChunk?: (chunk: ChunkType) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
@@ -24,6 +48,7 @@ export type LoopConfig = {
   activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
+  prepareStep?: PrepareStepFunction<any>;
 };
 
 export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
