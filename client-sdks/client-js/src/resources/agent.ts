@@ -15,7 +15,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod';
+import type { ZodType, ZodSchema } from 'zod';
 
 import type {
   GenerateParams,
@@ -43,7 +43,7 @@ async function executeToolCallAndRespond({
   runtimeContext,
   respondFn,
 }: {
-  params: StreamVNextParams<any>;
+  params: StreamVNextParams<any, any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
   runId?: string;
   resourceId?: string;
@@ -315,14 +315,21 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<T extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<T>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+  async generateVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(params: StreamVNextParams<T, STRUCTURED_OUTPUT>): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
+      structuredOutput: params.structuredOutput
+        ? {
+            ...params.structuredOutput,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          }
+        : undefined,
     };
 
     const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamVNextParams;
@@ -1255,8 +1262,11 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async streamVNext<T extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<T>,
+  async streamVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    params: StreamVNextParams<T, STRUCTURED_OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1271,6 +1281,12 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
+      structuredOutput: params.structuredOutput
+        ? {
+            ...params.structuredOutput,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          }
+        : undefined,
     };
 
     // Create a readable stream that will handle the response processing
