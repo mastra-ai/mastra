@@ -1263,9 +1263,6 @@ describe('Workflow', () => {
                 totalTokens: 0,
               },
             },
-            stepResult: {
-              reason: 'stop',
-            },
           },
           type: 'workflow-finish',
           from: 'WORKFLOW',
@@ -1772,9 +1769,6 @@ describe('Workflow', () => {
           runId: 'test-run-id',
           from: 'WORKFLOW',
           payload: {
-            stepResult: {
-              reason: 'stop',
-            },
             output: {
               usage: {
                 promptTokens: 0,
@@ -1936,9 +1930,6 @@ describe('Workflow', () => {
                 promptTokens: 0,
                 totalTokens: 0,
               },
-            },
-            stepResult: {
-              reason: 'stop',
             },
           },
           type: 'workflow-finish',
@@ -2114,9 +2105,6 @@ describe('Workflow', () => {
                 promptTokens: 0,
                 totalTokens: 0,
               },
-            },
-            stepResult: {
-              reason: 'stop',
             },
           },
           type: 'workflow-finish',
@@ -2331,9 +2319,6 @@ describe('Workflow', () => {
                 promptTokens: 0,
                 totalTokens: 0,
               },
-            },
-            stepResult: {
-              reason: 'stop',
             },
           },
           type: 'workflow-finish',

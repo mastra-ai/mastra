@@ -26,6 +26,7 @@ export function TraceTimeline({
 }: TraceTimelineProps) {
   const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
   const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
+  const overallEndTime = hierarchicalSpans?.[0]?.endTime || '';
 
   return (
     <div className={cn('grid gap-[1rem]', className)}>
@@ -47,10 +48,10 @@ export function TraceTimeline({
         </div>
       ) : (
         <div
-          className={cn(
-            'overflow-y-auto grid items-start content-start gap-y-[2px] xl:py-[1rem]',
-            'xl:grid-cols-[3fr_2fr] xl:gap-x-[1rem]',
-          )}
+          className={cn('grid items-start content-start gap-y-[2px]', 'xl:gap-x-[1rem] xl:py-[1rem]', {
+            'xl:grid-cols-[3fr_auto]': !overallEndTime,
+            'xl:grid-cols-[3fr_2fr]': overallEndTime,
+          })}
         >
           {hierarchicalSpans?.map(span => (
             <TraceTimelineSpan
@@ -60,6 +61,7 @@ export function TraceTimeline({
               selectedSpanId={selectedSpanId}
               overallLatency={overallLatency}
               overallStartTime={overallStartTime}
+              overallEndTime={overallEndTime}
             />
           ))}
         </div>
