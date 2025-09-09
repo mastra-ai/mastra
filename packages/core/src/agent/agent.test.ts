@@ -5226,11 +5226,9 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let caughtError: any = null;
 
         const stream = await agent.streamVNext('Hello', {
-          options: {
-            onError: ({ error }) => {
-              errorCaught = true;
-              caughtError = error;
-            },
+          onError: ({ error }) => {
+            errorCaught = true;
+            caughtError = error;
           },
         });
 
@@ -5255,10 +5253,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         const chunks: any[] = [];
 
         const stream = await agent.streamVNext('Hello', {
-          options: {
-            onChunk: (event: any) => {
-              chunks.push(event.chunk);
-            },
+          onChunk: (event: any) => {
+            chunks.push(event.chunk);
           },
         });
 
@@ -5314,13 +5310,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let abortEvent: any = null;
 
         const stream = await agent.streamVNext('Hello', {
-          options: {
-            onAbort: event => {
-              abortCalled = true;
-              abortEvent = event;
-            },
-            abortSignal: abortController.signal,
+          onAbort: event => {
+            abortCalled = true;
+            abortEvent = event;
           },
+          abortSignal: abortController.signal,
         });
 
         // Consume the stream to trigger the abort

@@ -2989,12 +2989,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               : this.#outputProcessors
             : []);
 
+        // Create loop options from flattened properties
+        const loopOptions = {
+          onChunk: options.onChunk,
+          onError: options.onError,
+          onAbort: options.onAbort,
+          activeTools: options.activeTools,
+          abortSignal: options.abortSignal,
+        };
+
         const streamResult = llm.stream({
           ...inputData,
           outputProcessors,
           returnScorerData: options.returnScorerData,
           tracingContext,
-          options: options.options,
+          options: loopOptions,
         });
 
         if (format === 'aisdk') {
