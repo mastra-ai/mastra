@@ -1165,8 +1165,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
   describe('providerExecuted tools should not be re-executed', () => {
     it('should handle Claude Code SDK-style provider-executed tools', async () => {
       // This test simulates the exact scenario from issue #7558
-      // where Claude Code SDK sends tools that are already executed
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         messageList: new MessageList(),
         model: createTestModel({
@@ -1205,10 +1204,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             },
           ]),
         }),
-        tools: {
-          // Important: Claude Code's tools are NOT defined here
-          // They come pre-executed from the provider
-        },
+        tools: {},
         ...defaultSettings(),
       });
 
