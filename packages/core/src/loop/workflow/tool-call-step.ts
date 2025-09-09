@@ -43,8 +43,8 @@ export function createToolCallStep<
 
         // Return the provider-executed result
         return {
-          result: inputData.output,
           ...inputData,
+          result: inputData.output,
         };
       }
 

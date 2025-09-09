@@ -1187,10 +1187,16 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 view_range: [1, 50],
               }),
               providerExecuted: true,
-              output: {
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'str_replace_editor',
+              result: {
                 content: '// app.ts file content\nexport function main() {\n  console.log("Hello");\n}',
                 line_count: 4,
               },
+              providerExecuted: true,
             },
             {
               type: 'text-delta',
