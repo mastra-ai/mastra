@@ -43,7 +43,7 @@ function formatTable(scorers: ScorerTemplate[]): string {
 export function listAllScorers(): void {
   p.intro(color.inverse(' Available Scorers '));
 
-  // fetch scorers from a repo or wherever it is
+  const groupedScorers = AVAILABLE_SCORERS.reduce(
   const groupedScorers = AVAILABLE_SCORERS.reduce(
     (acc, scorer) => {
       if (!acc[scorer.category]) {
