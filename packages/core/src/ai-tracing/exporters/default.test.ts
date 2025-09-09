@@ -251,7 +251,7 @@ describe('DefaultExporter', () => {
         // Should not throw, but log error instead
         expect(() => exporter.init()).not.toThrow();
 
-        expect(mockLogger.error).toHaveBeenCalledWith(
+        expect(mockLogger.warn).toHaveBeenCalledWith(
           'DefaultExporter disabled: Storage not available. Traces will not be persisted.',
         );
       });

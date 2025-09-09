@@ -634,7 +634,9 @@ describe('AI Tracing Registry', () => {
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('CloudExporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set'),
       );
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Sign up for Mastra Cloud at https://mastra.ai'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Sign up for Mastra Cloud at https://cloud.mastra.ai'),
+      );
 
       // Verify exporter is disabled but doesn't throw
       const event = {
