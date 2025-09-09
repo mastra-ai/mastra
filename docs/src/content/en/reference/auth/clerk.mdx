@@ -58,7 +58,7 @@ export const mastra = new Mastra({
     },
     {
       name: "authorizeUser",
-      type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
+      type: "(user: User, request: HonoRequest) => Promise<boolean> | boolean",
       description: "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users.",
       isOptional: true,
     },
