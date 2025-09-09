@@ -225,7 +225,8 @@ export const completenessScorer = createCompletenessScorer();`
     content: `import { createContentSimilarityScorer } from '@mastra/evals';
 
 export const contentSimilarityScorer = createContentSimilarityScorer({
-  threshold: 0.8, // Similarity threshold (0-1)
+  ignoreCase: true, // Whether to ignore case differences
+  ignoreWhitespace: true, // Whether to normalize whitespace
 });`
   },
   {
