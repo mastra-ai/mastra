@@ -40,6 +40,31 @@ import type {
   WorkflowRunState,
 } from './types';
 
+// Helper to detect if a type is 'any' (TypeScript any or Zod any)
+type IsAny<T> =
+  // Check if the type that we pass in is a true 'any' value
+  0 extends 1 & T
+    ? true
+    : T extends z.ZodAny
+      ? true
+      : T extends z.ZodTypeAny
+        ? z.ZodTypeAny extends T
+          ? true
+          : false
+        : false;
+
+type OutputMatches<TExpectedOutput, TCurrentOutput> =
+  // If either type is any (TypeScript any or Zod any), it matches everything
+  IsAny<TCurrentOutput> extends true
+    ? true
+    : IsAny<TExpectedOutput> extends true
+      ? true
+      : TCurrentOutput extends TExpectedOutput
+        ? TExpectedOutput extends TCurrentOutput
+          ? true
+          : false
+        : false;
+
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
   path,
@@ -327,7 +352,7 @@ export function cloneWorkflow<
   });
 
   wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
+  (wf as any).commit();
   return wf;
 }
 
@@ -843,9 +868,14 @@ export class Workflow<
    * This method should be called after all steps have been added to the workflow
    * @returns A built workflow instance ready for execution
    */
-  commit() {
-    this.executionGraph = this.buildExecutionGraph();
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TOutput>;
+  commit(
+    this: OutputMatches<TOutput, TPrevSchema> extends true
+      ? Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema>
+      : never,
+    // : "Error: The workflow output schema doesn't match the output schema of the last step. Please check your workflow.",
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+    (this as any).executionGraph = (this as any).buildExecutionGraph();
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema>;
   }
 
   get stepGraph() {

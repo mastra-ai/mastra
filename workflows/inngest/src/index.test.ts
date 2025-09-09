@@ -8,8 +8,10 @@ import { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraScorer } from '@mastra/core/scores';
 import { createScorer, runExperiment } from '@mastra/core/scores';
+import { MockStore } from '@mastra/core/storage/mock';
 import { Telemetry } from '@mastra/core/telemetry';
 import { createTool } from '@mastra/core/tools';
+import { mapVariable } from '@mastra/core/workflows';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
@@ -17,9 +19,10 @@ import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
 import { $ } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { z } from 'zod';
 import { init, serve as inngestServe } from './index';
+
+const testStorage = new MockStore();
 
 interface LocalTestContext {
   inngestPort: number;
@@ -83,9 +86,10 @@ describe('MastraInngestWorkflow', () => {
           result: z.string(),
         }),
         steps: [step1, step2],
-      });
-
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -173,8 +177,9 @@ describe('MastraInngestWorkflow', () => {
           result: z.string(),
         }),
         steps: [step1],
-      });
-      workflow.then(step1).commit();
+      })
+        .then(step1)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -245,11 +250,11 @@ describe('MastraInngestWorkflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ step1: z.object({ value: z.string() }), step2: z.object({ value: z.string() }) }),
         steps: [step1, step2],
-      });
-
-      workflow.parallel([step1, step2]).commit();
+      })
+        .parallel([step1, step2])
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -328,9 +333,10 @@ describe('MastraInngestWorkflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({ value: z.string() }),
         steps: [step1, step2],
-      });
-
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -397,14 +403,16 @@ describe('MastraInngestWorkflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        inputSchema: z.object({}),
+        inputSchema: step1.inputSchema,
         outputSchema: z.object({
           result: z.string(),
         }),
         steps: [step1],
-      });
-
-      workflow.then(step1).sleep(1000).then(step2).commit();
+      })
+        .then(step1)
+        .sleep(1000)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -490,9 +498,7 @@ describe('MastraInngestWorkflow', () => {
           value: z.number(),
         }),
         steps: [step1],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleep(async ({ inputData }) => {
           return inputData.value;
@@ -584,9 +590,7 @@ describe('MastraInngestWorkflow', () => {
           result: z.string(),
         }),
         steps: [step1],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleepUntil(new Date(Date.now() + 1000))
         .then(step2)
@@ -676,9 +680,7 @@ describe('MastraInngestWorkflow', () => {
           value: z.number(),
         }),
         steps: [step1],
-      });
-
-      workflow
+      })
         .then(step1)
         .sleepUntil(async ({ inputData }) => {
           return new Date(Date.now() + inputData.value);
@@ -772,9 +774,10 @@ describe('MastraInngestWorkflow', () => {
           resumed: z.any(),
         }),
         steps: [step1],
-      });
-
-      workflow.then(step1).waitForEvent('hello-event', step2).commit();
+      })
+        .then(step1)
+        .waitForEvent('hello-event', step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -866,9 +869,10 @@ describe('MastraInngestWorkflow', () => {
           resumed: z.any(),
         }),
         steps: [step1],
-      });
-
-      workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
+      })
+        .then(step1)
+        .waitForEvent('hello-event', step2, { timeout: 1000 })
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -958,9 +962,11 @@ describe('MastraInngestWorkflow', () => {
           result: z.string(),
         }),
         steps: [step1, step2],
-      });
-
-      workflow.then(step1).sleep(2000).then(step2).commit();
+      })
+        .then(step1)
+        .sleep(2000)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -1060,9 +1066,10 @@ describe('MastraInngestWorkflow', () => {
           result: z.string(),
         }),
         steps: [step1, step2],
-      });
-
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -1148,10 +1155,11 @@ describe('MastraInngestWorkflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ inputData: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      workflow.then(step1).then(step2).commit();
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -1238,9 +1246,10 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({ inputValue: z.string() }),
         outputSchema: z.object({ value: z.string() }),
-      });
-
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -1306,9 +1315,9 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-workflow',
         inputSchema: triggerSchema,
         outputSchema: z.object({ result: z.string() }),
-      });
-
-      workflow.then(step1).commit();
+      })
+        .then(step1)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -1382,9 +1391,10 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-workflow',
         inputSchema: triggerSchema,
         outputSchema: z.object({ result: z.string() }),
-      });
-
-      workflow.then(step1).then(step2).commit();
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
@@ -1456,15 +1466,13 @@ describe('MastraInngestWorkflow', () => {
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({ result: z.string() }),
-      });
-
-      workflow
+      })
         .then(step1)
         .map({
-          previousValue: {
+          previousValue: mapVariable({
             step: step1,
             path: 'nested.value',
-          },
+          }),
         })
         .then(step2)
         .commit();
@@ -1551,7 +1559,7 @@ describe('MastraInngestWorkflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ status: z.string() }),
-        outputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ step2: z.object({ result: z.string() }), step3: z.object({ result: z.string() }) }),
         steps: [step1, step2, step3],
       });
 
@@ -1754,6 +1762,7 @@ describe('MastraInngestWorkflow', () => {
             step3,
           ],
         ])
+        .map({})
         .commit();
 
       const mastra = new Mastra({
@@ -1838,6 +1847,7 @@ describe('MastraInngestWorkflow', () => {
             step2,
           ],
         ])
+        .map({})
         .commit();
 
       const mastra = new Mastra({
@@ -2624,7 +2634,12 @@ describe('MastraInngestWorkflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({
-          finalValue: z.number(),
+          'else-branch': z.object({
+            finalValue: z.number(),
+          }),
+          finalIf: z.object({
+            finalValue: z.number(),
+          }),
         }),
         steps: [startStep, finalIf],
       });
@@ -2773,7 +2788,12 @@ describe('MastraInngestWorkflow', () => {
           startValue: z.number(),
         }),
         outputSchema: z.object({
-          finalValue: z.number(),
+          finalIf: z.object({
+            finalValue: z.number(),
+          }),
+          'else-branch': z.object({
+            finalValue: z.number(),
+          }),
         }),
         steps: [startStep, finalIf],
       });
@@ -2884,7 +2904,7 @@ describe('MastraInngestWorkflow', () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: triggerSchema,
-        outputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
         steps: [step1],
       });
 
@@ -2980,6 +3000,7 @@ describe('MastraInngestWorkflow', () => {
             .then(step5)
             .commit(),
         ])
+        .map({})
         .commit();
 
       const mastra = new Mastra({
@@ -3606,6 +3627,7 @@ describe('MastraInngestWorkflow', () => {
         .then(evaluateTone)
         .then(improveResponse)
         .then(evaluateImproved)
+        .map({})
         .commit();
 
       // Create a new storage instance for initial run
@@ -3758,6 +3780,7 @@ describe('MastraInngestWorkflow', () => {
           [() => Promise.resolve(true), humanIntervention],
           [() => Promise.resolve(false), explainResponse],
         ])
+        .map({})
         .commit();
 
       const mastra = new Mastra({
@@ -3960,6 +3983,7 @@ describe('MastraInngestWorkflow', () => {
           },
         })
         .parallel([humanIntervention, explainResponse])
+        .map({})
         .commit();
 
       const mastra = new Mastra({
@@ -4155,6 +4179,7 @@ describe('MastraInngestWorkflow', () => {
         .then(evaluateTone)
         .then(improveResponse)
         .then(evaluateImproved)
+        .map({})
         .commit();
 
       const mastra = new Mastra({
@@ -4506,6 +4531,7 @@ describe('MastraInngestWorkflow', () => {
           },
         })
         .then(agentStep2)
+        .map({})
         .commit();
 
       const mastra = new Mastra({
@@ -5578,7 +5604,7 @@ describe('MastraInngestWorkflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({
-            finalValue: z.number(),
+            success: z.boolean(),
           }),
         });
 
@@ -5744,7 +5770,7 @@ describe('MastraInngestWorkflow', () => {
             startValue: z.number(),
           }),
           outputSchema: z.object({
-            finalValue: z.number(),
+            success: z.boolean(),
           }),
         });
 
@@ -5877,9 +5903,6 @@ describe('MastraInngestWorkflow', () => {
       const counterInputSchema = z.object({
         startValue: z.number(),
       });
-      const counterOutputSchema = z.object({
-        finalValue: z.number(),
-      });
 
       const passthroughStep = createStep({
         id: 'passthrough',
@@ -5921,7 +5944,7 @@ describe('MastraInngestWorkflow', () => {
       const counterWorkflow = createWorkflow({
         id: 'counter-workflow',
         inputSchema: counterInputSchema,
-        outputSchema: counterOutputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
         steps: [wfC, passthroughStep],
       });
 
@@ -6530,7 +6553,7 @@ describe('MastraInngestWorkflow', () => {
           };
         },
         inputSchema: z.object({}),
-        outputSchema: z.object({}),
+        outputSchema: z.object({ hasEngine: z.boolean() }),
       });
       const workflow = createWorkflow({
         id: 'test-workflow',
@@ -7419,6 +7442,7 @@ describe('MastraInngestWorkflow', () => {
         .then(evaluateTone)
         .then(improveResponse)
         .then(evaluateImproved)
+        .map({})
         .commit();
 
       const mastra = new Mastra({

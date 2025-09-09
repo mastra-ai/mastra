@@ -523,7 +523,8 @@ export const workflowBuilderWorkflow = createWorkflow({
   id: 'workflow-builder',
   description: 'Create or edit Mastra workflows using AI-powered assistance with iterative planning',
   inputSchema: WorkflowBuilderInputSchema,
-  outputSchema: WorkflowBuilderResultSchema,
+  // outputSchema: WorkflowBuilderResultSchema,
+  outputSchema: TaskExecutionResultSchema,
   steps: [
     workflowDiscoveryStep,
     projectDiscoveryStep,

@@ -411,16 +411,7 @@ export class NewAgentNetwork extends MastraBase {
         isOneOff: z.boolean(),
         verboseIntrospection: z.boolean(),
       }),
-      outputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        prompt: z.string(),
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-        completionReason: z.string().optional(),
-        iteration: z.number(),
-      }),
+      outputSchema: finalStep.outputSchema,
     })
       .dountil(networkWorkflow, async ({ inputData }) => {
         return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);

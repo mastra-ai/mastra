@@ -458,7 +458,7 @@ class MastraScorer<
       chainedWorkflow = chainedWorkflow.then(step);
     }
 
-    return chainedWorkflow.commit();
+    return (chainedWorkflow as any).commit();
   }
 
   private createScorerContext(

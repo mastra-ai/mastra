@@ -11,7 +11,7 @@ export default defineConfig({
     preset: 'smallest',
   },
   sourcemap: true,
-    onSuccess: async () => {
+  onSuccess: async () => {
     await generateTypes(process.cwd());
   },
 });

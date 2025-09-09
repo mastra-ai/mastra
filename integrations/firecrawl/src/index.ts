@@ -25,26 +25,6 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       config: this.config,
     });
 
-    const crawlAndSyncWorkflow = createWorkflow({
-      id: 'Crawl and Sync',
-      inputSchema: z.object({
-        url: z.string(),
-        limit: z.number().default(3),
-        pathRegex: z.string().nullable(),
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-        crawlData: z.array(
-          z.object({
-            markdown: z.string(),
-            metadata: z.object({
-              sourceURL: z.string(),
-            }),
-          }),
-        ),
-        entityType: z.string(),
-      }),
-    });
 
     const syncStep = createStep({
       id: 'FIRECRAWL:CRAWL_AND_SYNC',
@@ -144,9 +124,28 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       },
     });
 
-    crawlAndSyncWorkflow.then(syncStep).commit();
+    const crawlAndSyncWorkflow = createWorkflow({
+      id: 'Crawl and Sync',
+      inputSchema: z.object({
+        url: z.string(),
+        limit: z.number().default(3),
+        pathRegex: z.string().nullable(),
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        crawlData: z.array(
+          z.object({
+            markdown: z.string(),
+            metadata: z.object({
+              sourceURL: z.string(),
+            }),
+          }),
+        ),
+        entityType: z.string(),
+      }),
+    });
 
-    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC', crawlAndSyncWorkflow);
+    this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC', crawlAndSyncWorkflow.then(syncStep).commit());
   }
 
   getStaticTools() {
