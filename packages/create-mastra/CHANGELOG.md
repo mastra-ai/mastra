@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.12.1-alpha.2
+
+### Patch Changes
+
+- Fix template slug when getting template environment variables ([#7650](https://github.com/mastra-ai/mastra/pull/7650))
+
 ## 0.12.1-alpha.1
 
 ### Patch Changes

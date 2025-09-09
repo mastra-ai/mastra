@@ -1,5 +1,15 @@
 # mastra
 
+## 0.12.1-alpha.2
+
+### Patch Changes
+
+- Fix template slug when getting template environment variables ([#7650](https://github.com/mastra-ai/mastra/pull/7650))
+
+- Updated dependencies [[`fd9bbfe`](https://github.com/mastra-ai/mastra/commit/fd9bbfee22484f8493582325f53e8171bf8e682b)]:
+  - @mastra/core@0.16.1-alpha.3
+  - @mastra/deployer@0.16.1-alpha.3
+
 ## 0.12.1-alpha.1
 
 ### Patch Changes

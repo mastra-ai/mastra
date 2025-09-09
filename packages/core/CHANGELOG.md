@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.16.1-alpha.3
+
+### Patch Changes
+
+- Add prepareStep to generate/stream VNext options. ([#7646](https://github.com/mastra-ai/mastra/pull/7646))
+
 ## 0.16.1-alpha.2
 
 ### Patch Changes
