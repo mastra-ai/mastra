@@ -15,12 +15,15 @@ export type InferSchemaOutput<OUTPUT extends OutputSchema> = OUTPUT extends unde
       ? OBJECT // Zod v3
       : OUTPUT extends Schema<infer OBJECT>
         ? OBJECT // JSON Schema (AI SDK's Schema type)
-        : unknown; // Fallback
+        : OUTPUT extends JSONSchema7
+          ? any // JSONSchema7 - we can't infer the exact type statically
+          : unknown; // Fallback
 
 export type OutputSchema<OBJECT = any> =
   | z4.ZodType<OBJECT, any>
   | z3.Schema<OBJECT, z3.ZodTypeDef, any>
   | Schema<OBJECT>
+  | JSONSchema7
   | undefined;
 
 export type ZodLikePartialSchema<T = any> = (
@@ -31,7 +34,17 @@ export type ZodLikePartialSchema<T = any> = (
 };
 
 export function getTransformedSchema<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
-  const jsonSchema = schema ? asSchema(schema).jsonSchema : undefined;
+  let jsonSchema: JSONSchema7 | undefined;
+
+  if (!schema) {
+    jsonSchema = undefined;
+  } else if (schema && typeof schema === 'object' && ('type' in schema || 'properties' in schema || 'enum' in schema)) {
+    // Handle JSONSchema7 directly
+    jsonSchema = schema as JSONSchema7;
+  } else {
+    // Handle Zod schemas and AI SDK Schema types
+    jsonSchema = asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>).jsonSchema;
+  }
   if (!jsonSchema) {
     return undefined;
   }

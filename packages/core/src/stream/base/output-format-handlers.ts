@@ -1,6 +1,8 @@
 import { TransformStream } from 'stream/web';
 import { asSchema, isDeepEqualData, parsePartialJson } from 'ai-v5';
 import type { Schema } from 'ai-v5';
+import type z3 from 'zod/v3';
+import type z4 from 'zod/v4';
 import { safeValidateTypes } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -67,8 +69,14 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   constructor(schema?: OUTPUT, options: { validatePartialChunks?: boolean } = {}) {
     if (!schema) {
       this.schema = undefined;
+    } else if (
+      schema &&
+      typeof schema === 'object' &&
+      ('type' in schema || 'properties' in schema || 'enum' in schema)
+    ) {
+      this.schema = schema as Schema<InferSchemaOutput<OUTPUT>>;
     } else {
-      this.schema = asSchema(schema);
+      this.schema = asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>);
     }
     if (options.validatePartialChunks) {
       if (schema !== undefined && 'partial' in schema && typeof schema.partial === 'function') {
