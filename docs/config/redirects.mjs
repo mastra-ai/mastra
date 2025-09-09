@@ -1,5 +1,15 @@
 export const redirectList = [
   {
+    source: "/:locale/docs/agents/runtime-variables",
+    destination: "/:locale/docs/agents/runtime-context",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/tools-mcp/dynamic-context",
+    destination: "/:locale/docs/tools-mcp/runtime-context",
+    permanent: true,
+  },
+  {
     source: "/:locale/docs/08-running-evals",
     destination: "/:locale/docs/evals/overview",
     permanent: true,
@@ -721,6 +731,71 @@ export const redirectList = [
   {
     source: "/:locale/reference/agents/getAgent",
     destination: "/:locale/reference/core/getAgent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/branch",
+    destination: "/:locale/reference/workflows/workflow-methods/branch",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/commit",
+    destination: "/:locale/reference/workflows/workflow-methods/commit",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/create-run",
+    destination: "/:locale/reference/workflows/workflow-methods/create-run",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/dountil",
+    destination: "/:locale/reference/workflows/workflow-methods/dountil",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/dowhile",
+    destination: "/:locale/reference/workflows/workflow-methods/dowhile",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/foreach",
+    destination: "/:locale/reference/workflows/workflow-methods/foreach",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/map",
+    destination: "/:locale/reference/workflows/workflow-methods/map",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/parallel",
+    destination: "/:locale/reference/workflows/workflow-methods/parallel",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/sendEvent",
+    destination: "/:locale/reference/workflows/workflow-methods/sendEvent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/sleep",
+    destination: "/:locale/reference/workflows/workflow-methods/sleep",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/sleepUntil",
+    destination: "/:locale/reference/workflows/workflow-methods/sleepUntil",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/then",
+    destination: "/:locale/reference/workflows/workflow-methods/then",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/workflows/waitForEvent",
+    destination: "/:locale/reference/workflows/workflow-methods/waitForEvent",
     permanent: true,
   },
 ];

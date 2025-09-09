@@ -46,7 +46,7 @@ Steps are the building blocks of workflows. Create a step using `createStep`:
 const step1 = createStep({...});
 ```
 
-> See [createStep](/reference/workflows/step) for more information.
+> See [createStep](../../reference/workflows/step.mdx) for more information.
 
 ### Create workflow
 
@@ -72,7 +72,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [workflow](/reference/workflows/workflow) for more information.
+> See [workflow](../../reference/workflows/workflow.mdx) for more information.
 
 #### Composing steps
 
@@ -100,7 +100,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> Steps can be composed using a number of different methods. See [Control Flow](/docs/workflows/control-flow)  for more information.
+> Steps can be composed using a number of different methods. See [Control Flow](./control-flow.mdx)  for more information.
 
 #### Cloning steps
 
@@ -163,7 +163,7 @@ There are two ways to run and test workflows.
 
 With the Mastra Dev Server running you can run the workflow from the Mastra Playground by visiting [http://localhost:4111/workflows](http://localhost:4111/workflows) in your browser.
 
-> For more information, see the [Local Dev Playground](/docs/server-db/local-dev-playground) documentation.
+> For more information, see the [Local Dev Playground](../server-db/local-dev-playground.mdx) documentation.
 
 ### Command line
 
@@ -188,7 +188,7 @@ if (result.status === 'success') {
   console.log(result.result.output);
 }
 ```
-> see [createRunAsync](../../reference/workflows/create-run.mdx) and [start](../../reference/workflows/run-methods/start.mdx) for more information.
+> see [createRunAsync](../../reference/workflows/run.mdx) and [start](../../reference/workflows/run-methods/start.mdx) for more information.
 
 To trigger this workflow, run the following:
 
@@ -286,7 +286,7 @@ for await (const chunk of result.stream) {
 }
 ```
 
-> See [stream](/reference/workflows/run-methods/stream) and [messages](/reference/workflows/run-methods/stream#messages) for more information.
+> See [stream](../../reference/workflows/run-methods/stream.mdx) for more information.
 
 ## Watch Workflow
 
@@ -308,7 +308,7 @@ const result = await run.start({
 });
 ```
 
-> See [watch](/reference/workflows/run-methods/watch) for more information.
+> See [watch](../../reference/workflows/run-methods/watch.mdx) for more information.
 
 ## Related
 
@@ -321,5 +321,5 @@ const result = await run.start({
 
 ## Workflows (Legacy)
 
-For legacy workflow documentation, see [Workflows (Legacy)](/docs/workflows-legacy/overview).
+For legacy workflow documentation, see [Workflows (Legacy)](../workflows-legacy/overview.mdx).
 

@@ -1383,7 +1383,7 @@ export class Agent<
                 resourceId,
               });
 
-              const run = workflow.createRun();
+              const run = await workflow.createRunAsync();
 
               let result: any;
               if (methodType === 'generate') {

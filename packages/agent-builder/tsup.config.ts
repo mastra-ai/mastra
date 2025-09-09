@@ -9,6 +9,7 @@ export default defineConfig({
   dts: false,
   clean: true,
   sourcemap: true,
+  external: ['typescript'],
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },
