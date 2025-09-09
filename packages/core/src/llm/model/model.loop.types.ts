@@ -1,14 +1,15 @@
 import type {
-  ModelMessage,
-  UIMessage,
   ToolSet,
   DeepPartial,
   streamText,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
+  ModelMessage,
+  UIMessage,
 } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
+import type { MessageList } from '../../agent';
 import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
 import type { StructuredOutputOptions, OutputProcessor } from '../../processors';
@@ -38,7 +39,7 @@ export type ModelLoopStreamArgs<
   OUTPUT extends OutputSchema | undefined = undefined,
   STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
-  messages: UIMessage[] | ModelMessage[];
+  messages?: UIMessage[] | ModelMessage[];
   structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
   outputProcessors?: OutputProcessor[];
   runtimeContext: RuntimeContext;
@@ -46,4 +47,5 @@ export type ModelLoopStreamArgs<
   resourceId?: string;
   threadId?: string;
   returnScorerData?: boolean;
+  messageList: MessageList;
 } & Omit<LoopOptions<TOOLS, OUTPUT>, 'model' | 'messageList'>;

@@ -6241,6 +6241,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       ];
+
       if (version === 'v1') {
         await agent.generate(messagesWithMetadata, {
           memory: {
@@ -7297,3 +7298,273 @@ describe('Agent Tests', () => {
 //     });
 
 // });
+
+describe('Stream ID Consistency', () => {
+  /**
+   * Test to verify that stream response IDs match database-saved message IDs
+   */
+
+  let memory: MockMemory;
+  let mastra: Mastra;
+
+  beforeEach(() => {
+    memory = new MockMemory();
+    mastra = new Mastra();
+  });
+
+  it('should return stream response IDs that can fetch saved messages from database', async () => {
+    const model = new MockLanguageModelV1({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          initialDelayInMs: 0,
+          chunkDelayInMs: 1,
+          chunks: [
+            { type: 'text-delta', textDelta: 'Hello! ' },
+            { type: 'text-delta', textDelta: 'I am ' },
+            { type: 'text-delta', textDelta: 'a helpful assistant.' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+            },
+          ],
+        }),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      // model: openai('gpt-4o'),
+      memory,
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const streamResult = await agent.stream('Hello!', {
+      threadId,
+      resourceId,
+    });
+
+    let streamResponseId: string | undefined;
+    for await (const _chunk of streamResult.fullStream) {
+      console.log('DEBUG chunk', _chunk);
+    }
+    await streamResult.consumeStream();
+
+    const finishedResult = streamResult;
+    const response = await finishedResult.response;
+
+    streamResponseId = response?.messages?.[0]?.id;
+
+    console.log('DEBUG streamResponseId', streamResponseId);
+    expect(streamResponseId).toBeDefined();
+
+    const savedMessages = await memory.getMessages({ threadId });
+
+    const messageById = savedMessages.find(m => m.id === streamResponseId);
+
+    expect(messageById).toBeDefined();
+    expect(messageById!.id).toBe(streamResponseId);
+  });
+
+  it('should use custom ID generator for streaming and keep stream response IDs consistent with database', async () => {
+    let customIdCounter = 0;
+    const customIdGenerator = vi.fn(() => `custom-id-${++customIdCounter}`);
+
+    const model = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'Hello! I am a helpful assistant.',
+      }),
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          initialDelayInMs: 0,
+          chunkDelayInMs: 1,
+          chunks: [
+            { type: 'text-delta', textDelta: 'Hello! ' },
+            { type: 'text-delta', textDelta: 'I am ' },
+            { type: 'text-delta', textDelta: 'a helpful assistant.' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+            },
+          ],
+        }),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+      }),
+    });
+
+    const mastraWithCustomId = new Mastra({
+      idGenerator: customIdGenerator,
+      logger: false,
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+    });
+
+    agent.__registerMastra(mastraWithCustomId);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const stream = await agent.stream('Hello!', { threadId, resourceId });
+
+    await stream.consumeStream();
+    const res = await stream.response;
+    const messageId = res.messages[0].id;
+
+    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+
+    expect(savedMessages).toHaveLength(1);
+    expect(savedMessages[0].id).toBe(messageId);
+    expect(customIdGenerator).toHaveBeenCalled();
+  });
+
+  it('should return streamVNext response IDs that can fetch saved messages from database', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          {
+            type: 'stream-start',
+            warnings: [],
+          },
+          {
+            type: 'response-metadata',
+            id: 'v2-msg-xyz123',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'Hello! ' },
+          { type: 'text-delta', id: '1', delta: 'I am a ' },
+          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const streamResult = await agent.streamVNext('Hello!', {
+      threadId,
+      resourceId,
+    });
+
+    await streamResult.consumeStream();
+
+    let streamResponseId: string | undefined;
+    const res = await streamResult.response;
+    streamResponseId = res.uiMessages[0].id;
+
+    expect(streamResponseId).toBeDefined();
+
+    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: streamResponseId! }] } });
+    const messageById = savedMessages.find(m => m.id === streamResponseId);
+
+    expect(messageById).toBeDefined();
+    expect(messageById!.id).toBe(streamResponseId);
+  });
+
+  it('should use custom ID generator for streamVNext and keep stream response IDs consistent with database', async () => {
+    let customIdCounter = 0;
+    const customIdGenerator = vi.fn(() => `custom-v2-id-${++customIdCounter}`);
+
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: 'Hello! I am a helpful assistant.',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          {
+            type: 'stream-start',
+            warnings: [],
+          },
+          {
+            type: 'response-metadata',
+            id: 'custom-v2-msg-xyz123',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'Hello! ' },
+          { type: 'text-delta', id: '1', delta: 'I am a ' },
+          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mastraWithCustomId = new Mastra({
+      idGenerator: customIdGenerator,
+      logger: false,
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+    });
+
+    agent.__registerMastra(mastraWithCustomId);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const stream = await agent.streamVNext('Hello!', { threadId, resourceId });
+
+    await stream.consumeStream();
+    const res = await stream.response;
+    const messageId = res.uiMessages[0].id;
+    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+    expect(savedMessages).toHaveLength(1);
+    expect(savedMessages[0].id).toBe(messageId);
+    expect(customIdGenerator).toHaveBeenCalled();
+  });
+});
