@@ -1,23 +1,23 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import fs, { createWriteStream } from "fs";
+import fs, { createWriteStream } from 'fs';
 import path from 'path';
 
 const MAX_TEXT_LENGTH = 4000;
 
 const saveAudioToFile = async (audio: any, filename: string): Promise<void> => {
-  const audioDir = path.join(process.cwd(), "audio");
+  const audioDir = path.join(process.cwd(), 'audio');
   const filePath = path.join(audioDir, filename);
- 
+
   await fs.promises.mkdir(audioDir, { recursive: true });
   // TypeScript assertion - we know this will work (probably)
   const audioStream = audio as { pipe: (writer: any) => void };
   const writer = createWriteStream(filePath);
   audioStream.pipe(writer);
-  
+
   return new Promise((resolve, reject) => {
-    writer.on("finish", resolve);
-    writer.on("error", reject);
+    writer.on('finish', resolve);
+    writer.on('error', reject);
   });
 };
 
@@ -27,7 +27,7 @@ export const textToSpeechTool = createTool({
   inputSchema: z.object({
     extractedText: z.string().describe('The extracted text to generate audio from'),
     speaker: z.enum(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']).optional().default('onyx'),
-    speed: z.number().min(0.1).max(4).optional().default(1)
+    speed: z.number().min(0.1).max(4).optional().default(1),
   }),
   outputSchema: z.object({
     audioGenerated: z.boolean().describe('Whether audio generation was successful'),
@@ -55,7 +55,7 @@ export const textToSpeechTool = createTool({
     try {
       console.log(`🎵 Converting text to audio...`);
       const textToAudioAgent = mastra!.getAgent('textNaturalizerAgent');
-      console.log("textToAudioAgent.voice", textToAudioAgent.voice)
+      console.log('textToAudioAgent.voice', textToAudioAgent.voice);
 
       // Generate audio using the agent's voice synthesis
       const audioStream = await textToAudioAgent.voice.speak(processedText, {
@@ -78,7 +78,7 @@ export const textToSpeechTool = createTool({
 
       return {
         audioGenerated: true,
-        filePath: path.join(process.cwd(), "audio", filename),
+        filePath: path.join(process.cwd(), 'audio', filename),
         speaker: context.speaker,
         speed: context.speed,
       };

@@ -88,9 +88,7 @@ const generateAudioFromSummaryStep = createStep({
         tracingContext: {} as any,
       });
 
-      console.log(
-        `Step generate-audio-from-summary: Succeeded - Generated audio: ${result.audioGenerated}`,
-      );
+      console.log(`Step generate-audio-from-summary: Succeeded - Generated audio: ${result.audioGenerated}`);
       return result;
     } catch (error) {
       console.error('Step generate-audio-from-summary: Failed - Error during generation:', error);

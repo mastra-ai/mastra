@@ -4,8 +4,7 @@ import { Memory } from '@mastra/memory';
 
 export const pdfSummarizationAgent = new Agent({
   name: 'pdfSummarizationAgent',
-  description:
-    'An agent that summarizes extracted PDF text using a large context window model',
+  description: 'An agent that summarizes extracted PDF text using a large context window model',
   instructions: `
 You are a PDF summarization specialist with access to a large context window model. Your role is to create concise, comprehensive summaries of PDF content that will be processed for text-to-speech conversion.
 

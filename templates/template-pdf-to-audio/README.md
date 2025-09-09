@@ -41,14 +41,13 @@ Your Mastra server and the Playground will be running on `http://localhost:4111`
 
 ## How to experience the agent in action
 
-The recommended way to experience this template is to run the Mastra playground and pass it a link to a PDF. 
+The recommended way to experience this template is to run the Mastra playground and pass it a link to a PDF.
 
 Here's a chapter from Mastra's book on [principles of building AI agents](https://mastra.ai/book) for you to play with:
 
 ```
 https://github.com/mastra-ai/template-pdf-to-audio/blob/main/media/mcp_chapter.pdf
 ```
-
 
 ## Features
 
@@ -64,13 +63,16 @@ https://github.com/mastra-ai/template-pdf-to-audio/blob/main/media/mcp_chapter.p
 ## Architecture Overview
 
 ### Tools
+
 - **summarizePdfTool**: Downloads PDFs from URLs, extracts text, and generates AI summaries
 - **textToSpeechTool**: Generates high-quality audio from text content using voice synthesis
 
 ### Agents
+
 - **pdfToAudioAgent**: Complete agent that handles the full PDF to audio pipeline with voice synthesis
 - **textNaturalizerAgent**: Specialized in preparing and optimizing text content for audio script generation
 - **pdfSummarizationAgent**: Creates concise, comprehensive summaries of PDF content optimized for text-to-speech conversion
 
 ### Workflow
+
 - **pdfToAudioWorkflow**: Orchestrates the complete PDF-to-audio conversion process through two main steps: download & summarize, then generate audio
