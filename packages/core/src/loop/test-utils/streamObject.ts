@@ -8,12 +8,12 @@ import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-
 import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai-v5';
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai-v5';
 import { MockLanguageModelV2 } from 'ai-v5/test';
-import { assert, beforeEach, describe, expect, it } from 'vitest';
+import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
-import { testUsage } from './utils';
+import { mockDate, testUsage } from './utils';
 
 function createTestModel({
   warnings = [],
@@ -439,6 +439,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       describe('result.pipeTextStreamToResponse', async () => {
         it('should write text deltas to a Node.js response-like object', async () => {
+          vi.useRealTimers();
           const mockResponse = createMockServerResponse();
 
           const result = loopFn({
@@ -471,6 +472,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               " }",
             ]
           `);
+          vi.useFakeTimers();
+          vi.setSystemTime(mockDate);
         });
       });
 
@@ -597,6 +600,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messages: [
               {
                 content: [
+                  {
+                    text: '{"content": "Hello, world!"}',
+                    type: 'text',
+                  },
+                ],
+                role: 'assistant',
+              },
+            ],
+            uiMessages: [
+              {
+                id: expect.any(String),
+                metadata: {
+                  __originalContent: '{"content": "Hello, world!"}',
+                  createdAt: expect.any(Date),
+                },
+                parts: [
                   {
                     text: '{"content": "Hello, world!"}',
                     type: 'text',
@@ -826,6 +845,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 result = event;
               },
             },
+            _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
             messageList: new MessageList(),
           });
           // consume stream
@@ -862,6 +882,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 ],
                 "modelId": "mock-model-id",
                 "timestamp": 1970-01-01T00:00:00.000Z,
+                "uiMessages": [
+                  {
+                    "id": "1234",
+                    "metadata": {
+                      "__originalContent": "{ "content": "Hello, world!" }",
+                      "createdAt": ${mockDate.toISOString()},
+                    },
+                    "parts": [
+                      {
+                        "text": "{ "content": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
               },
               "sources": [],
               "staticToolCalls": [],
@@ -964,6 +1000,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 result = event;
               },
             },
+            _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
             messageList: new MessageList(),
           });
           // consume stream
@@ -1004,6 +1041,22 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 ],
                 "modelId": "mock-model-id",
                 "timestamp": 1970-01-01T00:00:00.000Z,
+                "uiMessages": [
+                  {
+                    "id": "1234",
+                    "metadata": {
+                      "__originalContent": "{ "invalid": "Hello, world!" }",
+                      "createdAt": ${mockDate.toISOString()},
+                    },
+                    "parts": [
+                      {
+                        "text": "{ "invalid": "Hello, world!" }",
+                        "type": "text",
+                      },
+                    ],
+                    "role": "assistant",
+                  },
+                ],
               },
               "sources": [],
               "staticToolCalls": [],

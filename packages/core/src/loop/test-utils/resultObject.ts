@@ -7,6 +7,7 @@ import type { loop } from '../loop';
 import {
   createTestModel,
   defaultSettings,
+  mockDate,
   modelWithFiles,
   modelWithReasoning,
   modelWithSources,
@@ -305,26 +306,42 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       await result.aisdk.v5.consumeStream();
 
       expect(await result.aisdk.v5.response).toMatchInlineSnapshot(`
+        {
+          "headers": {
+            "call": "2",
+          },
+          "id": "id-0",
+          "messages": [
             {
-              "headers": {
-                "call": "2",
-              },
-              "id": "id-0",
-              "messages": [
+              "content": [
                 {
-                  "content": [
-                    {
-                      "text": "Hello",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
+                  "text": "Hello",
+                  "type": "text",
                 },
               ],
-              "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
-            }
-          `);
+              "role": "assistant",
+            },
+          ],
+          "modelId": "mock-model-id",
+          "timestamp": 1970-01-01T00:00:00.000Z,
+          "uiMessages": [
+            {
+              "id": "msg-0",
+              "metadata": {
+                "__originalContent": "Hello",
+                "createdAt": ${mockDate.toISOString()},
+              },
+              "parts": [
+                {
+                  "text": "Hello",
+                  "type": "text",
+                },
+              ],
+              "role": "assistant",
+            },
+          ],
+        }
+      `);
     });
   });
 
