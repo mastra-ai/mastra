@@ -602,7 +602,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     let fullStream = this.teeStream();
 
-
     return fullStream
       .pipeThrough(
         createObjectStreamTransformer({
