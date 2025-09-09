@@ -125,16 +125,17 @@ const openai = createOpenAI({
 });
 
 // Define your available tools here
-const availableTools = {
-  // Example:
-  // getTodo: {
-  //   description: 'Get a todo item',
-  //   parameters: z.object({
-  //     id: z.string(),
-  //   }),
-  //   execute: async ({ id }) => { /* implementation */ }
-  // }
-};
+const availableTools = [
+  {
+    id: 'weather-tool',
+    description: 'Get current weather information for any location',
+  },
+  {
+    id: 'search-tool', 
+    description: 'Search the web for information',
+  },
+  // Add more tools as needed
+];
 
 export const toolCallAccuracyScorer = createToolCallAccuracyScorerLLM({
   model: openai('gpt-4o-mini'),
@@ -271,20 +272,10 @@ export const toneScorer = createToneScorer();`
     filename: 'code-tool-call-accuracy-scorer.ts',
     content: `import { createToolCallAccuracyScorerCode } from '@mastra/evals';
 
-// Define your available tools here
-const availableTools = {
-  // Example:
-  // getTodo: {
-  //   description: 'Get a todo item',
-  //   parameters: z.object({
-  //     id: z.string(),
-  //   }),
-  //   execute: async ({ id }) => { /* implementation */ }
-  // }
-};
-
 export const codeToolCallAccuracyScorer = createToolCallAccuracyScorerCode({
-  availableTools,
+  expectedTool: 'weather-tool', // The tool that should be called
+  strictMode: false, // Set to true for exact single tool matching
+  // expectedToolOrder: ['search-tool', 'weather-tool'], // For order validation (overrides expectedTool)
 });`
   }
 ];
