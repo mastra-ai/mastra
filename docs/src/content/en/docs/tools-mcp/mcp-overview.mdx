@@ -11,6 +11,103 @@ import { Tabs } from "nextra/components";
 
 Mastra uses MCP to connect agents to external tool servers.
 
+## Getting started
+
+To use Mastra MCP, install the required dependency:
+
+```bash
+npm install @mastra/mcp@latest
+```
+
+### Creating an MCP Client
+
+An MCP Client is the thing that allows Mastra primitives to connect to external MCP Servers, be it published npm packages, or remote MCP servers that operate over http(s)
+
+To create a new MCP client....
+
+```typescript filename="src/mastra/mcp-clients/test-mcp-client.ts" showLineNumbers copy
+import { MCPClient } from "@mastra/mcp";
+
+export const testMcpClient = new MCPClient({
+  servers: {
+    wikipedia: {
+      command: "npx",
+      args: ["-y", "wikipedia-mcp"]
+    }
+  }
+});
+```
+
+> See [MCPClient](../../reference/tools/mcp-client.mdx) for a full list of configuration options.
+
+## Adding an MCP client to an agent
+
+Provide access to the MCP Client from an agent, import the MCP Client, use the `tools` parameter with the `.getTools()` method:
+
+```typescript {4,15} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { wikipediaMcp } from "../mcp-clients/wikipedia-mcp";
+
+export const testAgent = new Agent({
+  name: "Test Agent",
+  description: "A test agent that uses the Wikipedia MCP Server",
+  instructions: `
+      You are a helpful assistant that has access to the Wikipedia MCP Server.
+      - Wikipedia MCP Server
+
+      Answer questions using the information you find using the Wikipedia Server.
+`,
+  model: openai("gpt-4o-mini"),
+  tools: await wikipediaMcp.getTools()
+});
+```
+
+This agent will now have access to the following Wikipedia tools:
+
+- **wikipedia_search**: Returns a list of Wikipedia articles matching a query string.
+- **wikipedia_readArticle**: Returns the full content of a specified Wikipedia article.
+
+## Creating an MCP Server
+
+An MCP Server is a thing that can be accessed by other stuff by being part of a deployed Mastra application that can be access over http(s).
+
+```typescript filename="src/mastra/mcp-servers/test-mcp-server.ts" showLineNumbers copy
+import { MCPServer } from "@mastra/mcp";
+
+import { testAgent } from "../agents/test-agent";
+import { testWorkflow } from "../workflows/test-workflow";
+import { testTool } from "../tools/test-tool";
+
+export const testMcpServer = new MCPServer({
+  name: "Test Server",
+  version: "1.0.0",
+  agents: { testAgent },
+  tools: { testTool },
+  workflows: { testWorkflow }
+});
+```
+
+> See [MCPServer](../../reference/tools/mcp-server.mdx) for a full list of configuration options.
+
+## Registering an MCP Server
+
+To blah an MCP Server register it in the main Mastra instance.
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { testMcpServer } from "./mcp-servers/test-mcp-server";
+
+export const mastra = new Mastra({
+  // ...
+  mcpServers: { testMcpServer }
+});
+```
+
+## ------ OLD ---------
+
 ## Use third-party tools with an MCP Client
 
 Mastra provides the `MCPClient` class to manage connections to one or more MCP servers and access their tools.
@@ -63,7 +160,8 @@ const mcp = new MCPClient({
 });
 ```
 
-For detailed configuration options, see the [`MCPClient` reference documentation](/reference/tools/mcp-client).
+See [MCPClient](../../reference/tools/mcp-client.mdx) for a full list of configuration options.
+
 
 ### Static vs Dynamic Tool Configurations
 
@@ -239,7 +337,7 @@ Each tab shows the specific URL patterns and configuration needed for that regis
     <Tabs.Tab>
 
     [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
-    
+
 
     ```typescript
 
@@ -261,7 +359,7 @@ Each tab shows the specific URL patterns and configuration needed for that regis
 
     ```typescript
     // If you prefer to run the MCP server locally:
-    
+
     import { MCPClient } from "@mastra/mcp";
 
     // MCPClient with Ampersand MCP Server using stdio transport
