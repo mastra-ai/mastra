@@ -187,7 +187,6 @@ You have access to an enhanced set of tools based on production coding agent pat
 **Important**: All file paths are resolved relative to the project directory unless absolute paths are provided.
 
 ### Communication & Workflow
-- **askClarification**: Ask users for clarification when requirements are unclear or multiple options exist.
 - **attemptCompletion**: Signal task completion with validation status and confidence metrics.
 
 ### Guidelines for Enhanced Tools:
@@ -408,8 +407,8 @@ export const mastra = new Mastra({
     network: 'src/mastra/networks',
   };
 
-  static DEFAULT_TOOLS = async (projectPath: string, mode: 'template' | 'code-editor' = 'code-editor') => {
-    const agentBuilderTools = {
+  static DEFAULT_TOOLS = async (projectPath: string) => {
+    return {
       readFile: createTool({
         id: 'read-file',
         description: 'Read contents of a file with optional line range selection.',
@@ -466,7 +465,7 @@ export const mastra = new Mastra({
           path: z.string().describe('Directory path to list'),
           recursive: z.boolean().default(false).describe('List subdirectories recursively'),
           includeHidden: z.boolean().default(false).describe('Include hidden files and directories'),
-          pattern: z.string().optional().describe('Glob pattern to filter files'),
+          pattern: z.string().default('*').describe('Glob pattern to filter files'),
           maxDepth: z.number().default(10).describe('Maximum recursion depth'),
           includeMetadata: z.boolean().default(true).describe('Include file metadata'),
         }),
@@ -606,12 +605,22 @@ export const mastra = new Mastra({
       replaceLines: createTool({
         id: 'replace-lines',
         description:
-          'Replace specific line ranges in files with new content. Perfect for fixing multiline imports, function signatures, or other structured code.',
+          'Replace specific line ranges in files with new content. IMPORTANT: This tool replaces ENTIRE lines, not partial content within lines. Lines are 1-indexed.',
         inputSchema: z.object({
           filePath: z.string().describe('Path to the file to edit'),
-          startLine: z.number().describe('Starting line number to replace (1-indexed)'),
-          endLine: z.number().describe('Ending line number to replace (1-indexed, inclusive)'),
-          newContent: z.string().describe('New content to replace the lines with'),
+          startLine: z
+            .number()
+            .describe('Starting line number to replace (1-indexed, inclusive). Count from the first line = 1'),
+          endLine: z
+            .number()
+            .describe(
+              'Ending line number to replace (1-indexed, inclusive). To replace single line, use same number as startLine',
+            ),
+          newContent: z
+            .string()
+            .describe(
+              'New content to replace the lines with. Use empty string "" to delete lines completely. For multiline content, include \\n characters',
+            ),
           createBackup: z.boolean().default(false).describe('Create backup file before editing'),
         }),
         outputSchema: z.object({
@@ -626,40 +635,40 @@ export const mastra = new Mastra({
         },
       }),
 
-      // Interactive Communication
-      askClarification: createTool({
-        id: 'ask-clarification',
-        description: 'Ask the user for clarification when requirements are unclear or when multiple options exist.',
+      // File diagnostics tool to help debug line replacement issues
+      showFileLines: createTool({
+        id: 'show-file-lines',
+        description:
+          'Show specific lines from a file with line numbers. Useful for debugging before using replaceLines.',
         inputSchema: z.object({
-          question: z.string().describe('The specific question to ask'),
-          options: z
-            .array(
-              z.object({
-                id: z.string(),
-                description: z.string(),
-                implications: z.string().optional(),
-              }),
-            )
+          filePath: z.string().describe('Path to the file to examine'),
+          startLine: z
+            .number()
             .optional()
-            .describe('Multiple choice options if applicable'),
-          context: z.string().optional().describe('Additional context about why clarification is needed'),
-          urgency: z.enum(['low', 'medium', 'high']).default('medium').describe('How urgent the clarification is'),
+            .describe('Starting line number to show (1-indexed). If not provided, shows all lines'),
+          endLine: z
+            .number()
+            .optional()
+            .describe(
+              'Ending line number to show (1-indexed, inclusive). If not provided but startLine is, shows only that line',
+            ),
+          context: z.number().default(2).describe('Number of context lines to show before and after the range'),
         }),
         outputSchema: z.object({
-          questionId: z.string(),
-          question: z.string(),
-          options: z
-            .array(
-              z.object({
-                id: z.string(),
-                description: z.string(),
-              }),
-            )
-            .optional(),
-          awaitingResponse: z.boolean(),
+          success: z.boolean(),
+          lines: z.array(
+            z.object({
+              lineNumber: z.number(),
+              content: z.string(),
+              isTarget: z.boolean().describe('Whether this line is in the target range'),
+            }),
+          ),
+          totalLines: z.number(),
+          message: z.string(),
+          error: z.string().optional(),
         }),
         execute: async ({ context }) => {
-          return await AgentBuilderDefaults.askClarification(context);
+          return await AgentBuilderDefaults.showFileLines({ ...context, projectPath });
         },
       }),
 
@@ -715,16 +724,18 @@ export const mastra = new Mastra({
       validateCode: createTool({
         id: 'validate-code',
         description:
-          'Validates generated code through TypeScript compilation, ESLint, schema validation, and other checks',
+          'Validates code using a fast hybrid approach: syntax → semantic → lint. RECOMMENDED: Always provide specific files for optimal performance and accuracy.',
         inputSchema: z.object({
           projectPath: z.string().optional().describe('Path to the project to validate (defaults to current project)'),
           validationType: z
             .array(z.enum(['types', 'lint', 'schemas', 'tests', 'build']))
-            .describe('Types of validation to perform'),
+            .describe('Types of validation to perform. Recommended: ["types", "lint"] for code quality'),
           files: z
             .array(z.string())
             .optional()
-            .describe('Specific files to validate (if not provided, validates entire project)'),
+            .describe(
+              'RECOMMENDED: Specific files to validate (e.g., files you created/modified). Uses hybrid validation: fast syntax check → semantic types → ESLint. Without files, falls back to slower CLI validation.',
+            ),
         }),
         outputSchema: z.object({
           valid: z.boolean(),
@@ -749,6 +760,11 @@ export const mastra = new Mastra({
         execute: async ({ context }) => {
           const { projectPath: validationProjectPath, validationType, files } = context;
           const targetPath = validationProjectPath || projectPath;
+
+          // BEST PRACTICE: Always provide files array for optimal performance
+          // Hybrid approach: syntax (1ms) → semantic (100ms) → ESLint (50ms)
+          // Without files: falls back to CLI validation (2000ms+)
+
           return await AgentBuilderDefaults.validateCode({
             projectPath: targetPath,
             validationType,
@@ -756,358 +772,327 @@ export const mastra = new Mastra({
           });
         },
       }),
-    };
 
-    if (mode === 'template') {
-      return agentBuilderTools;
-    } else {
-      return {
-        ...agentBuilderTools,
-
-        // Web Search (replaces MCP web search)
-        webSearch: createTool({
-          id: 'web-search',
-          description: 'Search the web for current information and return structured results.',
-          inputSchema: z.object({
-            query: z.string().describe('Search query'),
-            maxResults: z.number().default(10).describe('Maximum number of results to return'),
-            region: z.string().default('us').describe('Search region/country code'),
-            language: z.string().default('en').describe('Search language'),
-            includeImages: z.boolean().default(false).describe('Include image results'),
-            dateRange: z.enum(['day', 'week', 'month', 'year', 'all']).default('all').describe('Date range filter'),
-          }),
-          outputSchema: z.object({
-            success: z.boolean(),
-            query: z.string(),
-            results: z.array(
-              z.object({
-                title: z.string(),
-                url: z.string(),
-                snippet: z.string(),
-                domain: z.string(),
-                publishDate: z.string().optional(),
-                relevanceScore: z.number().optional(),
-              }),
-            ),
-            totalResults: z.number(),
-            searchTime: z.number(),
-            suggestions: z.array(z.string()).optional(),
-            error: z.string().optional(),
-          }),
-          execute: async ({ context }) => {
-            return await AgentBuilderDefaults.webSearch(context);
-          },
+      // Web Search (replaces MCP web search)
+      webSearch: createTool({
+        id: 'web-search',
+        description: 'Search the web for current information and return structured results.',
+        inputSchema: z.object({
+          query: z.string().describe('Search query'),
+          maxResults: z.number().default(10).describe('Maximum number of results to return'),
+          region: z.string().default('us').describe('Search region/country code'),
+          language: z.string().default('en').describe('Search language'),
+          includeImages: z.boolean().default(false).describe('Include image results'),
+          dateRange: z.enum(['day', 'week', 'month', 'year', 'all']).default('all').describe('Date range filter'),
         }),
-
-        // Enhanced Code Discovery
-        codeAnalyzer: createTool({
-          id: 'code-analyzer',
-          description: 'Analyze codebase structure, discover definitions, and understand architecture patterns.',
-          inputSchema: z.object({
-            action: z
-              .enum(['definitions', 'dependencies', 'patterns', 'structure'])
-              .describe('Type of analysis to perform'),
-            path: z.string().describe('Directory or file path to analyze'),
-            language: z.string().optional().describe('Programming language filter'),
-            depth: z.number().default(3).describe('Directory traversal depth'),
-            includeTests: z.boolean().default(false).describe('Include test files in analysis'),
-          }),
-          outputSchema: z.object({
-            success: z.boolean(),
-            analysis: z.object({
-              definitions: z
-                .array(
-                  z.object({
-                    name: z.string(),
-                    type: z.string(),
-                    file: z.string(),
-                    line: z.number().optional(),
-                    scope: z.string().optional(),
-                  }),
-                )
-                .optional(),
-              dependencies: z
-                .array(
-                  z.object({
-                    name: z.string(),
-                    type: z.enum(['import', 'require', 'include']),
-                    source: z.string(),
-                    target: z.string(),
-                  }),
-                )
-                .optional(),
-              patterns: z
-                .array(
-                  z.object({
-                    pattern: z.string(),
-                    description: z.string(),
-                    files: z.array(z.string()),
-                  }),
-                )
-                .optional(),
-              structure: z
-                .object({
-                  directories: z.number(),
-                  files: z.number(),
-                  languages: z.record(z.number()),
-                  complexity: z.string(),
-                })
-                .optional(),
+        outputSchema: z.object({
+          success: z.boolean(),
+          query: z.string(),
+          results: z.array(
+            z.object({
+              title: z.string(),
+              url: z.string(),
+              snippet: z.string(),
+              domain: z.string(),
+              publishDate: z.string().optional(),
+              relevanceScore: z.number().optional(),
             }),
-            message: z.string(),
-          }),
-          execute: async ({ context }) => {
-            return await AgentBuilderDefaults.analyzeCode(context);
-          },
+          ),
+          totalResults: z.number(),
+          searchTime: z.number(),
+          suggestions: z.array(z.string()).optional(),
+          error: z.string().optional(),
         }),
+        execute: async ({ context }) => {
+          return await AgentBuilderDefaults.webSearch(context);
+        },
+      }),
 
-        // Task Completion Signaling
-        attemptCompletion: createTool({
-          id: 'attempt-completion',
-          description: 'Signal that you believe the requested task has been completed and provide a summary.',
-          inputSchema: z.object({
-            summary: z.string().describe('Summary of what was accomplished'),
-            changes: z
-              .array(
-                z.object({
-                  type: z.enum([
-                    'file_created',
-                    'file_modified',
-                    'file_deleted',
-                    'command_executed',
-                    'dependency_added',
-                  ]),
-                  description: z.string(),
-                  path: z.string().optional(),
-                }),
-              )
-              .describe('List of changes made'),
-            validation: z
-              .object({
-                testsRun: z.boolean().default(false),
-                buildsSuccessfully: z.boolean().default(false),
-                manualTestingRequired: z.boolean().default(false),
-              })
-              .describe('Validation status'),
-            nextSteps: z.array(z.string()).optional().describe('Suggested next steps or follow-up actions'),
-          }),
-          outputSchema: z.object({
-            completionId: z.string(),
-            status: z.enum(['completed', 'needs_review', 'needs_testing']),
-            summary: z.string(),
-            confidence: z.number().min(0).max(100),
-          }),
-          execute: async ({ context }) => {
-            return await AgentBuilderDefaults.signalCompletion(context);
-          },
+      // Task Completion Signaling
+      attemptCompletion: createTool({
+        id: 'attempt-completion',
+        description: 'Signal that you believe the requested task has been completed and provide a summary.',
+        inputSchema: z.object({
+          summary: z.string().describe('Summary of what was accomplished'),
+          changes: z
+            .array(
+              z.object({
+                type: z.enum(['file_created', 'file_modified', 'file_deleted', 'command_executed', 'dependency_added']),
+                description: z.string(),
+                path: z.string().optional(),
+              }),
+            )
+            .describe('List of changes made'),
+          validation: z
+            .object({
+              testsRun: z.boolean().default(false),
+              buildsSuccessfully: z.boolean().default(false),
+              manualTestingRequired: z.boolean().default(false),
+            })
+            .describe('Validation status'),
+          nextSteps: z.array(z.string()).optional().describe('Suggested next steps or follow-up actions'),
         }),
+        outputSchema: z.object({
+          completionId: z.string(),
+          status: z.enum(['completed', 'needs_review', 'needs_testing']),
+          summary: z.string(),
+          confidence: z.number().min(0).max(100),
+        }),
+        execute: async ({ context }) => {
+          return await AgentBuilderDefaults.signalCompletion(context);
+        },
+      }),
 
-        manageProject: createTool({
-          id: 'manage-project',
-          description:
-            'Handles project management including creating project structures, managing dependencies, and package operations.',
-          inputSchema: z.object({
-            action: z.enum(['create', 'install', 'upgrade']).describe('The action to perform'),
-            features: z
-              .array(z.string())
-              .optional()
-              .describe('Mastra features to include (e.g., ["agents", "memory", "workflows"])'),
-            packages: z
-              .array(
-                z.object({
-                  name: z.string(),
-                  version: z.string().optional(),
-                }),
-              )
-              .optional()
-              .describe('Packages to install/upgrade'),
-          }),
-          outputSchema: z.object({
-            success: z.boolean(),
-            installed: z.array(z.string()).optional(),
-            upgraded: z.array(z.string()).optional(),
-            warnings: z.array(z.string()).optional(),
-            message: z.string().optional(),
-            details: z.string().optional(),
-            error: z.string().optional(),
-          }),
-          execute: async ({ context }) => {
-            const { action, features, packages } = context;
-            try {
-              switch (action) {
-                case 'create':
-                  return await AgentBuilderDefaults.createMastraProject({
-                    projectName: projectPath,
-                    features,
-                  });
-                case 'install':
-                  if (!packages?.length) {
-                    return {
-                      success: false,
-                      message: 'Packages array is required for install action',
-                    };
-                  }
-                  return await AgentBuilderDefaults.installPackages({
-                    packages,
-                    projectPath,
-                  });
-                case 'upgrade':
-                  if (!packages?.length) {
-                    return {
-                      success: false,
-                      message: 'Packages array is required for upgrade action',
-                    };
-                  }
-                  return await AgentBuilderDefaults.upgradePackages({
-                    packages,
-                    projectPath,
-                  });
-                // case 'check':
-                //   return await AgentBuilderDefaults.checkProject({
-                //     projectPath,
-                //   });
-                default:
+      manageProject: createTool({
+        id: 'manage-project',
+        description:
+          'Handles project management including creating project structures, managing dependencies, and package operations.',
+        inputSchema: z.object({
+          action: z.enum(['create', 'install', 'upgrade']).describe('The action to perform'),
+          features: z
+            .array(z.string())
+            .optional()
+            .describe('Mastra features to include (e.g., ["agents", "memory", "workflows"])'),
+          packages: z
+            .array(
+              z.object({
+                name: z.string(),
+                version: z.string().optional(),
+              }),
+            )
+            .optional()
+            .describe('Packages to install/upgrade'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          installed: z.array(z.string()).optional(),
+          upgraded: z.array(z.string()).optional(),
+          warnings: z.array(z.string()).optional(),
+          message: z.string().optional(),
+          details: z.string().optional(),
+          error: z.string().optional(),
+        }),
+        execute: async ({ context }) => {
+          const { action, features, packages } = context;
+          try {
+            switch (action) {
+              case 'create':
+                return await AgentBuilderDefaults.createMastraProject({
+                  projectName: projectPath,
+                  features,
+                });
+              case 'install':
+                if (!packages?.length) {
                   return {
                     success: false,
-                    message: `Unknown action: ${action}`,
+                    message: 'Packages array is required for install action',
                   };
-              }
-            } catch (error) {
-              return {
-                success: false,
-                message: `Error executing ${action}: ${error instanceof Error ? error.message : String(error)}`,
-              };
-            }
-          },
-        }),
-        manageServer: createTool({
-          id: 'manage-server',
-          description:
-            'Manages the Mastra server - start, stop, restart, and check status, use the terminal tool to make curl requests to the server. There is an openapi spec for the server at http://localhost:{port}/openapi.json',
-          inputSchema: z.object({
-            action: z.enum(['start', 'stop', 'restart', 'status']).describe('Server management action'),
-            port: z.number().optional().default(4200).describe('Port to run the server on'),
-          }),
-          outputSchema: z.object({
-            success: z.boolean(),
-            status: z.enum(['running', 'stopped', 'starting', 'stopping', 'unknown']),
-            pid: z.number().optional(),
-            port: z.number().optional(),
-            url: z.string().optional(),
-            message: z.string().optional(),
-            stdout: z.array(z.string()).optional().describe('Server output lines captured during startup'),
-            error: z.string().optional(),
-          }),
-          execute: async ({ context }) => {
-            const { action, port } = context;
-            try {
-              switch (action) {
-                case 'start':
-                  return await AgentBuilderDefaults.startMastraServer({
-                    port,
-                    projectPath,
-                  });
-                case 'stop':
-                  return await AgentBuilderDefaults.stopMastraServer({
-                    port,
-                    projectPath,
-                  });
-                case 'restart':
-                  const stopResult = await AgentBuilderDefaults.stopMastraServer({
-                    port,
-                    projectPath,
-                  });
-                  if (!stopResult.success) {
-                    return {
-                      success: false,
-                      status: 'unknown' as const,
-                      message: `Failed to restart: could not stop server on port ${port}`,
-                      error: stopResult.error || 'Unknown stop error',
-                    };
-                  }
-                  await new Promise(resolve => setTimeout(resolve, 500));
-                  const startResult = await AgentBuilderDefaults.startMastraServer({
-                    port,
-                    projectPath,
-                  });
-                  if (!startResult.success) {
-                    return {
-                      success: false,
-                      status: 'stopped' as const,
-                      message: `Failed to restart: server stopped successfully but failed to start on port ${port}`,
-                      error: startResult.error || 'Unknown start error',
-                    };
-                  }
+                }
+                return await AgentBuilderDefaults.installPackages({
+                  packages,
+                  projectPath,
+                });
+              case 'upgrade':
+                if (!packages?.length) {
                   return {
-                    ...startResult,
-                    message: `Mastra server restarted successfully on port ${port}`,
+                    success: false,
+                    message: 'Packages array is required for upgrade action',
                   };
-                case 'status':
-                  return await AgentBuilderDefaults.checkMastraServerStatus({
-                    port,
-                    projectPath,
-                  });
-                default:
+                }
+                return await AgentBuilderDefaults.upgradePackages({
+                  packages,
+                  projectPath,
+                });
+              default:
+                return {
+                  success: false,
+                  message: `Unknown action: ${action}`,
+                };
+            }
+          } catch (error) {
+            return {
+              success: false,
+              message: `Error executing ${action}: ${error instanceof Error ? error.message : String(error)}`,
+            };
+          }
+        },
+      }),
+      manageServer: createTool({
+        id: 'manage-server',
+        description:
+          'Manages the Mastra server - start, stop, restart, and check status, use the terminal tool to make curl requests to the server. There is an openapi spec for the server at http://localhost:{port}/openapi.json',
+        inputSchema: z.object({
+          action: z.enum(['start', 'stop', 'restart', 'status']).describe('Server management action'),
+          port: z.number().optional().default(4200).describe('Port to run the server on'),
+        }),
+        outputSchema: z.object({
+          success: z.boolean(),
+          status: z.enum(['running', 'stopped', 'starting', 'stopping', 'unknown']),
+          pid: z.number().optional(),
+          port: z.number().optional(),
+          url: z.string().optional(),
+          message: z.string().optional(),
+          stdout: z.array(z.string()).optional().describe('Server output lines captured during startup'),
+          error: z.string().optional(),
+        }),
+        execute: async ({ context }) => {
+          const { action, port } = context;
+          try {
+            switch (action) {
+              case 'start':
+                return await AgentBuilderDefaults.startMastraServer({
+                  port,
+                  projectPath,
+                });
+              case 'stop':
+                return await AgentBuilderDefaults.stopMastraServer({
+                  port,
+                  projectPath,
+                });
+              case 'restart':
+                const stopResult = await AgentBuilderDefaults.stopMastraServer({
+                  port,
+                  projectPath,
+                });
+                if (!stopResult.success) {
                   return {
                     success: false,
                     status: 'unknown' as const,
-                    message: `Unknown action: ${action}`,
+                    message: `Failed to restart: could not stop server on port ${port}`,
+                    error: stopResult.error || 'Unknown stop error',
                   };
-              }
-            } catch (error) {
-              return {
-                success: false,
-                status: 'unknown' as const,
-                message: `Error managing server: ${error instanceof Error ? error.message : String(error)}`,
-              };
+                }
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const startResult = await AgentBuilderDefaults.startMastraServer({
+                  port,
+                  projectPath,
+                });
+                if (!startResult.success) {
+                  return {
+                    success: false,
+                    status: 'stopped' as const,
+                    message: `Failed to restart: server stopped successfully but failed to start on port ${port}`,
+                    error: startResult.error || 'Unknown start error',
+                  };
+                }
+                return {
+                  ...startResult,
+                  message: `Mastra server restarted successfully on port ${port}`,
+                };
+              case 'status':
+                return await AgentBuilderDefaults.checkMastraServerStatus({
+                  port,
+                  projectPath,
+                });
+              default:
+                return {
+                  success: false,
+                  status: 'unknown' as const,
+                  message: `Unknown action: ${action}`,
+                };
             }
-          },
+          } catch (error) {
+            return {
+              success: false,
+              status: 'unknown' as const,
+              message: `Error managing server: ${error instanceof Error ? error.message : String(error)}`,
+            };
+          }
+        },
+      }),
+      httpRequest: createTool({
+        id: 'http-request',
+        description: 'Makes HTTP requests to the Mastra server or external APIs for testing and integration',
+        inputSchema: z.object({
+          method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).describe('HTTP method'),
+          url: z.string().describe('Full URL or path (if baseUrl provided)'),
+          baseUrl: z.string().optional().describe('Base URL for the server (e.g., http://localhost:4200)'),
+          headers: z.record(z.string()).optional().describe('HTTP headers'),
+          body: z.any().optional().describe('Request body (will be JSON stringified if object)'),
+          timeout: z.number().optional().default(30000).describe('Request timeout in milliseconds'),
         }),
-        httpRequest: createTool({
-          id: 'http-request',
-          description: 'Makes HTTP requests to the Mastra server or external APIs for testing and integration',
-          inputSchema: z.object({
-            method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).describe('HTTP method'),
-            url: z.string().describe('Full URL or path (if baseUrl provided)'),
-            baseUrl: z.string().optional().describe('Base URL for the server (e.g., http://localhost:4200)'),
-            headers: z.record(z.string()).optional().describe('HTTP headers'),
-            body: z.any().optional().describe('Request body (will be JSON stringified if object)'),
-            timeout: z.number().optional().default(30000).describe('Request timeout in milliseconds'),
-          }),
-          outputSchema: z.object({
-            success: z.boolean(),
-            status: z.number().optional(),
-            statusText: z.string().optional(),
-            headers: z.record(z.string()).optional(),
-            data: z.any().optional(),
-            error: z.string().optional(),
-            url: z.string(),
-            method: z.string(),
-          }),
-          execute: async ({ context }) => {
-            const { method, url, baseUrl, headers, body, timeout } = context;
-            try {
-              return await AgentBuilderDefaults.makeHttpRequest({
-                method,
-                url,
-                baseUrl,
-                headers,
-                body,
-                timeout,
-              });
-            } catch (error) {
-              return {
-                success: false,
-                url: baseUrl ? `${baseUrl}${url}` : url,
-                method,
-                error: error instanceof Error ? error.message : String(error),
-              };
-            }
-          },
+        outputSchema: z.object({
+          success: z.boolean(),
+          status: z.number().optional(),
+          statusText: z.string().optional(),
+          headers: z.record(z.string()).optional(),
+          data: z.any().optional(),
+          error: z.string().optional(),
+          url: z.string(),
+          method: z.string(),
         }),
-      };
-    }
+        execute: async ({ context }) => {
+          const { method, url, baseUrl, headers, body, timeout } = context;
+          try {
+            return await AgentBuilderDefaults.makeHttpRequest({
+              method,
+              url,
+              baseUrl,
+              headers,
+              body,
+              timeout,
+            });
+          } catch (error) {
+            return {
+              success: false,
+              url: baseUrl ? `${baseUrl}${url}` : url,
+              method,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        },
+      }),
+    };
   };
+
+  /**
+   * Filter tools for template builder mode (excludes web search and other advanced tools)
+   */
+  static filterToolsForTemplateBuilder(tools: Record<string, any>): Record<string, any> {
+    const templateBuilderTools = [
+      'readFile',
+      'writeFile',
+      'listDirectory',
+      'executeCommand',
+      'taskManager',
+      'multiEdit',
+      'replaceLines',
+      'showFileLines',
+      'smartSearch',
+      'validateCode',
+    ];
+
+    const filtered: Record<string, ReturnType<typeof createTool>> = {};
+    for (const toolName of templateBuilderTools) {
+      if (tools[toolName]) {
+        filtered[toolName] = tools[toolName];
+      }
+    }
+    return filtered;
+  }
+
+  /**
+   * Filter tools for code editor mode (includes all tools)
+   */
+  static filterToolsForCodeEditor(tools: Record<string, any>): Record<string, any> {
+    return tools; // Return all tools for code editor mode
+  }
+
+  /**
+   * Get tools for a specific mode
+   */
+  static async getToolsForMode(
+    projectPath: string,
+    mode: 'template' | 'code-editor' = 'code-editor',
+  ): Promise<Record<string, any>> {
+    const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(projectPath);
+
+    if (mode === 'template') {
+      return AgentBuilderDefaults.filterToolsForTemplateBuilder(allTools);
+    } else {
+      return AgentBuilderDefaults.filterToolsForCodeEditor(allTools);
+    }
+  }
 
   /**
    * Create a new Mastra project using create-mastra CLI
@@ -1202,55 +1187,6 @@ export const mastra = new Mastra({
       };
     }
   }
-
-  // /**
-  //  * Check project health and status
-  //  */
-  // static async checkProject({ projectPath }: { projectPath?: string }) {
-  //   try {
-  //     const execOptions = projectPath ? { cwd: projectPath } : {};
-
-  //     let hasPackageJson = false;
-  //     let hasMastraConfig = false;
-
-  //     try {
-  //       await exec('test -f package.json', execOptions);
-  //       hasPackageJson = true;
-  //     } catch {
-  //       // ignore
-  //     }
-
-  //     try {
-  //       await exec('test -f mastra.config.* || test -d src/mastra || test -d mastra', execOptions);
-  //       hasMastraConfig = true;
-  //     } catch {
-  //       // ignore
-  //     }
-
-  //     const warnings: string[] = [];
-  //     if (!hasPackageJson) {
-  //       warnings.push('No package.json found - this may not be a Node.js project');
-  //     }
-  //     if (!hasMastraConfig) {
-  //       warnings.push('No Mastra configuration found - run "npx create-mastra" to initialize');
-  //     }
-
-  //     return {
-  //       success: true,
-  //       message: `Project health check completed for ${projectPath || 'current directory'}`,
-  //       warnings,
-  //       checks: {
-  //         hasPackageJson,
-  //         hasMastraConfig,
-  //       },
-  //     };
-  //   } catch (error) {
-  //     return {
-  //       success: false,
-  //       message: `Failed to check project: ${error instanceof Error ? error.message : String(error)}`,
-  //     };
-  //   }
-  // }
 
   /**
    * Start the Mastra server
@@ -1366,7 +1302,7 @@ export const mastra = new Mastra({
       const pids = stdout
         .trim()
         .split('\n')
-        .filter(pid => pid.trim());
+        .filter((pid: string) => pid.trim());
       const killedPids: number[] = [];
       const failedPids: number[] = [];
 
@@ -1413,7 +1349,7 @@ export const mastra = new Mastra({
           const remainingPids = checkStdout
             .trim()
             .split('\n')
-            .filter(pid => pid.trim());
+            .filter((pid: string) => pid.trim());
           for (const pidStr of remainingPids) {
             const pid = parseInt(pidStr.trim());
             if (!isNaN(pid)) {
@@ -1519,8 +1455,38 @@ export const mastra = new Mastra({
     }
   }
 
+  // Cache for TypeScript program (lazily loaded)
+  private static tsProgram: any | null = null;
+  private static programProjectPath: string | null = null;
+
   /**
-   * Validate code using TypeScript, ESLint, and other tools
+   * Validate code using hybrid approach: syntax -> types -> lint
+   *
+   * BEST PRACTICES FOR CODING AGENTS:
+   *
+   * ✅ RECOMMENDED (Fast & Accurate):
+   * validateCode({
+   *   validationType: ['types', 'lint'],
+   *   files: ['src/workflows/my-workflow.ts', 'src/components/Button.tsx']
+   * })
+   *
+   * Performance: ~150ms
+   * - Syntax check (1ms) - catches 80% of issues instantly
+   * - Semantic validation (100ms) - full type checking with dependencies
+   * - ESLint (50ms) - style and best practices
+   * - Only shows errors from YOUR files
+   *
+   * ❌ AVOID (Slow & Noisy):
+   * validateCode({ validationType: ['types', 'lint'] }) // no files specified
+   *
+   * Performance: ~2000ms+
+   * - Full project CLI validation
+   * - Shows errors from all project files (confusing)
+   * - Much slower for coding agents
+   *
+   * @param projectPath - Project root directory (defaults to cwd)
+   * @param validationType - ['types', 'lint'] recommended for most use cases
+   * @param files - ALWAYS provide this for best performance
    */
   static async validateCode({
     projectPath,
@@ -1543,14 +1509,93 @@ export const mastra = new Mastra({
     const validationsPassed: string[] = [];
     const validationsFailed: string[] = [];
 
+    const targetProjectPath = projectPath || process.cwd();
+
+    // If no files specified, use legacy CLI-based validation for backward compatibility
+    if (!files || files.length === 0) {
+      return this.validateCodeCLI({ projectPath, validationType });
+    }
+
+    // Hybrid validation approach for specific files (default behavior)
+    for (const filePath of files) {
+      const absolutePath = isAbsolute(filePath) ? filePath : resolve(targetProjectPath, filePath);
+
+      try {
+        const fileContent = await readFile(absolutePath, 'utf-8');
+        const fileResults = await this.validateSingleFileHybrid(
+          absolutePath,
+          fileContent,
+          targetProjectPath,
+          validationType,
+        );
+
+        errors.push(...fileResults.errors);
+
+        // Track validation results
+        for (const type of validationType) {
+          const hasErrors = fileResults.errors.some(e => e.type === type && e.severity === 'error');
+          if (hasErrors) {
+            if (!validationsFailed.includes(type)) validationsFailed.push(type);
+          } else {
+            if (!validationsPassed.includes(type)) validationsPassed.push(type);
+          }
+        }
+      } catch (error) {
+        errors.push({
+          type: 'typescript',
+          severity: 'error',
+          message: `Failed to read file ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          file: filePath,
+        });
+        validationsFailed.push('types');
+      }
+    }
+
+    const totalErrors = errors.filter(e => e.severity === 'error').length;
+    const totalWarnings = errors.filter(e => e.severity === 'warning').length;
+    const isValid = totalErrors === 0;
+
+    return {
+      valid: isValid,
+      errors,
+      summary: {
+        totalErrors,
+        totalWarnings,
+        validationsPassed,
+        validationsFailed,
+      },
+    };
+  }
+
+  /**
+   * CLI-based validation for when no specific files are provided
+   */
+  static async validateCodeCLI({
+    projectPath,
+    validationType,
+  }: {
+    projectPath?: string;
+    validationType: Array<'types' | 'lint' | 'schemas' | 'tests' | 'build'>;
+  }) {
+    const errors: Array<{
+      type: 'typescript' | 'eslint' | 'schema' | 'test' | 'build';
+      severity: 'error' | 'warning' | 'info';
+      message: string;
+      file?: string;
+      line?: number;
+      column?: number;
+      code?: string;
+    }> = [];
+    const validationsPassed: string[] = [];
+    const validationsFailed: string[] = [];
+
     const execOptions = { cwd: projectPath };
 
-    // TypeScript validation
+    // TypeScript validation (legacy approach)
     if (validationType.includes('types')) {
       try {
-        const fileArgs = files?.length ? files : [];
         // Use execFile for safe argument passing to avoid shell interpretation
-        const args = ['tsc', '--noEmit', ...fileArgs];
+        const args = ['tsc', '--noEmit'];
         await execFile('npx', args, execOptions);
         validationsPassed.push('types');
       } catch (error: any) {
@@ -1575,8 +1620,7 @@ export const mastra = new Mastra({
     // ESLint validation
     if (validationType.includes('lint')) {
       try {
-        const fileArgs = files?.length ? files : ['.'];
-        const eslintArgs = ['eslint', ...fileArgs, '--format', 'json'];
+        const eslintArgs = ['eslint', '--format', 'json'];
         const { stdout } = await execFile('npx', eslintArgs, execOptions);
 
         if (stdout) {
@@ -1615,39 +1659,6 @@ export const mastra = new Mastra({
       }
     }
 
-    // Build validation
-    // if (validationType.includes('build')) {
-    //   try {
-    //     await spawnSWPM(execOptions.cwd!, 'build', []);
-    //     validationsPassed.push('build');
-    //   } catch (error) {
-    //     const errorMessage = error instanceof Error ? error.message : String(error);
-    //     errors.push({
-    //       type: 'build',
-    //       severity: 'error',
-    //       message: `Build failed: ${errorMessage}`,
-    //     });
-    //     validationsFailed.push('build');
-    //   }
-    // }
-
-    // Test validation
-    // if (validationType.includes('tests')) {
-    //   try {
-    //     const testCommand = files?.length ? `npx vitest run ${files.join(' ')}` : 'npm test || pnpm test || yarn test';
-    //     await exec(testCommand, execOptions);
-    //     validationsPassed.push('tests');
-    //   } catch (error) {
-    //     const errorMessage = error instanceof Error ? error.message : String(error);
-    //     errors.push({
-    //       type: 'test',
-    //       severity: 'error',
-    //       message: `Tests failed: ${errorMessage}`,
-    //     });
-    //     validationsFailed.push('tests');
-    //   }
-    // }
-
     const totalErrors = errors.filter(e => e.severity === 'error').length;
     const totalWarnings = errors.filter(e => e.severity === 'warning').length;
     const isValid = totalErrors === 0;
@@ -1663,6 +1674,273 @@ export const mastra = new Mastra({
       },
     };
   }
+
+  /**
+   * Hybrid validation for a single file
+   */
+  static async validateSingleFileHybrid(
+    filePath: string,
+    fileContent: string,
+    projectPath: string,
+    validationType: Array<'types' | 'lint' | 'schemas' | 'tests' | 'build'>,
+  ) {
+    const errors: Array<{
+      type: 'typescript' | 'eslint' | 'schema' | 'test' | 'build';
+      severity: 'error' | 'warning' | 'info';
+      message: string;
+      file?: string;
+      line?: number;
+      column?: number;
+      code?: string;
+    }> = [];
+
+    // Step 1: Fast syntax validation
+    if (validationType.includes('types')) {
+      const syntaxErrors = await this.validateSyntaxOnly(fileContent, filePath);
+      errors.push(...syntaxErrors);
+
+      // Fail fast on syntax errors
+      if (syntaxErrors.length > 0) {
+        return { errors };
+      }
+
+      // Step 2: TypeScript semantic validation (if syntax is clean)
+      const typeErrors = await this.validateTypesSemantic(filePath, projectPath);
+      errors.push(...typeErrors);
+    }
+
+    // Step 3: ESLint validation (only if no critical errors)
+    if (validationType.includes('lint') && !errors.some(e => e.severity === 'error')) {
+      const lintErrors = await this.validateESLintSingle(filePath, projectPath);
+      errors.push(...lintErrors);
+    }
+
+    return { errors };
+  }
+
+  /**
+   * Fast syntax-only validation using TypeScript parser
+   */
+  static async validateSyntaxOnly(fileContent: string, fileName: string) {
+    const errors: Array<{
+      type: 'typescript';
+      severity: 'error';
+      message: string;
+      file?: string;
+      line?: number;
+      column?: number;
+    }> = [];
+
+    try {
+      // Dynamically import TypeScript to avoid bundling issues
+      const ts = await import('typescript');
+
+      const sourceFile = ts.createSourceFile(fileName, fileContent, ts.ScriptTarget.Latest, true);
+
+      // Create a minimal program to get syntax diagnostics
+      const options: any = {
+        allowJs: true,
+        checkJs: false,
+        noEmit: true,
+      };
+
+      const host: any = {
+        getSourceFile: (name: string) => (name === fileName ? sourceFile : undefined),
+        writeFile: () => {},
+        getCurrentDirectory: () => '',
+        getDirectories: () => [],
+        fileExists: (name: string) => name === fileName,
+        readFile: (name: string) => (name === fileName ? fileContent : undefined),
+        getCanonicalFileName: (name: string) => name,
+        useCaseSensitiveFileNames: () => true,
+        getNewLine: () => '\n',
+        getDefaultLibFileName: () => 'lib.d.ts',
+      };
+
+      const program = ts.createProgram([fileName], options, host);
+      const diagnostics = program.getSyntacticDiagnostics(sourceFile);
+
+      for (const diagnostic of diagnostics) {
+        if (diagnostic.start !== undefined) {
+          const position = sourceFile.getLineAndCharacterOfPosition(diagnostic.start);
+          errors.push({
+            type: 'typescript',
+            severity: 'error',
+            message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+            file: fileName,
+            line: position.line + 1,
+            column: position.character + 1,
+          });
+        }
+      }
+    } catch (error) {
+      // If TypeScript is not available, fall back to basic validation
+      console.warn('TypeScript not available for syntax validation:', error);
+
+      // Basic syntax check - look for common syntax errors
+      const lines = fileContent.split('\n');
+      const commonErrors = [
+        { pattern: /\bimport\s+.*\s+from\s+['""][^'"]*$/, message: 'Unterminated import statement' },
+        { pattern: /\{[^}]*$/, message: 'Unclosed brace' },
+        { pattern: /\([^)]*$/, message: 'Unclosed parenthesis' },
+        { pattern: /\[[^\]]*$/, message: 'Unclosed bracket' },
+      ];
+
+      lines.forEach((line, index) => {
+        commonErrors.forEach(({ pattern, message }) => {
+          if (pattern.test(line)) {
+            errors.push({
+              type: 'typescript',
+              severity: 'error',
+              message,
+              file: fileName,
+              line: index + 1,
+            });
+          }
+        });
+      });
+    }
+
+    return errors;
+  }
+
+  /**
+   * TypeScript semantic validation using incremental program
+   */
+  static async validateTypesSemantic(filePath: string, projectPath: string) {
+    const errors: Array<{
+      type: 'typescript';
+      severity: 'error' | 'warning';
+      message: string;
+      file?: string;
+      line?: number;
+      column?: number;
+    }> = [];
+
+    try {
+      // Initialize or reuse TypeScript program
+      const program = await this.getOrCreateTSProgram(projectPath);
+      if (!program) {
+        return errors; // Fallback to no validation if program creation fails
+      }
+
+      const sourceFile = program.getSourceFile(filePath);
+      if (!sourceFile) {
+        return errors; // File not in program
+      }
+
+      const diagnostics = [
+        ...program.getSemanticDiagnostics(sourceFile),
+        ...program.getSyntacticDiagnostics(sourceFile),
+      ];
+
+      // Dynamically import TypeScript for diagnostic processing
+      const ts = await import('typescript');
+
+      for (const diagnostic of diagnostics) {
+        if (diagnostic.start !== undefined) {
+          const position = sourceFile.getLineAndCharacterOfPosition(diagnostic.start);
+          errors.push({
+            type: 'typescript',
+            severity: diagnostic.category === ts.DiagnosticCategory.Warning ? 'warning' : 'error',
+            message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+            file: filePath,
+            line: position.line + 1,
+            column: position.character + 1,
+          });
+        }
+      }
+    } catch (error) {
+      // Fallback to no semantic validation on error
+      console.warn(`TypeScript semantic validation failed for ${filePath}:`, error);
+    }
+
+    return errors;
+  }
+
+  /**
+   * ESLint validation for a single file
+   */
+  static async validateESLintSingle(filePath: string, projectPath: string) {
+    const errors: Array<{
+      type: 'eslint';
+      severity: 'error' | 'warning';
+      message: string;
+      file?: string;
+      line?: number;
+      column?: number;
+      code?: string;
+    }> = [];
+
+    try {
+      const { stdout } = await execFile('npx', ['eslint', filePath, '--format', 'json'], { cwd: projectPath });
+
+      if (stdout) {
+        const eslintResults = JSON.parse(stdout);
+        const eslintErrors = this.parseESLintErrors(eslintResults);
+        errors.push(...eslintErrors);
+      }
+    } catch (error: any) {
+      // Try to parse error output
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('"filePath"') || errorMessage.includes('messages')) {
+        try {
+          const eslintResults = JSON.parse(errorMessage);
+          const eslintErrors = this.parseESLintErrors(eslintResults);
+          errors.push(...eslintErrors);
+        } catch {
+          // Ignore ESLint errors in hybrid mode for now
+        }
+      }
+    }
+
+    return errors;
+  }
+
+  /**
+   * Get or create TypeScript program
+   */
+  static async getOrCreateTSProgram(projectPath: string): Promise<any | null> {
+    // Return cached program if same project
+    if (this.tsProgram && this.programProjectPath === projectPath) {
+      return this.tsProgram;
+    }
+
+    try {
+      // Dynamically import TypeScript
+      const ts = await import('typescript');
+
+      const configPath = ts.findConfigFile(projectPath, ts.sys.fileExists, 'tsconfig.json');
+      if (!configPath) {
+        return null; // No tsconfig found
+      }
+
+      const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+      if (configFile.error) {
+        return null;
+      }
+
+      const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, projectPath);
+
+      if (parsedConfig.errors.length > 0) {
+        return null;
+      }
+
+      // Create regular program
+      this.tsProgram = ts.createProgram({
+        rootNames: parsedConfig.fileNames,
+        options: parsedConfig.options,
+      });
+
+      this.programProjectPath = projectPath;
+      return this.tsProgram;
+    } catch (error) {
+      console.warn('Failed to create TypeScript program:', error);
+      return null;
+    }
+  }
+
+  // Note: Old filterTypeScriptErrors method removed in favor of hybrid validation approach
 
   /**
    * Parse ESLint errors from JSON output
@@ -1792,7 +2070,7 @@ export const mastra = new Mastra({
     }>;
     taskId?: string;
   }) {
-    // In-memory task storage with cleanup (could be enhanced with persistent storage)
+    // In-memory task storage (could be enhanced with persistent storage)
     if (!AgentBuilderDefaults.taskStorage) {
       AgentBuilderDefaults.taskStorage = new Map();
     }
@@ -1915,213 +2193,6 @@ export const mastra = new Mastra({
   }
 
   /**
-   * Analyze codebase structure and patterns
-   */
-  static async analyzeCode(context: {
-    action: 'definitions' | 'dependencies' | 'patterns' | 'structure';
-    path: string;
-    language?: string;
-    depth?: number;
-    includeTests?: boolean;
-  }) {
-    try {
-      const { action, path, language, depth = 3 } = context;
-
-      // Use ripgrep for fast searching
-      // const excludePatterns = includeTests ? [] : ['*test*', '*spec*', '__tests__'];
-
-      // Only allow a list of known extensions/language types to prevent shell injection
-      const ALLOWED_LANGUAGES = [
-        'js',
-        'ts',
-        'jsx',
-        'tsx',
-        'py',
-        'java',
-        'go',
-        'cpp',
-        'c',
-        'cs',
-        'rb',
-        'php',
-        'rs',
-        'kt',
-        'swift',
-        'm',
-        'scala',
-        'sh',
-        'json',
-        'yaml',
-        'yml',
-        'toml',
-        'ini',
-      ];
-      let languagePattern = '*';
-      if (language && ALLOWED_LANGUAGES.includes(language)) {
-        languagePattern = `*.${language}`;
-      }
-
-      switch (action) {
-        case 'definitions':
-          // Search for function/class/interface definitions
-          const definitionPatterns = [
-            'function\\s+([a-zA-Z_][a-zA-Z0-9_]*)',
-            'class\\s+([a-zA-Z_][a-zA-Z0-9_]*)',
-            'interface\\s+([a-zA-Z_][a-zA-Z0-9_]*)',
-            'const\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*=',
-            'export\\s+(function|class|interface|const)\\s+([a-zA-Z_][a-zA-Z0-9_]*)',
-          ];
-
-          const definitions: Array<{ name: string; type: string; file: string; line?: number; scope?: string }> = [];
-
-          for (const pattern of definitionPatterns) {
-            try {
-              const { stdout } = await execFile('rg', [
-                '-n',
-                pattern,
-                path,
-                '--type',
-                languagePattern,
-                '--max-depth',
-                String(depth),
-              ]);
-              const matches = stdout.split('\n').filter(line => line.trim());
-
-              matches.forEach(match => {
-                const parts = match.split(':');
-                if (parts.length >= 3) {
-                  const file = parts[0];
-                  const lineStr = parts[1];
-                  const line = parseInt(lineStr || '0');
-                  const content = parts.slice(2).join(':');
-                  const nameMatch = content.match(/([a-zA-Z_][a-zA-Z0-9_]*)/);
-
-                  if (nameMatch && nameMatch[1]) {
-                    definitions.push({
-                      name: nameMatch[1],
-                      type: pattern.includes('function')
-                        ? 'function'
-                        : pattern.includes('class')
-                          ? 'class'
-                          : pattern.includes('interface')
-                            ? 'interface'
-                            : 'variable',
-                      file: file || '',
-                      line,
-                      scope: 'top-level',
-                    });
-                  }
-                }
-              });
-            } catch {
-              // Continue with other patterns if one fails
-            }
-          }
-
-          return {
-            success: true,
-            analysis: { definitions },
-            message: `Found ${definitions.length} code definitions`,
-          };
-
-        case 'dependencies':
-          // Search for import/require statements
-          const depPatterns = [
-            'import\\s+.*\\s+from\\s+[\'"]([^\'"]+)[\'"]',
-            'require\\([\'"]([^\'"]+)[\'"]\\)',
-            '#include\\s+[<"]([^>"]+)[>"]',
-          ];
-
-          const dependencies: Array<{
-            name: string;
-            type: 'import' | 'require' | 'include';
-            source: string;
-            target: string;
-          }> = [];
-
-          for (const pattern of depPatterns) {
-            try {
-              const { stdout } = await execFile('rg', ['-n', pattern, path, '--type', languagePattern]);
-              const matches = stdout.split('\n').filter(line => line.trim());
-
-              matches.forEach(match => {
-                const parts = match.split(':');
-                if (parts.length >= 3) {
-                  const file = parts[0];
-                  const content = parts.slice(2).join(':');
-                  const depMatch = content.match(new RegExp(pattern));
-
-                  if (depMatch && depMatch[1]) {
-                    dependencies.push({
-                      name: depMatch[1],
-                      type: pattern.includes('import') ? 'import' : pattern.includes('require') ? 'require' : 'include',
-                      source: file || '',
-                      target: depMatch[1],
-                    });
-                  }
-                }
-              });
-            } catch {
-              // Continue with other patterns
-            }
-          }
-
-          return {
-            success: true,
-            analysis: { dependencies },
-            message: `Found ${dependencies.length} dependencies`,
-          };
-
-        case 'structure':
-          // Use execFile for find commands to avoid shell injection
-          const { stdout: lsOutput } = await execFile('find', [path, '-type', 'f', '-name', languagePattern]);
-          const allFiles = lsOutput.split('\n').filter(line => line.trim());
-          const files = allFiles.slice(0, 1000); // Limit to 1000 files like head -1000
-
-          const { stdout: dirOutput } = await execFile('find', [path, '-type', 'd']);
-          const directories = dirOutput.split('\n').filter(line => line.trim()).length;
-
-          // Count languages by file extension
-          const languages: Record<string, number> = {};
-          files.forEach(file => {
-            const ext = file.split('.').pop();
-            if (ext) {
-              languages[ext] = (languages[ext] || 0) + 1;
-            }
-          });
-
-          const complexity = files.length > 1000 ? 'high' : files.length > 100 ? 'medium' : 'low';
-
-          return {
-            success: true,
-            analysis: {
-              structure: {
-                directories,
-                files: files.length,
-                languages,
-                complexity,
-              },
-            },
-            message: `Analyzed project structure: ${files.length} files in ${directories} directories`,
-          };
-
-        default:
-          return {
-            success: false,
-            analysis: {},
-            message: `Unknown analysis action: ${action}`,
-          };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        analysis: {},
-        message: `Code analysis error: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  }
-
-  /**
    * Perform multiple edits across files atomically
    */
   static async performMultiEdit(context: {
@@ -2236,10 +2307,18 @@ export const mastra = new Mastra({
       const lines = content.split('\n');
 
       // Validate line numbers
-      if (startLine < 1 || endLine < 1 || startLine > lines.length || endLine > lines.length) {
+      if (startLine < 1 || endLine < 1) {
         return {
           success: false,
-          message: `Invalid line range: ${startLine}-${endLine}. File has ${lines.length} lines.`,
+          message: `Line numbers must be 1 or greater. Got startLine: ${startLine}, endLine: ${endLine}`,
+          error: 'Invalid line range',
+        };
+      }
+
+      if (startLine > lines.length || endLine > lines.length) {
+        return {
+          success: false,
+          message: `Line range ${startLine}-${endLine} is out of bounds. File has ${lines.length} lines. Remember: lines are 1-indexed, so valid range is 1-${lines.length}.`,
           error: 'Invalid line range',
         };
       }
@@ -2272,10 +2351,11 @@ export const mastra = new Mastra({
       await writeFile(fullPath, updatedContent, 'utf-8');
 
       const linesReplaced = endLine - startLine + 1;
+      const newLineCount = newLines.length;
 
       return {
         success: true,
-        message: `Successfully replaced ${linesReplaced} lines (${startLine}-${endLine}) in ${filePath}`,
+        message: `Successfully replaced ${linesReplaced} lines (${startLine}-${endLine}) with ${newLineCount} new lines in ${filePath}`,
         linesReplaced,
         backup,
       };
@@ -2289,32 +2369,66 @@ export const mastra = new Mastra({
   }
 
   /**
-   * Ask user for clarification
+   * Show file lines with line numbers for debugging
    */
-  static async askClarification(context: {
-    question: string;
-    options?: Array<{ id: string; description: string; implications?: string }>;
-    context?: string;
-    urgency?: 'low' | 'medium' | 'high';
+  static async showFileLines(context: {
+    filePath: string;
+    startLine?: number;
+    endLine?: number;
+    context?: number;
+    projectPath?: string;
   }) {
-    const questionId = `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const { filePath, startLine, endLine, context: contextLines = 2, projectPath = process.cwd() } = context;
 
-    // Store question for potential follow-up (in real implementation, this might be stored in session state)
-    if (!AgentBuilderDefaults.pendingQuestions) {
-      AgentBuilderDefaults.pendingQuestions = new Map();
+    try {
+      const fullPath = isAbsolute(filePath) ? filePath : join(projectPath, filePath);
+
+      // Read current file content
+      const content = await readFile(fullPath, 'utf-8');
+      const lines = content.split('\n');
+
+      let targetStart = startLine;
+      let targetEnd = endLine;
+
+      // If no range specified, show all lines
+      if (!targetStart) {
+        targetStart = 1;
+        targetEnd = lines.length;
+      } else if (!targetEnd) {
+        targetEnd = targetStart;
+      }
+
+      // Calculate actual display range with context
+      const displayStart = Math.max(1, targetStart - contextLines);
+      const displayEnd = Math.min(lines.length, targetEnd + contextLines);
+
+      const result = [];
+      for (let i = displayStart; i <= displayEnd; i++) {
+        const lineIndex = i - 1; // Convert to 0-based for array access
+        const isTarget = i >= targetStart && i <= targetEnd;
+
+        result.push({
+          lineNumber: i,
+          content: lineIndex < lines.length ? (lines[lineIndex] ?? '') : '',
+          isTarget,
+        });
+      }
+
+      return {
+        success: true,
+        lines: result,
+        totalLines: lines.length,
+        message: `Showing lines ${displayStart}-${displayEnd} of ${lines.length} total lines in ${filePath}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        lines: [],
+        totalLines: 0,
+        message: `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
-
-    AgentBuilderDefaults.pendingQuestions.set(questionId, {
-      ...context,
-      timestamp: new Date().toISOString(),
-    });
-
-    return {
-      questionId,
-      question: context.question,
-      options: context.options?.map(opt => ({ id: opt.id, description: opt.description })),
-      awaitingResponse: true,
-    };
   }
 
   /**
@@ -2432,7 +2546,7 @@ export const mastra = new Mastra({
       const { stdout } = await execFile('rg', rgArgs, {
         cwd: projectPath,
       });
-      const lines = stdout.split('\n').filter(line => line.trim());
+      const lines = stdout.split('\n').filter((line: string) => line.trim());
 
       const matches: Array<{
         file: string;
@@ -2445,7 +2559,7 @@ export const mastra = new Mastra({
 
       let currentMatch: any = null;
 
-      lines.forEach(line => {
+      lines.forEach((line: string) => {
         if (line.includes(':') && !line.startsWith('-')) {
           // This is a match line
           const parts = line.split(':');

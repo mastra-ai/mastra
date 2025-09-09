@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.11.3-alpha.0",
+  "version": "0.12.1-alpha.1",
   "description": "Create Mastra apps with one command",
   "license": "Apache-2.0",
   "type": "module",
@@ -10,8 +10,7 @@
   },
   "files": [
     "dist",
-    "starter-files",
-    "templates"
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "rollup -c",
@@ -38,7 +37,7 @@
   "dependencies": {
     "commander": "^12.1.0",
     "execa": "^9.6.0",
-    "fs-extra": "^11.3.0",
+    "fs-extra": "^11.3.1",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "posthog-node": "^4.18.0",
@@ -62,5 +61,14 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/create-mastra"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

@@ -15,7 +15,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod';
+import type { ZodType, ZodSchema } from 'zod';
 
 import type {
   GenerateParams,
@@ -43,7 +43,7 @@ async function executeToolCallAndRespond({
   runtimeContext,
   respondFn,
 }: {
-  params: StreamVNextParams<any>;
+  params: StreamVNextParams<any, any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
   runId?: string;
   resourceId?: string;
@@ -211,6 +211,31 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodType | undefined = undefined,
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
+    console.warn(
+      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 16th. Please use generateLegacy if you don't want to upgrade just yet.",
+    );
+    // @ts-expect-error - generic type issues
+    return this.generateLegacy(params);
+  }
+
+  /**
+   * Generates a response from the agent
+   * @param params - Generation parameters including prompt
+   * @returns Promise containing the generated response
+   */
+  async generateLegacy(
+    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateReturn<any, undefined, undefined>>;
+  async generateLegacy<Output extends JSONSchema7 | ZodType>(
+    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
+  ): Promise<GenerateReturn<any, Output, undefined>>;
+  async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
+    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
+  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
+  async generateLegacy<
+    Output extends JSONSchema7 | ZodType | undefined = undefined,
+    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -222,7 +247,7 @@ export class Agent extends BaseResource {
     const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
-      `/api/agents/${this.agentId}/generate`,
+      `/api/agents/${this.agentId}/generate-legacy`,
       {
         method: 'POST',
         body: processedParams,
@@ -290,14 +315,21 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<T extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<T>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+  async generateVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(params: StreamVNextParams<T, STRUCTURED_OUTPUT>): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
+      structuredOutput: params.structuredOutput
+        ? {
+            ...params.structuredOutput,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          }
+        : undefined,
     };
 
     const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamVNextParams;
@@ -682,6 +714,24 @@ export class Agent extends BaseResource {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     }
   > {
+    console.warn(
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 16th. Please use streamLegacy if you don't want to upgrade just yet.",
+    );
+    return this.streamLegacy(params);
+  }
+
+  /**
+   * Streams a response from the agent
+   * @param params - Stream parameters including prompt
+   * @returns Promise containing the enhanced Response object with processDataStream method
+   */
+  async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
+    params: StreamParams<T>,
+  ): Promise<
+    Response & {
+      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+    }
+  > {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -958,7 +1008,7 @@ export class Agent extends BaseResource {
               step,
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
-              args: undefined,
+              args: chunk.payload.args,
             } as const;
 
             message.toolInvocations.push(invocation as ToolInvocation);
@@ -1037,7 +1087,7 @@ export class Agent extends BaseResource {
             step += 1;
 
             // reset the current text and reasoning parts
-            currentTextPart = chunk.payload.isContinued ? currentTextPart : undefined;
+            currentTextPart = chunk.payload.stepResult.isContinued ? currentTextPart : undefined;
             currentReasoningPart = undefined;
             currentReasoningTextDetail = undefined;
 
@@ -1046,7 +1096,7 @@ export class Agent extends BaseResource {
           }
 
           case 'finish': {
-            finishReason = chunk.payload.finishReason;
+            finishReason = chunk.payload.stepResult.reason;
             if (chunk.payload.usage != null) {
               // usage = calculateLanguageModelUsage(value.usage);
               usage = chunk.payload.usage;
@@ -1078,11 +1128,32 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream
+      // Pipe one branch to the writable stream without holding a persistent lock
       streamForWritable
-        .pipeTo(writable, {
-          preventClose: true,
-        })
+        .pipeTo(
+          new WritableStream<Uint8Array>({
+            async write(chunk) {
+              // Filter out terminal markers so the client stream doesn't end before recursion
+              try {
+                const text = new TextDecoder().decode(chunk);
+                if (text.includes('[DONE]')) {
+                  return;
+                }
+              } catch {
+                // If decoding fails, fall back to writing raw chunk
+              }
+              const writer = writable.getWriter();
+              try {
+                await writer.write(chunk);
+              } finally {
+                writer.releaseLock();
+              }
+            },
+          }),
+          {
+            preventClose: true,
+          },
+        )
         .catch(error => {
           console.error('Error piping to writable stream:', error);
         });
@@ -1128,7 +1199,9 @@ export class Agent extends BaseResource {
                   },
                 );
 
-                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
+                const lastMessageRaw = messages[messages.length - 1];
+                const lastMessage: UIMessage | undefined =
+                  lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
 
                 const toolInvocationPart = lastMessage?.parts?.find(
                   part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
@@ -1152,33 +1225,19 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
-                // write the tool result part to the stream
-                const writer = writable.getWriter();
-
-                try {
-                  await writer.write(
-                    new TextEncoder().encode(
-                      'a:' +
-                        JSON.stringify({
-                          toolCallId: toolCall.toolCallId,
-                          result,
-                        }) +
-                        '\n',
-                    ),
-                  );
-                } finally {
-                  writer.releaseLock();
-                }
-
                 // Convert messages to the correct format for the recursive call
                 const originalMessages = processedParams.messages;
                 const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+                const updatedMessages =
+                  lastMessage != null
+                    ? [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage]
+                    : [...messageArray, ...messages];
 
                 // Recursively call stream with updated messages
                 this.processStreamResponse_vNext(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: updatedMessages,
                   },
                   writable,
                 ).catch(error => {
@@ -1203,8 +1262,11 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async streamVNext<T extends OutputSchema | undefined = undefined>(
-    params: StreamVNextParams<T>,
+  async streamVNext<
+    T extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    params: StreamVNextParams<T, STRUCTURED_OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1219,6 +1281,12 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
       clientTools: processClientTools(params.clientTools),
+      structuredOutput: params.structuredOutput
+        ? {
+            ...params.structuredOutput,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          }
+        : undefined,
     };
 
     // Create a readable stream that will handle the response processing
@@ -1261,7 +1329,7 @@ export class Agent extends BaseResource {
   private async processStreamResponse(processedParams: any, writable: WritableStream<Uint8Array>) {
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/api/agents/${this.agentId}/stream`, {
+    } = await this.request(`/api/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
       body: processedParams,
       stream: true,

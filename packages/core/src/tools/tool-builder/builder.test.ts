@@ -1,15 +1,21 @@
 import { openai } from '@ai-sdk/openai';
+import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
-import type { AnyAISpan } from '../../ai-tracing';
 import { AISpanType } from '../../ai-tracing';
+import type { AnyAISpan } from '../../ai-tracing';
 import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 import 'dotenv/config';
+
+const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
+const openrouter_v5 = createOpenRouterV5({ apiKey: process.env.OPENROUTER_API_KEY });
 
 type Result = {
   modelName: string;
@@ -33,15 +39,15 @@ const allSchemas = {
   string: z.string().describe('I need any text'),
   stringMin: z.string().min(5).describe('I need any text with a minimum of 5 characters'),
   stringMax: z.string().max(10).describe('I need any text with a maximum of 10 characters'),
-  stringEmail: z.string().email().describe('I need any text including a valid email address'),
-  stringEmoji: z.string().emoji().describe('I need any text including a valid emoji'),
-  stringUrl: z.string().url().describe('I need any text including a valid url'),
-  stringUuid: z.string().uuid().describe('I need any text including a valid uuid'),
-  stringCuid: z.string().cuid().describe('I need any text including a valid cuid'),
+  stringEmail: z.string().email().describe('I need a valid email address'),
+  stringEmoji: z.string().emoji().describe('I need a valid emoji'),
+  stringUrl: z.string().url().describe('I need a valid url'),
+  stringUuid: z.string().uuid().describe('I need a valid uuid'),
+  stringCuid: z.string().cuid().describe('I need a valid cuid'),
   stringRegex: z
     .string()
     .regex(/^test-/)
-    .describe('I need any text including a valid regex'),
+    .describe('I need any text that is valid regex'),
 
   // Number types
   number: z.number().describe('I need any number'),
@@ -67,10 +73,10 @@ const allSchemas = {
       }),
     })
     .describe('I need you to include a name and an age in your response'),
-  objectPassthrough: z.object({}).passthrough().describe('Tell me about Toronto in two sentences'),
+  objectPassthrough: z.object({}).passthrough().describe('give me any object describing toronto'),
 
   // Optional and nullable
-  optional: z.string().optional().describe('I need any text that is optional'),
+  optional: z.string().optional().describe('Either include text or dont'),
   nullable: z.string().nullable().describe('I need any text that is nullable'),
 
   // Enums
@@ -84,9 +90,7 @@ const allSchemas = {
       z.object({ amount: z.number(), inventoryItemName: z.string() }),
       z.object({ type: z.string(), permissions: z.array(z.string()) }),
     ])
-    .describe(
-      'Pretend to be a store clerk and tell me about an item in the store and how much you have of it. Also tell me about types of permissions you allow for your employees and their names.',
-    ),
+    .describe('give an valid object'),
 
   // Default values
   default: z.string().default('test').describe('I need any text that is the default value'),
@@ -121,39 +125,59 @@ function createTestSchemas(schemaKeys: SchemaKey[] = []): z.ZodObject<any> {
 }
 
 async function runSingleOutputsTest(
-  model: LanguageModel,
+  model: LanguageModel | LanguageModelV2,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
   schemaName: string,
+  outputType: string,
 ): Promise<Result> {
   try {
-    const openAIProviderOptions = {
-      openai: {
-        reasoningEffort: 'low',
-      },
-    };
-
-    const agent = new Agent({
-      name: `test-agent-${model.modelId}`,
-      instructions: `I am testing that I can generate structured outputs from your response. Your sole purpose is to give me any type of response but make sure that you have the requested input somewhere in there.`,
-      model: model,
-    });
-
     const generateOptions: any = {
-      maxSteps: 1,
-      structuredOutput: {
+      maxSteps: 5,
+      temperature: 0,
+    };
+    if (outputType === 'structuredOutput') {
+      generateOptions.structuredOutput = {
         schema: testTool.inputSchema!,
         model: model,
         errorStrategy: 'strict',
-      },
-    };
-
-    if (model.provider.includes('openai') || model.modelId.includes('openai')) {
-      generateOptions.providerOptions = openAIProviderOptions;
+      };
+    } else if (outputType === 'output') {
+      generateOptions.output = testTool.inputSchema!;
     }
 
-    const response = await agent.generate(allSchemas[schemaName].description, generateOptions);
+    const instructions =
+      outputType === 'output'
+        ? 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.'
+        : 'I am testing that I can generate structured outputs from your response. Your sole purpose is to give me any type of response but make sure that you have the requested input somewhere in there.';
+
+    const agent = new Agent({
+      name: `test-agent-${model.modelId}`,
+      instructions,
+      model: model,
+    });
+
+    // Use the following to test AI SDK v4 and V5
+    // const responseText = await generateObject({
+    //   model: model,
+    //   schema: testTool.inputSchema!,
+    //   // output: Output.object({ schema: testTool.inputSchema! }),
+    //   // messages: [
+    //   //   { role: 'user', content: allSchemas[schemaName].description },
+    //   // ],
+    //   // prompt: 'test'
+    //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
+    // });
+
+    // const responseText = await generateObjectV5({
+    //   model: model,
+    //   temperature: 0,
+    //   schema: testTool.inputSchema!,
+    //   prompt: 'You are a test agent. Your task is to respond with valid JSON matching the schema provided.',
+    // });
+
+    const response = await agent.generateVNext(allSchemas[schemaName].description, generateOptions);
 
     if (!response.object) {
       throw new Error('No object generated for schema: ' + schemaName + ' with text: ' + response.text);
@@ -161,7 +185,7 @@ async function runSingleOutputsTest(
 
     const parsed = testTool.inputSchema?.parse(response.object);
     if (!parsed) {
-      throw new Error('Failed to parse object for schema: ' + schemaName + ' with text: ' + response.text);
+      throw new Error('Failed to parse object for schema: ' + schemaName + ' with text: ' + response.object);
     }
 
     return {
@@ -178,7 +202,7 @@ async function runSingleOutputsTest(
     if (e.message.includes('does not support zod type:')) {
       status = 'expected-error';
     }
-    if (e.name === 'AI_NoObjectGeneratedError') {
+    if (e.name === 'AI_NoObjectGeneratedError' || e.message.toLowerCase().includes('validation failed')) {
       status = 'failure';
     }
     return {
@@ -194,7 +218,7 @@ async function runSingleOutputsTest(
 }
 
 async function runSingleInputTest(
-  model: LanguageModel,
+  model: LanguageModel | LanguageModelV2,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
@@ -256,7 +280,7 @@ async function runSingleInputTest(
 
 // These tests are both expensive to run and occasionally a couple are flakey. We should run them manually for now
 // to make sure that we still have good coverage, for both input and output schemas.
-describe.skip('Tool Schema Compatibility', () => {
+describe('Tool Schema Compatibility', () => {
   // Set a longer timeout for the entire test suite
   const SUITE_TIMEOUT = 120000; // 2 minutes
   const TEST_TIMEOUT = 60000; // 1 minute
@@ -264,7 +288,7 @@ describe.skip('Tool Schema Compatibility', () => {
   if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
   const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
-  const modelsToTest = [
+  const modelsToTestV1 = [
     // Anthropic Models
     openrouter('anthropic/claude-3.7-sonnet'),
     openrouter('anthropic/claude-3.5-sonnet'),
@@ -280,9 +304,22 @@ describe.skip('Tool Schema Compatibility', () => {
     // OpenAI Models
     openrouter('openai/gpt-4o-mini'),
     openrouter('openai/gpt-4.1-mini'),
-    // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
+    // // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
     openai('o3-mini'),
     openai('o4-mini'),
+  ];
+  const modelsToTestV2 = [
+    openrouter_v5('openai/gpt-4o-mini'),
+    openrouter_v5('openai/gpt-4.1-mini'),
+    openai_v5('o3-mini'),
+    openai_v5('o4-mini'),
+
+    openrouter_v5('anthropic/claude-3.7-sonnet'),
+    openrouter_v5('anthropic/claude-3.5-sonnet'),
+    openrouter_v5('anthropic/claude-3.5-haiku'),
+    openrouter_v5('google/gemini-2.5-pro-preview-03-25'),
+    openrouter_v5('google/gemini-2.5-flash'),
+    openrouter_v5('google/gemini-2.0-flash-lite-001'),
 
     // Meta Models
     // Meta often calls the tool with the wrong name, ie 'tesTool_number'/'TestTool_number' instead of 'testTool_number'
@@ -303,7 +340,7 @@ describe.skip('Tool Schema Compatibility', () => {
   const testSchemas = createTestSchemas(schemasToTest);
 
   // Helper to check if a model is from Google
-  const isGoogleModel = (model: LanguageModel) =>
+  const isGoogleModel = (model: LanguageModel | LanguageModelV2) =>
     model.provider.includes('google') || model.modelId.includes('google/gemini');
 
   // Create test tools for each schema type
@@ -321,7 +358,7 @@ describe.skip('Tool Schema Compatibility', () => {
   });
 
   // Group tests by model provider for better organization
-  const modelsByProvider = modelsToTest.reduce(
+  const modelsByProviderV1 = modelsToTestV1.reduce(
     (acc, model) => {
       const provider = model.provider;
       if (!acc[provider]) {
@@ -330,11 +367,23 @@ describe.skip('Tool Schema Compatibility', () => {
       acc[provider].push(model);
       return acc;
     },
-    {} as Record<string, (typeof modelsToTest)[number][]>,
+    {} as Record<string, (typeof modelsToTestV1)[number][]>,
   );
 
-  // Run tests concurrently at both the provider and model level
-  Object.entries(modelsByProvider).forEach(([provider, models]) => {
+  // Group tests by model provider for better organization
+  const modelsByProviderV2 = modelsToTestV2.reduce(
+    (acc, model) => {
+      const provider = model.provider;
+      if (!acc[provider]) {
+        acc[provider] = [];
+      }
+      acc[provider].push(model);
+      return acc;
+    },
+    {} as Record<string, (typeof modelsToTestV2)[number][]>,
+  );
+
+  Object.entries(modelsByProviderV1).forEach(([provider, models]) => {
     describe.concurrent(`Input Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
         describe.concurrent(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
@@ -379,50 +428,70 @@ describe.skip('Tool Schema Compatibility', () => {
         });
       });
     });
+  });
 
-    describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
-      models.forEach(model => {
-        describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
-          testTools.forEach(testTool => {
-            const schemaName = testTool.id.replace('testTool_', '');
+  Object.entries(modelsByProviderV2).forEach(([provider, models]) => {
+    describe.concurrent(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+      ['output', 'structuredOutput'].forEach(outputType => {
+        describe(`${outputType}`, { timeout: SUITE_TIMEOUT }, () => {
+          models.forEach(model => {
+            describe(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
+              testTools.forEach(testTool => {
+                const schemaName = testTool.id.replace('testTool_', '');
 
-            // Google does not support unions of objects and is flakey withnulls
-            if (
-              (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null'))) ||
-              // This works consistently locally but for some reason keeps failing in CI,
-              model.modelId.includes('gpt-4o-mini') ||
-              (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
-            ) {
-              it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
-              return;
-            }
-            if (uncategorizedTypes.includes(schemaName)) {
-              it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
-              return;
-            }
-            it.concurrent(
-              `should handle ${schemaName} schema`,
-              async () => {
-                let result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id, schemaName);
-
-                // Sometimes models are flaky, run it again if it fails
-                if (result.status === 'failure') {
-                  console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
-                  result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id, schemaName);
+                // Google does not support unions of objects and is flakey withnulls
+                if (
+                  (isGoogleModel(model) && (testTool.id.includes('unionObjects') || testTool.id.includes('null'))) ||
+                  // This works consistently locally but for some reason keeps failing in CI,
+                  model.modelId.includes('gpt-4o-mini') ||
+                  (model.modelId.includes('gemini-2.0-flash-lite-001') && testTool.id.includes('stringRegex'))
+                ) {
+                  it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
+                  return;
                 }
-
-                if (result.status !== 'success' && result.status !== 'expected-error') {
-                  console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
+                if (uncategorizedTypes.includes(schemaName)) {
+                  it.skip(`should handle ${schemaName} schema (skipped for ${provider})`, () => {});
+                  return;
                 }
+                it.concurrent(
+                  `should handle ${schemaName} schema`,
+                  async () => {
+                    let result = await runSingleOutputsTest(
+                      model,
+                      testTool,
+                      crypto.randomUUID(),
+                      testTool.id,
+                      schemaName,
+                      outputType,
+                    );
 
-                if (result.status === 'expected-error') {
-                  expect(result.status).toBe('expected-error');
-                } else {
-                  expect(result.status).toBe('success');
-                }
-              },
-              TEST_TIMEOUT,
-            );
+                    // Sometimes models are flaky, run it again if it fails
+                    if (result.status === 'failure') {
+                      console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
+                      result = await runSingleOutputsTest(
+                        model,
+                        testTool,
+                        crypto.randomUUID(),
+                        testTool.id,
+                        schemaName,
+                        outputType,
+                      );
+                    }
+
+                    if (result.status !== 'success' && result.status !== 'expected-error') {
+                      console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
+                    }
+
+                    if (result.status === 'expected-error') {
+                      expect(result.status).toBe('expected-error');
+                    } else {
+                      expect(result.status).toBe('success');
+                    }
+                  },
+                  TEST_TIMEOUT,
+                );
+              });
+            });
           });
         });
       });
@@ -446,6 +515,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A test tool',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -469,6 +539,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A tool without ID',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -493,6 +564,7 @@ describe('CoreToolBuilder ID Preservation', () => {
         logger: console as any,
         description: 'A provider-defined tool',
         runtimeContext: new RuntimeContext(),
+        tracingContext: {},
       },
     });
 
@@ -551,7 +623,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Test tool that captures tracing context',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
     });
 
@@ -605,8 +677,8 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Test tool without agent span',
         runtimeContext: new RuntimeContext(),
-        // No agentAISpan provided
-      } as any,
+        tracingContext: {},
+      },
     });
 
     const builtTool = builder.build();
@@ -652,7 +724,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Vercel tool test',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
     });
 
@@ -713,7 +785,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Tool that throws an error',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
     });
 
@@ -764,7 +836,7 @@ describe('Tool Tracing Context Injection', () => {
         } as any,
         description: 'Tool from a toolset',
         runtimeContext: new RuntimeContext(),
-        agentAISpan: mockAgentSpan,
+        tracingContext: { currentSpan: mockAgentSpan },
       },
       logType: 'toolset', // Specify toolset type
     });
@@ -814,6 +886,7 @@ describe('Tool Input Validation', () => {
         tags: ['developer', 'typescript'],
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toEqual({
@@ -830,6 +903,7 @@ describe('Tool Input Validation', () => {
         age: 25,
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toEqual({
@@ -847,6 +921,7 @@ describe('Tool Input Validation', () => {
         age: 30,
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -864,6 +939,7 @@ describe('Tool Input Validation', () => {
         age: -5, // Negative age
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -882,6 +958,7 @@ describe('Tool Input Validation', () => {
         email: 'not-an-email', // Invalid email
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -918,6 +995,7 @@ describe('Tool Input Validation', () => {
         tags: [], // Empty array when min(1) required
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);
@@ -937,6 +1015,7 @@ describe('Tool Input Validation', () => {
         tags: [],
       },
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     expect(result).toHaveProperty('error', true);

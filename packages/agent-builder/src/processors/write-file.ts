@@ -1,6 +1,6 @@
 import { writeFile } from 'fs/promises';
-import { MemoryProcessor } from '@mastra/core';
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core/llm';
+import { MemoryProcessor } from '@mastra/core/memory';
 
 export class WriteToDiskProcessor extends MemoryProcessor {
   private prefix: string;

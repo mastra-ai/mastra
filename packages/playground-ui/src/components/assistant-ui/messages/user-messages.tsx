@@ -1,6 +1,6 @@
 'use client';
 
-import { AttachmentPrimitive, MessagePrimitive, TextContentPart, useAttachment, useMessage } from '@assistant-ui/react';
+import { AttachmentPrimitive, MessagePrimitive, TextMessagePart, useAttachment, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -22,26 +22,30 @@ const InMessageAttachmentWrapper = () => {
   const src = useAttachmentSrc();
   const attachment = useAttachment(a => a);
 
+  const isUrl = attachment?.name?.startsWith('https://');
+
   if (attachment.type === 'image') {
+    const actualSrc = isUrl ? attachment?.name : src;
+
     return (
       <InMessageAttachment
         type="image"
         contentType={undefined}
         nameSlot={<AttachmentPrimitive.Name />}
-        src={src}
+        src={actualSrc}
         data={undefined}
       />
     );
   }
 
   if (attachment.contentType === 'application/pdf') {
-    const pdfText = (attachment.content as TextContentPart[])?.[0]?.text;
+    const pdfText = (attachment.content as TextMessagePart[])?.[0]?.text;
     return (
       <InMessageAttachment
         type="document"
         contentType={attachment.contentType}
         nameSlot={<AttachmentPrimitive.Name />}
-        src={src}
+        src={isUrl ? attachment?.name : src}
         data={`data:application/pdf;base64,${pdfText}`}
       />
     );
@@ -53,7 +57,7 @@ const InMessageAttachmentWrapper = () => {
       contentType={attachment.contentType}
       nameSlot={<AttachmentPrimitive.Name />}
       src={src}
-      data={(attachment.content as TextContentPart[])?.[0]?.text}
+      data={(attachment.content as TextMessagePart[])?.[0]?.text}
     />
   );
 };
@@ -75,7 +79,7 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
             {type === 'image' ? (
               <ImageEntry src={src ?? ''} />
             ) : type === 'document' && contentType === 'application/pdf' ? (
-              <PdfEntry data={data ?? ''} />
+              <PdfEntry data={data ?? ''} url={src} />
             ) : (
               <TxtEntry data={data ?? ''} />
             )}
@@ -99,18 +103,20 @@ export const UserMessage = () => {
   return (
     <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col" data-message-id={messageId}>
       {/* <UserActionBar /> */}
-
       <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
-        <MessagePrimitive.Content
+        <MessagePrimitive.Parts
           components={{
             File: p => {
+              const image = (p as any)?.image;
+              const isUrl = image?.startsWith('https://');
+
               return (
                 <InMessageAttachment
                   type="document"
                   contentType={p.mimeType}
                   nameSlot="Unknown filename"
-                  src={undefined}
-                  data={(p as any).image as string} // yeah, for some reasons
+                  src={isUrl ? image : undefined}
+                  data={image} // yeah, for some reasons
                 />
               );
             },
@@ -135,9 +141,7 @@ export const UserMessage = () => {
           }}
         />
       </div>
-
       <UserMessageAttachments />
-
       {/* <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" /> */}
     </MessagePrimitive.Root>
   );

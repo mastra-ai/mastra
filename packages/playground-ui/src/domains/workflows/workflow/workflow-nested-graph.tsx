@@ -1,12 +1,4 @@
-import {
-  ReactFlow,
-  MiniMap,
-  Background,
-  useNodesState,
-  useEdgesState,
-  BackgroundVariant,
-  NodeProps,
-} from '@xyflow/react';
+import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
@@ -88,7 +80,11 @@ export function WorkflowNestedGraph({
                 steps[`${workflowName}.${e.data?.previousStepId}`]?.status === 'success' &&
                 steps[`${workflowName}.${e.data?.nextStepId}`]
                   ? '#22c55e'
-                  : undefined,
+                  : e.data?.conditionNode &&
+                      !steps[`${workflowName}.${e.data?.previousStepId}`] &&
+                      Boolean(steps[`${workflowName}.${e.data?.nextStepId}`]?.status)
+                    ? '#22c55e'
+                    : undefined,
             },
           }))}
           fitView
@@ -101,7 +97,6 @@ export function WorkflowNestedGraph({
           onNodesChange={onNodesChange}
         >
           <ZoomSlider position="bottom-left" />
-          <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
           <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} />
         </ReactFlow>
       ) : (

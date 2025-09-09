@@ -30,17 +30,15 @@ To pause execution at a specific step until user input is received, use the `⁠
 
 ![Suspending a workflow with suspend()](/image/workflows/workflows-suspend-resume-suspend.jpg)
 
-```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {16} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   id: "step-1",
-  description: "Test suspend",
   inputSchema: z.object({
     input: z.string()
   }),
   outputSchema: z.object({
     output: z.string()
   }),
-  suspendSchema: z.object({}),
   resumeSchema: z.object({
     city: z.string()
   }),
@@ -48,20 +46,21 @@ const step1 = createStep({
     const { city } = resumeData ?? {};
 
     if (!city) {
-      await suspend({});
-      return { output: "" };
+      return await suspend({});
     }
 
     return { output: "" };
   }
 });
 
-export const testWorkflow = createWorkflow({})
+export const testWorkflow = createWorkflow({
+  // ...
+})
   .then(step1)
   .commit();
 ```
 
-> For more details, check out the [Suspend workflow example](/examples/workflows/human-in-the-loop#suspend-workflow).
+> For more details, check out the [Suspend workflow example](../../examples/workflows/human-in-the-loop.mdx#suspend-workflow).
 
 ### Identifying suspended steps
 
@@ -88,7 +87,6 @@ if (result.status === "suspended") {
     }
   });
 }
-
 ```
 
 In this case, the logic resumes the first step listed in the `suspended` array. A `step` can also be defined using it's `id`, for example: 'step-1'.
@@ -111,7 +109,66 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
 }
 ```
 
-> See [Run Workflow Results](/docs/workflows/overview#run-workflow-results) for more details.
+> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
+
+## Providing user feedback with suspend
+
+When a workflow is suspended, feedback can be surfaced to the user through the `suspendSchema`. Include a reason in the `suspend` payload to explain why the workflow paused.
+
+```typescript {13,23} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({
+    value: z.string()
+  }),
+  resumeSchema: z.object({
+    confirm: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string()
+  }),
+  outputSchema: z.object({
+    value: z.string()
+  }),
+  execute: async ({ resumeData, suspend }) => {
+    const { confirm } = resumeData ?? {};
+
+    if (!confirm) {
+      return await suspend({
+        reason: "Confirm to continue"
+      });
+    }
+
+    return { value: "" };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .commit();
+
+```
+
+In this case, the reason provided explains that the user must confirm to continue.
+
+```json
+{
+  "step-1": {
+    // ...
+    "status": "suspended",
+    "suspendPayload": {
+      "reason": "Confirm to continue"
+    },
+  }
+}
+```
+
+> See [Run Workflow Results](./overview.mdx#run-workflow-results) for more details.
 
 ## Resuming a workflow with `resume()`
 

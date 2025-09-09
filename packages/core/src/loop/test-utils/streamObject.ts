@@ -171,24 +171,25 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]
           `);
 
-          expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-            {
-              "schema": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "additionalProperties": false,
-                "properties": {
-                  "content": {
-                    "type": "string",
-                  },
-                },
-                "required": [
-                  "content",
-                ],
-                "type": "object",
-              },
-              "type": "json",
-            }
-          `);
+          // TODO: responseFormat disabled in favor of json schema in system prompt
+          // expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+          //   {
+          //     "schema": {
+          //       "$schema": "http://json-schema.org/draft-07/schema#",
+          //       "additionalProperties": false,
+          //       "properties": {
+          //         "content": {
+          //           "type": "string",
+          //         },
+          //       },
+          //       "required": [
+          //         "content",
+          //       ],
+          //       "type": "object",
+          //     },
+          //     "type": "json",
+          //   }
+          // `);
         });
 
         it('should use name and description', async () => {
@@ -217,9 +218,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           expect(model.doStreamCalls?.[0]?.prompt).toMatchInlineSnapshot(`
             [
               {
+                "content": "JSON schema:
+            {"type":"object","properties":{"content":{"type":"string"}},"required":["content"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}
+            You MUST answer with a JSON object that matches the JSON schema above.",
+                "role": "system",
+              },
+              {
                 "content": [
                   {
-                    "text": " ",
+                    "text": ".",
                     "type": "text",
                   },
                 ],
@@ -229,24 +236,25 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             ]
           `);
 
-          expect(model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-            {
-              "schema": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "additionalProperties": false,
-                "properties": {
-                  "content": {
-                    "type": "string",
-                  },
-                },
-                "required": [
-                  "content",
-                ],
-                "type": "object",
-              },
-              "type": "json",
-            }
-          `);
+          // TODO: responseFormat disabled in favor of json schema in system prompt
+          // expect(model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+          //   {
+          //     "schema": {
+          //       "$schema": "http://json-schema.org/draft-07/schema#",
+          //       "additionalProperties": false,
+          //       "properties": {
+          //         "content": {
+          //           "type": "string",
+          //         },
+          //       },
+          //       "required": [
+          //         "content",
+          //       ],
+          //       "type": "object",
+          //     },
+          //     "type": "json",
+          //   }
+          // `);
         });
 
         it('should suppress error in partialObjectStream', async () => {
@@ -1182,6 +1190,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toMatchInlineSnapshot(expectedOutput);
           expect(await convertAsyncIterableToArray(result.objectStream)).toMatchInlineSnapshot(expectedOutput);
 
+          // TODO: responseFormat disabled in favor of json schema in system prompt
           //   expect(mockModel.doStreamCalls[0].responseFormat).toMatchInlineSnapshot(`
           //   {
           //     "description": undefined,
@@ -1588,29 +1597,30 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]
         `);
 
-        expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
-          {
-            "schema": {
-              "$schema": "http://json-schema.org/draft-07/schema#",
-              "additionalProperties": false,
-              "properties": {
-                "result": {
-                  "enum": [
-                    "sunny",
-                    "rainy",
-                    "snowy",
-                  ],
-                  "type": "string",
-                },
-              },
-              "required": [
-                "result",
-              ],
-              "type": "object",
-            },
-            "type": "json",
-          }
-        `);
+        // TODO: responseFormat disabled in favor of json schema in system prompt
+        // expect(mockModel?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
+        //   {
+        //     "schema": {
+        //       "$schema": "http://json-schema.org/draft-07/schema#",
+        //       "additionalProperties": false,
+        //       "properties": {
+        //         "result": {
+        //           "enum": [
+        //             "sunny",
+        //             "rainy",
+        //             "snowy",
+        //           ],
+        //           "type": "string",
+        //         },
+        //       },
+        //       "required": [
+        //         "result",
+        //       ],
+        //       "type": "object",
+        //     },
+        //     "type": "json",
+        //   }
+        // `);
       });
 
       it('should not stream incorrect values', async () => {

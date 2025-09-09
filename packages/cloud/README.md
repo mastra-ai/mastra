@@ -14,6 +14,57 @@ pnpm add @mastra/cloud
 
 ## Features
 
+### AI Tracing
+
+Track and monitor AI operations and spans with the `MastraCloudAITracingExporter`:
+
+```typescript
+import { MastraCloudAITracingExporter } from '@mastra/cloud';
+
+// Initialize the AI tracing exporter
+const cloudAITracingExporter = new MastraCloudAITracingExporter({
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN, // Your Mastra Cloud access token
+  endpoint: 'https://api.mastra.ai/ai/spans/publish', // Optional: custom endpoint
+  logger: yourLoggerInstance, // Optional logger
+});
+
+// Use with Mastra instance
+export const mastra = new Mastra({
+  agents: { agent },
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+  observability: {
+    instances: {
+      cloud: {
+        serviceName: 'service',
+        exporters: [cloudAITracingExporter],
+      },
+    },
+  },
+});
+```
+
+**Required Environment Variable:**
+
+- `MASTRA_CLOUD_ACCESS_TOKEN`: Your Mastra Cloud access token (generated from your Mastra Cloud project)
+
+#### API Reference
+
+##### `MastraCloudAITracingExporter`
+
+A custom AI tracing exporter that sends AI span data to Mastra Cloud for observability and monitoring.
+
+###### Constructor Options
+
+- `accessToken` (required): Your Mastra Cloud access token
+- `endpoint` (optional): Custom endpoint URL for sending AI tracing data (defaults to `https://api.mastra.ai/ai/spans/publish`)
+- `maxBatchSize` (optional): Maximum number of spans to batch before sending (default: 1000)
+- `maxBatchWaitMs` (optional): Maximum time to wait before sending a batch in milliseconds (default: 5000)
+- `maxRetries` (optional): Maximum number of retry attempts for failed requests (default: 3)
+- `logger` (optional): Logger instance compatible with the Mastra Logger interface
+
 ### Telemetry
 
 The package currently provides OpenTelemetry integration with Mastra Cloud for instrumenting and collecting telemetry data from your applications.
@@ -52,13 +103,13 @@ export const mastra = new Mastra({
 });
 ```
 
-## API Reference
+#### API Reference
 
-### `MastraCloudExporter`
+##### `MastraCloudExporter`
 
 A custom OpenTelemetry exporter that sends telemetry data to Mastra Cloud.
 
-#### Constructor Options
+###### Constructor Options
 
 - `accessToken` (required): Your Mastra Cloud access token
 - `endpoint` (optional): Custom endpoint URL for sending telemetry data

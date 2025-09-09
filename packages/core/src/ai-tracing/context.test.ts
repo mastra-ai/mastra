@@ -5,7 +5,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { wrapAgent, wrapMastra, wrapWorkflow } from './context';
+import { Mastra } from '../mastra';
+import { isMastra, wrapMastra } from './context';
 import type { TracingContext } from './types';
 
 // Mock classes
@@ -18,15 +19,28 @@ class MockMastra {
 }
 
 class MockAgent {
+  #mastra = { id: 'mock-mastra' };
   generate = vi.fn();
   generateVNext = vi.fn();
   stream = vi.fn();
   streamVNext = vi.fn();
   otherMethod = vi.fn().mockReturnValue('agent-other-result');
+  getLLM() {
+    // This accesses the private field to simulate the real getLLM behavior
+    // Without proper binding, 'this' will be the proxy and #mastra access will fail
+    return { mastra: this.#mastra };
+  }
+}
+
+class MockRun {
+  start = vi.fn();
+  otherMethod = vi.fn().mockReturnValue('run-other-result');
 }
 
 class MockWorkflow {
   execute = vi.fn();
+  createRun = vi.fn();
+  createRunAsync = vi.fn();
   otherMethod = vi.fn().mockReturnValue('workflow-other-result');
 }
 
@@ -45,6 +59,7 @@ describe('AI Tracing Context Integration', () => {
   let mockMastra: MockMastra;
   let mockAgent: MockAgent;
   let mockWorkflow: MockWorkflow;
+  let mockRun: MockRun;
   let mockSpan: MockAISpan;
   let noOpSpan: NoOpAISpan;
   let tracingContext: TracingContext;
@@ -56,14 +71,17 @@ describe('AI Tracing Context Integration', () => {
     mockMastra = new MockMastra();
     mockAgent = new MockAgent();
     mockWorkflow = new MockWorkflow();
+    mockRun = new MockRun();
     mockSpan = new MockAISpan();
     noOpSpan = new NoOpAISpan();
 
-    // Mock agent and workflow returns
+    // Mock agent, workflow, and run returns
     mockMastra.getAgent.mockReturnValue(mockAgent);
     mockMastra.getAgentById.mockReturnValue(mockAgent);
     mockMastra.getWorkflow.mockReturnValue(mockWorkflow);
     mockMastra.getWorkflowById.mockReturnValue(mockWorkflow);
+    mockWorkflow.createRun.mockReturnValue(mockRun);
+    mockWorkflow.createRunAsync.mockResolvedValue(mockRun);
 
     tracingContext = { currentSpan: mockSpan as any };
     noOpContext = { currentSpan: noOpSpan as any };
@@ -132,151 +150,66 @@ describe('AI Tracing Context Integration', () => {
     });
   });
 
-  describe('wrapAgent', () => {
-    it('should return wrapped Agent with tracing context', () => {
-      const wrapped = wrapAgent(mockAgent as any, tracingContext);
+  describe('workflow run creation and tracing', () => {
+    it('should wrap createRunAsync to return run proxy', async () => {
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+      const workflow = wrapped.getWorkflow('test-workflow');
 
-      expect(wrapped).not.toBe(mockAgent);
-      expect(typeof wrapped.generate).toBe('function');
-      expect(typeof wrapped.stream).toBe('function');
-      expect(typeof wrapped.generateVNext).toBe('function');
-      expect(typeof wrapped.streamVNext).toBe('function');
+      const run = await workflow.createRunAsync();
+
+      expect(mockWorkflow.createRunAsync).toHaveBeenCalled();
+      expect(run).not.toBe(mockRun); // Should be wrapped
     });
 
-    it('should return original Agent when no current span', () => {
-      const emptyContext = { currentSpan: undefined };
-      const wrapped = wrapAgent(mockAgent as any, emptyContext);
+    it('should wrap createRun to return run proxy', () => {
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+      const workflow = wrapped.getWorkflow('test-workflow');
 
-      expect(wrapped).toBe(mockAgent);
+      const run = workflow.createRun();
+
+      expect(mockWorkflow.createRun).toHaveBeenCalled();
+      expect(run).not.toBe(mockRun); // Should be wrapped
     });
 
-    it('should return original Agent when using NoOp span', () => {
-      const wrapped = wrapAgent(mockAgent as any, noOpContext);
+    it('should inject tracing context into run start method', async () => {
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+      const workflow = wrapped.getWorkflow('test-workflow');
+      const run = await workflow.createRunAsync();
 
-      expect(wrapped).toBe(mockAgent);
-    });
+      await run.start({ inputData: { test: 'data' }, runtimeContext: {} });
 
-    it('should inject tracing context into generate method', async () => {
-      const wrapped = wrapAgent(mockAgent as any, tracingContext);
-
-      await wrapped.generate('test input', { temperature: 0.7 });
-
-      expect(mockAgent.generate).toHaveBeenCalledWith('test input', {
-        temperature: 0.7,
+      expect(mockRun.start).toHaveBeenCalledWith({
+        inputData: { test: 'data' },
+        runtimeContext: {},
         tracingContext,
       });
     });
 
-    it('should inject tracing context into stream method', async () => {
-      const wrapped = wrapAgent(mockAgent as any, tracingContext);
+    it('should preserve user-provided tracingContext in run start', async () => {
+      const userTracingContext = { currentSpan: 'user-span' as any };
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+      const workflow = wrapped.getWorkflow('test-workflow');
+      const run = await workflow.createRunAsync();
 
-      await wrapped.stream('test input', { maxTokens: 100 });
+      await run.start({
+        inputData: { test: 'data' },
+        tracingContext: userTracingContext,
+      });
 
-      expect(mockAgent.stream).toHaveBeenCalledWith('test input', {
-        maxTokens: 100,
-        tracingContext,
+      expect(mockRun.start).toHaveBeenCalledWith({
+        inputData: { test: 'data' },
+        tracingContext: userTracingContext, // User's context should take precedence
       });
     });
 
-    it('should inject tracing context into streamVNext method', async () => {
-      const wrapped = wrapAgent(mockAgent as any, tracingContext);
+    it('should pass through other run methods unchanged', async () => {
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+      const workflow = wrapped.getWorkflow('test-workflow');
+      const run = await workflow.createRunAsync();
 
-      await wrapped.streamVNext('test input');
-
-      expect(mockAgent.streamVNext).toHaveBeenCalledWith('test input', {
-        tracingContext,
-      });
-    });
-
-    it('should handle method calls without options', async () => {
-      const wrapped = wrapAgent(mockAgent as any, tracingContext);
-
-      await wrapped.generate('test input');
-
-      expect(mockAgent.generate).toHaveBeenCalledWith('test input', {
-        tracingContext,
-      });
-    });
-
-    it('should pass through other methods unchanged', () => {
-      const wrapped = wrapAgent(mockAgent as any, tracingContext);
-
-      const result = wrapped.otherMethod();
-      expect(result).toBe('agent-other-result');
-      expect(mockAgent.otherMethod).toHaveBeenCalled();
-    });
-
-    it('should handle agent wrapping errors gracefully', () => {
-      // Test that the function handles invalid contexts properly
-      const invalidContext = { currentSpan: null as any };
-      const wrapped = wrapAgent(mockAgent as any, invalidContext);
-
-      expect(wrapped).toBe(mockAgent);
-    });
-  });
-
-  describe('wrapWorkflow', () => {
-    it('should return wrapped Workflow with tracing context', () => {
-      const wrapped = wrapWorkflow(mockWorkflow as any, tracingContext);
-
-      expect(wrapped).not.toBe(mockWorkflow);
-      expect(typeof wrapped.execute).toBe('function');
-    });
-
-    it('should return original Workflow when no current span', () => {
-      const emptyContext = { currentSpan: undefined };
-      const wrapped = wrapWorkflow(mockWorkflow as any, emptyContext);
-
-      expect(wrapped).toBe(mockWorkflow);
-    });
-
-    it('should return original Workflow when using NoOp span', () => {
-      const wrapped = wrapWorkflow(mockWorkflow as any, noOpContext);
-
-      expect(wrapped).toBe(mockWorkflow);
-    });
-
-    it('should inject tracing context into execute method', async () => {
-      const wrapped = wrapWorkflow(mockWorkflow as any, tracingContext);
-
-      await wrapped.execute({ input: 'test' }, { runtimeContext: {} });
-
-      expect(mockWorkflow.execute).toHaveBeenCalledWith(
-        { input: 'test' },
-        {
-          runtimeContext: {},
-          tracingContext,
-        },
-      );
-    });
-
-    it('should handle method calls without options', async () => {
-      const wrapped = wrapWorkflow(mockWorkflow as any, tracingContext);
-
-      await wrapped.execute({ input: 'test' });
-
-      expect(mockWorkflow.execute).toHaveBeenCalledWith(
-        { input: 'test' },
-        {
-          tracingContext,
-        },
-      );
-    });
-
-    it('should pass through other methods unchanged', () => {
-      const wrapped = wrapWorkflow(mockWorkflow as any, tracingContext);
-
-      const result = wrapped.otherMethod();
-      expect(result).toBe('workflow-other-result');
-      expect(mockWorkflow.otherMethod).toHaveBeenCalled();
-    });
-
-    it('should handle workflow wrapping errors gracefully', () => {
-      // Test that the function handles invalid contexts properly
-      const invalidContext = { currentSpan: null as any };
-      const wrapped = wrapWorkflow(mockWorkflow as any, invalidContext);
-
-      expect(wrapped).toBe(mockWorkflow);
+      const result = run.otherMethod();
+      expect(result).toBe('run-other-result');
+      expect(mockRun.otherMethod).toHaveBeenCalled();
     });
   });
 
@@ -370,10 +303,11 @@ describe('AI Tracing Context Integration', () => {
     it('should handle method call errors gracefully', async () => {
       mockAgent.generate.mockRejectedValue(new Error('Generation failed'));
 
-      const wrapped = wrapAgent(mockAgent as any, tracingContext);
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+      const agent = wrapped.getAgent('test-agent');
 
-      // Error should propagate normally
-      await expect(wrapped.generate('test')).rejects.toThrow('Generation failed');
+      // Error should propagate normally through the wrapped agent
+      await expect(agent.generate('test')).rejects.toThrow('Generation failed');
     });
 
     it('should handle property access errors in wrapper methods', () => {
@@ -402,6 +336,46 @@ describe('AI Tracing Context Integration', () => {
       expect(wrapped.otherMethod()).toBe('works');
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Mastra interface compatibility', () => {
+    it('should verify that real Mastra class has expected AGENT_GETTERS and WORKFLOW_GETTERS methods', () => {
+      // This test ensures that if the Mastra class interface changes,
+      // we'll know to update our AGENT_GETTERS & WORKFLOW_GETTERS
+      // constants in wrapMastra
+
+      const mastra = new Mastra();
+      expect(isMastra(mastra)).toBe(true);
+    });
+
+    it('should detect if wrapMastra would skip wrapping due to missing methods', () => {
+      // Test object with no agent or workflow getters
+      const primitivesMastra = {
+        someOtherMethod: vi.fn(),
+      };
+
+      const wrapped = wrapMastra(primitivesMastra as any, tracingContext);
+
+      // Should return the original object since it has no methods to wrap
+      expect(wrapped).toBe(primitivesMastra);
+    });
+
+    it('should wrap objects that have all agent and workflow getters', () => {
+      // Test object with only agent getters
+      const agentOnlyMastra = {
+        getAgent: vi.fn(),
+        getAgentById: vi.fn(),
+        getWorkflow: vi.fn(),
+        getWorkflowById: vi.fn(),
+        someOtherMethod: vi.fn(),
+      };
+
+      const wrapped = wrapMastra(agentOnlyMastra as any, tracingContext);
+
+      // Should return a proxy (different object) since it has methods to wrap
+      expect(wrapped).not.toBe(agentOnlyMastra);
+      expect(typeof wrapped.getAgent).toBe('function');
     });
   });
 });

@@ -11,16 +11,15 @@ import type {
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart } from 'ai';
 import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
-
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
 // Type for flexible message deletion input
@@ -54,12 +53,19 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
   }
 
-  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
+  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
+    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+
     const thread = await this.storage.getThreadById({ threadId });
-    if (!thread) {
+
+    // For resource-scoped semantic recall, we don't need to validate that the specific thread exists
+    // because we're searching across all threads for the resource
+    if (!thread && !resourceScope) {
       throw new Error(`No thread found with id ${threadId}`);
     }
-    if (thread.resourceId !== resourceId) {
+
+    // If thread exists, validate it belongs to the correct resource
+    if (thread && thread.resourceId !== resourceId) {
       throw new Error(
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
       );
@@ -96,7 +102,8 @@ export class Memory extends MastraMemory {
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
   }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
+    const config = this.getMergedThreadConfig(threadConfig || {});
+    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
     const vectorResults: {
       id: string;
@@ -110,8 +117,6 @@ export class Memory extends MastraMemory {
       selectBy,
       threadConfig,
     });
-
-    const config = this.getMergedThreadConfig(threadConfig || {});
 
     this.checkStorageFeatureSupport(config);
 
@@ -162,31 +167,63 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const rawMessages = await this.storage.getMessages({
-      threadId,
-      resourceId,
-      format: 'v2',
-      selectBy: {
-        ...selectBy,
-        ...(vectorResults?.length
-          ? {
-              include: vectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                threadId: r.metadata?.thread_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
-          : {}),
-      },
-      threadConfig: config,
-    });
+    // Use paginated method when pagination is requested
+    let rawMessages;
+    if (selectBy?.pagination) {
+      const paginatedResult = await this.storage.getMessagesPaginated({
+        threadId,
+        resourceId,
+        format: 'v2',
+        selectBy: {
+          ...selectBy,
+          ...(vectorResults?.length
+            ? {
+                include: vectorResults.map(r => ({
+                  id: r.metadata?.message_id,
+                  threadId: r.metadata?.thread_id,
+                  withNextMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.after,
+                  withPreviousMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.before,
+                })),
+              }
+            : {}),
+        },
+        threadConfig: config,
+      });
+      rawMessages = paginatedResult.messages;
+    } else {
+      // Fall back to regular getMessages for backward compatibility
+      rawMessages = await this.storage.getMessages({
+        threadId,
+        resourceId,
+        format: 'v2',
+        selectBy: {
+          ...selectBy,
+          ...(vectorResults?.length
+            ? {
+                include: vectorResults.map(r => ({
+                  id: r.metadata?.message_id,
+                  threadId: r.metadata?.thread_id,
+                  withNextMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.after,
+                  withPreviousMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.before,
+                })),
+              }
+            : {}),
+        },
+        threadConfig: config,
+      });
+    }
 
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
     return {
@@ -226,8 +263,8 @@ export class Memory extends MastraMemory {
     vectorMessageSearch?: string;
     config?: MemoryConfig;
   }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
     const threadConfig = this.getMergedThreadConfig(config || {});
+    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
@@ -794,9 +831,7 @@ export class Memory extends MastraMemory {
 
         if (isZodObject(schema as ZodTypeAny)) {
           // Convert ZodObject to JSON Schema
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny, {
-            $refStrategy: 'none',
-          }) as JSONSchema7;
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny) as JSONSchema7;
         } else {
           // Already a JSON Schema
           convertedSchema = schema as any as JSONSchema7;

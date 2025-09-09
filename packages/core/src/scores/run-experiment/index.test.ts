@@ -101,39 +101,16 @@ describe('runExperiment', () => {
   });
 
   describe('Basic functionality', () => {
-    //     it.skip('should run experiment with single scorer', async () => {
-    //       const testPromise = new DelayedPromise();
+    it('should run experiment with single scorer', async () => {
+      const result = await runExperiment({
+        data: testData,
+        scorers: [createMockScorer('toxicity', 0.9)],
+        target: mockAgent,
+      });
 
-    // const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
-    //   const scorer = createScorer({
-    //     description: 'Mock scorer',
-    //     name,
-    //   }).generateScore(() => {
-    //     console.log('Generating name', name, score);
-    //     testPromise.resolve({ name, score });
-    //     return score;
-    //   });
-
-    //   vi.spyOn(scorer, 'run');
-
-    //   return scorer;
-    // };
-
-    //       const result = await runExperiment({
-    //         data: testData,
-    //         scorers: {
-    //           agent: { scorer: createMockScorer('toxicity', 0.9)},
-    //         },
-    //         target: mockAgent,
-    //       });
-
-    //       const promiseResult = await testPromise.promise;
-
-    //       console.log(`promiseResult`, JSON.stringify(promiseResult, null, 2))
-
-    //       expect(result.scores.toxicity).toBe(0.9);
-    //       expect(result.summary.totalItems).toBe(2);
-    //     });
+      expect(result.scores.toxicity).toBe(0.9);
+      expect(result.summary.totalItems).toBe(2);
+    });
 
     it('should run experiment with multiple scorers', async () => {
       const result = await runExperiment({
@@ -166,13 +143,23 @@ describe('runExperiment', () => {
   });
 
   describe('V2 Agent integration', () => {
-    it.skip('should call agent.generate with correct parameters', async () => {
+    it('should call agent.generate with correct parameters', async () => {
       const mockAgent = createMockAgentV2();
       await runExperiment({
         data: [{ input: 'test input', groundTruth: 'truth' }],
         scorers: mockScorers,
         target: mockAgent,
       });
+
+      expect(mockScorers[0].run).toHaveBeenCalledTimes(1);
+      expect(mockScorers[1].run).toHaveBeenCalledTimes(1);
+
+      expect(mockScorers[0].run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.any(Object),
+          output: expect.any(Object),
+        }),
+      );
     });
   });
 

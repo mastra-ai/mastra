@@ -1,7 +1,5 @@
-import type { AbstractAgent } from '@ag-ui/client';
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core';
+import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
-import { AGUIAdapter } from './adapters/agui';
 import {
   Agent,
   MemoryThread,
@@ -13,6 +11,7 @@ import {
   A2A,
   MCPTool,
   LegacyWorkflow,
+  AgentBuilder,
   Observability,
 } from './resources';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
@@ -64,25 +63,6 @@ export class MastraClient extends BaseResource {
    */
   public getAgents(): Promise<Record<string, GetAgentResponse>> {
     return this.request('/api/agents');
-  }
-
-  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AbstractAgent>> {
-    const agents = await this.getAgents();
-
-    return Object.entries(agents).reduce(
-      (acc, [agentId]) => {
-        const agent = this.getAgent(agentId);
-
-        acc[agentId] = new AGUIAdapter({
-          agentId,
-          agent,
-          resourceId,
-        });
-
-        return acc;
-      },
-      {} as Record<string, AbstractAgent>,
-    );
   }
 
   /**
@@ -237,6 +217,22 @@ export class MastraClient extends BaseResource {
    */
   public getWorkflow(workflowId: string) {
     return new Workflow(this.options, workflowId);
+  }
+
+  /**
+   * Gets all available agent builder actions
+   * @returns Promise containing map of action IDs to action details
+   */
+  public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
+    return this.request('/api/agent-builder/');
+  }
+
+  /**
+   * Gets an agent builder instance for executing agent-builder workflows
+   * @returns AgentBuilder instance
+   */
+  public getAgentBuilderAction(actionId: string) {
+    return new AgentBuilder(this.options, actionId);
   }
 
   /**

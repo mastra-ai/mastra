@@ -1,5 +1,82 @@
 # create-mastra
 
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- add workflow streaming in agent thread ([#7506](https://github.com/mastra-ai/mastra/pull/7506))
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#7544](https://github.com/mastra-ai/mastra/pull/7544))
+  - Updated dependency [`fs-extra@^11.3.1` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.1) (from `^11.3.0`, in `dependencies`)
+
+- Update cli dev copy from "Local" - ([#7579](https://github.com/mastra-ai/mastra/pull/7579))
+
+## 0.12.0
+
+### Minor Changes
+
+- a01cf14: Add workflow graph in agent (workflow as tool in agent)
+
+### Patch Changes
+
+- 788e612: Fix playground workflow graph is broken when workflow starts with a branch
+- 5397eb4: Add public URL support when adding files in Multi Modal
+
+## 0.12.0-alpha.1
+
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- a01cf14: Add workflow graph in agent (workflow as tool in agent)
+
+### Patch Changes
+
+- 788e612: Fix playground workflow graph is broken when workflow starts with a branch
+- 5397eb4: Add public URL support when adding files in Multi Modal
+
+## 0.11.3
+
+### Patch Changes
+
+- 64152fd: Improve output of Cli Dev command
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+- 8e4fe90: Unify focus outlines
+- f539199: mastra start - load env files, custom env. Deperecate --env flag for mastra build
+- 87de958: fix chat outline
+- 6f715fe: Fix plyground baseUrl, default api baseUrl to playground baseUrl
+- 01264f1: Mastra dev- load env vars before watch
+- 3308c9f: fix dev:playground command
+- d99baf6: change outline
+
+## 0.11.3-alpha.4
+
+### Patch Changes
+
+- [#7357](https://github.com/mastra-ai/mastra/pull/7357) [`01264f1`](https://github.com/mastra-ai/mastra/commit/01264f1280db040d1bd1ac9b8d29cfcaac3d6cbc) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - Mastra dev- load env vars before watch
+
+## 0.11.3-alpha.3
+
+### Patch Changes
+
+- [#7343](https://github.com/mastra-ai/mastra/pull/7343) [`de3cbc6`](https://github.com/mastra-ai/mastra/commit/de3cbc61079211431bd30487982ea3653517278e) Thanks [@LekoArts](https://github.com/LekoArts)! - Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
+## 0.11.3-alpha.2
+
+### Patch Changes
+
+- [#7218](https://github.com/mastra-ai/mastra/pull/7218) [`f539199`](https://github.com/mastra-ai/mastra/commit/f53919950a9320b292732e0cfcdf61cdae6c8742) Thanks [@TheIsrael1](https://github.com/TheIsrael1)! - mastra start - load env files, custom env. Deperecate --env flag for mastra build
+
+## 0.11.3-alpha.1
+
+### Patch Changes
+
+- [#7210](https://github.com/mastra-ai/mastra/pull/7210) [`87de958`](https://github.com/mastra-ai/mastra/commit/87de95832a7bdfa9ecb14473c84dc874331f1a7d) Thanks [@mfrachet](https://github.com/mfrachet)! - fix chat outline
+
 ## 0.11.3-alpha.0
 
 ### Patch Changes
@@ -21,8 +98,6 @@
 - [`c6113ed`](https://github.com/mastra-ai/mastra/commit/c6113ed7f9df297e130d94436ceee310273d6430) Thanks [@wardpeet](https://github.com/wardpeet)! - Fix peerdpes for @mastra/core
 
 ## 0.11.1
-
-## 0.11.0
 
 ### Patch Changes
 

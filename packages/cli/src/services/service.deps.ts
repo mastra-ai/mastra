@@ -2,9 +2,11 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import { execa } from 'execa';
+import { getPackageManagerAddCommand } from '../utils/package-manager';
+import type { PackageManager } from '../utils/package-manager';
 
 export class DepsService {
-  readonly packageManager: string;
+  readonly packageManager: PackageManager;
 
   constructor() {
     this.packageManager = this.getPackageManager();
@@ -24,7 +26,7 @@ export class DepsService {
     return null;
   }
 
-  private getPackageManager(): string {
+  private getPackageManager(): PackageManager {
     const lockFile = this.findLockFile(process.cwd());
     switch (lockFile) {
       case 'pnpm-lock.yaml':
@@ -41,15 +43,11 @@ export class DepsService {
   }
 
   public async installPackages(packages: string[]) {
-    let runCommand = this.packageManager;
-    if (this.packageManager === 'npm') {
-      runCommand = `${this.packageManager} i`;
-    } else {
-      runCommand = `${this.packageManager} add`;
-    }
+    const pm = this.packageManager;
+    const installCommand = getPackageManagerAddCommand(pm);
 
     const packageList = packages.join(' ');
-    return execa(`${runCommand} ${packageList}`, {
+    return execa(`${pm} ${installCommand} ${packageList}`, {
       all: true,
       shell: true,
       stdio: 'inherit',

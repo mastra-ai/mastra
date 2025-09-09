@@ -1,5 +1,7 @@
-import type { CoreMessage, MastraLanguageModel } from '@mastra/core';
-import { Agent, MemoryProcessor } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/llm';
+import { MemoryProcessor } from '@mastra/core/memory';
 
 /**
  * Summarizes tool calls and caches results to avoid re-summarizing identical calls

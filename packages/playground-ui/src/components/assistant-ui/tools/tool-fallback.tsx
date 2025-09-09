@@ -1,53 +1,38 @@
-import { ToolCallContentPartComponent } from '@assistant-ui/react';
-import { ChevronUpIcon } from 'lucide-react';
-import { useState } from 'react';
+import { ToolCallMessagePartComponent } from '@assistant-ui/react';
 
-import { Badge } from '@/ds/components/Badge';
-import { Icon, ToolsIcon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
-import { SyntaxHighlighter } from '../../ui/syntax-highlighter';
+import { ToolBadge } from './badges/tool-badge';
+import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { useWorkflow } from '@/hooks/use-workflows';
+import { WorkflowRunProvider } from '@/domains/workflows';
+import { LoadingBadge } from './badges/loading-badge';
 
-export const ToolFallback: ToolCallContentPartComponent = ({ toolName, argsText, result }) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result, args, ...props }) => {
+  return (
+    <WorkflowRunProvider>
+      <ToolFallbackInner toolName={toolName} argsText={argsText} result={result} args={args} {...props} />
+    </WorkflowRunProvider>
+  );
+};
 
-  let argSlot;
-  try {
-    const parsedArgs = JSON.parse(argsText);
-    argSlot = <SyntaxHighlighter data={parsedArgs} />;
-  } catch {
-    argSlot = <pre className="whitespace-pre-wrap">{argsText}</pre>;
+const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, result, args }) => {
+  // We need to handle the stream data even if the workflow is not resolved yet
+  // The response from the fetch request resolving the workflow might theoretically
+  // be resolved after we receive the first stream event
+  useWorkflowStream(args.__mastraMetadata?.partialChunk);
+  const { data: workflow, isLoading } = useWorkflow(toolName);
+
+  if (isLoading) return <LoadingBadge />;
+
+  if (workflow) {
+    return (
+      <WorkflowBadge
+        workflowId={toolName}
+        workflow={workflow}
+        isStreaming={args.__mastraMetadata?.isStreaming}
+        runId={result?.runId}
+      />
+    );
   }
 
-  return (
-    <div className="mb-2">
-      <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2">
-        <Icon>
-          <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-        </Icon>
-        <Badge icon={<ToolsIcon className="text-[#ECB047]" />}>{toolName}</Badge>
-      </button>
-
-      {!isCollapsed && (
-        <div className="pt-2">
-          <div className="border-sm border-border1 rounded-lg bg-surface4">
-            <div className="px-4 border-b-sm border-border1 py-2">
-              <p className="font-medium pb-2">Tool arguments</p>
-              {argSlot}
-            </div>
-
-            {result !== undefined && (
-              <div className="px-4 py-2">
-                <p className="font-medium pb-2">Tool result</p>
-                {typeof result === 'string' ? (
-                  <pre className="whitespace-pre-wrap">{result}</pre>
-                ) : (
-                  <SyntaxHighlighter data={result} />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <ToolBadge toolName={toolName} argsText={argsText} result={result} />;
 };
