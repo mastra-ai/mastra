@@ -375,6 +375,7 @@ export function createLLMExecutionStep<
   toolCallStreaming,
   controller,
   output,
+  outputProcessors,
   headers,
   downloadRetries,
   downloadConcurrency,
@@ -459,6 +460,7 @@ export function createLLMExecutionStep<
           telemetry_settings,
           includeRawChunks,
           output,
+          outputProcessors,
         },
       });
 

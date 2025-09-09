@@ -17,11 +17,11 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
       if (part.type === 'text-delta') {
         let text: string | undefined;
 
-        // Internal format
+        // Handle internal format
         if (part.payload && 'text' in part.payload) {
           text = part.payload.text;
         }
-        // AISDK format
+        // Handle AISDK format
         else if ('text' in part) {
           text = part.text;
         }
@@ -84,20 +84,6 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
               usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
             },
           ]),
-          rawCall: { rawPrompt: [], rawSettings: {} },
-          warnings: [],
-        };
-      },
-      doGenerate: async () => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'This contains SENSITIVE data that should be SENSITIVE redacted',
-            },
-          ],
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           rawCall: { rawPrompt: [], rawSettings: {} },
           warnings: [],
         };

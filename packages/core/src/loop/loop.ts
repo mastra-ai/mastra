@@ -110,7 +110,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,
       output: rest.output,
-      outputProcessors,
+      // Don't pass outputProcessors here - they're applied in the inner MastraModelOutput
+      // created in llm-execution.ts to avoid double processing
       returnScorerData,
     },
   });

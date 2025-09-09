@@ -162,7 +162,39 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     const self = this;
 
-    this.#baseStream = stream.pipeThrough(
+    // Apply output processors if they exist
+    let processedStream = stream;
+    const processorRunner = this.processorRunner;
+    if (processorRunner) {
+      const processorStates = new Map<string, ProcessorState>();
+      processedStream = stream.pipeThrough(
+        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+          async transform(chunk, controller) {
+            const {
+              part: processed,
+              blocked,
+              reason,
+            } = await processorRunner.processPart(chunk as any, processorStates);
+            if (blocked) {
+              // Emit a tripwire chunk so downstream knows about the abort
+              controller.enqueue({
+                type: 'tripwire',
+                payload: {
+                  tripwireReason: reason || 'Output processor blocked content',
+                },
+              } as ChunkType<OUTPUT>);
+              controller.terminate();
+              return;
+            }
+            if (processed) {
+              controller.enqueue(processed as ChunkType<OUTPUT>);
+            }
+          },
+        }),
+      );
+    }
+
+    this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
@@ -287,6 +319,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               break;
             }
+            case 'tripwire':
+              // Handle tripwire chunks from processors
+              self.#tripwire = true;
+              self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
+              self.#finishReason = 'other';
+              // Pass the tripwire chunk through
+              controller.enqueue(chunk);
+              // Terminate the stream
+              controller.terminate();
+              return;
             case 'finish':
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
@@ -560,41 +602,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     let fullStream = this.teeStream();
 
-    const processorStates = new Map<string, ProcessorState>();
+    // Output processors are now applied in the baseStream transform
+    // so we don't need to apply them here anymore
 
     return fullStream
-      .pipeThrough(
-        new TransformStream({
-          async transform(chunk, controller) {
-            // Process all stream parts through output processors
-            if (self.processorRunner) {
-              const {
-                part: processedPart,
-                blocked,
-                reason,
-              } = await self.processorRunner.processPart(chunk as any, processorStates);
-
-              if (blocked) {
-                // Send tripwire part and close stream for abort
-                controller.enqueue({
-                  type: 'tripwire',
-                  payload: {
-                    tripwireReason: reason || 'Output processor blocked content',
-                  },
-                });
-                controller.terminate();
-                return;
-              }
-
-              if (processedPart) {
-                controller.enqueue(processedPart);
-              }
-            } else {
-              controller.enqueue(chunk);
-            }
-          },
-        }),
-      )
       .pipeThrough(
         createObjectStreamTransformer({
           schema: self.#options.output,
