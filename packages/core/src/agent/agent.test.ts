@@ -450,7 +450,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         },
       ]);
     });
-    it.only('should support JSONSchema7 structured output type', async () => {
+    it('should support JSONSchema7 structured output type', async () => {
       const electionAgent = new Agent({
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
