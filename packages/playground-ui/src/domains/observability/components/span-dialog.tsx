@@ -43,7 +43,7 @@ export function SpanDialog({
       isOpen={isOpen}
       onClose={onClose}
       hasCloseButton={true}
-      className={cn('w-[calc(100vw-20rem)] max-w-[60%]', '3xl:max-w-[50rem]', '4xl:max-w-[40%]')}
+      className={cn('w-[calc(100vw-25rem)] max-w-[65%]', '3xl:max-w-[50%]', '4xl:max-w-[40%]')}
     >
       <div className="flex items-center justify-between pr-[1.5rem]">
         <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>

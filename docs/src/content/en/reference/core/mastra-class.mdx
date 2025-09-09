@@ -13,42 +13,29 @@ Think of `Mastra` as a top-level registry:
 - **tools** aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
 
 
-## Importing
+## Usage example
 
-```typescript
-import { Mastra } from "@mastra/core/mastra";
-```
-
-## Constructor
-
-Creates a new `Mastra` instance with the specified configuration.
-
-```typescript
-constructor(config?: Config);
-```
-
-## Initialization
-
-The Mastra class is typically initialized in your `src/mastra/index.ts` file:
-
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
-import { weatherAgent } from "./agents/weather-agent";
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { weatherWorkflow } from './workflows/weather-workflow';
+import { weatherAgent } from './agents/weather-agent';
 
 export const mastra = new Mastra({
+  workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
     url: ":memory:",
   }),
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
 });
 ```
 
-## Configuration Object
-
-The constructor accepts an optional `Config` object to customize its behavior and integrate various Mastra components. All properties on the `Config` object are optional.
-
-### Properties
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -145,156 +132,5 @@ The constructor accepts an optional `Config` object to customize its behavior an
   ]}
 />
 
-## Usage
 
-Any of the below methods can be used with the Mastra class, for example:
 
-```typescript {3} filename="example.ts" showLineNumbers
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("weatherAgent");
-const result = await agent.generate("What's the weather like in London?");
-```
-
-### Methods
-
-<PropertiesTable
-  content={[
-    {
-      name: "getAgent(name)",
-      type: "Agent",
-      description:
-        "Returns an agent instance by id. Throws if agent not found.",
-      example: 'const agent = mastra.getAgent("agentOne");',
-    },
-    {
-      name: "getAgents()",
-      type: "Record<string, Agent>",
-      description: "Returns all registered agents as a key-value object.",
-      example: "const agents = mastra.getAgents();",
-    },
-    {
-      name: "getWorkflow(id, { serialized })",
-      type: "Workflow",
-      description:
-        "Returns a workflow instance by id. The serialized option (default: false) returns a simplified representation with just the name.",
-      example: 'const workflow = mastra.getWorkflow("myWorkflow");',
-    },
-    {
-      name: "getWorkflows({ serialized })",
-      type: "Record<string, Workflow>",
-      description:
-        "Returns all registered workflows. The serialized option (default: false) returns simplified representations.",
-      example: "const workflows = mastra.getWorkflows();",
-    },
-    {
-      name: "getVector(name)",
-      type: "MastraVector",
-      description:
-        "Returns a vector store instance by name. Throws if not found.",
-      example: 'const vectorStore = mastra.getVector("myVectorStore");',
-    },
-    {
-      name: "getVectors()",
-      type: "Record<string, MastraVector>",
-      description:
-        "Returns all registered vector stores as a key-value object.",
-      example: "const vectorStores = mastra.getVectors();",
-    },
-    {
-      name: "getDeployer()",
-      type: "MastraDeployer | undefined",
-      description: "Returns the configured deployer instance, if any.",
-      example: "const deployer = mastra.getDeployer();",
-    },
-    {
-      name: "getStorage()",
-      type: "MastraStorage | undefined",
-      description: "Returns the configured storage instance.",
-      example: "const storage = mastra.getStorage();",
-    },
-    {
-      name: "getMemory()",
-      type: "MastraMemory | undefined",
-      description:
-        "Returns the configured memory instance. Note: This is deprecated, memory should be added to agents directly.",
-      example: "const memory = mastra.getMemory();",
-    },
-    {
-      name: "getServer()",
-      type: "ServerConfig | undefined",
-      description:
-        "Returns the server configuration including port, timeout, API routes, middleware, CORS settings, and build options.",
-      example: "const serverConfig = mastra.getServer();",
-    },
-    {
-      name: "setStorage(storage)",
-      type: "void",
-      description: "Sets the storage instance for the Mastra instance.",
-      example: "mastra.setStorage(new DefaultStorage());",
-    },
-    {
-      name: "setLogger({ logger })",
-      type: "void",
-      description:
-        "Sets the logger for all components (agents, workflows, etc.).",
-      example:
-        'mastra.setLogger({ logger: new PinoLogger({ name: "MyLogger" }) });',
-    },
-    {
-      name: "setTelemetry(telemetry)",
-      type: "void",
-      description: "Sets the telemetry configuration for all components.",
-      example: 'mastra.setTelemetry({ export: { type: "console" } });',
-    },
-    {
-      name: "getLogger()",
-      type: "Logger",
-      description: "Gets the configured logger instance.",
-      example: "const logger = mastra.getLogger();",
-    },
-    {
-      name: "getTelemetry()",
-      type: "Telemetry | undefined",
-      description: "Gets the configured telemetry instance.",
-      example: "const telemetry = mastra.getTelemetry();",
-    },
-    {
-      name: "getLogsByRunId({ runId, transportId })",
-      type: "Promise<any>",
-      description: "Retrieves logs for a specific run ID and transport ID.",
-      example:
-        'const logs = await mastra.getLogsByRunId({ runId: "123", transportId: "456" });',
-    },
-    {
-      name: "getLogs(transportId)",
-      type: "Promise<any>",
-      description: "Retrieves all logs for a specific transport ID.",
-      example: 'const logs = await mastra.getLogs("transportId");',
-    },
-    {
-      name: "getMCPServers()",
-      type: "Record<string, MCPServerBase> | undefined",
-      description: "Retrieves all registered MCP server instances.",
-      example: "const mcpServers = mastra.getMCPServers();",
-    },
-  ]}
-/>
-
-## Error Handling
-
-The Mastra class methods throw typed errors that can be caught:
-
-```typescript {8} filename="example.ts" showLineNumbers
-import { mastra } from "./mastra";
-
-try {
-  const agent = mastra.getAgent("weatherAgent");
-  const result = await agent.generate("What's the weather like in London?");
-
-} catch (error) {
-  if (error instanceof Error) {
-    console.log(error.message);
-  }
-}
-```

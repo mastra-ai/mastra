@@ -1,0 +1,35 @@
+---
+title: "Reference: Mastra.getStorage() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance."
+---
+
+# Mastra.getStorage()
+
+The `.getStorage()` method is used to retrieve the storage instance that has been configured in the Mastra instance.
+
+## Usage example
+
+```typescript copy
+mastra.getStorage();
+```
+
+## Parameters
+
+This method does not accept any parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraStorage | undefined",
+      description: "The configured storage instance, or undefined if no storage has been configured.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Storage overview](../../docs/server-db/storage.mdx)
+- [Storage reference](../../reference/storage/libsql.mdx)
