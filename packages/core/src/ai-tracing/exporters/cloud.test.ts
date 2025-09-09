@@ -1,8 +1,9 @@
-import { AISpanType, AITracingEvent, AITracingEventType, AnyAISpan } from '..';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { AITracingEvent, AnyAISpan } from '..';
+import { AISpanType, AITracingEventType } from '..';
 
-import { CloudExporter } from './cloud';
 import { fetchWithRetry } from '../../utils';
+import { CloudExporter } from './cloud';
 
 // Mock fetchWithRetry
 vi.mock('../../utils', () => ({
