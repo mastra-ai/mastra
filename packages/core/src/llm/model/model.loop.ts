@@ -119,7 +119,6 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
-    messages,
     stopWhen = stepCountIs(5),
     maxSteps,
     tools = {} as Tools,
@@ -146,6 +145,8 @@ export class MastraLLMVNext extends MastraBase {
     } else {
       stopWhenToUse = stopWhen;
     }
+
+    const messages = messageList.get.all.aiV5.model();
 
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {

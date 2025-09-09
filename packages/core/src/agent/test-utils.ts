@@ -54,7 +54,14 @@ export class MockMemory extends MastraMemory {
     let results = Array.from(this.messages.values());
     if (threadId) results = results.filter(m => m.threadId === threadId);
     if (resourceId) results = results.filter(m => m.resourceId === resourceId);
-    if (selectBy) results = results.filter(m => selectBy.include?.some(i => i.id === m.id));
+    if (selectBy) {
+      if (selectBy.include) {
+        results = results.filter(m => selectBy.include?.some(i => i.id === m.id));
+      }
+      if (selectBy.last) {
+        results = results.slice(-selectBy.last);
+      }
+    }
     if (format === 'v2') return results as MastraMessageV2[];
     return results as MastraMessageV1[];
   }

@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
-import type { ModelMessage } from 'ai-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
@@ -792,23 +791,35 @@ export class Agent<
     let text = '';
 
     if (llm.getModel().specificationVersion === 'v2') {
+      const messageList = new MessageList()
+        .add(
+          [
+            {
+              role: 'system',
+              content: systemInstructions,
+            },
+          ],
+          'system',
+        )
+        .add(
+          [
+            {
+              role: 'user',
+              content: JSON.stringify(partsToGen),
+            },
+          ],
+          'input',
+        );
       const result = (llm as MastraLLMVNext).stream({
         runtimeContext,
         tracingContext,
-        messages: [
-          {
-            role: 'system',
-            content: systemInstructions,
-          },
-          {
-            role: 'user',
-            content: JSON.stringify(partsToGen),
-          },
-        ],
-        messageList: new MessageList(),
+        messageList,
       });
 
+      console.log('DEBUG result', JSON.stringify(result, null, 2));
+
       text = await result.text;
+      console.log('DEBUG text', text);
     } else {
       const result = await (llm as MastraLLMV1).__text({
         runtimeContext,
@@ -848,6 +859,7 @@ export class Agent<
     try {
       if (userMessage) {
         const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        console.log('DEBUG normMessage', normMessage);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
@@ -2753,7 +2765,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       id: 'prepare-memory-step',
       inputSchema: z.any(),
       outputSchema: z.object({
-        messageObjects: z.array(z.any()),
         threadExists: z.boolean(),
         thread: z.any(),
         messageList: z.any(),
@@ -2783,7 +2794,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             messageList,
           });
           return {
-            messageObjects: messageList.get.all.prompt(),
             threadExists: false,
             thread: undefined,
             messageList,
@@ -2948,14 +2958,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           .addSystem(memorySystemMessage)
           .add(options.context || [], 'context')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.v2(), 'user')
-          .get.all.prompt();
+          .add(messageList.get.input.v2(), 'user');
 
         return {
           thread: threadObject,
-          messageList,
+          messageList: processedList,
           // add old processed messages + new input messages
-          messageObjects: processedList,
           ...(tripwireTriggered && {
             tripwire: true,
             tripwireReason,
@@ -3012,7 +3020,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       .map(async ({ inputData, bail, tracingContext }) => {
         const result = {
           ...options,
-          messages: inputData['prepare-memory-step'].messageObjects,
           tools: inputData['prepare-tools-step'].convertedTools as Record<string, Tool>,
           runId,
           temperature: options.modelSettings?.temperature,
@@ -3123,7 +3130,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
 
         const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
-          messages: result.messages as ModelMessage[],
           runtimeContext: result.runtimeContext!,
           tracingContext: { currentSpan: agentAISpan },
           runId,

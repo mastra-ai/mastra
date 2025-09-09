@@ -789,8 +789,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       ...(scoringData ? { scoringData } : {}),
     };
 
-    fullOutput.response.messages = this.messageList.get.response.aiV5.model();
-
     return fullOutput;
   }
 

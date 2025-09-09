@@ -6119,6 +6119,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       ];
+
       if (version === 'v1') {
         await agent.generate(messagesWithMetadata, {
           memory: {
@@ -7168,6 +7169,7 @@ describe('Stream ID Consistency', () => {
       name: 'test-agent',
       instructions: 'You are a helpful assistant.',
       model,
+      // model: openai('gpt-4o'),
       memory,
     });
 
@@ -7182,6 +7184,9 @@ describe('Stream ID Consistency', () => {
     });
 
     let streamResponseId: string | undefined;
+    for await (const _chunk of streamResult.fullStream) {
+      console.log('DEBUG chunk', _chunk);
+    }
     await streamResult.consumeStream();
 
     const finishedResult = streamResult;
@@ -7189,6 +7194,7 @@ describe('Stream ID Consistency', () => {
 
     streamResponseId = response?.messages?.[0]?.id;
 
+    console.log('DEBUG streamResponseId', streamResponseId);
     expect(streamResponseId).toBeDefined();
 
     const savedMessages = await memory.getMessages({ threadId });
