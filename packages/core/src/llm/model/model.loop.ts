@@ -14,7 +14,6 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
 import type { MastraPrimitives } from '../../action';
-import { MessageList } from '../../agent';
 import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -120,7 +119,6 @@ export class MastraLLMVNext extends MastraBase {
   }
 
   stream<Tools extends ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
-    messages,
     stopWhen = stepCountIs(5),
     maxSteps,
     tools = {} as Tools,
@@ -136,6 +134,8 @@ export class MastraLLMVNext extends MastraBase {
     returnScorerData,
     providerOptions,
     tracingContext,
+    messageList,
+    _internal,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
     let stopWhenToUse;
@@ -145,6 +145,8 @@ export class MastraLLMVNext extends MastraBase {
     } else {
       stopWhenToUse = stopWhen;
     }
+
+    const messages = messageList.get.all.aiV5.model();
 
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
@@ -171,12 +173,6 @@ export class MastraLLMVNext extends MastraBase {
     });
 
     try {
-      const messageList = new MessageList({
-        threadId,
-        resourceId,
-      });
-      messageList.add(messages, 'input');
-
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         messageList,
         model: this.#model,
@@ -189,6 +185,7 @@ export class MastraLLMVNext extends MastraBase {
           ...this.experimental_telemetry,
           ...telemetry_settings,
         },
+        _internal,
         output,
         outputProcessors,
         returnScorerData,
