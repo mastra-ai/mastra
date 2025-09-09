@@ -178,8 +178,8 @@ These properties resolve to final values after the stream completes:
         parameters: [
           { name: "text", type: "string", description: "Complete text response" },
           { name: "object", type: "InferSchemaOutput<OUTPUT>", isOptional: true, description: "Structured output if schema was provided" },
-          { name: "toolCalls", type: "any[]", description: "All tool calls made" },
-          { name: "toolResults", type: "any[]", description: "All tool execution results" },
+          { name: "toolCalls", type: "ToolCallChunk[]", description: "All tool call chunks made" },
+          { name: "toolResults", type: "ToolResultChunk[]", description: "All tool result chunks" },
           { name: "usage", type: "Record<string, number>", description: "Token usage statistics" },
           { name: "reasoning", type: "string", isOptional: true, description: "Reasoning text if available" },
           { name: "finishReason", type: "string", isOptional: true, description: "Why generation finished" }
