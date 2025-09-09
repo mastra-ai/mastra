@@ -1,0 +1,67 @@
+---
+title: "MastraAuthClerk"
+description: "API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
+---
+
+# MastraAuthClerk
+
+The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+
+## Usage example
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthClerk } from '@mastra/clerk-auth';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthClerk({
+      jwksUri: process.env.CLERK_JWKS_URI,
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+    }),
+  },
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "jwksUri",
+      type: "string",
+      description: "The JWKS URI from your Clerk application. If not provided, uses MASTRA_JWKS_URI environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "publishableKey",
+      type: "string",
+      description: "Your Clerk publishable key. If not provided, uses MASTRA_PUBLISHABLE_KEY environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "secretKey",
+      type: "string",
+      description: "Your Clerk secret key. If not provided, uses MASTRA_SECRET_KEY environment variable.",
+      isOptional: true,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Optional name for the auth instance. Inherits from base auth class.",
+      isOptional: true,
+    },
+    {
+      name: "authorizeUser",
+      type: "(jwtPayload: any, honoRequest: any) => Promise<boolean>",
+      description: "Custom authorization function to validate users beyond JWT verification. Inherits from base auth class.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Related
+
+[MastraAuthClerk](/docs/auth/clerk.mdx)

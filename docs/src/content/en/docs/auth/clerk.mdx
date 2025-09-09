@@ -1,0 +1,162 @@
+---
+title: "MastraAuthClerk Class"
+description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
+---
+
+import { Tabs, Tab } from "@/components/tabs";
+
+# MastraAuthClerk Class
+
+The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+
+## Installation
+
+Before you can use the `MastraAuthClerk` class you have to install the `@mastra/clerk-auth` package.
+
+```bash copy
+npm install @mastra/clerk-auth@latest
+```
+
+## Usage example
+
+### Basic usage (using environment variables)
+
+```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthClerk } from '@mastra/clerk-auth';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthClerk(),
+  },
+});
+```
+
+When no arguments are passed, `MastraAuthClerk` will use the following environment variables:
+
+- `MASTRA_JWKS_URI` - The JWKS URI from your Clerk application
+- `MASTRA_PUBLISHABLE_KEY` - Your Clerk publishable key
+- `MASTRA_SECRET_KEY` - Your Clerk secret key
+
+### Explicit configuration
+
+```typescript {7-18} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthClerk } from '@mastra/clerk-auth';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthClerk({
+      jwksUri: process.env.CLERK_JWKS_URI,
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+
+      // Optional overrides
+      name: "custom-clerk-auth",
+      authorizeUser: async (jwtPayload, honoRequest) => {
+        // Custom authorization logic
+        return true;
+      },
+    }),
+  },
+});
+```
+
+> See the [MastraAuthClerk](/reference/auth/clerk.mdx) API reference for all available configuration options.
+
+## Configuring `MastraClient`
+
+When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Clerk JWT token in the `Authorization` header:
+
+```typescript {9-12} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+import { useAuth } from "@clerk/nextjs";
+import { MastraClient } from "@mastra/client-js";
+
+export const useAuthenticatedMastraClient = () => {
+  const { getToken } = useAuth();
+
+  const getClient = async () => {
+    const token = await getToken();
+    return new MastraClient({
+      baseUrl: "https://<mastra-api-url>",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+  };
+
+  return { getClient };
+};
+```
+
+> See [Mastra Client SDK](/docs/server-db/mastra-client.mdx) for more configuration options.
+
+### Making authenticated requests
+
+Once `MastraClient` is configured with Clerk authentication, you can send authenticated requests from your frontend application:
+
+<Tabs items={["React Component", "curl"]}>
+  <Tab>
+    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+    "use client";
+
+    import { useAuth } from "@clerk/nextjs";
+    import { MastraClient } from "@mastra/client-js";
+
+    export const TestAgent = () => {
+      const { getToken } = useAuth();
+
+      async function handleClick() {
+        const token = await getToken();
+
+        const client = new MastraClient({
+          baseUrl: "http://localhost:4111",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+
+        const weatherAgent = client.getAgent("weatherAgent");
+        const response = await weatherAgent.generate({
+          messages: "What's the weather like in New York",
+        });
+
+        console.log({ response });
+      }
+
+      return <button onClick={handleClick}>Test Agent</button>;
+    };
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <clerk-jwt-token>" \
+      -d '{
+        "messages": "What'\''s the weather like in New York"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Setting up Clerk
+
+To use Clerk authentication with Mastra, you need to:
+
+1. **Create a Clerk application** at [clerk.com](https://clerk.com)
+2. **Install Clerk in your frontend application**:
+
+   ```bash copy
+   npm install @clerk/nextjs
+   ```
+
+3. **Configure your Clerk keys** in your environment variables
+4. **Wrap your application** with Clerk providers
+
+For detailed setup instructions, see the [Clerk documentation](https://clerk.com/docs).
+
+## Authentication Flow
+
+1. User signs in through Clerk on your frontend application
+2. Frontend retrieves JWT token using Clerk's `getToken()` method
+3. Frontend includes token in `Authorization: Bearer <token>` header when making requests to Mastra
+4. Mastra server validates the token with Clerk and processes the authenticated request
