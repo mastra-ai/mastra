@@ -6,6 +6,6 @@ export interface ScorerTemplate {
   description: string;
   category: Category;
   filename: string;
-  type: 'llm' | 'code'
+  type: 'llm' | 'code';
   content?: string; 
 }
