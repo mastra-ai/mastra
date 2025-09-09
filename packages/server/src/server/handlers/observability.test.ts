@@ -152,14 +152,14 @@ describe('Observability Handlers', () => {
       const result = await getAITracesPaginatedHandler({
         mastra: mockMastra,
         body: {
-          filter: { name: 'test' },
+          filters: { name: 'test' },
           pagination: { page: 1, perPage: 10 },
         },
       });
 
       expect(result).toEqual(mockResult);
       expect(mockStorage.getAITracesPaginated).toHaveBeenCalledWith({
-        filter: { name: 'test' },
+        filters: { name: 'test' },
         pagination: { page: 1, perPage: 10 },
       });
       expect(handleErrorSpy).not.toHaveBeenCalled();
@@ -179,14 +179,14 @@ describe('Observability Handlers', () => {
       const result = await getAITracesPaginatedHandler({
         mastra: mockMastra,
         body: {
-          filter: {},
+          filters: {},
           pagination: {},
         },
       });
 
       expect(result).toEqual(mockResult);
       expect(mockStorage.getAITracesPaginated).toHaveBeenCalledWith({
-        filter: {},
+        filters: {},
         pagination: {},
       });
     });
@@ -197,14 +197,14 @@ describe('Observability Handlers', () => {
       await expect(
         getAITracesPaginatedHandler({
           mastra: mastraWithoutStorage,
-          body: { filter: {}, pagination: {} },
+          body: { filters: {}, pagination: {} },
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await getAITracesPaginatedHandler({
           mastra: mastraWithoutStorage,
-          body: { filter: {}, pagination: {} },
+          body: { filters: {}, pagination: {} },
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -238,7 +238,7 @@ describe('Observability Handlers', () => {
           getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: { page: -1, perPage: 10 },
             },
           }),
@@ -248,7 +248,7 @@ describe('Observability Handlers', () => {
           await getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: { page: -1, perPage: 10 },
             },
           });
@@ -264,7 +264,7 @@ describe('Observability Handlers', () => {
           getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: { page: 1, perPage: -1 },
             },
           }),
@@ -274,7 +274,7 @@ describe('Observability Handlers', () => {
           await getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: { page: 1, perPage: -1 },
             },
           });
@@ -292,14 +292,14 @@ describe('Observability Handlers', () => {
         const result = await getAITracesPaginatedHandler({
           mastra: mockMastra,
           body: {
-            filter: {},
+            filters: {},
             pagination: { page: 0, perPage: 0 },
           },
         });
 
         expect(result).toEqual(mockResult);
         expect(mockStorage.getAITracesPaginated).toHaveBeenCalledWith({
-          filter: {},
+          filters: {},
           pagination: { page: 0, perPage: 0 },
         });
       });
@@ -316,7 +316,7 @@ describe('Observability Handlers', () => {
         const result = await getAITracesPaginatedHandler({
           mastra: mockMastra,
           body: {
-            filter: {},
+            filters: {},
             pagination: {
               dateRange: { start: startDate, end: endDate },
               page: 1,
@@ -327,7 +327,7 @@ describe('Observability Handlers', () => {
 
         expect(result).toEqual(mockResult);
         expect(mockStorage.getAITracesPaginated).toHaveBeenCalledWith({
-          filter: {},
+          filters: {},
           pagination: {
             dateRange: { start: startDate, end: endDate },
             page: 1,
@@ -341,7 +341,7 @@ describe('Observability Handlers', () => {
           getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: {
                 dateRange: { start: 'invalid-date' as any },
                 page: 1,
@@ -355,7 +355,7 @@ describe('Observability Handlers', () => {
           await getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: {
                 dateRange: { start: 'invalid-date' as any },
                 page: 1,
@@ -375,7 +375,7 @@ describe('Observability Handlers', () => {
           getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: {
                 dateRange: { end: 'invalid-date' as any },
                 page: 1,
@@ -389,7 +389,7 @@ describe('Observability Handlers', () => {
           await getAITracesPaginatedHandler({
             mastra: mockMastra,
             body: {
-              filter: {},
+              filters: {},
               pagination: {
                 dateRange: { end: 'invalid-date' as any },
                 page: 1,
@@ -412,7 +412,7 @@ describe('Observability Handlers', () => {
       await expect(
         getAITracesPaginatedHandler({
           mastra: mockMastra,
-          body: { filter: {}, pagination: {} },
+          body: { filters: {}, pagination: {} },
         }),
       ).rejects.toThrow();
     });

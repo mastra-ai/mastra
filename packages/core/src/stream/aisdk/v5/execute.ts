@@ -1,4 +1,5 @@
 import { isAbortError } from '@ai-sdk/provider-utils';
+import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { Span } from '@opentelemetry/api';
 import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
@@ -6,6 +7,7 @@ import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
+import { getModelSupport } from './model-supports';
 
 type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
   runId: string;
@@ -64,6 +66,18 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
     });
   }
 
+  const modelSupports = getModelSupport(model.modelId, model.provider);
+  const modelSupportsResponseFormat = modelSupports?.capabilities.responseFormat?.support === 'full';
+  const responseFormat = output ? getResponseFormat(output) : undefined;
+
+  let prompt = inputMessages;
+  if (output && responseFormat?.type === 'json' && !modelSupportsResponseFormat) {
+    prompt = injectJsonInstructionIntoMessages({
+      messages: inputMessages,
+      schema: responseFormat.schema,
+    });
+  }
+
   const stream = v5.initialize({
     runId,
     onResult,
@@ -71,11 +85,11 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
       try {
         const stream = await model.doStream({
           ...toolsAndToolChoice,
-          prompt: inputMessages,
+          prompt,
           providerOptions,
           abortSignal: options?.abortSignal,
           includeRawChunks,
-          responseFormat: output ? getResponseFormat(output) : undefined,
+          responseFormat: modelSupportsResponseFormat ? responseFormat : undefined,
           ...(modelSettings ?? {}),
           headers,
         });

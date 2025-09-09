@@ -624,15 +624,39 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   async listIndexes(): Promise<string[]> {
     const client = await this.pool.connect();
     try {
-      // Then let's see which ones have vector columns
-      const vectorTablesQuery = `
-            SELECT DISTINCT table_name
-            FROM information_schema.columns
-            WHERE table_schema = $1
-            AND udt_name = 'vector';
-        `;
-      const vectorTables = await client.query(vectorTablesQuery, [this.schema || 'public']);
-      return vectorTables.rows.map(row => row.table_name);
+      // Query for tables that match the exact Mastra PgVector table structure:
+      // Must have: vector_id (TEXT), embedding (vector), metadata (JSONB)
+      const mastraTablesQuery = `
+        SELECT DISTINCT t.table_name
+        FROM information_schema.tables t
+        WHERE t.table_schema = $1
+        AND EXISTS (
+          SELECT 1
+          FROM information_schema.columns c
+          WHERE c.table_schema = t.table_schema
+          AND c.table_name = t.table_name
+          AND c.column_name = 'vector_id'
+          AND c.data_type = 'text'
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM information_schema.columns c
+          WHERE c.table_schema = t.table_schema
+          AND c.table_name = t.table_name
+          AND c.column_name = 'embedding'
+          AND c.udt_name = 'vector'
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM information_schema.columns c
+          WHERE c.table_schema = t.table_schema
+          AND c.table_name = t.table_name
+          AND c.column_name = 'metadata'
+          AND c.data_type = 'jsonb'
+        );
+      `;
+      const mastraTables = await client.query(mastraTablesQuery, [this.schema || 'public']);
+      return mastraTables.rows.map(row => row.table_name);
     } catch (e) {
       const mastraError = new MastraError(
         {
