@@ -5,6 +5,8 @@ const meta = {
   generate: ".generate()",
   stream: ".stream()",
   streamVNext: <Tag text="experimental">.streamVNext()</Tag>,
+  MastraModelOutput: "MastraModelOutput",
+  ChunkType: "ChunkType",
   getWorkflows: ".getWorkflows()",
   getTools: ".getTools()",
   getScorers: ".getScorers()",
