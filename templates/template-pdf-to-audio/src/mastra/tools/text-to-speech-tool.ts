@@ -54,11 +54,11 @@ export const textToSpeechTool = createTool({
 
     try {
       console.log(`🎵 Converting text to audio...`);
-      const textToAudioAgent = mastra!.getAgent('textNaturalizerAgent');
-      console.log('textToAudioAgent.voice', textToAudioAgent.voice);
+      const textNaturalizerAgent = mastra!.getAgent('textNaturalizerAgent');
+      console.log('extToAudioAgent.voice', textNaturalizerAgent.voice);
 
       // Generate audio using the agent's voice synthesis
-      const audioStream = await textToAudioAgent.voice.speak(processedText, {
+      const audioStream = await textNaturalizerAgent.voice.speak(processedText, {
         speaker: context.speaker,
         speed: context.speed,
       });

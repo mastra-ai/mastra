@@ -22,7 +22,7 @@ cd pdf-to-audio
 Set up environment variables by copying the example environment file and adding your OpenAI API key:
 
 ```bash
-cp env.local .env
+cp .env.local .env
 ```
 
 Then edit `.env` and add your OpenAI API key:
@@ -46,7 +46,7 @@ The recommended way to experience this template is to run the Mastra playground 
 Here's a chapter from Mastra's book on [principles of building AI agents](https://mastra.ai/book) for you to play with:
 
 ```
-https://github.com/mastra-ai/template-pdf-to-audio/blob/main/media/mcp_chapter.pdf
+https://raw.githubusercontent.com/mastra-ai/template-pdf-to-audio/main/media/mcp_chapter.pdf
 ```
 
 ## Features

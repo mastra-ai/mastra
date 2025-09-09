@@ -32,7 +32,7 @@ When processing a PDF request:
 
 **Tool Usage Guidelines:**
 
-**PDF Fetcher Tool:**
+**PDF Summarizer Tool:**
 - Provide the PDF URL
 - Returns a comprehensive AI summary along with file metadata
 - Handle download errors gracefully
