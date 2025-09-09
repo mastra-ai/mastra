@@ -1,18 +1,24 @@
 # @mastra/couchbase
 
-A Mastra vector store implementation for Couchbase with vector similarity search and advanced metadata filtering capabilities.
+A Mastra vector store implementation for Couchbase with vector similarity search and advanced metadata filtering capabilities. It offers two distinct vector stores:
+
+- **`CouchbaseSearchStore`**: Leverages Couchbase's Search Service (FTS) for vector search.
+- **`CouchbaseQueryStore`**: Utilizes Couchbase's Query Service with GSI Vector Indexes.
 
 ## Features
 
-- Vector similarity search with filtering support
-- Cosine, Euclidean (L2), and Dot Product distance metrics
-- Search index management (create, list, describe, delete)
-- Compatible with Couchbase Server 7.6.4+ and Couchbase Capella
-- Built-in telemetry support
+- Vector similarity search with advanced filtering
+- **Two vector store implementations**: `CouchbaseSearchStore` (Search Service) and `CouchbaseQueryStore` (Query Service with GSI)
+- Support for `BHIVE` and `Composite` GSI vector index types with `CouchbaseQueryStore`.
+- Cosine, Euclidean (L2), and Dot Product distance metrics.
+- Search index management (create, list, describe, delete).
+- Compatible with Couchbase Capella and Couchbase Server (see version details below).
+- Built-in telemetry support.
 
 ## Prerequisites
 
-- Couchbase Server 7.6.4+ or Couchbase Capella cluster with Search Service enabled
+- Couchbase Server 7.6.4+ or Couchbase Capella cluster with Search and/or Query Service enabled
+- **Note**: For `CouchbaseQueryStore`, Couchbase Server 8.0.0+ is required.
 - Configured Bucket, Scope, and Collection
 - User credentials with Read and Write access
 - Node.js 18+
@@ -27,9 +33,36 @@ pnpm add @mastra/couchbase
 yarn add @mastra/couchbase
 ```
 
-## Getting Started: A Quick Tutorial
+## Choosing Your Store and Index Type
 
-Let's set up `@mastra/couchbase` to store and search vectors with filtering capabilities in your Couchbase cluster.
+The primary choice is between `CouchbaseSearchStore` (FTS) and `CouchbaseQueryStore` (GSI). If you choose `CouchbaseQueryStore`, you then select between a `BHIVE` or `Composite` index.
+
+### `CouchbaseSearchStore` (FTS) vs. `CouchbaseQueryStore` (GSI)
+
+| Feature               | `CouchbaseSearchStore` (FTS)          | `CouchbaseQueryStore` (GSI)                                               |
+| --------------------- | ------------------------------------- | ------------------------------------------------------------------------- |
+| **Best For**          | Hybrid search and high recall rates.  | Vector-first workloads, complex filtering, and high QPS performance.      |
+| **Couchbase Version** | 7.6.4+                                | 8.0.0+                                                                    |
+| **Filtering**         | Pre-filtering with flexible ordering. | Pre-filtering with `WHERE` clauses (Composite) or post-filtering (BHIVE). |
+| **Scalability**       | Up to 10 million vectors.             | Up to billions of vectors (BHIVE).                                        |
+
+### Choosing the Right GSI Index Type for `CouchbaseQueryStore`
+
+#### Hyperscale Vector Indexes (BHIVE)
+
+- **Best for**: Pure vector searches like content discovery, recommendations, and semantic search.
+- **Use when**: You primarily perform vector-only queries without complex scalar filtering.
+- **Features**: High performance with a low memory footprint, optimized for concurrent operations, and designed to scale to billions of vectors.
+
+#### Composite Vector Indexes
+
+- **Best for**: Filtered vector searches that combine vector similarity with scalar value filtering.
+- **Use when**: Your queries combine vector similarity with scalar filters that eliminate large portions of the dataset.
+- **Features**: Efficient pre-filtering where scalar attributes reduce the vector comparison scope.
+
+## Getting Started with `CouchbaseSearchStore`
+
+Let's set up `@mastra/couchbase` to store and search vectors with filtering capabilities in your Couchbase cluster using the Search Service.
 
 **Step 1: Connect to Your Cluster**
 
@@ -90,7 +123,7 @@ _Note_: Index creation in Couchbase is asynchronous. It might take a short while
 
 **Important:** Filtering will only work on metadata fields that are explicitly indexed using the `fields_to_index` parameter. Fields not included in the index definition cannot be used for filtering operations.
 
-_Best practice_: Implement a delay or polling mechanism to ensure the index is ready using simple delay approach (`await new Promise(resolve => setTimeout(resolve, 2000));`) or implement a more robust solution that polls the index status
+_Best practice_: Implement a delay or polling mechanism to ensure the index is ready using simple delay approach (`await new Promise(resolve => setTimeout(resolve, 2000));`).
 
 **Step 3: Add Your Vectors (Upsert Documents)**
 
@@ -253,6 +286,215 @@ try {
 
 _Note_: Deleting Index does NOT delete the vectors in the associated Couchbase Collection
 
+## Getting Started with `CouchbaseQueryStore`
+
+This section guides you through using `CouchbaseQueryStore`, which leverages the Query Service and GSI Vector Indexes for vector search.
+
+**Step 1: Connect to Your Cluster**
+
+Instantiate `CouchbaseQueryStore` with your cluster details.
+
+```typescript
+import { CouchbaseQueryStore } from '@mastra/couchbase';
+
+const connectionString = 'couchbases://your_cluster_host?ssl=no_verify'; // Use couchbases:// for Capella/TLS, couchbase:// for local/non-TLS
+const username = 'your_couchbase_user';
+const password = 'your_couchbase_password';
+const bucketName = 'your_vector_bucket';
+const scopeName = '_default'; // Or your custom scope name
+const collectionName = 'vector_data_gsi'; // Or your custom collection name
+
+const vectorStore = new CouchbaseQueryStore({
+  connectionString,
+  username,
+  password,
+  bucketName,
+  scopeName,
+  collectionName,
+});
+
+console.log('CouchbaseQueryStore instance created. Connecting...');
+```
+
+**Step 2: Create a GSI Vector Index**
+
+`CouchbaseQueryStore` supports two types of GSI vector indexes: `bhive` and `composite`.
+
+- **`bhive`**: A vector-optimized index for vector-first workloads. It supports post-scan filtering and simple pre-filtering, and is designed to scale to billions of vectors.
+- **`composite`**: A composite GSI index that combines vector and non-vector fields. It is best for well-defined workloads that require complex filtering using GSI features, such as range lookups combined with vector search.
+
+**Example: Creating a `bhive` index**
+
+```typescript
+const indexName = 'my_gsi_vector_index_bhive';
+const vectorDimension = 1536; // Example: OpenAI embedding dimension
+
+try {
+  await vectorStore.createIndex({
+    indexName: indexName,
+    dimension: vectorDimension,
+    metric: 'cosine', // Or 'euclidean', 'dotproduct'
+    gsi_vector_index_type: 'bhive',
+    fields_to_index: ['category', 'page'], // Metadata fields to include for filtering
+  });
+  console.log(`GSI vector index '${indexName}' created successfully.`);
+} catch (error) {
+  console.error(`Failed to create index '${indexName}':`, error);
+}
+```
+
+**Example: Creating a `composite` index**
+
+```typescript
+const compositeIndexName = 'my_gsi_vector_index_composite';
+
+try {
+  await vectorStore.createIndex({
+    indexName: compositeIndexName,
+    dimension: vectorDimension,
+    metric: 'cosine',
+    gsi_vector_index_type: 'composite',
+    fields_to_index: ['category', 'page'],
+  });
+  console.log(`GSI vector index '${compositeIndexName}' created successfully.`);
+} catch (error) {
+  console.error(`Failed to create index '${compositeIndexName}':`, error);
+}
+```
+
+_Note_: Index creation in Couchbase is asynchronous. It might take a short while for the index to become fully built and queryable.
+
+### Understanding GSI Index Configuration
+
+The `index_metadata` parameter in the `createIndex` method allows you to control how Couchbase optimizes vector storage and search. The `description` field is particularly important.
+
+**Format**: `'IVF[<centroids>],{PQ|SQ}<settings>'`
+
+- **Centroids (IVF)**: Controls how the dataset is subdivided for faster searches. More centroids result in faster searches but slower training. If omitted (e.g., `IVF,SQ8`), Couchbase automatically selects the number of centroids based on the dataset size.
+- **Quantization (PQ/SQ)**: Compresses vectors to save memory. `SQ` (Scalar Quantization) and `PQ` (Product Quantization) offer different levels of precision and performance.
+
+**Common Examples**:
+
+- `IVF,SQ8`: Auto-selected centroids with 8-bit scalar quantization. A good default.
+- `IVF1000,SQ6`: 1000 centroids with 6-bit scalar quantization.
+- `IVF,PQ32x8`: Auto-selected centroids with 32 subquantizers of 8 bits each.
+
+**Step 3: Add Your Vectors (Upsert Documents)**
+
+The `upsert` process is the same as with `CouchbaseSearchStore`.
+
+```typescript
+const vectors = [Array(vectorDimension).fill(0.1), Array(vectorDimension).fill(0.2)];
+const metadata = [
+  { source: 'doc1.txt', page: 1, category: 'finance' },
+  { source: 'doc2.pdf', page: 5, category: 'tech' },
+];
+
+try {
+  const ids = await vectorStore.upsert({
+    indexName: indexName, // Required for dimension validation
+    vectors: vectors,
+    metadata: metadata,
+  });
+  console.log('Upserted documents with IDs:', ids);
+} catch (error) {
+  console.error('Failed to upsert vectors:', error);
+}
+```
+
+**Step 4: Find Similar Vectors (Query the Index)**
+
+Querying with `CouchbaseQueryStore` uses the same filter syntax as `CouchbaseSearchStore`, but leverages SQL++ for execution.
+
+```typescript
+const queryVector = Array(vectorDimension).fill(0.15); // Your query vector
+const k = 5; // Number of nearest neighbors to retrieve
+
+try {
+  // Vector search with metadata filtering
+  const filteredResults = await vectorStore.query({
+    indexName: indexName,
+    queryVector: queryVector,
+    topK: k,
+    filter: {
+      'metadata.category': { $eq: 'finance' },
+      'metadata.page': { $gt: 0 },
+    },
+  });
+  console.log(`Found ${filteredResults.length} filtered results:`, filteredResults);
+} catch (error) {
+  console.error('Failed to query vectors:', error);
+}
+```
+
+**Important - Filter Field Names:** When using filters, metadata fields are stored within a `metadata` object in the Couchbase document. Therefore, you must prefix your field names with `metadata.` when creating filters. For example, to filter on a field called `category` that was stored in metadata, use `'metadata.category'` in your filter expression.
+
+**Filtering Operators Supported:**
+
+- **Equality:** `$eq`, `$ne`
+- **Comparison:** `$gt`, `$gte`, `$lt`, `$lte` (for numbers and dates)
+- **Logical:** `$and`, `$or`, `$not`, `$nor`
+
+**Filter Examples:**
+
+```typescript
+// Text equality
+{ 'metadata.category': { $eq: 'finance' } }
+
+// Numeric range
+{ 'metadata.page': { $gte: 1, $lte: 10 } }
+
+// Date comparison
+{ 'metadata.timestamp': { $gt: new Date('2024-01-01') } }
+
+// Boolean filtering
+{ 'metadata.active': { $eq: true } }
+
+// Complex logical operations
+{
+  $and: [
+    { 'metadata.category': { $eq: 'tech' } },
+    { 'metadata.page': { $gt: 5 } }
+  ]
+}
+
+// Multiple conditions with OR
+{
+  $or: [
+    { 'metadata.category': { $eq: 'finance' } },
+    { 'metadata.category': { $eq: 'tech' } }
+  ]
+}
+```
+
+_Note_: `includeVector` **IS** supported in `CouchbaseQueryStore` queries.
+
+**Important - Filter Field Names:** When using filters, metadata fields are stored within a `metadata` object in the Couchbase document. Therefore, you must prefix your field names with `metadata.` when creating filters. For example, to filter on a field called `category` that was stored in metadata, use `'metadata.category'` in your filter expression.
+
+_Note_: In GSI vector search, the score represents the vector distance. A lower score indicates higher similarity.
+
+**Step 5: Manage Indexes**
+
+You can list, describe, and delete GSI vector indexes.
+
+```typescript
+try {
+  // List all indexes on the collection
+  const indexes = await vectorStore.listIndexes();
+  console.log('Available GSI indexes:', indexes);
+
+  // Get details about our specific vector index
+  const stats = await vectorStore.describeIndex({ indexName: indexName });
+  console.log(`Stats for index '${indexName}':`, stats);
+
+  // Delete the index
+  await vectorStore.deleteIndex({ indexName: indexName });
+  console.log(`GSI index '${indexName}' deleted.`);
+} catch (error) {
+  console.error('Failed to manage indexes:', error);
+}
+```
+
 ## API Reference
 
 ### `CouchbaseSearchStore`
@@ -279,6 +521,30 @@ new CouchbaseSearchStore({
 - `updateVector({ id, update })`, `deleteVector({ id })` - Vector management
 - `disconnect()` - Close connection
 
+### `CouchbaseQueryStore`
+
+**Constructor:**
+
+```typescript
+new CouchbaseQueryStore({
+  connectionString: string,
+  username: string,
+  password: string,
+  bucketName: string,
+  scopeName: string,
+  collectionName: string,
+});
+```
+
+**Key Methods:**
+
+- `createIndex({ indexName, dimension, metric?, fields_to_index?, gsi_vector_index_type?, index_metadata? })` - Create a GSI vector index. `index_metadata` can be used to provide a `description` for centroids and quantization.
+- `upsert({ indexName, vectors, metadata?, ids? })` - Add/update vectors.
+- `query({ indexName, queryVector, topK?, filter?, includeVector? })` - Search similar vectors with filtering.
+- `listIndexes()`, `describeIndex({ indexName })`, `deleteIndex({ indexName })` - Index management.
+- `updateVector({ id, update })`, `deleteVector({ id })` - Vector management.
+- `disconnect()` - Close connection.
+
 ### Legacy `CouchbaseVector` (Deprecated)
 
 ⚠️ Use `CouchbaseSearchStore` for new projects. `CouchbaseVector` lacks filtering support.
@@ -286,12 +552,18 @@ new CouchbaseSearchStore({
 ## Important Notes
 
 - **Async Operations:** Index creation and large upserts are asynchronous. Allow time for processing before querying.
-- **Field Indexing:** Only `fields_to_index` fields can be filtered. Use `metadata.` prefix in filters.
+- **Field Indexing:** For `CouchbaseSearchStore`, only `fields_to_index` fields can be filtered. Use `metadata.` prefix in filters. For `CouchbaseQueryStore`, fields must be included in the GSI index to be efficiently filtered.
 - **Document Structure:** Vectors stored in `embedding` field, metadata in `metadata` field.
+- **Composite Index Filtering**: When using Composite indexes, scalar filters take precedence over vector similarity.
 - **Limitations:**
-  - `includeVector` not supported in queries
-  - Advanced operators (`$in`, `$regex`, etc.) not yet supported
-  - Index count returns -1
+  - `CouchbaseSearchStore`:
+    - `includeVector` not supported in queries
+    - Advanced operators (`$in`, `$regex`, etc.) not yet supported
+    - Index count, is not yet supported and so returns -1
+  - `CouchbaseQueryStore`:
+    - Advanced operators (`$in`, `$regex`, etc.) not yet supported
+    - Score is distance (lower is better).
+    - Index count, is not yet supported and so returns -1
 
 ## Links
 ## Advanced Couchbase Vector Usage

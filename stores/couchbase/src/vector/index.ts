@@ -534,7 +534,7 @@ export class CouchbaseVector extends MastraVector {
   }
 }
 
-export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
+class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
   private clusterPromise: Promise<Cluster>;
   private cluster: Cluster;
   private bucketName: string;
@@ -1068,3 +1068,6 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
     }
   }
 }
+
+import { CouchbaseQueryStore } from './queryVectorStore';
+export { CouchbaseQueryStore, CouchbaseSearchStore };

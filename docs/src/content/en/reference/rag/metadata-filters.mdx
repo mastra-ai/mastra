@@ -38,37 +38,37 @@ const results = await store.query({
       name: "$eq",
       description: "Matches values equal to specified value",
       example: "{ age: { $eq: 25 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$ne",
       description: "Matches values not equal",
       example: "{ status: { $ne: 'inactive' } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$gt",
       description: "Greater than",
       example: "{ price: { $gt: 100 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$gte",
       description: "Greater than or equal",
       example: "{ rating: { $gte: 4.5 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$lt",
       description: "Less than",
       example: "{ stock: { $lt: 20 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$lte",
       description: "Less than or equal",
       example: "{ priority: { $lte: 3 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
   ]}
 />
@@ -110,13 +110,13 @@ const results = await store.query({
       name: "$and",
       description: "Logical AND",
       example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
-      supportedBy: ["All except Vectorize, Couchbase"],
+      supportedBy: ["All except Vectorize"],
     },
     {
       name: "$or",
       description: "Logical OR",
       example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
-      supportedBy: ["All except Vectorize, Couchbase"],
+      supportedBy: ["All except Vectorize"],
     },
     {
       name: "$not",
@@ -129,13 +129,14 @@ const results = await store.query({
         "PgVector",
         "LibSQL",
         "MongoDB",
+        "Couchbase",
       ],
     },
     {
       name: "$nor",
       description: "Logical NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB", "Couchbase"],
     },
   ]}
 />
