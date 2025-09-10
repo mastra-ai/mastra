@@ -364,17 +364,6 @@ export async function createNetworkLoop({
         throw new Error(`Agent ${agentId} not found`);
       }
 
-      let streamPromise = {} as {
-        promise: Promise<string>;
-        resolve: (value: string) => void;
-        reject: (reason?: any) => void;
-      };
-
-      streamPromise.promise = new Promise((resolve, reject) => {
-        streamPromise.resolve = resolve;
-        streamPromise.reject = reject;
-      });
-
       const runId = generateId();
 
       await writer.write({
