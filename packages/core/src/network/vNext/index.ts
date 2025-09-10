@@ -6,6 +6,7 @@ import type { MessageListInput } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { RegisteredLogger } from '../../logger';
+import { RESOURCE_TYPES } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraMessageV2, MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
@@ -26,8 +27,6 @@ interface NewAgentNetworkConfig {
   memory?: DynamicArgument<MastraMemory>;
   defaultAgent?: DynamicArgument<Agent>;
 }
-
-const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
 
 export class NewAgentNetwork extends MastraBase {
   id: string;

@@ -1000,6 +1000,7 @@ export class Workflow<
     abortSignal,
     runCount,
     tracingContext,
+    writer,
   }: {
     runId?: string;
     inputData: z.infer<TInput>;
@@ -1022,6 +1023,7 @@ export class Workflow<
     abort: () => any;
     runCount?: number;
     tracingContext?: TracingContext;
+    writer?: WritableStream<ChunkType>;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1049,7 +1051,7 @@ export class Workflow<
 
     const res = isResume
       ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, tracingContext })
-      : await run.start({ inputData, runtimeContext, tracingContext });
+      : await run.start({ inputData, runtimeContext, tracingContext, writableStream: writer });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
