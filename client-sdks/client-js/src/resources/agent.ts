@@ -26,11 +26,12 @@ import type {
   StreamParams,
   UpdateModelParams,
   StreamVNextParams,
+  NetworkStreamParams,
 } from '../types';
 
 import { parseClientRuntimeContext } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
-import { processMastraStream } from '../utils/process-mastra-stream';
+import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -1260,6 +1261,51 @@ export class Agent extends BaseResource {
     }
 
     return response;
+  }
+
+  async network(params: NetworkStreamParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/network`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
+    }) => {
+      await processMastraNetworkStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
   }
 
   async streamVNext<
