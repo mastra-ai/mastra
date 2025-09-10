@@ -28,10 +28,12 @@
     "posttest": "node scripts/stop-docker.js"
   },
   "dependencies": {
-    "couchbase": "^4.5.0"
+    "couchbase": "^4.5.0",
+    "p-limit": "^7.1.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
@@ -41,8 +43,7 @@
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.15.3-0 <0.16.0-0"
