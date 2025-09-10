@@ -319,7 +319,7 @@ export async function createNetworkLoop({
         resourceId: object.resourceId,
         resourceType: object.resourceType,
         prompt: object.prompt,
-        isComplete: object.resourceId === 'none' && object.resourceType === 'none' ? true : false,
+        isComplete: object.resourceId === 'none' && object.resourceType === 'none',
         selectionReason: object.selectionReason,
         iteration: inputData.iteration + 1,
       };
