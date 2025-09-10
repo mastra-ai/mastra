@@ -2314,7 +2314,7 @@ importers:
         specifier: ^5.0.15
         version: 5.0.28(zod@3.25.76)
       jsdom:
-        specifier: ^26.0.0
+        specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       mastra:
         specifier: workspace:*
