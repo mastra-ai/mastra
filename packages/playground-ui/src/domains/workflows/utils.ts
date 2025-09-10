@@ -143,7 +143,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
     return {
       ...prev,
       payload: {
-        ...prev.payload,
+        ...prev?.payload,
         currentStep: {
           id: chunk.payload.id,
           ...(prev?.payload?.currentStep || {}),
