@@ -96,4 +96,4 @@ export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   writer: WritableStream<ChunkType>;
 } & LoopRun<Tools, OUTPUT>;
 
-export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
+export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);
