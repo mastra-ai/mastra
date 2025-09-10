@@ -9,7 +9,7 @@ import { MessageList } from '../../agent/message-list';
 import type { AIV5Type } from '../../agent/message-list/types';
 import { MastraBase } from '../../base';
 import type { OutputProcessor } from '../../processors';
-import type { ProcessorState } from '../../processors/runner';
+import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
 import { ProcessorRunner } from '../../processors/runner';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import { DelayedPromise } from '../aisdk/v5/compat';
@@ -44,6 +44,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   includeRawChunks?: boolean;
   output?: OUTPUT;
   outputProcessors?: OutputProcessor[];
+  outputProcessorRunnerMode?: ProcessorRunnerMode;
   returnScorerData?: boolean;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
@@ -123,6 +124,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * The processor runner for this stream.
    */
   public processorRunner?: ProcessorRunner;
+  private outputProcessorRunnerMode: ProcessorRunnerMode = false;
   /**
    * The message list for this stream.
    */
@@ -158,6 +160,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       });
     }
 
+    if (options.outputProcessorRunnerMode) {
+      this.outputProcessorRunnerMode = options.outputProcessorRunnerMode;
+    }
+
     this.messageList = messageList;
 
     const self = this;
@@ -165,7 +171,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     // Apply output processors if they exist
     let processedStream = stream;
     const processorRunner = this.processorRunner;
-    if (processorRunner) {
+    if (processorRunner && options.outputProcessorRunnerMode === `stream`) {
       const processorStates = new Map<string, ProcessorState>();
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
@@ -370,7 +376,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               chunk.payload.output.usage = self.#usageCount as any;
 
               try {
-                if (self.processorRunner) {
+                if (self.processorRunner && self.outputProcessorRunnerMode === `result`) {
                   self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
                   const outputText = self.messageList.get.response.aiV4
                     .core()

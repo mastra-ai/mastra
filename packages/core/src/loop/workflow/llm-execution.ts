@@ -511,6 +511,7 @@ export function createLLMExecutionStep<
           includeRawChunks,
           output,
           outputProcessors,
+          outputProcessorRunnerMode: 'stream',
         },
       });
 
