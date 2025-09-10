@@ -1,5 +1,5 @@
 ---
-'@mastra/deployer-cloud': minor
+'@mastra/deployer-cloud': patch
 ---
 
 Remove unused deps
