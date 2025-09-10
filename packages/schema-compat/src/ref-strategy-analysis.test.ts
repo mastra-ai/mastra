@@ -386,12 +386,12 @@ function getMemoryUsage() {
   };
 }
 
-async function testSchemaConversionWithTimeout(
+function testSchemaConversionWithTimeout(
   schema: z.ZodSchema,
   strategy: 'none' | 'seen' | 'root' | 'relative',
   timeoutMs: number = 30000, // 30 second timeout
 ) {
-  return new Promise(async (resolve, reject) => {
+  return new Promise<any>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error(`Test timed out after ${timeoutMs}ms`));
     }, timeoutMs);
