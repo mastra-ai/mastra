@@ -63,7 +63,7 @@ import { DefaultVoice } from '../voice';
 import { createStep, createWorkflow } from '../workflows';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
-import type { AgentExecutionOptions, InnerAgentExecutionOptions } from './agent.types';
+import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -76,6 +76,7 @@ import type {
   ToolsInput,
   AgentMemoryOption,
 } from './types';
+import { networkLoop } from '../loop/network';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -3450,6 +3451,27 @@ export class Agent<
       structuredOutput,
       overrideScorers,
       tracingContext,
+    });
+  }
+
+  async network(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions) {
+    const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
+    const runtimeContextToUse = options?.runtimeContext || new RuntimeContext();
+
+    return await networkLoop({
+      networkName: this.name,
+      runtimeContext: runtimeContextToUse,
+      runId,
+      routingAgent: this,
+      routingAgentOptions: {
+        telemetry: options?.telemetry,
+        modelSettings: options?.modelSettings,
+      },
+      generateId: () => this.#mastra?.generateId() || randomUUID(),
+      maxIterations: options?.maxSteps || 1,
+      messages,
+      threadId: typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id,
+      resourceId: options?.memory?.resource,
     });
   }
 
