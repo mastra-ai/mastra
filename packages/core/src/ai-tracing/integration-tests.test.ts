@@ -629,7 +629,7 @@ function getBaseMastraConfig(testExporter: TestExporter) {
     telemetry: { enabled: false },
     storage: new MockStore(),
     observability: {
-      instances: {
+      configs: {
         test: {
           serviceName: 'integration-tests',
           exporters: [testExporter],
