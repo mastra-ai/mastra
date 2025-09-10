@@ -90,12 +90,17 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   };
   /** Model parameters */
   parameters?: {
+    maxOutputTokens?: number;
     temperature?: number;
-    maxTokens?: number;
     topP?: number;
-    frequencyPenalty?: number;
+    topK?: number;
     presencePenalty?: number;
-    stop?: string[];
+    frequencyPenalty?: number;
+    stopSequences?: string[];
+    seed?: number;
+    maxRetries?: number;
+    abortSignal?: any;
+    headers?: Record<string, string | undefined>;
   };
   /** Whether this was a streaming response */
   streaming?: boolean;
@@ -329,7 +334,7 @@ export interface AISpan<TType extends AISpanType> {
     metadata?: Record<string, any>;
   }): AISpan<TChildType>;
 
-  /** Create event span - can be any span type independent of parent 
+  /** Create event span - can be any span type independent of parent
       Event spans have no input, and no endTime.
   */
   createEventSpan<TChildType extends AISpanType>(options: {
@@ -408,10 +413,10 @@ export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
  * Configuration for a single AI tracing instance
  */
 export interface AITracingInstanceConfig {
+  /** Unique identifier for this config in the ai tracing registry */
+  name: string;
   /** Service name for tracing */
   serviceName: string;
-  /** Instance name from the registry */
-  instanceName: string;
   /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
   sampling?: SamplingStrategy;
   /** Custom exporters */
@@ -424,10 +429,14 @@ export interface AITracingInstanceConfig {
  * Complete AI Tracing configuration
  */
 export interface AITracingConfig {
+  /** Enables default exporters, with sampling: always, and sensitive data filtering */
+  default?: {
+    enabled?: boolean;
+  };
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  instances: Record<string, Omit<AITracingInstanceConfig, 'instanceName'> | MastraAITracing>;
+  configs: Record<string, Omit<AITracingInstanceConfig, 'name'> | MastraAITracing>;
   /** Optional selector function to choose which tracing instance to use */
-  selector?: TracingSelector;
+  configSelector?: TracingSelector;
 }
 
 // ============================================================================

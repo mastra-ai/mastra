@@ -1,12 +1,12 @@
-import type { AITracingEvent, AnyAISpan } from '@mastra/core/ai-tracing';
-import { AITracingEventType, AISpanType } from '@mastra/core/ai-tracing';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { AITracingEvent, AnyAISpan } from '..';
+import { AISpanType, AITracingEventType } from '..';
 
-import { fetchWithRetry } from '../utils/fetchWithRetry';
-import { CloudAITracingExporter } from '.';
+import { fetchWithRetry } from '../../utils';
+import { CloudExporter } from './cloud';
 
 // Mock fetchWithRetry
-vi.mock('../utils/fetchWithRetry', () => ({
+vi.mock('../../utils', () => ({
   fetchWithRetry: vi.fn(),
 }));
 
@@ -22,8 +22,8 @@ function createTestJWT(payload: { teamId: string; projectId: string }): string {
   return `${headerB64}.${payloadB64}.${signature}`;
 }
 
-describe('CloudAITracingExporter', () => {
-  let exporter: CloudAITracingExporter;
+describe('CloudExporter', () => {
+  let exporter: CloudExporter;
   const testJWT = createTestJWT({ teamId: 'team-123', projectId: 'project-456' });
 
   beforeEach(() => {
@@ -32,7 +32,7 @@ describe('CloudAITracingExporter', () => {
     mockFetchWithRetry.mockReset();
     mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    exporter = new CloudAITracingExporter({
+    exporter = new CloudExporter({
       accessToken: testJWT,
       endpoint: 'http://localhost:3000',
     });
@@ -301,7 +301,7 @@ describe('CloudAITracingExporter', () => {
     };
 
     it('should trigger flush when maxBatchSize is reached', async () => {
-      const smallBatchExporter = new CloudAITracingExporter({
+      const smallBatchExporter = new CloudExporter({
         accessToken: createTestJWT({ teamId: 'test-team', projectId: 'test-project' }),
         endpoint: 'http://localhost:3000',
         maxBatchSize: 2, // Small batch size for testing
@@ -654,7 +654,7 @@ describe('CloudAITracingExporter', () => {
 
     it('should use JWT token in Authorization header', async () => {
       const testJWT = createTestJWT({ teamId: 'auth-test', projectId: 'auth-project' });
-      const authExporter = new CloudAITracingExporter({
+      const authExporter = new CloudExporter({
         accessToken: testJWT,
         endpoint: 'http://localhost:3000',
       });
@@ -752,7 +752,7 @@ describe('CloudAITracingExporter', () => {
     });
 
     it('should retry on API failures using fetchWithRetry', async () => {
-      const retryExporter = new CloudAITracingExporter({
+      const retryExporter = new CloudExporter({
         accessToken: createTestJWT({ teamId: 'retry-team', projectId: 'retry-project' }),
         endpoint: 'http://localhost:3000',
         maxRetries: 3,
@@ -780,7 +780,7 @@ describe('CloudAITracingExporter', () => {
     });
 
     it('should pass maxRetries to fetchWithRetry correctly', async () => {
-      const customRetryExporter = new CloudAITracingExporter({
+      const customRetryExporter = new CloudExporter({
         accessToken: createTestJWT({ teamId: 'custom-team', projectId: 'custom-project' }),
         endpoint: 'http://localhost:3000',
         maxRetries: 5, // Custom retry count
@@ -803,7 +803,7 @@ describe('CloudAITracingExporter', () => {
     });
 
     it('should drop batch after fetchWithRetry exhausts all retries', async () => {
-      const retryExporter = new CloudAITracingExporter({
+      const retryExporter = new CloudExporter({
         accessToken: createTestJWT({ teamId: 'fail-team', projectId: 'fail-project' }),
         endpoint: 'http://localhost:3000',
         maxRetries: 2,
@@ -901,7 +901,7 @@ describe('CloudAITracingExporter', () => {
 
       expect(clearTimeoutSpy).toHaveBeenCalledWith(timer);
       expect((exporter as any).flushTimer).toBeNull();
-      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudAITracingExporter shutdown complete');
+      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 
     it('should flush remaining events on shutdown', async () => {
@@ -928,7 +928,7 @@ describe('CloudAITracingExporter', () => {
         remainingEvents: 2,
       });
       expect(flushSpy).toHaveBeenCalled();
-      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudAITracingExporter shutdown complete');
+      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 
     it('should handle shutdown with empty buffer gracefully', async () => {
@@ -942,7 +942,7 @@ describe('CloudAITracingExporter', () => {
 
       // Should not call flush for empty buffer
       expect(flushSpy).not.toHaveBeenCalled();
-      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudAITracingExporter shutdown complete');
+      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 
     it('should handle shutdown flush errors gracefully', async () => {
@@ -963,7 +963,7 @@ describe('CloudAITracingExporter', () => {
         'Failed to flush remaining events during shutdown',
         expect.any(Object),
       );
-      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudAITracingExporter shutdown complete');
+      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 
     it('should handle shutdown when timer is already null', async () => {
@@ -977,7 +977,7 @@ describe('CloudAITracingExporter', () => {
 
       // Should not call clearTimeout when timer is already null
       expect(clearTimeoutSpy).not.toHaveBeenCalled();
-      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudAITracingExporter shutdown complete');
+      expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
   });
 });

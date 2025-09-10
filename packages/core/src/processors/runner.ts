@@ -14,7 +14,7 @@ export class ProcessorState {
   public customState: Record<string, any> = {};
   public streamParts: ChunkType[] = [];
 
-  constructor(private readonly processorName: string) {}
+  constructor(_processorName: string) {}
 
   // Internal methods for the runner
   addPart(part: ChunkType): void {
@@ -25,6 +25,8 @@ export class ProcessorState {
     this.streamParts.push(part);
   }
 }
+
+export type ProcessorRunnerMode = 'stream' | 'result' | false;
 
 export class ProcessorRunner {
   public readonly inputProcessors: Processor[];
