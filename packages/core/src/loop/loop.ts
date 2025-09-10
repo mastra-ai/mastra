@@ -113,6 +113,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       outputProcessors,
       outputProcessorRunnerMode: 'result',
       returnScorerData,
+      tracingContext: { currentSpan: llmAISpan },
     },
   });
 }

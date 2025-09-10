@@ -634,7 +634,7 @@ describe('Tool Tracing Context Injection', () => {
     // Verify tool span was created
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
       type: AISpanType.TOOL_CALL,
-      name: 'tool: tracing-test-tool',
+      name: "tool: 'tracing-test-tool'",
       input: { message: 'test' },
       attributes: {
         toolId: 'tracing-test-tool',
@@ -734,7 +734,7 @@ describe('Tool Tracing Context Injection', () => {
     // Verify tool span was created for Vercel tool
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
       type: AISpanType.TOOL_CALL,
-      name: 'tool: vercel-tool',
+      name: "tool: 'vercel-tool'",
       input: { input: 'test' },
       attributes: {
         toolId: 'vercel-tool',
@@ -847,7 +847,7 @@ describe('Tool Tracing Context Injection', () => {
     // Verify tool span was created with correct toolType attribute
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
       type: AISpanType.TOOL_CALL,
-      name: 'tool: toolset-tool',
+      name: "tool: 'toolset-tool'",
       input: { message: 'test' },
       attributes: {
         toolId: 'toolset-tool',

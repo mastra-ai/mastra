@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -142,6 +142,8 @@ export type AgentGenerateOptions<
   outputProcessors?: OutputProcessor[];
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
+  /** AI tracing options for starting new traces */
+  tracingOptions?: TracingOptions;
 } & (
   | {
       /**
@@ -217,6 +219,8 @@ export type AgentStreamOptions<
   inputProcessors?: InputProcessor[];
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
+  /** AI tracing options for starting new traces */
+  tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 } & (
