@@ -676,6 +676,7 @@ export async function createNetworkLoop({
         isComplete: false,
         iteration: inputData.iteration,
         toolCallId,
+        toolName: inputData.resourceId,
       };
 
       await writer?.write({
