@@ -145,16 +145,12 @@ function generateProviderRegistry(providers) {
 }
 
 function generateTypeScriptFile(providerRegistry) {
-  const modelsList = {};
-  const allModelStrings = [];
+  // Build provider models mapping as a type-safe const object
+  const providerModelsObj = {};
 
   for (const [providerId, config] of Object.entries(providerRegistry)) {
     if (config.models && config.models.length > 0) {
-      modelsList[providerId] = config.models;
-      // Add provider/model format strings
-      for (const model of config.models) {
-        allModelStrings.push(`${providerId}/${model}`);
-      }
+      providerModelsObj[providerId] = config.models;
     }
   }
 
@@ -171,30 +167,47 @@ export interface ProviderConfig {
   apiKeyEnvVar?: string;
   apiKeyHeader?: string;
   name?: string;
-  models?: string[];
+  models?: readonly string[];
 }
 
 /**
  * Registry of OpenAI-compatible providers
  */
-export const PROVIDER_REGISTRY: Record<string, ProviderConfig> = ${JSON.stringify(providerRegistry, null, 2)} as const;
+export const PROVIDER_REGISTRY = ${JSON.stringify(providerRegistry, null, 2)} as const;
 
 /**
- * Available models for each provider
+ * Available models for each provider as a const object for type inference
  */
-export const PROVIDER_MODELS: Record<string, string[]> = ${JSON.stringify(modelsList, null, 2)} as const;
+export const PROVIDER_MODELS = ${JSON.stringify(providerModelsObj, null, 2)} as const;
 
 /**
- * All available model strings in provider/model format
+ * Type definitions for autocomplete support
  */
-export type OpenAICompatibleModelId = 
-${allModelStrings.map(m => `  | '${m}'`).join('\n')};
+export type ProviderModels = typeof PROVIDER_MODELS;
+export type Provider = keyof ProviderModels;
+export type ModelForProvider<P extends Provider> = ProviderModels[P][number];
+
+/**
+ * OpenAI-compatible model ID with intelligent autocomplete
+ * 
+ * This type provides two-stage autocomplete:
+ * 1. When you type a provider name, you get autocomplete for available providers
+ * 2. After typing '/', you get autocomplete for models specific to that provider
+ * 
+ * Examples:
+ *   "openai/gpt-4o"
+ *   "anthropic/claude-3-opus-20240229"
+ *   "deepseek/deepseek-chat"
+ */
+export type OpenAICompatibleModelId = {
+  [P in Provider]: \`\${P}/\${ModelForProvider<P>}\`
+}[Provider];
 
 /**
  * Get provider configuration by provider ID
  */
 export function getProviderConfig(providerId: string): ProviderConfig | undefined {
-  return PROVIDER_REGISTRY[providerId];
+  return PROVIDER_REGISTRY[providerId as keyof typeof PROVIDER_REGISTRY];
 }
 
 /**
@@ -209,6 +222,21 @@ export function isProviderRegistered(providerId: string): boolean {
  */
 export function getRegisteredProviders(): string[] {
   return Object.keys(PROVIDER_REGISTRY);
+}
+
+/**
+ * Get available models for a specific provider
+ */
+export function getModelsForProvider(providerId: Provider): readonly string[] {
+  return PROVIDER_MODELS[providerId] ?? [];
+}
+
+/**
+ * Get models for a provider by string (runtime version)
+ */
+export function getModelsForProviderString(providerId: string): readonly string[] {
+  const models = (PROVIDER_MODELS as any)[providerId];
+  return models ?? [];
 }
 
 /**
@@ -239,6 +267,17 @@ export function parseModelString(modelString: string): { provider: string | null
     provider: null,
     modelId: modelString,
   };
+}
+
+/**
+ * Type guard to check if a string is a valid OpenAI-compatible model ID
+ */
+export function isValidModelId(modelId: string): modelId is OpenAICompatibleModelId {
+  const parsed = parseModelString(modelId);
+  if (!parsed.provider) return false;
+  
+  const models = getModelsForProviderString(parsed.provider);
+  return models.includes(parsed.modelId);
 }
 `;
 
