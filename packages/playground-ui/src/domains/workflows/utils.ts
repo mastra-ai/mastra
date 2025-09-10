@@ -46,7 +46,9 @@ export function convertWorkflowRunStateToWatchResult(runState: WorkflowRunState)
   };
 }
 
-function determineWorkflowStatus(steps: Record<string, any>): 'running' | 'success' | 'failed' | 'suspended' {
+function determineWorkflowStatus(
+  steps: Record<string, any>,
+): 'running' | 'success' | 'failed' | 'suspended' | 'waiting' {
   const stepStatuses = Object.values(steps).map(step => step.status);
 
   if (stepStatuses.includes('failed')) {
