@@ -674,12 +674,6 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData }) => {
-      console.log('Finish Step Debug - Input Data', JSON.stringify(inputData, null, 2));
-      console.log('Finish Step Debug - Is Complete', inputData.isComplete);
-      console.log('Finish Step Debug - Iteration', inputData.iteration);
-      console.log('Finish Step Debug - Result', inputData.result);
-      console.log('Finish Step Debug - Task', inputData.task);
-
       return {
         task: inputData.task,
         result: inputData.result,
