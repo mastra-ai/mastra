@@ -16,7 +16,6 @@ import type {
   AISpanProcessor,
   AnyAISpan,
 } from './types';
-import { SamplingStrategyType } from './types';
 import { shallowClean } from './utils';
 
 // ============================================================================
@@ -330,24 +329,17 @@ export class SensitiveDataFilter implements AISpanProcessor {
 }
 
 // ============================================================================
-// Default Configuration (defined after classes to avoid circular dependencies)
-// ============================================================================
-
-export const aiTracingDefaultConfig: AITracingInstanceConfig = {
-  serviceName: 'mastra-ai-service',
-  instanceName: 'default',
-  sampling: { type: SamplingStrategyType.ALWAYS },
-  exporters: [new ConsoleExporter()],
-  processors: [new SensitiveDataFilter()],
-};
-
-// ============================================================================
 // Default AI Tracing Implementation
 // ============================================================================
 
 export class DefaultAITracing extends MastraAITracing {
-  constructor(config: AITracingInstanceConfig = aiTracingDefaultConfig) {
-    super(config);
+  constructor(config: AITracingInstanceConfig) {
+    // If no exporters provided, add ConsoleExporter as default
+    const configWithDefaults = {
+      ...config,
+      exporters: config.exporters?.length ? config.exporters : [new ConsoleExporter()],
+    };
+    super(configWithDefaults);
   }
 
   // ============================================================================

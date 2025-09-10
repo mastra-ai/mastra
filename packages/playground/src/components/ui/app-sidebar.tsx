@@ -146,6 +146,11 @@ const links = [
     icon: GaugeIcon,
   },
   {
+    name: 'Observability',
+    url: '/observability',
+    icon: EyeIcon,
+  },
+  {
     name: 'Runtime Context',
     url: '/runtime-context',
     icon: Globe,
