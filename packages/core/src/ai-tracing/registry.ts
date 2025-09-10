@@ -203,8 +203,13 @@ function isAITracingInstance(obj: Omit<AITracingInstanceConfig, 'name'> | Mastra
  * Setup AI tracing from the AITracingConfig
  */
 export function setupAITracing(config: AITracingConfig): void {
+  // Handle undefined/null config
+  if (!config) {
+    return;
+  }
+
   // Check for naming conflict if default is enabled
-  if (config.default?.enabled && config.configs['default']) {
+  if (config.default?.enabled && config.configs?.['default']) {
     throw new Error(
       "Cannot use 'default' as a custom config name when default tracing is enabled. " +
         'Please rename your custom config to avoid conflicts.',
@@ -225,18 +230,20 @@ export function setupAITracing(config: AITracingConfig): void {
     registerAITracing('default', defaultInstance, true);
   }
 
-  // Process user-provided configs
-  const instances = Object.entries(config.configs);
+  if (config.configs) {
+    // Process user-provided configs
+    const instances = Object.entries(config.configs);
 
-  instances.forEach(([name, tracingDef], index) => {
-    const instance = isAITracingInstance(tracingDef)
-      ? tracingDef // Pre-instantiated custom implementation
-      : new DefaultAITracing({ ...tracingDef, name }); // Config -> DefaultAITracing with instance name
+    instances.forEach(([name, tracingDef], index) => {
+      const instance = isAITracingInstance(tracingDef)
+        ? tracingDef // Pre-instantiated custom implementation
+        : new DefaultAITracing({ ...tracingDef, name }); // Config -> DefaultAITracing with instance name
 
-    // First user-provided instance becomes default only if no default config
-    const isDefault = !config.default?.enabled && index === 0;
-    registerAITracing(name, instance, isDefault);
-  });
+      // First user-provided instance becomes default only if no default config
+      const isDefault = !config.default?.enabled && index === 0;
+      registerAITracing(name, instance, isDefault);
+    });
+  }
 
   // Set selector function if provided
   if (config.configSelector) {

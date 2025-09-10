@@ -85,7 +85,7 @@ export type AgentExecutionOptions<
   /** Output processors to use for this execution (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
   /** Structured output generation with enhanced developer experience  @experimental */
-  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+  structuredOutput?: StructuredOutputOptions<STRUCTURED_OUTPUT extends z.ZodTypeAny ? STRUCTURED_OUTPUT : never>;
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;

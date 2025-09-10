@@ -1693,7 +1693,9 @@ export class Agent<
         const agentAISpan = getOrCreateSpan({
           type: AISpanType.AGENT_RUN,
           name: `agent run: '${this.id}'`,
-          input: messages,
+          input: {
+            messages,
+          },
           attributes: {
             agentId: this.id,
             instructions,
@@ -2166,13 +2168,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         agentAISpan?.end({
           output: {
-            text: result?.text,
-            object: result?.object,
-          },
-          metadata: {
-            usage: result?.usage,
-            toolResults: result?.toolResults,
-            toolCalls: result?.toolCalls,
+            status: 'success',
           },
         });
 
@@ -3226,7 +3222,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const run = await executionWorkflow.createRunAsync();
     const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
-    agentAISpan?.end({ output: result });
+    agentAISpan?.end({
+      output: {
+        status: result.status,
+      },
+    });
 
     return result;
   }

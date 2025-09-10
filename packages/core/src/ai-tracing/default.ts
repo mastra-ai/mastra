@@ -3,8 +3,6 @@
  */
 
 import { MastraError } from '../error';
-import type { IMastraLogger } from '../logger';
-import { ConsoleLogger, LogLevel } from '../logger';
 import { MastraAITracing } from './base';
 import { ConsoleExporter } from './exporters';
 import type {
@@ -16,7 +14,7 @@ import type {
   AISpanProcessor,
   AnyAISpan,
 } from './types';
-import { shallowClean } from './utils';
+import { deepClean } from './utils';
 
 // ============================================================================
 // Default AISpan Implementation
@@ -77,23 +75,18 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
-  private logger: IMastraLogger;
 
   constructor(options: AISpanOptions<TType>, aiTracing: MastraAITracing) {
     this.id = generateSpanId();
     this.name = options.name;
     this.type = options.type;
-    this.attributes = shallowClean(options.attributes) || ({} as AISpanTypeMap[TType]);
-    this.metadata = shallowClean(options.metadata);
+    this.attributes = deepClean(options.attributes) || ({} as AISpanTypeMap[TType]);
+    this.metadata = deepClean(options.metadata);
     this.parent = options.parent;
     this.startTime = new Date();
     this.aiTracing = aiTracing;
-    this.input = shallowClean(options.input);
+    this.input = deepClean(options.input);
     this.isEvent = options.isEvent;
-    this.logger = new ConsoleLogger({
-      name: 'default-ai-span',
-      level: LogLevel.INFO, // Set to INFO so that info() calls actually log
-    });
 
     // Set trace ID: generate new for root spans, inherit for child spans
     if (!options.parent) {
@@ -107,24 +100,23 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the base class via the end() event.
-      this.output = shallowClean(options.output);
+      this.output = deepClean(options.output);
     }
   }
 
   end(options?: { output?: any; attributes?: Partial<AISpanTypeMap[TType]>; metadata?: Record<string, any> }): void {
     if (this.isEvent) {
-      this.logger.warn(`End event is not available on event spans`);
       return;
     }
     this.endTime = new Date();
     if (options?.output !== undefined) {
-      this.output = shallowClean(options.output);
+      this.output = deepClean(options.output);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...shallowClean(options.attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
     }
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...shallowClean(options.metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
     }
     // Tracing events automatically handled by base class
   }
@@ -136,7 +128,6 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     metadata?: Record<string, any>;
   }): void {
     if (this.isEvent) {
-      this.logger.warn(`Error event is not available on event spans`);
       return;
     }
 
@@ -157,10 +148,10 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
 
     // Update attributes if provided
     if (attributes) {
-      this.attributes = { ...this.attributes, ...shallowClean(attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(attributes) };
     }
     if (metadata) {
-      this.metadata = { ...this.metadata, ...shallowClean(metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(metadata) };
     }
 
     if (endSpan) {
@@ -207,21 +198,20 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     metadata?: Record<string, any>;
   }): void {
     if (this.isEvent) {
-      this.logger.warn(`Update() is not available on event spans`);
       return;
     }
 
     if (options?.input !== undefined) {
-      this.input = shallowClean(options.input);
+      this.input = deepClean(options.input);
     }
     if (options?.output !== undefined) {
-      this.output = shallowClean(options.output);
+      this.output = deepClean(options.output);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...shallowClean(options.attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
     }
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...shallowClean(options.metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
     }
     // Tracing events automatically handled by base class
   }
