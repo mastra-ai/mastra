@@ -116,15 +116,17 @@ export const AgentMetadata = ({
         </Badge>
       </AgentMetadataSection>
 
-      <AgentMetadataSection
-        title="Agents"
-        hint={{
-          link: 'https://mastra.ai/en/docs/agents/overview',
-          title: 'Agents documentation',
-        }}
-      >
-        <AgentMetadataNetworkList agents={networkAgents} computeAgentLink={computeAgentLink} />
-      </AgentMetadataSection>
+      {networkAgents.length > 0 && (
+        <AgentMetadataSection
+          title="Agents"
+          hint={{
+            link: 'https://mastra.ai/en/docs/agents/overview',
+            title: 'Agents documentation',
+          }}
+        >
+          <AgentMetadataNetworkList agents={networkAgents} computeAgentLink={computeAgentLink} />
+        </AgentMetadataSection>
+      )}
 
       <AgentMetadataSection
         title="Tools"

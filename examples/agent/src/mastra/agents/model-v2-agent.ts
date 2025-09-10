@@ -58,8 +58,8 @@ export const chefModelV2Agent = new Agent({
 
 const weatherAgent = new Agent({
   name: 'Weather Agent',
-  instructions: `You are a weather agent that can help you get weather information for a given city OR give a recipe based on an ingredient.`,
-  description: `An agent that can help you get weather information for a given city OR give a recipe based on an ingredient.`,
+  instructions: `You are a weather agent that can help you get weather information for a given city`,
+  description: `An agent that can help you get weather information for a given city`,
   model: openai_v5('gpt-4o-mini'),
   tools: { weatherInfo },
   workflows: {
@@ -71,12 +71,8 @@ export const networkAgent = new Agent({
   name: 'Chef Network',
   description:
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
-  instructions: `You are a network of agent and tools, use the best primitives based on what the user wants to accomplish your task.`,
+  instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
   model: openai_v5('gpt-4o-mini'),
-  tools: {
-    cookingTool,
-    weatherInfo,
-  },
   workflows: {
     myWorkflow,
   },

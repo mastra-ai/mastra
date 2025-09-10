@@ -202,25 +202,34 @@ export async function createNetworkLoop({
         completionReason: z.string(),
       });
 
-      await writer.write({
-        type: 'routing-agent-start',
-        payload: {
-          inputData,
-        },
-      });
-
       const routingAgent = await getRoutingAgent({ runtimeContext, agent });
 
       let completionResult;
 
+      let iterationCount = inputData.iteration ? inputData.iteration + 1 : 0;
+
+      await writer.write({
+        type: 'routing-agent-start',
+        payload: {
+          inputData: {
+            ...inputData,
+            iteration: iterationCount,
+          },
+        },
+      });
+
       if (inputData.resourceType !== 'none' && inputData?.result) {
         // Check if the task is complete
+        console.log('Input Data for decision making', inputData);
+
         const completionPrompt = `
                           The ${inputData.resourceType} ${inputData.resourceId} has contributed to the task.
                           This is the result from the agent: ${inputData.result}
   
                           You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
                           Original task: ${inputData.task}
+
+                          You must return this JSON shape.
   
                           {
                               "isComplete": boolean,
@@ -236,10 +245,12 @@ export async function createNetworkLoop({
           memory: {
             thread: initData?.threadId ?? runId,
             resource: initData?.threadResourceId ?? networkName,
-            readOnly: true,
+            // readOnly: true,
           },
           ...routingAgentOptions,
         });
+
+        console.log('Completion Result', completionResult);
 
         if (completionResult?.object?.isComplete) {
           const endPayload = {
@@ -250,7 +261,7 @@ export async function createNetworkLoop({
             result: completionResult.object.finalResult,
             isComplete: true,
             selectionReason: completionResult.object.completionReason || '',
-            iteration: inputData.iteration + 1,
+            iteration: iterationCount,
           };
 
           await writer.write({
@@ -258,9 +269,13 @@ export async function createNetworkLoop({
             payload: endPayload,
           });
 
+          console.log('Routing Complete', endPayload);
+
           return endPayload;
         }
       }
+
+      console.log('Final Result', completionResult?.object);
 
       const prompt: MessageListInput = [
         {
@@ -295,12 +310,11 @@ export async function createNetworkLoop({
           selectionReason: z.string(),
         }),
         runtimeContext: runtimeContext,
-        toolChoice: 'none' as any,
         maxSteps: 1,
         memory: {
           thread: initData?.threadId ?? runId,
           resource: initData?.threadResourceId ?? networkName,
-          readOnly: true,
+          // readOnly: true,
         },
         ...routingAgentOptions,
       };
@@ -317,7 +331,7 @@ export async function createNetworkLoop({
         prompt: object.prompt,
         isComplete: object.resourceId === 'none' && object.resourceType === 'none',
         selectionReason: object.selectionReason,
-        iteration: inputData.iteration + 1,
+        iteration: iterationCount,
       };
 
       await writer.write({
