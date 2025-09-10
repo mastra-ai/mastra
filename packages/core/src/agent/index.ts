@@ -278,6 +278,18 @@ export class Agent<
     });
   }
 
+  private async getResolvedOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
+    if (!this.#outputProcessors) {
+      return [];
+    }
+
+    if (typeof this.#outputProcessors === 'function') {
+      return await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+    }
+
+    return this.#outputProcessors;
+  }
+
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
   }
@@ -4036,6 +4048,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         ...llmOptions,
         experimental_output,
         tracingContext,
+        outputProcessors: await this.getResolvedOutputProcessors(mergedStreamOptions.runtimeContext),
         onFinish: async result => {
           try {
             const outputText = result.text;
