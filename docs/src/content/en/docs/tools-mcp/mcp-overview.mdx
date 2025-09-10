@@ -13,8 +13,8 @@ Mastra can also be used to author MCP servers, exposing agents, tools, and other
 
 Mastra currently supports two MCP classes:
 
-1. **`MCPClient`**: Connects to external MCP servers and accesses their tools.
-2. **`MCPServer`**: Exposes Mastra tools, agents, and workflows to MCP-compatible clients.
+1. **`MCPClient`**: Connects to one or many MCP servers to access their tools, resources, prompts, and handle elicitation requests.
+2. **`MCPServer`**: Exposes Mastra tools, agents, workflows, prompts, and resources to MCP compatible clients.
 
 ## Getting started
 
@@ -24,17 +24,7 @@ To use MCP, install the required dependency:
 npm install @mastra/mcp@latest
 ```
 
-### Environment variables
-
-LLM providers require API keys, named using the provider’s identifier.
-Providers like [Smithery](https://smithery.ai/) require an API key to access their hosted MCP servers.
-
-```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
-SMITHERY_API_KEY=<your-api-key>
-```
-
-## Creating an `MCPClient`
+## Configuring `MCPClient`
 
 The `MCPClient` connects Mastra primitives to external MCP servers, which can be local packages (invoked using `npx`) or remote HTTP(S) endpoints. Each server must be configured with either a `command` or a `url`, depending on how it's hosted.
 
@@ -42,6 +32,7 @@ The `MCPClient` connects Mastra primitives to external MCP servers, which can be
 import { MCPClient } from "@mastra/mcp";
 
 export const testMcpClient = new MCPClient({
+  id: "test-mcp-client",
   servers: {
     wikipedia: {
       command: "npx",
@@ -81,9 +72,9 @@ export const testAgent = new Agent({
 ```
 > See the [Agent Class](../../reference/agents/agent.mdx) for a full list of configuration options.
 
-## Creating an `MCPServer`
+## Configuring `MCPServer`
 
-An MCP server exposes agents, tools, and workflows from your Mastra application to external systems over HTTP(S). This makes them accessible to any system or agent that supports the protocol.
+To expose agents, tools, and workflows from your Mastra application to external systems over HTTP(S) use the `MCPServer` class. This makes them accessible to any system or agent that supports the protocol.
 
 ```typescript filename="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
 import { MCPServer } from "@mastra/mcp";
@@ -93,6 +84,7 @@ import { testWorkflow } from "../workflows/test-workflow";
 import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
+  id: "test-mcp-server",
   name: "Test Server",
   version: "1.0.0",
   agents: { testAgent },
