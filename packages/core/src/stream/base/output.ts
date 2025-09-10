@@ -183,7 +183,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   tripwireReason: reason || 'Output processor blocked content',
                 },
               } as ChunkType<OUTPUT>);
-              controller.terminate();
               return;
             }
             if (processed) {
@@ -324,6 +323,27 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#tripwire = true;
               self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
               self.#finishReason = 'other';
+
+              // Resolve all delayed promises before terminating
+              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+              self.#delayedPromises.finishReason.resolve('other');
+              self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+              self.#delayedPromises.usage.resolve(self.#usageCount);
+              self.#delayedPromises.warnings.resolve(self.#warnings);
+              self.#delayedPromises.providerMetadata.resolve(undefined);
+              self.#delayedPromises.response.resolve({});
+              self.#delayedPromises.request.resolve({});
+              self.#delayedPromises.reasoning.resolve('');
+              self.#delayedPromises.reasoningText.resolve(undefined);
+              self.#delayedPromises.sources.resolve([]);
+              self.#delayedPromises.files.resolve([]);
+              self.#delayedPromises.toolCalls.resolve([]);
+              self.#delayedPromises.toolResults.resolve([]);
+              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
+              self.#delayedPromises.totalUsage.resolve(self.#usageCount);
+              self.#delayedPromises.content.resolve([]);
+              self.#delayedPromises.reasoningDetails.resolve([]);
+
               // Pass the tripwire chunk through
               controller.enqueue(chunk);
               // Terminate the stream
