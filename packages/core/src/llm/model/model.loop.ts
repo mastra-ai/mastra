@@ -24,7 +24,6 @@ import type { OutputSchema } from '../../stream/base/schema';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
-import { symbol } from 'zod/v4';
 
 export class MastraLLMVNext extends MastraBase {
   #model: LanguageModelV2;
