@@ -7,7 +7,7 @@ import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext, TracingOptions } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -1316,12 +1316,14 @@ export class Run<
     runtimeContext,
     writableStream,
     tracingContext,
+    tracingOptions,
     format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
@@ -1333,6 +1335,7 @@ export class Run<
         workflowId: this.workflowId,
       },
       tracingContext,
+      tracingOptions,
       runtimeContext,
     });
 
@@ -1385,17 +1388,20 @@ export class Run<
     runtimeContext,
     writableStream,
     tracingContext,
+    tracingOptions,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     return this._start({
       inputData,
       runtimeContext,
       writableStream,
       tracingContext,
+      tracingOptions,
       format: 'aisdk',
     });
   }
@@ -1683,6 +1689,7 @@ export class Run<
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1778,6 +1785,7 @@ export class Run<
         workflowId: this.workflowId,
       },
       tracingContext: params.tracingContext,
+      tracingOptions: params.tracingOptions,
       runtimeContext: runtimeContextToUse,
     });
 

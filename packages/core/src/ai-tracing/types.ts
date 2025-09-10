@@ -379,6 +379,26 @@ export interface AISpanOptions<TType extends AISpanType> {
   isEvent: boolean;
 }
 
+// ============================================================================
+// Lifecycle Types
+// ============================================================================
+
+/**
+ * Options passed when starting a new agent or workflow execution
+ */
+export interface TracingOptions {
+  /** Metadata to add to the root trace span */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Context for AI tracing that flows through workflow and agent execution
+ */
+export interface TracingContext {
+  /** Current AI span for creating child spans and adding metadata */
+  currentSpan?: AnyAISpan;
+}
+
 /**
  * Properties returned to the user for working with traces externally.
  */
@@ -520,11 +540,3 @@ export type TracingSelector = (
   context: AITracingSelectorContext,
   availableTracers: ReadonlyMap<string, MastraAITracing>,
 ) => string | undefined;
-
-/**
- * Context for AI tracing that flows through workflow and agent execution
- */
-export interface TracingContext {
-  /** Current AI span for creating child spans and adding metadata */
-  currentSpan?: AnyAISpan;
-}

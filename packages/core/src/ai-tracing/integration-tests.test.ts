@@ -751,18 +751,29 @@ describe('AI Tracing Integration Tests', () => {
       workflows: { branchingWorkflow },
     });
 
+    const customMetadata = {
+      id1: 123,
+      id2: 'tacos',
+    };
+
     const workflow = mastra.getWorkflow('branchingWorkflow');
     const run = await workflow.createRunAsync();
-    const result = await run.start({ inputData: { value: 15 } });
+    const result = await run.start({ inputData: { value: 15 }, tracingOptions: { metadata: customMetadata } });
     expect(result.status).toBe('success');
     expect(result.traceId).toBeDefined();
 
     const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
     const conditionalSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_CONDITIONAL);
-    expect(workflowRunSpans[0].traceId).toBe(result.traceId);
 
     expect(workflowRunSpans.length).toBe(1); // One workflow run
+    const workflowRunSpan = workflowRunSpans[0];
+
+    expect(workflowRunSpan.traceId).toBe(result.traceId);
+    expect(workflowRunSpan.isRootSpan).toBe(true);
+    expect(workflowRunSpan.metadata?.id1).toBe(customMetadata.id1);
+    expect(workflowRunSpan.metadata?.id2).toBe(customMetadata.id2);
+
     expect(workflowStepSpans.length).toBe(2); // checkCondition + processHigh (value=15 > 10)
     expect(conditionalSpans.length).toBe(1); // One branch evaluation
 
@@ -1176,8 +1187,15 @@ describe('AI Tracing Integration Tests', () => {
         agents: { workflowAgent },
       });
 
+      const customMetadata = {
+        id1: 123,
+        id2: 'tacos',
+      };
+
       const agent = mastra.getAgent('workflowAgent');
-      const result = await method(agent, 'Execute the simpleWorkflow with test input');
+      const result = await method(agent, 'Execute the simpleWorkflow with test input', {
+        tracingOptions: { metadata: customMetadata },
+      });
       expect(result.text).toBeDefined();
       expect(result.traceId).toBeDefined();
 
@@ -1188,8 +1206,14 @@ describe('AI Tracing Integration Tests', () => {
       const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
 
       expect(agentRunSpans.length).toBe(1); // One agent run
+      const agentRunSpan = agentRunSpans[0];
+
+      expect(agentRunSpan.traceId).toBe(result.traceId);
+      expect(agentRunSpan.isRootSpan).toBe(true);
+      expect(agentRunSpan.metadata?.id1).toBe(customMetadata.id1);
+      expect(agentRunSpan.metadata?.id2).toBe(customMetadata.id2);
+
       expect(llmGenerationSpans.length).toBe(1); // one llmGeneration per agent run
-      expect(agentRunSpans[0].traceId).toBe(result.traceId);
       expect(toolCallSpans.length).toBe(1); // tool call
 
       // TODO: revert these expectations to assert equal to just 1 after we can hide

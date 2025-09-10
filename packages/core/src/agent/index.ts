@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { AISpan, TracingContext, TracingProperties } from '../ai-tracing';
+import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
@@ -1668,6 +1668,7 @@ export class Agent<
     writableStream,
     methodType,
     tracingContext,
+    tracingOptions,
   }: {
     instructions: string;
     toolsets?: ToolsetsInput;
@@ -1683,6 +1684,7 @@ export class Agent<
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream';
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }) {
     return {
       before: async () => {
@@ -1710,6 +1712,7 @@ export class Agent<
             threadId: thread ? thread.id : undefined,
           },
           tracingContext,
+          tracingOptions,
           runtimeContext,
         });
 
@@ -2450,6 +2453,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       toolChoice = 'auto',
       runtimeContext = new RuntimeContext(),
       tracingContext,
+      tracingOptions,
       savePerStep,
       writableStream,
       ...args
@@ -2517,6 +2521,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       writableStream,
       methodType,
       tracingContext,
+      tracingOptions,
     });
 
     let messageList: MessageList;
@@ -2681,6 +2686,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         threadId: threadFromArgs ? threadFromArgs.id : undefined,
       },
       tracingContext: options.tracingContext,
+      tracingOptions: options.tracingOptions,
       runtimeContext,
     });
 

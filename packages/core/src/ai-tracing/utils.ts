@@ -5,7 +5,7 @@
 
 import type { RuntimeContext } from '../di';
 import { getSelectedAITracing } from './registry';
-import type { AISpan, AISpanType, AISpanTypeMap, AnyAISpan, TracingContext } from './types';
+import type { AISpan, AISpanType, AISpanTypeMap, AnyAISpan, TracingContext, TracingOptions } from './types';
 
 const DEFAULT_KEYS_TO_STRIP = new Set(['logger', 'providerMetadata', 'steps', 'tracingContext']);
 export interface DeepCleanOptions {
@@ -157,9 +157,15 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
   attributes?: AISpanTypeMap[T];
   metadata?: Record<string, any>;
   tracingContext?: TracingContext;
+  tracingOptions?: TracingOptions;
   runtimeContext?: RuntimeContext;
 }): AISpan<T> | undefined {
-  const { type, attributes, tracingContext, runtimeContext, ...rest } = options;
+  const { type, attributes, tracingContext, tracingOptions, runtimeContext, ...rest } = options;
+
+  const metadata = {
+    ...(rest.metadata ?? {}),
+    ...(tracingOptions?.metadata ?? {}),
+  };
 
   // If we have a current span, create a child span
   if (tracingContext?.currentSpan) {
@@ -167,6 +173,7 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
       type,
       attributes,
       ...rest,
+      metadata,
     });
   }
 
@@ -182,6 +189,7 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
       runtimeContext,
     },
     ...rest,
+    metadata,
   });
 }
 
