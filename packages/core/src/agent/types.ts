@@ -44,8 +44,8 @@ export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
   /** Zod schema to validate the output against */
   schema: S;
 
-  /** Model to use for the internal structuring agent */
-  model: MastraLanguageModel;
+  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
+  model?: MastraLanguageModel;
 
   /**
    * Custom instructions for the structuring agent.

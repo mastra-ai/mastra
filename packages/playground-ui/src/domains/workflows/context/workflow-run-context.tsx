@@ -1,4 +1,4 @@
-import { ExtendedLegacyWorkflowRunResult, ExtendedWorkflowWatchResult } from '@/hooks/use-workflows';
+import { ExtendedLegacyWorkflowRunResult } from '@/hooks/use-workflows';
 import { WorkflowRunState } from '@mastra/core/workflows';
 import { WorkflowWatchResult } from '@mastra/client-js';
 import { createContext, useEffect, useState } from 'react';
@@ -39,10 +39,8 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (snapshot?.runId) {
       setResult(convertWorkflowRunStateToWatchResult(snapshot));
-    } else {
-      setResult(null);
     }
-  }, [snapshot?.runId ?? '']);
+  }, [snapshot]);
 
   return (
     <WorkflowRunContext.Provider
