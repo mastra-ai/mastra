@@ -26,7 +26,7 @@ function GetTypeOfField(value: Record<string, any>): string {
   return typeOfField;
 }
 
-function OperatorHandler(typeOfField: any): any {
+function OperatorHandler(typeOfField: string): (field: string, value: Record<string, any>) => any {
   switch (typeOfField) {
     case 'boolean':
       return Boolean_Handler;

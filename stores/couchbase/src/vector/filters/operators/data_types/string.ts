@@ -14,13 +14,16 @@ function ne_for_strings(field: string, value: string): any {
   return not(eq_for_strings(field, value));
 }
 
-function String_Handler(field: string, value: Record<string, any>): any {
+function String_Handler(field: string, value: Record<string, string>): any {
   if (value === null || value === undefined || Object.keys(value).length === 0) {
     return {};
   }
 
   const result: { conjuncts: any[] } = { conjuncts: [] };
   for (const op in value) {
+    if (typeof value[op] !== 'string') {
+      throw new Error(`Invalid string value: ${value[op]} for operator ${op} in field ${field}`);
+    }
     switch (op) {
       case '$eq':
         result.conjuncts.push(eq_for_strings(field, value[op]));
