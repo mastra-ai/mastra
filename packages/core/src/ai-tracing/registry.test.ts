@@ -454,6 +454,172 @@ describe('AI Tracing Registry', () => {
     });
   });
 
+  describe('setupAITracing edge cases', () => {
+    it('should handle config.configs being undefined', () => {
+      expect(() => {
+        setupAITracing({
+          default: { enabled: false },
+          // configs is undefined
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle config.configs being empty array', () => {
+      expect(() => {
+        setupAITracing({
+          default: { enabled: false },
+          configs: [] as any, // Empty array instead of object
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle config.configs being undefined with default enabled', () => {
+      expect(() => {
+        setupAITracing({
+          default: { enabled: true },
+          // configs is undefined - should not throw "Cannot read properties of undefined"
+        });
+      }).not.toThrow();
+
+      // Should still create the default instance
+      const defaultInstance = getAITracing('default');
+      expect(defaultInstance).toBeDefined();
+    });
+
+    it('should handle empty configs object', () => {
+      expect(() => {
+        setupAITracing({
+          default: { enabled: false },
+          configs: {}, // Empty object
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle minimal config with just selector', () => {
+      const selector: TracingSelector = () => undefined;
+
+      expect(() => {
+        setupAITracing({
+          configSelector: selector,
+          // No default, no configs
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle config with null configs property', () => {
+      expect(() => {
+        setupAITracing({
+          default: { enabled: true },
+          configs: null as any, // null instead of undefined or object
+        });
+      }).not.toThrow();
+    });
+
+    it('should verify the fix for accessing undefined configs.default', () => {
+      // This test specifically checks that we don't get:
+      // "Cannot read properties of undefined (reading 'default')"
+      // when config.configs is undefined but config.default is enabled
+
+      expect(() => {
+        setupAITracing({
+          default: { enabled: true },
+          // configs intentionally undefined to test the original bug
+        });
+      }).not.toThrow();
+    });
+
+    it('should verify the fix for Object.entries on undefined configs', () => {
+      // This test specifically checks that we don't get:
+      // "Cannot convert undefined or null to object"
+      // when trying to do Object.entries(config.configs)
+
+      expect(() => {
+        setupAITracing({
+          default: { enabled: false },
+          // configs intentionally undefined to test the original bug
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle when entire config is undefined', () => {
+      expect(() => {
+        setupAITracing(undefined as any);
+      }).not.toThrow();
+    });
+
+    it('should handle when entire config is empty object', () => {
+      expect(() => {
+        setupAITracing({});
+      }).not.toThrow();
+    });
+
+    it('should handle when default property is undefined', () => {
+      expect(() => {
+        setupAITracing({
+          default: undefined,
+          configs: {
+            test: {
+              serviceName: 'test-service',
+              exporters: [],
+            },
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle when default property is empty object', () => {
+      expect(() => {
+        setupAITracing({
+          default: {} as any,
+          configs: {
+            test: {
+              serviceName: 'test-service',
+              exporters: [],
+            },
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle when default property is null', () => {
+      expect(() => {
+        setupAITracing({
+          default: null as any,
+          configs: {
+            test: {
+              serviceName: 'test-service',
+              exporters: [],
+            },
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle when default.enabled is undefined', () => {
+      expect(() => {
+        setupAITracing({
+          default: { enabled: undefined } as any,
+          configs: {
+            test: {
+              serviceName: 'test-service',
+              exporters: [],
+            },
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle completely minimal config', () => {
+      expect(() => {
+        setupAITracing({
+          default: undefined,
+          configs: undefined,
+          configSelector: undefined,
+        });
+      }).not.toThrow();
+    });
+  });
+
   describe('Default Config', () => {
     beforeEach(() => {
       // Mock environment variable for CloudExporter

@@ -2,9 +2,9 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { extractTextFromPDF } from '../lib/util';
 
-export const pdfFetcherTool = createTool({
-  id: 'download-pdf-tool',
-  description: 'Downloads a PDF from a URL, extracts text, and returns a comprehensive summary',
+export const summarizePdfTool = createTool({
+  id: 'summarizePdfTool',
+  description: 'Summarizes a PDF from a given URL',
   inputSchema: z.object({
     pdfUrl: z.string().describe('URL to the PDF file to download'),
   }),
@@ -46,16 +46,11 @@ export const pdfFetcherTool = createTool({
 
       // Step 3: Generate summary using the AI agent
       console.log('🧠 Generating AI summary...');
-      const pdfSummarizationAgent = mastra?.getAgent('pdfSummarizationAgent');
-      if (!pdfSummarizationAgent) {
-        throw new Error('PDF summarization agent not found');
-      }
-      const summaryResult = await pdfSummarizationAgent.generate([
-        {
-          role: 'user',
-          content: `Please provide a comprehensive summary of this PDF content:\n\n${extractionResult.extractedText}`,
-        },
-      ]);
+      const pdfSummarizationAgent = mastra!.getAgent('pdfSummarizationAgent');
+
+      const summaryResult = await pdfSummarizationAgent.generate(
+        `Please provide a comprehensive summary of this PDF content:\n\n${extractionResult.extractedText}`,
+      );
 
       const summary = summaryResult.text || 'Summary could not be generated';
 

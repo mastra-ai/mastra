@@ -27,7 +27,7 @@
     "@mastra/mcp": "^0.12.0",
     "@mastra/memory": "^0.15.0",
     "@openrouter/ai-sdk-provider": "^0.7.5",
-    "hono": "^4.9.4",
+    "hono": "^4.9.6",
     "zod": "^3.25.76"
   },
   "devDependencies": {

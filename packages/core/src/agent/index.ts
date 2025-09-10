@@ -6,8 +6,8 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import { AISpanType, getOrCreateSpan } from '../ai-tracing';
-import type { AISpan, TracingContext } from '../ai-tracing';
+import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
+import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
@@ -1668,6 +1668,7 @@ export class Agent<
     writableStream,
     methodType,
     tracingContext,
+    tracingOptions,
   }: {
     instructions: string;
     toolsets?: ToolsetsInput;
@@ -1683,6 +1684,7 @@ export class Agent<
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream';
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }) {
     return {
       before: async () => {
@@ -1693,7 +1695,9 @@ export class Agent<
         const agentAISpan = getOrCreateSpan({
           type: AISpanType.AGENT_RUN,
           name: `agent run: '${this.id}'`,
-          input: messages,
+          input: {
+            messages,
+          },
           attributes: {
             agentId: this.id,
             instructions,
@@ -1708,6 +1712,7 @@ export class Agent<
             threadId: thread ? thread.id : undefined,
           },
           tracingContext,
+          tracingOptions,
           runtimeContext,
         });
 
@@ -2166,13 +2171,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         agentAISpan?.end({
           output: {
-            text: result?.text,
-            object: result?.object,
-          },
-          metadata: {
-            usage: result?.usage,
-            toolResults: result?.toolResults,
-            toolCalls: result?.toolCalls,
+            status: 'success',
           },
         });
 
@@ -2454,6 +2453,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       toolChoice = 'auto',
       runtimeContext = new RuntimeContext(),
       tracingContext,
+      tracingOptions,
       savePerStep,
       writableStream,
       ...args
@@ -2521,6 +2521,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       writableStream,
       methodType,
       tracingContext,
+      tracingOptions,
     });
 
     let messageList: MessageList;
@@ -2685,6 +2686,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         threadId: threadFromArgs ? threadFromArgs.id : undefined,
       },
       tracingContext: options.tracingContext,
+      tracingOptions: options.tracingOptions,
       runtimeContext,
     });
 
@@ -3226,7 +3228,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const run = await executionWorkflow.createRunAsync();
     const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
-    agentAISpan?.end({ output: result });
+    agentAISpan?.end({
+      output: {
+        status: result.status,
+      },
+    });
 
     return result;
   }
@@ -3596,6 +3602,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     let llmToUse = llm as MastraLLMV1;
 
     const beforeResult = await before();
+    const traceId = getValidTraceId(beforeResult.agentAISpan);
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -3622,6 +3629,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         experimental_providerMetadata: undefined,
         tripwire: true,
         tripwireReason: beforeResult.tripwireReason,
+        traceId,
       };
 
       return tripwireResult as unknown as OUTPUT extends undefined
@@ -3691,6 +3699,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           experimental_providerMetadata: undefined,
           tripwire: true,
           tripwireReason: outputProcessorResult.tripwireReason,
+          traceId,
         };
 
         return tripwireResult as unknown as OUTPUT extends undefined
@@ -3755,6 +3764,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         result.scoringData = afterResult.scoringData;
       }
 
+      result.traceId = traceId;
+
       return result as unknown as OUTPUT extends undefined
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
         : GenerateObjectResult<OUTPUT>;
@@ -3808,6 +3819,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         experimental_providerMetadata: undefined,
         tripwire: true,
         tripwireReason: outputProcessorResult.tripwireReason,
+        traceId,
       };
 
       return tripwireResult as unknown as OUTPUT extends undefined
@@ -3842,6 +3854,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       result.scoringData = afterResult.scoringData;
     }
 
+    result.traceId = traceId;
+
     return result as unknown as OUTPUT extends undefined
       ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
       : GenerateObjectResult<OUTPUT>;
@@ -3860,7 +3874,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
-  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -3890,7 +3904,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
+    | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
     this.logger.warn(
       "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 16th. Please use streamLegacy if you don't want to upgrade just yet.",
@@ -3912,7 +3926,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: MessageListInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
-  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties>;
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -3942,7 +3956,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
+    | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
     const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
 
@@ -3973,6 +3987,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     }
 
     const beforeResult = await before();
+    const traceId = getValidTraceId(beforeResult.agentAISpan);
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -4009,6 +4024,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         experimental_output: undefined,
         steps: undefined,
         experimental_providerMetadata: undefined,
+        traceId,
         toAIStream: () =>
           Promise.resolve('').then(() => {
             const emptyStream = new (globalThis as any).ReadableStream({
@@ -4031,7 +4047,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
       return emptyResult as unknown as
         | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
+        | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties);
     }
 
     const { onFinish, runId, output, experimental_output, agentAISpan, ...llmOptions } = beforeResult;
@@ -4069,16 +4085,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         runId,
       });
 
+      streamResult.traceId = traceId;
+
       return streamResult as
         | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
+        | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties);
     }
 
     this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {
       runId,
     });
 
-    return llm.__streamObject({
+    const streamObjectResult = llm.__streamObject({
       ...llmOptions,
       tracingContext,
       onFinish: async result => {
@@ -4102,6 +4120,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runId,
       structuredOutput: output,
     });
+
+    (streamObjectResult as any).traceId = traceId;
+
+    return streamObjectResult as StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> &
+      TracingProperties;
   }
 
   /**

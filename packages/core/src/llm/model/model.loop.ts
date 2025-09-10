@@ -12,7 +12,6 @@ import { stepCountIs } from 'ai-v5';
 import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
@@ -158,15 +157,19 @@ export class MastraLLMVNext extends MastraBase {
     });
 
     const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
-      name: `llm stream: '${model.modelId}'`,
+      name: `llm: '${model.modelId}'`,
       type: AISpanType.LLM_GENERATION,
-      input: messages,
+      input: {
+        messages: [...messageList.getSystemMessages(), ...messages],
+      },
       attributes: {
         model: model.modelId,
         provider: model.provider,
         streaming: true,
+        parameters: modelSettings,
       },
       metadata: {
+        runId,
         threadId,
         resourceId,
       },
@@ -215,6 +218,7 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
+              llmAISpan?.error({ error: mastraError });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -260,9 +264,29 @@ export class MastraLLMVNext extends MastraBase {
                 },
                 e,
               );
+              llmAISpan?.error({ error: mastraError });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
+
+            llmAISpan?.end({
+              output: {
+                text: props?.text,
+                reasoning: props?.reasoning,
+                reasoningText: props?.reasoningText,
+                files: props?.files,
+                sources: props?.sources,
+                warnings: props?.warnings,
+              },
+              attributes: {
+                finishReason: props?.finishReason,
+                usage: {
+                  promptTokens: props?.totalUsage?.inputTokens,
+                  completionTokens: props?.totalUsage?.outputTokens,
+                  totalTokens: props?.totalUsage?.totalTokens,
+                },
+              },
+            });
 
             this.logger.debug('[LLM] - Stream Finished:', {
               text: props?.text,
@@ -278,9 +302,7 @@ export class MastraLLMVNext extends MastraBase {
         },
       };
 
-      const result = loop(loopOptions);
-      llmAISpan?.end({ output: result });
-      return result;
+      return loop(loopOptions);
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {

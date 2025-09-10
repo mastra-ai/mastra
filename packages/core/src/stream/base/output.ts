@@ -7,6 +7,8 @@ import type { FinishReason, TelemetrySettings } from 'ai-v5';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import type { AIV5Type } from '../../agent/message-list/types';
+import { getValidTraceId } from '../../ai-tracing';
+import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import type { OutputProcessor } from '../../processors';
 import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
@@ -46,6 +48,7 @@ type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   outputProcessors?: OutputProcessor[];
   outputProcessorRunnerMode?: ProcessorRunnerMode;
   returnScorerData?: boolean;
+  tracingContext?: TracingContext;
 };
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
@@ -129,6 +132,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * The message list for this stream.
    */
   public messageList: MessageList;
+  /**
+   * Trace ID used on the execution (if the execution was traced).
+   */
+  public traceId?: string;
 
   constructor({
     model: _model,
@@ -149,6 +156,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#options = options;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
+    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
 
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
@@ -823,6 +831,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
       ...(scoringData ? { scoringData } : {}),
+      traceId: this.traceId,
     };
 
     return fullOutput;

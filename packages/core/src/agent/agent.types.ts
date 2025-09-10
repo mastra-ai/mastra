@@ -4,7 +4,7 @@ import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
@@ -85,7 +85,7 @@ export type AgentExecutionOptions<
   /** Output processors to use for this execution (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
   /** Structured output generation with enhanced developer experience  @experimental */
-  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+  structuredOutput?: StructuredOutputOptions<STRUCTURED_OUTPUT extends z.ZodTypeAny ? STRUCTURED_OUTPUT : never>;
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;
@@ -103,6 +103,8 @@ export type AgentExecutionOptions<
   returnScorerData?: boolean;
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
+  /** AI tracing options for starting new traces */
+  tracingOptions?: TracingOptions;
 
   /** Callback function called before each step of multi-step execution */
   prepareStep?: PrepareStepFunction<any>;
