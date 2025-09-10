@@ -761,7 +761,7 @@ describe('AI Tracing Integration Tests', () => {
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
     const conditionalSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_CONDITIONAL);
     expect(workflowRunSpans[0].traceId).toBe(result.traceId);
-    
+
     expect(workflowRunSpans.length).toBe(1); // One workflow run
     expect(workflowStepSpans.length).toBe(2); // checkCondition + processHigh (value=15 > 10)
     expect(conditionalSpans.length).toBe(1); // One branch evaluation
@@ -948,7 +948,7 @@ describe('AI Tracing Integration Tests', () => {
     expect(result.traceId).toBeDefined();
 
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
-    
+
     expect(workflowStepSpans.length).toBe(1);
     const stepSpan = workflowStepSpans[0];
 
@@ -1289,7 +1289,7 @@ describe('AI Tracing Integration Tests', () => {
       expect(result.traceId).toBeDefined();
 
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
-      
+
       expect(toolCallSpans.length).toBeGreaterThanOrEqual(1);
       expect(toolCallSpans[0].traceId).toBe(result.traceId);
 
