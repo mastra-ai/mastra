@@ -228,7 +228,9 @@ touch tsconfig.json
 
 Add the following configuration:
 
-```json filename="tsconfig.json" copy
+Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
+
+```json {4-5} filename="tsconfig.json" copy
 {
   "compilerOptions": {
     "target": "ES2022",
