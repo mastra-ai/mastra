@@ -82,5 +82,7 @@
     "@mastra/voice-speechify": "0.11.4",
     "@mastra/inngest": "0.13.1"
   },
-  "changesets": []
+  "changesets": [
+    "warm-groups-hang"
+  ]
 }

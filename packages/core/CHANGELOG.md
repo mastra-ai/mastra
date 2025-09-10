@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.16.2-alpha.0
+
+### Patch Changes
+
+- Export server types ([#7657](https://github.com/mastra-ai/mastra/pull/7657))
+
 ## 0.16.1
 
 ### Patch Changes
