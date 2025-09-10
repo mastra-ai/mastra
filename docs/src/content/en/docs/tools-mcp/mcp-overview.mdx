@@ -7,25 +7,38 @@ import { Tabs } from "nextra/components";
 
 # MCP Overview
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open standard designed to let AI models discover and interact with external tools and resources. Think of it as a universal plugin system for AI agents, allowing them to use tools regardless of the language they were written in or where they are hosted.
+Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction), an open standard for connecting AI agents to external tools and resources. It serves as a universal plugin system, enabling agents to call tools regardless of language or hosting environment.
 
-Mastra uses MCP to connect agents to external tool servers.
+Mastra can also be used to author MCP servers, exposing agents, tools, and other structured resources via the MCP interface. These can then be accessed by any system or agent that supports the protocol.
+
+Mastra currently supports two MCP classes:
+
+1. **`MCPClient`**: Connects to external MCP servers and accesses their tools.
+2. **`MCPServer`**: Exposes Mastra tools, agents, and workflows to MCP-compatible clients.
 
 ## Getting started
 
-To use Mastra MCP, install the required dependency:
+To use MCP, install the required dependency:
 
 ```bash
 npm install @mastra/mcp@latest
 ```
 
-### Creating an MCP Client
+### Environment variables
 
-An MCP Client is the thing that allows Mastra primitives to connect to external MCP Servers, be it published npm packages, or remote MCP servers that operate over http(s)
+LLM providers require API keys, named using the provider’s identifier.
+Providers like [Smithery](https://smithery.ai/) require an API key to access their hosted MCP servers.
 
-To create a new MCP client....
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+SMITHERY_API_KEY=<your-api-key>
+```
 
-```typescript filename="src/mastra/mcp-clients/test-mcp-client.ts" showLineNumbers copy
+## Creating an `MCPClient`
+
+The `MCPClient` connects Mastra primitives to external MCP servers, which can be local packages (invoked using `npx`) or remote HTTP(S) endpoints. Each server must be configured with either a `command` or a `url`, depending on how it's hosted.
+
+```typescript filename="src/mastra/mcp/test-mcp-client.ts" showLineNumbers copy
 import { MCPClient } from "@mastra/mcp";
 
 export const testMcpClient = new MCPClient({
@@ -33,47 +46,46 @@ export const testMcpClient = new MCPClient({
     wikipedia: {
       command: "npx",
       args: ["-y", "wikipedia-mcp"]
-    }
+    },
+    weather: {
+      url: new URL(`https://server.smithery.ai/@smithery-ai/national-weather-service/mcp?api_key=${process.env.SMITHERY_API_KEY}`)
+    },
   }
 });
 ```
 
 > See [MCPClient](../../reference/tools/mcp-client.mdx) for a full list of configuration options.
 
-## Adding an MCP client to an agent
+## Using `MCPClient` with an agent
 
-Provide access to the MCP Client from an agent, import the MCP Client, use the `tools` parameter with the `.getTools()` method:
+To use tools from an MCP server in an agent, import your `MCPClient` and call `.getTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
-```typescript {4,15} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {4,16} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
-import { wikipediaMcp } from "../mcp-clients/wikipedia-mcp";
+import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
   name: "Test Agent",
-  description: "A test agent that uses the Wikipedia MCP Server",
+  description: "You are a helpful AI assistant",
   instructions: `
-      You are a helpful assistant that has access to the Wikipedia MCP Server.
+      You are a helpful assistant that has access to the following MCP Servers.
       - Wikipedia MCP Server
+      - US National Weather Service
 
-      Answer questions using the information you find using the Wikipedia Server.
-`,
+      Answer questions using the information you find using the MCP Servers.`,
   model: openai("gpt-4o-mini"),
-  tools: await wikipediaMcp.getTools()
+  tools: await testMcpClient.getTools()
 });
 ```
+> See the [Agent Class](../../reference/agents/agent.mdx) for a full list of configuration options.
 
-This agent will now have access to the following Wikipedia tools:
+## Creating an `MCPServer`
 
-- **wikipedia_search**: Returns a list of Wikipedia articles matching a query string.
-- **wikipedia_readArticle**: Returns the full content of a specified Wikipedia article.
+An MCP server exposes agents, tools, and workflows from your Mastra application to external systems over HTTP(S). This makes them accessible to any system or agent that supports the protocol.
 
-## Creating an MCP Server
-
-An MCP Server is a thing that can be accessed by other stuff by being part of a deployed Mastra application that can be access over http(s).
-
-```typescript filename="src/mastra/mcp-servers/test-mcp-server.ts" showLineNumbers copy
+```typescript filename="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
 import { MCPServer } from "@mastra/mcp";
 
 import { testAgent } from "../agents/test-agent";
@@ -91,14 +103,14 @@ export const testMcpServer = new MCPServer({
 
 > See [MCPServer](../../reference/tools/mcp-server.mdx) for a full list of configuration options.
 
-## Registering an MCP Server
+## Registering an `MCPServer`
 
-To blah an MCP Server register it in the main Mastra instance.
+To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 
-import { testMcpServer } from "./mcp-servers/test-mcp-server";
+import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
   // ...
@@ -106,107 +118,74 @@ export const mastra = new Mastra({
 });
 ```
 
-## ------ OLD ---------
-
-## Use third-party tools with an MCP Client
-
-Mastra provides the `MCPClient` class to manage connections to one or more MCP servers and access their tools.
-
-### Installation
-
-If you haven't already, install the Mastra MCP package:
-
-```bash npm2yarn copy
-npm install @mastra/mcp@latest
-```
-
-### Registering the MCPServer
-
-Register your MCP server with Mastra to enable logging and access to configured tools and integrations:
-
-```ts showLineNumbers filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core";
-import { myMcpServer } from "./mcpServers";
-
-export const mastra = new Mastra({
-  mcpServers: { myMcpServer },
-});
-```
-
-### Configuring `MCPClient`
-
-You configure `MCPClient` with a map of servers you want to connect to. It supports connections via subprocess (Stdio) or HTTP (Streamable HTTP with SSE fallback).
-
-```typescript
-import { MCPClient } from "@mastra/mcp";
-
-const mcp = new MCPClient({
-  servers: {
-    // Stdio example
-    sequential: {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
-    },
-    // HTTP example
-    weather: {
-      url: new URL("http://localhost:8080/mcp"),
-      requestInit: {
-        headers: {
-          Authorization: "Bearer your-token",
-        },
-      },
-    },
-  },
-});
-```
-
-See [MCPClient](../../reference/tools/mcp-client.mdx) for a full list of configuration options.
-
-
-### Static vs Dynamic Tool Configurations
+## Static and dynamic tools
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
-| Feature           | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`)  |
-| :---------------- | :-------------------------------------------- | :------------------------------------------------- |
-| **Use Case**      | Single-user, static config (e.g., CLI tool)   | Multi-user, dynamic config (e.g., SaaS app)        |
-| **Configuration** | Fixed at agent initialization                 | Per-request, dynamic                               |
-| **Credentials**   | Shared across all uses                        | Can vary per user/request                          |
-| **Agent Setup**   | Tools added in `Agent` constructor            | Tools passed in `generate()` or `stream()` options |
+| Feature           | Static Configuration (`await mcp.getTools()`)  | Dynamic Configuration (`await mcp.getToolsets()`)     |
+| :---------------- | :---------------------------------------------| :--------------------------------------------------- |
+| **Use Case**      | Single-user, static config (e.g., CLI tool)    | Multi-user, dynamic config (e.g., SaaS app)           |
+| **Configuration**  | Fixed at agent initialization                 | Per-request, dynamic                                 |
+| **Credentials**   | Shared across all uses                        | Can vary per user/request                            |
+| **Agent Setup**   | Tools added in `Agent` constructor            | Tools passed in `.generate()` or `.stream()` options |
 
-- **Static Configuration (`getTools()`):** Fetches all tools from all configured servers. Best when the tool configuration (like API keys) is static and shared across all users or requests. You typically call this once and pass the result to the `tools` property when defining your `Agent`.
-  [Reference: `getTools()`](/reference/tools/mcp-client#gettools)
+### Static tools
 
-  ```typescript
-  import { Agent } from "@mastra/core/agent";
-  // ... mcp client setup
+Use the `.getTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
 
-  const agent = new Agent({
-    // ... other agent config
-    tools: await mcp.getTools(),
+> See [getTools()](../../reference/tools/mcp-client.mdx#gettools) for more information.
+
+```typescript {8} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { testMcpClient } from "../mcp/test-mcp-client";
+
+export const testAgent = new Agent({
+  // ...
+  tools: await testMcpClient.getTools()
+});
+```
+
+### Dynamic tools
+
+Use the `.getToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
+
+```typescript {5-16,21} showLineNumbers copy
+import { MCPClient } from "@mastra/mcp";
+import { mastra } from "./mastra";
+
+async function handleRequest(userPrompt: string, userApiKey: string) {
+  const userMcp = new MCPClient({
+    servers: {
+      weather: {
+        url: new URL("http://localhost:8080/mcp"),
+        requestInit: {
+          headers: {
+            Authorization: `Bearer ${userApiKey}`
+          }
+        }
+      }
+    }
   });
-  ```
 
-- **Dynamic Configuration (`getToolsets()`):** Designed for scenarios where configuration might change per request or per user (e.g., different API keys for different tenants in a multi-user application). You pass the result of `getToolsets()` to the `toolsets` option in the agent's `generate()` or `stream()` method.
-  [Reference: `getToolsets()`](/reference/tools/mcp-client#gettoolsets)
+  const agent = mastra.getAgent("testAgent");
 
-  ```typescript
-  import { Agent } from "@mastra/core/agent";
-  // ... agent setup without tools initially
+  const response = await agent.generate(userPrompt, {
+    toolsets: await userMcp.getToolsets()
+  });
 
-  async function handleRequest(userPrompt: string, userApiKey: string) {
-    const userMcp = new MCPClient({
-      /* config with userApiKey */
-    });
-    const toolsets = await userMcp.getToolsets();
+  await userMcp.disconnect();
 
-    const response = await agent.stream(userPrompt, {
-      toolsets, // Pass dynamic toolsets
-    });
-    // ... handle response
-    await userMcp.disconnect();
-  }
-  ```
+  return Response.json({
+    data: response.text
+  });
+}
+```
+
+> See [getToolsets()](../../reference/tools/mcp-client.mdx#gettoolsets) for more information.
+
+
 
 ## Connecting to an MCP registry
 
@@ -392,92 +371,8 @@ Each tab shows the specific URL patterns and configuration needed for that regis
   </Tabs.Tab>
 </Tabs>
 
-## Share your tools with an MCP server
+## Related
 
-If you have created your own Mastra tools, you can expose them to any MCP-compatible client using Mastra's `MCPServer` class.
-
-Similarly, Mastra `Agent` and `Workflow` instances can also be exposed as tools via `MCPServer`. This allows other MCP clients to interact with your agents by "asking" them questions or run your workflows. Each agent provided in the `MCPServer` configuration will be converted into a tool named `ask_<agentKey>`, using the agent's `description` property. Each workflow will be converted into a tool named `run_<workflowKey>`, using its `inputSchema` and `description`.
-
-This allows others to use your tools, agents, and workflows without needing direct access to your codebase.
-
-### Using `MCPServer`
-
-You initialize `MCPServer` with a name, version, and the Mastra tools, agents, and/or workflows you want to share.
-
-```typescript
-import { MCPServer } from "@mastra/mcp";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { weatherTool } from "./tools"; // Your Mastra tool
-import { weatherAgent } from "./agents"; // Your Mastra Agent
-import { dataWorkflow } from "./workflows"; // Your Mastra Workflow
-
-const server = new MCPServer({
-  name: "My Custom Server",
-  version: "1.0.0",
-  tools: { weatherTool }, // Provide your tool(s) here
-  agents: { weatherAgent }, // Provide your agent(s) here
-  workflows: { dataWorkflow }, // Provide your workflow(s) here
-});
-
-// Start the server (e.g., using stdio for a CLI tool)
-// await server.startStdio();
-
-// Or integrate with an HTTP server using startSSE()
-// See MCPServer reference for details
-```
-
-For an agent to be exposed as a tool, it must have a non-empty `description` string. Similarly, for a workflow to be exposed, its `description` must also be a non-empty string. If the description is missing or empty for either, `MCPServer` will throw an error during initialization.
-Workflows will use their `inputSchema` for the tool's input.
-
-### Tools with Structured Outputs
-
-You can define an `outputSchema` for your tools to enforce a specific structure for the tool's output. This is useful for ensuring that the tool returns data in a consistent and predictable format, which can then be validated by the client.
-
-When a tool includes an `outputSchema`, its `execute` function **must** return an object. The value of the object must conform to the `outputSchema`. Mastra will automatically validate this output on both the server and client sides.
-
-Here's an example of a tool with an `outputSchema`:
-
-```typescript filename="src/tools/structured-tool.ts"
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
-
-export const structuredTool = createTool({
-  description: 'A test tool that returns structured data.',
-  parameters: z.object({
-    input: z.string().describe('Some input string.'),
-  }),
-  outputSchema: z.object({
-    processedInput: z.string().describe('The processed input string.'),
-    timestamp: z.string().describe('An ISO timestamp.'),
-  }),
-  execute: async ({ input }) => {
-    // When outputSchema is defined, you must return an object
-    return {
-      processedInput: `processed: ${input}`,
-      timestamp: new Date().toISOString(),
-    };
-  },
-});
-```
-
-When this tool is called, the MCP client will receive both the structured data and a text representation of it.
-
-```
-Tool result
-
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "{\"processedInput\": \"hello\", \"timestamp\": \"2025-06-19T16:53:16.472Z\"}"
-    }
-  ],
-  "structuredContent": {
-    "processedInput": "processed: hello",
-    "timestamp": "2025-06-19T16:53:16.472Z",
-  }
-}
-```
-
-For detailed usage and examples, see the [`MCPServer` reference documentation](/reference/tools/mcp-server).
+- [Using Tools and MCP](../agents/using-tools-and-mcp.mdx)
+- [MCPClient](../../reference/tools/mcp-client.mdx)
+- [MCPServer](../../reference/tools/mcp-server.mdx)
