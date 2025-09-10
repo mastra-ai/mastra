@@ -39,10 +39,8 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (snapshot?.runId) {
       setResult(convertWorkflowRunStateToWatchResult(snapshot));
-    } else {
-      setResult(null);
     }
-  }, [snapshot?.runId ?? '']);
+  }, [snapshot]);
 
   return (
     <WorkflowRunContext.Provider
