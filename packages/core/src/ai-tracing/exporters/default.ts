@@ -127,7 +127,8 @@ export class DefaultExporter implements AITracingExporter {
 
     const storage = this.mastra.getStorage();
     if (!storage) {
-      throw new Error('DefaultExporter: Storage not available during initialization');
+      this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
+      return;
     }
 
     this.initializeStrategy(storage);
@@ -500,13 +501,13 @@ export class DefaultExporter implements AITracingExporter {
    */
   private async flush(): Promise<void> {
     if (!this.mastra) {
-      this.logger.warn('Cannot flush traces. Mastra instance not registered yet.');
+      this.logger.debug('Cannot flush traces. Mastra instance not registered yet.');
       return;
     }
 
     const storage = this.mastra.getStorage();
     if (!storage) {
-      this.logger.warn('Cannot flush traces. Mastra storage is not initialized');
+      this.logger.debug('Cannot flush traces. Mastra storage is not initialized');
       return;
     }
 
@@ -610,13 +611,13 @@ export class DefaultExporter implements AITracingExporter {
 
   async exportEvent(event: AITracingEvent): Promise<void> {
     if (!this.mastra) {
-      this.logger.warn('Cannot export AI tracing event. Mastra instance not registered yet.');
+      this.logger.debug('Cannot export AI tracing event. Mastra instance not registered yet.');
       return;
     }
 
     const storage = this.mastra.getStorage();
     if (!storage) {
-      this.logger.warn('Cannot store traces. Mastra storage is not initialized');
+      this.logger.debug('Cannot store traces. Mastra storage is not initialized');
       return;
     }
 

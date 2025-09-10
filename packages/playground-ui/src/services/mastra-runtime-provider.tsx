@@ -17,6 +17,7 @@ import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 import { MastraModelOutput } from '@mastra/core/stream';
 import { flushSync } from 'react-dom';
+import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -450,7 +451,10 @@ export function MastraRuntimeProvider({
                                 ...part.args,
                                 __mastraMetadata: {
                                   ...part.args?.__mastraMetadata,
-                                  partialChunk: chunk?.payload?.output,
+                                  workflowFullState: mapWorkflowStreamChunkToWatchResult(
+                                    part.args?.__mastraMetadata?.workflowFullState || {},
+                                    chunk?.payload?.output,
+                                  ),
                                   isStreaming: true,
                                 },
                               },
