@@ -6,7 +6,7 @@ import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 
 import { fetchWithRetry } from '../utils/fetchWithRetry';
 
-export interface CloudAITracingExporterConfig {
+export interface MastraCloudAITracingExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
   maxRetries?: number; // Default: 3
@@ -17,13 +17,13 @@ export interface CloudAITracingExporterConfig {
   logger?: IMastraLogger; // Optional logger
 }
 
-interface CloudBuffer {
-  spans: CloudSpanRecord[];
+interface MastraCloudBuffer {
+  spans: MastraCloudSpanRecord[];
   firstEventTime?: Date;
   totalSize: number;
 }
 
-interface CloudSpanRecord {
+interface MastraCloudSpanRecord {
   traceId: string;
   spanId: string;
   parentSpanId: string | null;
@@ -41,15 +41,15 @@ interface CloudSpanRecord {
   updatedAt: Date | null;
 }
 
-export class CloudAITracingExporter implements AITracingExporter {
-  name = 'cloud-ai-tracing-exporter';
+export class MastraCloudAITracingExporter implements AITracingExporter {
+  name = 'mastra-cloud-ai-tracing-exporter';
 
-  private config: Required<CloudAITracingExporterConfig>;
-  private buffer: CloudBuffer;
+  private config: Required<MastraCloudAITracingExporterConfig>;
+  private buffer: MastraCloudBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private logger: IMastraLogger;
 
-  constructor(config: CloudAITracingExporterConfig = {}) {
+  constructor(config: MastraCloudAITracingExporterConfig = {}) {
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     if (!accessToken) {
       throw new MastraError({
@@ -59,14 +59,8 @@ export class CloudAITracingExporter implements AITracingExporter {
       });
     }
 
-    const endpoint = config.endpoint ?? process.env.MASTRA_CLOUD_ENDPOINT;
-    if (!endpoint) {
-      throw new MastraError({
-        id: `CLOUD_AI_TRACING_EXPORTER_ENDPOINT_REQUIRED`,
-        domain: ErrorDomain.MASTRA_OBSERVABILITY,
-        category: ErrorCategory.USER,
-      });
-    }
+    const endpoint =
+      config.endpoint ?? process.env.MASTRA_CLOUD_AI_TRACES_ENDPOINT ?? 'https://api.mastra.ai/ai/spans/publish';
 
     this.config = {
       maxBatchSize: config.maxBatchSize ?? 1000,
@@ -116,8 +110,8 @@ export class CloudAITracingExporter implements AITracingExporter {
     this.buffer.totalSize++;
   }
 
-  private formatSpan(span: AnyAISpan): CloudSpanRecord {
-    const spanRecord: CloudSpanRecord = {
+  private formatSpan(span: AnyAISpan): MastraCloudSpanRecord {
+    const spanRecord: MastraCloudSpanRecord = {
       traceId: span.traceId,
       spanId: span.id,
       parentSpanId: span.parent?.id ?? null,
@@ -224,7 +218,7 @@ export class CloudAITracingExporter implements AITracingExporter {
   /**
    * Uploads spans to cloud API using fetchWithRetry for all retry logic
    */
-  private async batchUpload(spans: CloudSpanRecord[]): Promise<void> {
+  private async batchUpload(spans: MastraCloudSpanRecord[]): Promise<void> {
     const url = `${this.config.endpoint}`;
 
     const headers = {

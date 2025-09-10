@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { LegacyWorkflowRunResult, WorkflowWatchResult, GetWorkflowResponse } from '@mastra/client-js';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useQuery } from '@tanstack/react-query';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -22,41 +23,12 @@ export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
 };
 
 export const useWorkflow = (workflowId: string) => {
-  const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
   const client = useMastraClient();
-
-  useEffect(() => {
-    const fetchWorkflow = async () => {
-      setIsLoading(true);
-      try {
-        if (!workflowId) {
-          setWorkflow(null);
-          setIsLoading(false);
-          return;
-        }
-        const res = await client.getWorkflow(workflowId).details();
-        if (!res) {
-          setWorkflow(null);
-          console.error('Error fetching workflow');
-          toast.error('Error fetching workflow');
-          return;
-        }
-        setWorkflow(res);
-      } catch (error) {
-        setWorkflow(null);
-        console.error('Error fetching workflow', error);
-        toast.error('Error fetching workflow');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchWorkflow();
-  }, [workflowId]);
-
-  return { workflow, isLoading };
+  return useQuery({
+    queryKey: ['workflow', workflowId],
+    queryFn: () => client.getWorkflow(workflowId).details(),
+    retry: false,
+  });
 };
 
 export const useLegacyWorkflow = (workflowId: string) => {

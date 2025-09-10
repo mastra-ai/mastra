@@ -92,7 +92,7 @@ export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: get
   if (withSpanId) {
     baseInfo.unshift({
       key: 'spanId',
-      label: 'Span Id',
+      label: '#',
       value: span?.spanId,
     });
   }

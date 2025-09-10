@@ -1161,4 +1161,76 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             `);
     });
   });
+
+  describe('providerExecuted tools should not be re-executed', () => {
+    it('should handle Claude Code SDK-style provider-executed tools', async () => {
+      // This test simulates the exact scenario from issue #7558
+      const result = loopFn({
+        runId,
+        messageList: new MessageList(),
+        model: createTestModel({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'claude-code-model',
+              timestamp: new Date(0),
+            },
+            // Simulate Claude Code SDK's file reading tool
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'str_replace_editor',
+              input: JSON.stringify({
+                command: 'view',
+                path: '/src/app.ts',
+                view_range: [1, 50],
+              }),
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'str_replace_editor',
+              result: {
+                content: '// app.ts file content\nexport function main() {\n  console.log("Hello");\n}',
+                line_count: 4,
+              },
+              providerExecuted: true,
+            },
+            {
+              type: 'text-delta',
+              id: 'text-1',
+              delta: 'I can see your app.ts file. It contains a main function that logs "Hello".',
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {},
+        ...defaultSettings(),
+      });
+
+      // Should complete without "tool not found" error
+      const stream = result.aisdk.v5.fullStream;
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      // Verify tool-result chunk exists with provider output
+      const toolResultChunk = chunks.find((c: any) => c.type === 'tool-result');
+      expect(toolResultChunk).toBeDefined();
+      // as any because we're testing a case where there's a provider defined tool that's not added to tools: {} in agent definition, so there's no output type
+      expect((toolResultChunk as any)?.output).toEqual({
+        content: '// app.ts file content\nexport function main() {\n  console.log("Hello");\n}',
+        line_count: 4,
+      });
+      expect((toolResultChunk as any)?.providerExecuted).toBe(true);
+
+      // Verify we also get the text response
+      const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
+      expect(textChunks.length).toBeGreaterThan(0);
+    });
+  });
 }

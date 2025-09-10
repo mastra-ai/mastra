@@ -14,6 +14,40 @@ export function createToolCallStep<
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData }) => {
+      // If the tool was already executed by the provider, skip execution
+      if (inputData.providerExecuted) {
+        // Still emit telemetry for provider-executed tools
+        const tracer = getTracer({
+          isEnabled: telemetry_settings?.isEnabled,
+          tracer: telemetry_settings?.tracer,
+        });
+
+        const span = tracer.startSpan('mastra.stream.toolCall').setAttributes({
+          ...assembleOperationName({
+            operationId: 'mastra.stream.toolCall',
+            telemetry: telemetry_settings,
+          }),
+          'stream.toolCall.toolName': inputData.toolName,
+          'stream.toolCall.toolCallId': inputData.toolCallId,
+          'stream.toolCall.args': JSON.stringify(inputData.args),
+          'stream.toolCall.providerExecuted': true,
+        });
+
+        if (inputData.output) {
+          span.setAttributes({
+            'stream.toolCall.result': JSON.stringify(inputData.output),
+          });
+        }
+
+        span.end();
+
+        // Return the provider-executed result
+        return {
+          ...inputData,
+          result: inputData.output,
+        };
+      }
+
       const tool =
         tools?.[inputData.toolName] ||
         Object.values(tools || {})?.find(tool => `id` in tool && tool.id === inputData.toolName);
