@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, TriangleAlertIcon } from 'lucide-react';
 import { EntryListTextCell } from './entry-list-cell';
 import { EntryListItem } from './entry-list-item';
 import { getColumnTemplate, type Column } from './shared';
@@ -21,6 +21,7 @@ export function EntryList({
   columns,
   searchTerm,
   setEndOfListElement,
+  errorMsg,
 }: {
   items: Record<string, any>[];
   selectedItemId?: string;
@@ -36,6 +37,7 @@ export function EntryList({
   columns?: Column[];
   searchTerm?: string;
   setEndOfListElement: (element: HTMLDivElement | null) => void;
+  errorMsg?: string;
 }) {
   const loadingItems: Record<string, any>[] = Array.from({ length: 3 }).map((_, index) => {
     return {
@@ -65,7 +67,22 @@ export function EntryList({
         </div>
       </div>
 
-      {!isLoading && items?.length === 0 && (
+      {errorMsg && !isLoading && (
+        <div className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none">
+          <p
+            className={cn(
+              'text-[0.875rem] text-center items-center flex justify-center p-[2.5rem] gap-[1rem] text-icon3',
+              '[&>svg]:w-[1.5em]',
+              '[&>svg]:h-[1.5em]',
+              '[&>svg]:text-red-500',
+            )}
+          >
+            <TriangleAlertIcon /> {errorMsg || 'Something went wrong while fetching the data.'}
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !errorMsg && items?.length === 0 && (
         <div className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none">
           <p className="text-icon3 text-[0.875rem] text-center h-[3.5rem] items-center flex justify-center">
             {searchTerm ? `No results found for "${searchTerm}"` : 'No entries found'}
@@ -73,7 +90,7 @@ export function EntryList({
         </div>
       )}
 
-      {items?.length > 0 && (
+      {!errorMsg && items?.length > 0 && (
         <>
           <ul className="grid border border-border1 border-t-0 bg-surface3 rounded-xl rounded-t-none overflow-y-auto">
             {items.map(item => {

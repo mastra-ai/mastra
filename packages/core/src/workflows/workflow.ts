@@ -984,6 +984,8 @@ export class Workflow<
     return scorers;
   }
 
+  // This method should only be called internally for nested workflow execution, as well as from mastra server handlers
+  // To run a workflow use `.createRunAsync` and then `.start` or `.resume`
   async execute({
     runId,
     inputData,

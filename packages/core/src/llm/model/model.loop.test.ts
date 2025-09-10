@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, it } from 'vitest';
 import z from 'zod';
+import { MessageList } from '../../agent/message-list';
 import { RuntimeContext } from '../../runtime-context';
 import { MastraLLMVNext } from './model.loop';
 
@@ -11,13 +12,17 @@ const model = new MastraLLMVNext({
 describe('MastraLLMVNext', () => {
   it('should generate text - mastra', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you?',
-        },
-      ],
       runtimeContext: new RuntimeContext(),
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you?',
+          },
+        ],
+        'input',
+      ),
+      tracingContext: {},
     });
 
     console.log(await result.getFullOutput());
@@ -25,13 +30,17 @@ describe('MastraLLMVNext', () => {
 
   it('should generate text - aisdk', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you?',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you?',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     console.log(await result.aisdk.v5.getFullOutput());
@@ -39,13 +48,17 @@ describe('MastraLLMVNext', () => {
 
   it('should stream text - mastra', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you?',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you?',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     for await (const chunk of result.fullStream) {
@@ -58,13 +71,17 @@ describe('MastraLLMVNext', () => {
 
   it('should stream text - aisdk', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you?',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you?',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
     });
 
     for await (const chunk of result.aisdk.v5.fullStream) {
@@ -74,13 +91,17 @@ describe('MastraLLMVNext', () => {
 
   it('should stream object - mastra/aisdk', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
       output: z.object({
         name: z.string(),
         age: z.number(),
@@ -96,13 +117,17 @@ describe('MastraLLMVNext', () => {
 
   it('should generate object - mastra', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
       output: z.object({
         name: z.string(),
         age: z.number(),
@@ -116,13 +141,17 @@ describe('MastraLLMVNext', () => {
 
   it('should generate object - aisdk', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
       output: z.object({
         name: z.string(),
         age: z.number(),
@@ -136,13 +165,17 @@ describe('MastraLLMVNext', () => {
 
   it('full stream object - mastra', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
       output: z.object({
         name: z.string(),
         age: z.number(),
@@ -160,13 +193,17 @@ describe('MastraLLMVNext', () => {
 
   it('full stream object - aisdk', async () => {
     const result = model.stream({
-      messages: [
-        {
-          role: 'user',
-          content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
-        },
-      ],
+      messageList: new MessageList().add(
+        [
+          {
+            role: 'user',
+            content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
+          },
+        ],
+        'input',
+      ),
       runtimeContext: new RuntimeContext(),
+      tracingContext: {},
       output: z.object({
         name: z.string(),
         age: z.number(),

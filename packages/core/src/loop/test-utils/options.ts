@@ -1443,32 +1443,34 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           },
           messageList,
           stopWhen: stepCountIs(3),
-          //   prepareStep: async ({ model, stepNumber, steps, messages }) => {
-          //     prepareStepCalls.push({ stepNumber, steps, messages });
+          options: {
+            prepareStep: async ({ stepNumber, steps, messages }) => {
+              prepareStepCalls.push({ stepNumber, steps, messages });
 
-          //     if (stepNumber === 0) {
-          //       return {
-          //         toolChoice: {
-          //           type: 'tool',
-          //           toolName: 'tool1' as const,
-          //         },
-          //         system: 'system-message-0',
-          //         messages: [
-          //           {
-          //             role: 'user',
-          //             content: 'new input from prepareStep',
-          //           },
-          //         ],
-          //       };
-          //     }
+              if (stepNumber === 0) {
+                return {
+                  toolChoice: {
+                    type: 'tool',
+                    toolName: 'tool1' as const,
+                  },
+                  system: 'system-message-0',
+                  messages: [
+                    {
+                      role: 'user',
+                      content: 'new input from prepareStep',
+                    },
+                  ],
+                };
+              }
 
-          //     if (stepNumber === 1) {
-          //       return {
-          //         activeTools: [],
-          //         system: 'system-message-1',
-          //       };
-          //     }
-          //   },
+              if (stepNumber === 1) {
+                return {
+                  activeTools: [],
+                  system: 'system-message-1',
+                };
+              }
+            },
+          },
         });
       });
 
@@ -1603,169 +1605,34 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         `);
       });
 
-      it.skip('should contain all prepareStep calls', async () => {
+      it('should contain all prepareStep calls', async () => {
         await result.consumeStream();
         expect(prepareStepCalls).toMatchInlineSnapshot(`
           [
             {
               "messages": [
                 {
-                  "content": "test-input",
+                  "content": [
+                    {
+                      "text": "test-input",
+                      "type": "text",
+                    },
+                  ],
                   "role": "user",
                 },
               ],
               "stepNumber": 0,
-              "steps": [
-                DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "providerMetadata": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "output": "result1",
-                      "providerExecuted": undefined,
-                      "providerMetadata": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                  ],
-                  "finishReason": "tool-calls",
-                  "providerMetadata": undefined,
-                  "request": {},
-                  "response": {
-                    "headers": {
-                      "call": "1",
-                    },
-                    "id": "id-0",
-                    "messages": [
-                      {
-                        "content": [
-                          {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "providerOptions": undefined,
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                      {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
-                        "role": "tool",
-                      },
-                    ],
-                    "modelId": "mock-model-id",
-                    "timestamp": 1970-01-01T00:00:00.000Z,
-                  },
-                  "usage": {
-                    "cachedInputTokens": undefined,
-                    "inputTokens": 3,
-                    "outputTokens": 10,
-                    "reasoningTokens": undefined,
-                    "totalTokens": 13,
-                  },
-                  "warnings": [],
-                },
-                DefaultStepResult {
-                  "content": [
-                    {
-                      "providerMetadata": undefined,
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "finishReason": "stop",
-                  "providerMetadata": undefined,
-                  "request": {},
-                  "response": {
-                    "headers": {
-                      "call": "2",
-                    },
-                    "id": "id-1",
-                    "messages": [
-                      {
-                        "content": [
-                          {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "providerOptions": undefined,
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                      {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
-                        "role": "tool",
-                      },
-                      {
-                        "content": [
-                          {
-                            "providerOptions": undefined,
-                            "text": "Hello, world!",
-                            "type": "text",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                    ],
-                    "modelId": "mock-model-id",
-                    "timestamp": 1970-01-01T00:00:01.000Z,
-                  },
-                  "usage": {
-                    "cachedInputTokens": 3,
-                    "inputTokens": 3,
-                    "outputTokens": 10,
-                    "reasoningTokens": 10,
-                    "totalTokens": 23,
-                  },
-                  "warnings": [],
-                },
-              ],
+              "steps": [],
             },
             {
               "messages": [
                 {
-                  "content": "test-input",
+                  "content": [
+                    {
+                      "text": "test-input",
+                      "type": "text",
+                    },
+                  ],
                   "role": "user",
                 },
                 {
@@ -1775,7 +1642,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "value": "value",
                       },
                       "providerExecuted": undefined,
-                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -1801,30 +1667,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "stepNumber": 1,
               "steps": [
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "providerMetadata": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "output": "result1",
-                      "providerExecuted": undefined,
-                      "providerMetadata": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                  ],
-                  "finishReason": "tool-calls",
+                  "content": [],
+                  "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
                   "response": {
@@ -1832,37 +1676,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "call": "1",
                     },
                     "id": "id-0",
-                    "messages": [
-                      {
-                        "content": [
-                          {
-                            "input": {
-                              "value": "value",
-                            },
-                            "providerExecuted": undefined,
-                            "providerOptions": undefined,
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-call",
-                          },
-                        ],
-                        "role": "assistant",
-                      },
-                      {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
-                        "role": "tool",
-                      },
-                    ],
+                    "messages": [],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
@@ -1878,12 +1692,30 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 DefaultStepResult {
                   "content": [
                     {
-                      "providerMetadata": undefined,
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                    {
+                      "input": {},
+                      "output": {
+                        "type": "text",
+                        "value": "result1",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                    {
                       "text": "Hello, world!",
                       "type": "text",
                     },
                   ],
-                  "finishReason": "stop",
+                  "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
                   "response": {
@@ -1899,7 +1731,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               "value": "value",
                             },
                             "providerExecuted": undefined,
-                            "providerOptions": undefined,
                             "toolCallId": "call-1",
                             "toolName": "tool1",
                             "type": "tool-call",
@@ -1924,7 +1755,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       {
                         "content": [
                           {
-                            "providerOptions": undefined,
                             "text": "Hello, world!",
                             "type": "text",
                           },

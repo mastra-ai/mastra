@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
-import type { ModelMessage } from 'ai-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
@@ -277,6 +276,18 @@ export class Agent<
       logger: this.logger,
       agentName: this.name,
     });
+  }
+
+  private async getResolvedOutputProcessors(runtimeContext?: RuntimeContext): Promise<OutputProcessor[]> {
+    if (!this.#outputProcessors) {
+      return [];
+    }
+
+    if (typeof this.#outputProcessors === 'function') {
+      return await this.#outputProcessors({ runtimeContext: runtimeContext || new RuntimeContext() });
+    }
+
+    return this.#outputProcessors;
   }
 
   public hasOwnMemory(): boolean {
@@ -792,19 +803,29 @@ export class Agent<
     let text = '';
 
     if (llm.getModel().specificationVersion === 'v2') {
+      const messageList = new MessageList()
+        .add(
+          [
+            {
+              role: 'system',
+              content: systemInstructions,
+            },
+          ],
+          'system',
+        )
+        .add(
+          [
+            {
+              role: 'user',
+              content: JSON.stringify(partsToGen),
+            },
+          ],
+          'input',
+        );
       const result = (llm as MastraLLMVNext).stream({
         runtimeContext,
         tracingContext,
-        messages: [
-          {
-            role: 'system',
-            content: systemInstructions,
-          },
-          {
-            role: 'user',
-            content: JSON.stringify(partsToGen),
-          },
-        ],
+        messageList,
       });
 
       text = await result.text;
@@ -1383,7 +1404,7 @@ export class Agent<
                 resourceId,
               });
 
-              const run = workflow.createRun();
+              const run = await workflow.createRunAsync();
 
               let result: any;
               if (methodType === 'generate') {
@@ -2021,12 +2042,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               ];
             }
             if (responseMessages) {
-              // Remove IDs from response messages to ensure the custom ID generator is used
-              const messagesWithoutIds = responseMessages.map((m: any) => {
-                const { id, ...messageWithoutId } = m;
-                return messageWithoutId;
-              });
-              messageList.add(messagesWithoutIds, 'response');
+              messageList.add(responseMessages, 'response');
             }
 
             if (!threadExists) {
@@ -2758,7 +2774,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       id: 'prepare-memory-step',
       inputSchema: z.any(),
       outputSchema: z.object({
-        messageObjects: z.array(z.any()),
         threadExists: z.boolean(),
         thread: z.any(),
         messageList: z.any(),
@@ -2788,7 +2803,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             messageList,
           });
           return {
-            messageObjects: messageList.get.all.prompt(),
             threadExists: false,
             thread: undefined,
             messageList,
@@ -2953,14 +2967,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           .addSystem(memorySystemMessage)
           .add(options.context || [], 'context')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.v2(), 'user')
-          .get.all.prompt();
+          .add(messageList.get.input.v2(), 'user');
 
         return {
           thread: threadObject,
-          messageList,
+          messageList: processedList,
           // add old processed messages + new input messages
-          messageObjects: processedList,
           ...(tripwireTriggered && {
             tripwire: true,
             tripwireReason,
@@ -2994,6 +3006,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           outputProcessors,
           returnScorerData: options.returnScorerData,
           tracingContext,
+          _internal: {
+            generateId: inputData.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
+          },
         });
 
         if (format === 'aisdk') {
@@ -3014,7 +3029,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       .map(async ({ inputData, bail, tracingContext }) => {
         const result = {
           ...options,
-          messages: inputData['prepare-memory-step'].messageObjects,
           tools: inputData['prepare-tools-step'].convertedTools as Record<string, Tool>,
           runId,
           temperature: options.modelSettings?.temperature,
@@ -3126,7 +3140,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
 
         const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
-          messages: result.messages as ModelMessage[],
           runtimeContext: result.runtimeContext!,
           tracingContext: { currentSpan: agentAISpan },
           runId,
@@ -3139,6 +3152,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           maxSteps: result.maxSteps,
           providerOptions: result.providerOptions,
           options: {
+            ...(options.prepareStep && { prepareStep: options.prepareStep }),
             onFinish: async (payload: any) => {
               if (payload.finishReason === 'error') {
                 this.logger.error('Error in agent stream', {
@@ -3149,8 +3163,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               }
 
               const messageList = inputData['prepare-memory-step'].messageList as MessageList;
-
-              messageList.add(payload.response.messages, 'response');
 
               try {
                 const outputText = messageList.get.all
@@ -3192,6 +3204,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               });
             },
             onStepFinish: result.onStepFinish,
+            onChunk: options.onChunk,
+            onError: options.onError,
+            onAbort: options.onAbort,
+            activeTools: options.activeTools,
+            abortSignal: options.abortSignal,
           },
           output: options.output,
           outputProcessors: effectiveOutputProcessors,
@@ -3199,6 +3216,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             temperature: 0,
             ...(options.modelSettings || {}),
           },
+          messageList: inputData['prepare-memory-step'].messageList,
         };
 
         return loopOptions;
@@ -3301,16 +3319,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         }
 
         if (responseMessages) {
-          // Remove IDs from response messages to ensure the custom ID generator is used
           // @TODO: PREV VERSION DIDNT RETURN USER MESSAGES, SO WE FILTER THEM OUT
-          const messagesWithoutIds = responseMessages
-            .map((m: any) => {
-              const { id, ...messageWithoutId } = m;
-              return messageWithoutId;
-            })
-            .filter((m: any) => m.role !== 'user');
-
-          messageList.add(messagesWithoutIds, 'response');
+          const filteredMessages = responseMessages.filter((m: any) => m.role !== 'user');
+          messageList.add(filteredMessages, 'response');
         }
 
         if (!threadExists) {
@@ -3558,6 +3569,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const mergedGenerateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultGenerateOptions,
       ...generateOptions,
+      experimental_generateMessageId:
+        defaultGenerateOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions, 'generate');
@@ -3938,6 +3951,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...defaultStreamOptions,
       ...streamOptions,
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
+      experimental_generateMessageId:
+        defaultStreamOptions.experimental_generateMessageId || this.#mastra?.generateId?.bind(this.#mastra),
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions, 'stream');
@@ -4034,6 +4049,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         ...llmOptions,
         experimental_output,
         tracingContext,
+        outputProcessors: await this.getResolvedOutputProcessors(mergedStreamOptions.runtimeContext),
         onFinish: async result => {
           try {
             const outputText = result.text;
