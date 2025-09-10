@@ -133,7 +133,7 @@ const memory = new Memory({
 });
 ```
 
-**Important:** Only send the newest user message in each agent call. Mastra handles retrieving and injecting the necessary history. Sending the full history yourself will cause duplication. See the [AI SDK Memory Example](../../examples/memory/use-chat.mdx) for how to handle this with when using the `useChat` frontend hooks.
+**Important:** Only send the newest user message in each agent call. Mastra handles retrieving and injecting the necessary history. Sending the full history yourself will cause duplication. See the [AI SDK Memory Example](../../docs/frameworks/agentic-uis/ai-sdk.mdx) for how to handle this with when using the `useChat` frontend hooks.
 
 ### Storage Configuration
 
@@ -176,4 +176,4 @@ For more details on enabling and configuring tracing, see [Tracing](../observabi
 
 Now that you understand the core concepts, continue to [semantic recall](./semantic-recall.mdx) to learn how to add RAG memory to your Mastra agents.
 
-Alternatively you can visit the [configuration reference](../../reference/memory/Memory.mdx) for available options, or browse [usage examples](../../examples/memory/use-chat.mdx).
+Alternatively you can visit the [configuration reference](../../reference/memory/Memory.mdx) for available options.

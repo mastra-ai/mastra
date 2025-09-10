@@ -232,7 +232,45 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       const tools = agentJson.tools;
 
       expect(tools).toHaveProperty('weather_fetchWeather');
-      expect(Object.keys(tools).length).toBe(4);
+      expect(Object.keys(tools).length).toBe(5);
     });
+  });
+
+  describe('Mastra Instance Availability in MCP Tools', () => {
+    it('should have mastra instance available in MCP tool execution via HTTP', async () => {
+      const toolCallPayload = {
+        jsonrpc: '2.0',
+        id: `test-${Date.now()}`,
+        method: 'CallTool',
+        params: {
+          name: 'testMastraInstance',
+          args: { testMessage: 'Hello from integration test!' },
+        },
+      };
+
+      const tools = await client.getTools();
+      const tool = tools['myMcpServer_testMastraInstance'];
+      expect(tool).toBeDefined();
+
+      const result = await tool.execute({ context: toolCallPayload.params.args });
+
+      expect(result).toBeDefined();
+      expect(result.isError).toBe(false);
+      expect(result.content).toBeInstanceOf(Array);
+      expect(result.content.length).toBeGreaterThan(0);
+
+      const toolOutput = result.content[0];
+      expect(toolOutput.type).toBe('text');
+
+      const parsedResult = JSON.parse(toolOutput.text);
+      expect(parsedResult.success).toBe(true);
+      expect(parsedResult.testMessage).toBe('Hello from integration test!');
+      expect(parsedResult.mastraAvailable).toBe(true);
+      expect(parsedResult.mastraType).toBe('object');
+      expect(parsedResult.mastraHasAgents).toBe(true);
+      expect(parsedResult.mastraHasMCPServers).toBe(true);
+      expect(parsedResult.mastraHasLogger).toBe(true);
+      expect(parsedResult.timestamp).toBeDefined();
+    }, 25000);
   });
 });

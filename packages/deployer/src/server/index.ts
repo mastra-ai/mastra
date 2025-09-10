@@ -17,10 +17,10 @@ import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
 import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
 import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
-import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
+import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
-// import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
+import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
 import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
 import { logsRouter } from './handlers/routes/logs/router';
@@ -418,7 +418,7 @@ export async function createHonoServer(
   // Scores routes
   app.route('/api/scores', scoresRouter(bodyLimitOptions));
   // Agent builder routes
-  // app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
+  app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
   // Tool routes
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
@@ -463,6 +463,20 @@ export async function createHonoServer(
         hide: true,
       }),
       handleTriggerClientsRefresh,
+    );
+
+    // Check hot reload status
+    app.get(
+      '/__hot-reload-status',
+      describeRoute({
+        hide: true,
+      }),
+      (c: Context) => {
+        return c.json({
+          disabled: isHotReloadDisabled(),
+          timestamp: new Date().toISOString(),
+        });
+      },
     );
     // Playground routes - these should come after API routes
     // Serve assets with specific MIME types

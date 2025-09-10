@@ -102,17 +102,6 @@ describe('AgentBuilder', () => {
     });
   });
 
-  describe('AgentBuilder.defaultConfig', () => {
-    it('should return default configuration', () => {
-      const defaultConfig = AgentBuilder.defaultConfig('/test/project');
-
-      expect(defaultConfig).toHaveProperty('instructions');
-      expect(defaultConfig).toHaveProperty('memoryConfig');
-      expect(defaultConfig).toHaveProperty('tools');
-      expect(defaultConfig.memoryConfig).toEqual(AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG);
-    });
-  });
-
   describe('AgentBuilder.createWithDefaults', () => {
     it('should create an instance with merged default settings', () => {
       const builder = new AgentBuilder({
@@ -124,15 +113,6 @@ describe('AgentBuilder', () => {
       });
 
       expect(builder).toBeInstanceOf(AgentBuilder);
-    });
-  });
-
-  describe('generateAgent method', () => {
-    it('should be defined and callable', async () => {
-      const builder = new AgentBuilder(mockConfig);
-
-      expect(builder.generateAgent).toBeDefined();
-      expect(typeof builder.generateAgent).toBe('function');
     });
   });
 

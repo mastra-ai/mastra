@@ -20,6 +20,7 @@ import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { stream } from 'hono/streaming';
 
+import { disableHotReload, enableHotReload } from '../../client';
 import { handleError } from '../../error';
 
 export async function getAgentBuilderActionsHandler(c: Context) {
@@ -78,6 +79,7 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
     const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
+    disableHotReload();
     const result = await getOriginalStartAsyncAgentBuilderActionHandler({
       mastra,
       runtimeContext,
@@ -86,8 +88,10 @@ export async function startAsyncAgentBuilderActionHandler(c: Context) {
       inputData,
     });
 
+    enableHotReload();
     return c.json(result);
   } catch (error) {
+    enableHotReload();
     return handleError(error, 'Error starting async agent builder action');
   }
 }
@@ -100,7 +104,7 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
     const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
-    const result = await getOriginalStartAgentBuilderActionRunHandler({
+    await getOriginalStartAgentBuilderActionRunHandler({
       mastra,
       runtimeContext,
       actionId,
@@ -108,7 +112,7 @@ export async function startAgentBuilderActionRunHandler(c: Context) {
       inputData,
     });
 
-    return c.json(result);
+    return c.json({ message: 'Agent builder action run started' });
   } catch (error) {
     return handleError(error, 'Error starting agent builder action run');
   }
@@ -130,6 +134,7 @@ export async function watchAgentBuilderActionHandler(c: Context) {
 
     return stream(c, async stream => {
       try {
+        disableHotReload();
         const result = await getOriginalWatchAgentBuilderActionHandler({
           mastra,
           actionId,
@@ -147,11 +152,14 @@ export async function watchAgentBuilderActionHandler(c: Context) {
         while ((chunkResult = await reader.read()) && !chunkResult.done) {
           await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
         }
+        enableHotReload();
       } catch (err) {
+        enableHotReload();
         logger.error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
       }
     });
   } catch (error) {
+    enableHotReload();
     return handleError(error, 'Error watching agent builder action');
   }
 }
@@ -170,6 +178,7 @@ export async function streamAgentBuilderActionHandler(c: Context) {
       c,
       async stream => {
         try {
+          disableHotReload();
           const result = await getOriginalStreamAgentBuilderActionHandler({
             mastra,
             actionId,
@@ -192,12 +201,14 @@ export async function streamAgentBuilderActionHandler(c: Context) {
           logger.error('Error in action stream: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
         await stream.close();
+        enableHotReload();
       },
       async err => {
         logger.error('Error in action stream: ' + err?.message);
       },
     );
   } catch (error) {
+    enableHotReload();
     return handleError(error, 'Error streaming agent builder action');
   }
 }
@@ -217,6 +228,7 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
       c,
       async stream => {
         try {
+          disableHotReload();
           const result = await getOriginalStreamVNextAgentBuilderActionHandler({
             mastra,
             actionId,
@@ -238,12 +250,14 @@ export async function streamVNextAgentBuilderActionHandler(c: Context) {
         } catch (err) {
           logger.error('Error in action VNext stream: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
+        enableHotReload();
       },
       async err => {
         logger.error('Error in action VNext stream: ' + err?.message);
       },
     );
   } catch (error) {
+    enableHotReload();
     return handleError(error, 'Error streaming VNext agent builder action');
   }
 }
@@ -260,6 +274,7 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId required to resume action' });
     }
 
+    disableHotReload();
     const result = await getOriginalResumeAsyncAgentBuilderActionHandler({
       mastra,
       runtimeContext,
@@ -268,8 +283,10 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
       body: { step, resumeData },
     });
 
+    enableHotReload();
     return c.json(result);
   } catch (error) {
+    enableHotReload();
     return handleError(error, 'Error resuming async agent builder action');
   }
 }
@@ -286,6 +303,7 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId required to resume action' });
     }
 
+    disableHotReload();
     await getOriginalResumeAgentBuilderActionHandler({
       mastra,
       runtimeContext,
@@ -294,8 +312,10 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
       body: { step, resumeData },
     });
 
+    enableHotReload();
     return c.json({ message: 'Action run resumed' });
   } catch (error) {
+    enableHotReload();
     return handleError(error, 'Error resuming agent builder action');
   }
 }

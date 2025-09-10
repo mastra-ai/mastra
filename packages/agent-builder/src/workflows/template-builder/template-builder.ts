@@ -4,7 +4,6 @@ import { tmpdir } from 'os';
 import { join, dirname, resolve, extname, basename } from 'path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import type { MastraLanguageModel } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -44,29 +43,10 @@ import {
   gitRevParse,
   gitAddAndCommit,
   resolveTargetPath,
+  mergeGitignoreFiles,
+  mergeEnvFiles,
+  resolveModel,
 } from '../../utils';
-
-// Helper function to resolve the model to use
-const resolveModel = (runtimeContext: any): MastraLanguageModel => {
-  const modelFromContext = runtimeContext.get('model');
-  if (modelFromContext) {
-    // Type check to ensure it's a MastraLanguageModel
-    if (isValidMastraLanguageModel(modelFromContext)) {
-      return modelFromContext;
-    }
-    throw new Error(
-      'Invalid model provided. Model must be a MastraLanguageModel instance (e.g., openai("gpt-4"), anthropic("claude-3-5-sonnet"), etc.)',
-    );
-  }
-  return openai('gpt-4.1'); // Default model
-};
-
-// Type guard to check if object is a valid MastraLanguageModel
-const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
-  return (
-    model && typeof model === 'object' && typeof model.modelId === 'string' && typeof model.generate === 'function'
-  );
-};
 
 // Step 1: Clone template to temp directory
 const cloneTemplateStep = createStep({
@@ -75,7 +55,7 @@ const cloneTemplateStep = createStep({
   inputSchema: AgentBuilderInputSchema,
   outputSchema: CloneTemplateResultSchema,
   execute: async ({ inputData }) => {
-    const { repo, ref = 'main', slug } = inputData;
+    const { repo, ref = 'main', slug, targetPath } = inputData;
 
     if (!repo) {
       throw new Error('Repository URL or path is required');
@@ -110,6 +90,7 @@ const cloneTemplateStep = createStep({
         commitSha: commitSha.trim(),
         slug: inferredSlug,
         success: true,
+        targetPath,
       };
     } catch (error) {
       // Cleanup on error
@@ -123,6 +104,7 @@ const cloneTemplateStep = createStep({
         slug: slug || 'unknown',
         success: false,
         error: `Failed to clone template: ${error instanceof Error ? error.message : String(error)}`,
+        targetPath,
       };
     }
   },
@@ -179,12 +161,17 @@ const discoverUnitsStep = createStep({
   outputSchema: DiscoveryResultSchema,
   execute: async ({ inputData, runtimeContext }) => {
     const { templateDir } = inputData;
+    const targetPath = resolveTargetPath(inputData, runtimeContext);
 
     const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
+    console.log('targetPath', targetPath);
+
+    const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+
     try {
       const agent = new Agent({
-        model: resolveModel(runtimeContext),
+        model,
         instructions: `You are an expert at analyzing Mastra projects.
 
 Your task is to scan the provided directory and identify all available units (agents, workflows, tools, MCP servers, networks).
@@ -223,8 +210,9 @@ Return the actual exported names of the units, as well as the file names.`,
         },
       });
 
-      const result = await agent.generate(
-        `Analyze the Mastra project directory structure at "${templateDir}".
+      const isV2 = model.specificationVersion === 'v2';
+
+      const prompt = `Analyze the Mastra project directory structure at "${templateDir}".
 
             List directory contents using listDirectory tool, and then analyze each file with readFile tool.
       IMPORTANT:
@@ -233,19 +221,26 @@ Return the actual exported names of the units, as well as the file names.`,
       - Return the actual exported variable names, as well as the file names
       - If a directory doesn't exist or has no files, return an empty array
 
-      Return the analysis in the exact format specified in the output schema.`,
-        {
-          experimental_output: z.object({
-            agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-            other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
-          }),
-          maxSteps: 100,
-        },
-      );
+      Return the analysis in the exact format specified in the output schema.`;
+
+      const output = z.object({
+        agents: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        workflows: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        tools: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        mcp: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        networks: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+        other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
+      });
+
+      const result = isV2
+        ? await agent.generateVNext(prompt, {
+            output,
+            maxSteps: 100,
+          })
+        : await agent.generate(prompt, {
+            experimental_output: output,
+            maxSteps: 100,
+          });
 
       const template = result.object ?? {};
 
@@ -799,7 +794,7 @@ const programmaticFileCopyStep = createStep({
               destination: targetMastraIndex,
               unit: { kind: 'other', id: 'mastra-index' },
             });
-            console.log('✓ Copied src/mastra/index.ts from template to target');
+            console.log('✓ Copied Mastra index file from template');
           }
         }
       } catch (e) {
@@ -808,6 +803,103 @@ const programmaticFileCopyStep = createStep({
           issue: `Failed to ensure Mastra index file: ${e instanceof Error ? e.message : String(e)}`,
           sourceFile: 'src/mastra/index.ts',
           targetFile: 'src/mastra/index.ts',
+        });
+      }
+
+      // Handle .gitignore file merging
+      try {
+        const targetGitignore = resolve(targetPath, '.gitignore');
+        const templateGitignore = resolve(templateDir, '.gitignore');
+
+        const targetExists = existsSync(targetGitignore);
+        const templateExists = existsSync(templateGitignore);
+
+        if (templateExists) {
+          if (!targetExists) {
+            // Target has no .gitignore - copy template's completely
+            await copyFile(templateGitignore, targetGitignore);
+            copiedFiles.push({
+              source: templateGitignore,
+              destination: targetGitignore,
+              unit: { kind: 'other', id: 'gitignore' },
+            });
+            console.log('✓ Copied .gitignore from template to target');
+          } else {
+            // Both exist - merge them intelligently
+            const targetContent = await readFile(targetGitignore, 'utf-8');
+            const templateContent = await readFile(templateGitignore, 'utf-8');
+
+            const mergedContent = mergeGitignoreFiles(targetContent, templateContent, slug);
+
+            if (mergedContent !== targetContent) {
+              const addedLines = mergedContent.split('\n').length - targetContent.split('\n').length;
+              await writeFile(targetGitignore, mergedContent, 'utf-8');
+              copiedFiles.push({
+                source: templateGitignore,
+                destination: targetGitignore,
+                unit: { kind: 'other', id: 'gitignore-merge' },
+              });
+              console.log(`✓ Merged template .gitignore entries into existing .gitignore (${addedLines} new entries)`);
+            } else {
+              console.log('ℹ No new .gitignore entries to add from template');
+            }
+          }
+        }
+      } catch (e) {
+        conflicts.push({
+          unit: { kind: 'other', id: 'gitignore' },
+          issue: `Failed to handle .gitignore file: ${e instanceof Error ? e.message : String(e)}`,
+          sourceFile: '.gitignore',
+          targetFile: '.gitignore',
+        });
+      }
+
+      // Handle .env file merging with template variables
+      try {
+        const { variables } = inputData;
+        if (variables && Object.keys(variables).length > 0) {
+          const targetEnv = resolve(targetPath, '.env');
+          const targetExists = existsSync(targetEnv);
+
+          if (!targetExists) {
+            // Target has no .env - create new one with template variables
+            const envContent = [
+              `# Environment variables for ${slug}`,
+              ...Object.entries(variables).map(([key, value]) => `${key}=${value}`),
+            ].join('\n');
+
+            await writeFile(targetEnv, envContent, 'utf-8');
+            copiedFiles.push({
+              source: '[template variables]',
+              destination: targetEnv,
+              unit: { kind: 'other', id: 'env' },
+            });
+            console.log(`✓ Created .env file with ${Object.keys(variables).length} template variables`);
+          } else {
+            // Both exist - merge them intelligently
+            const targetContent = await readFile(targetEnv, 'utf-8');
+            const mergedContent = mergeEnvFiles(targetContent, variables, slug);
+
+            if (mergedContent !== targetContent) {
+              const addedLines = mergedContent.split('\n').length - targetContent.split('\n').length;
+              await writeFile(targetEnv, mergedContent, 'utf-8');
+              copiedFiles.push({
+                source: '[template variables]',
+                destination: targetEnv,
+                unit: { kind: 'other', id: 'env-merge' },
+              });
+              console.log(`✓ Merged new environment variables into existing .env file (${addedLines} new entries)`);
+            } else {
+              console.log('ℹ No new environment variables to add (all already exist in .env)');
+            }
+          }
+        }
+      } catch (e) {
+        conflicts.push({
+          unit: { kind: 'other', id: 'env' },
+          issue: `Failed to handle .env file: ${e instanceof Error ? e.message : String(e)}`,
+          sourceFile: '.env',
+          targetFile: '.env',
         });
       }
 
@@ -861,6 +953,8 @@ const intelligentMergeStep = createStep({
     const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
     const targetPath = resolveTargetPath(inputData, runtimeContext);
     try {
+      const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
         id: 'copy-file',
@@ -906,7 +1000,7 @@ const intelligentMergeStep = createStep({
       const agentBuilder = new AgentBuilder({
         projectPath: targetPath,
         mode: 'template',
-        model: resolveModel(runtimeContext),
+        model,
         instructions: `
 You are an expert at integrating Mastra template components into existing projects.
 
@@ -1021,8 +1115,7 @@ Template information:
       // Log git state before merge operations
       await logGitState(targetPath, 'before intelligent merge');
 
-      // Process tasks systematically
-      const result = await agentBuilder.stream(`
+      const prompt = `
 You need to work through a task list to complete the template integration.
 
 CRITICAL INSTRUCTIONS:
@@ -1064,7 +1157,11 @@ For each task:
 - DO NOT perform validation - that's handled by the dedicated validation step
 
 Start by listing your tasks and work through them systematically!
-`);
+`;
+
+      // Process tasks systematically
+      const isV2 = model.specificationVersion === 'v2';
+      const result = isV2 ? await agentBuilder.streamVNext(prompt) : await agentBuilder.stream(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{
@@ -1077,29 +1174,33 @@ Start by listing your tasks and work through them systematically!
 
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+          const chunkData = 'payload' in chunk ? chunk.payload : chunk;
           console.log({
             type: chunk.type,
-            msgId: chunk.messageId,
+            msgId: chunkData.messageId,
           });
         } else {
           console.log(JSON.stringify(chunk, null, 2));
 
           // Extract task management tool results
-          if (chunk.type === 'tool-result' && chunk.toolName === 'manageTaskList') {
-            try {
-              const toolResult = chunk.result;
-              if (toolResult.action === 'update' && toolResult.status === 'completed') {
-                actualResolutions.push({
-                  taskId: toolResult.taskId || '',
-                  action: toolResult.action,
-                  status: toolResult.status,
-                  content: toolResult.content || '',
-                  notes: toolResult.notes,
-                });
-                console.log(`📋 Task completed: ${toolResult.taskId} - ${toolResult.content}`);
+          if (chunk.type === 'tool-result') {
+            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
+            if (chunkData.toolName === 'manageTaskList') {
+              try {
+                const toolResult = chunkData.result;
+                if (toolResult.action === 'update' && toolResult.status === 'completed') {
+                  actualResolutions.push({
+                    taskId: toolResult.taskId || '',
+                    action: toolResult.action,
+                    status: toolResult.status,
+                    content: toolResult.content || '',
+                    notes: toolResult.notes,
+                  });
+                  console.log(`📋 Task completed: ${toolResult.taskId} - ${toolResult.content}`);
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse task management result:', parseError);
               }
-            } catch (parseError) {
-              console.warn('Failed to parse task management result:', parseError);
             }
           }
         }
@@ -1189,7 +1290,9 @@ const validationAndFixStep = createStep({
     let currentIteration = 1; // Declare at function scope for error handling
 
     try {
-      const allTools = await AgentBuilderDefaults.DEFAULT_TOOLS(targetPath, 'template');
+      const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+
+      const allTools = await AgentBuilderDefaults.getToolsForMode(targetPath, 'template');
 
       const validationAgent = new Agent({
         name: 'code-validator-fixer',
@@ -1297,7 +1400,7 @@ INTEGRATED UNITS:
 ${JSON.stringify(orderedUnits, null, 2)}
 
 Be thorough and methodical. Always use listDirectory to verify actual file existence before fixing imports.`,
-        model: resolveModel(runtimeContext),
+        model,
         tools: {
           validateCode: allTools.validateCode,
           readFile: allTools.readFile,
@@ -1316,6 +1419,7 @@ Be thorough and methodical. Always use listDirectory to verify actual file exist
         errorsFixed: 0,
         remainingErrors: 1, // Start with 1 to enter the loop
         iteration: currentIteration,
+        lastValidationErrors: [] as any[], // Store the actual error details
       };
 
       // Loop up to maxIterations times or until all errors are fixed
@@ -1331,18 +1435,26 @@ Start by running validateCode with all validation types to get a complete pictur
 
 Previous iterations may have fixed some issues, so start by re-running validateCode to see the current state, then fix any remaining issues.`;
 
-        const result = await validationAgent.stream(iterationPrompt, {
-          experimental_output: z.object({ success: z.boolean() }),
-        });
+        const isV2 = model.specificationVersion === 'v2';
+        const output = z.object({ success: z.boolean() });
+        const result = isV2
+          ? await validationAgent.streamVNext(iterationPrompt, {
+              output,
+            })
+          : await validationAgent.stream(iterationPrompt, {
+              experimental_output: output,
+            });
 
         let iterationErrors = 0;
         let previousErrors = validationResults.remainingErrors;
+        let lastValidationResult: any = null;
 
         for await (const chunk of result.fullStream) {
           if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
             console.log({
               type: chunk.type,
-              msgId: chunk.messageId,
+              msgId: chunkData.messageId,
               iteration: currentIteration,
             });
           } else {
@@ -1350,8 +1462,10 @@ Previous iterations may have fixed some issues, so start by re-running validateC
           }
           if (chunk.type === 'tool-result') {
             // Track validation results
-            if (chunk.toolName === 'validateCode') {
-              const toolResult = chunk.result as any;
+            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
+            if (chunkData.toolName === 'validateCode') {
+              const toolResult = chunkData.result;
+              lastValidationResult = toolResult; // Store the full result
               if (toolResult?.summary) {
                 iterationErrors = toolResult.summary.totalErrors || 0;
                 console.log(`Iteration ${currentIteration}: Found ${iterationErrors} errors`);
@@ -1365,6 +1479,11 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         validationResults.errorsFixed += Math.max(0, previousErrors - iterationErrors);
         validationResults.valid = iterationErrors === 0;
         validationResults.iteration = currentIteration;
+
+        // Store the last validation errors if any remain
+        if (iterationErrors > 0 && lastValidationResult?.errors) {
+          validationResults.lastValidationErrors = lastValidationResult.errors;
+        }
 
         console.log(`Iteration ${currentIteration} complete: ${iterationErrors} errors remaining`);
 
@@ -1394,14 +1513,17 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         console.warn('Failed to commit validation fixes:', commitError);
       }
 
+      const success = validationResults.valid;
+
       return {
-        success: true,
+        success,
         applied: true,
-        message: `Validation completed in ${currentIteration} iteration${currentIteration > 1 ? 's' : ''}. ${validationResults.valid ? 'All issues resolved!' : `${validationResults.remainingErrors} issues remaining`}`,
+        message: `Validation completed in ${currentIteration} iteration${currentIteration > 1 ? 's' : ''}. ${validationResults.valid ? 'All issues resolved!' : `${validationResults.remainingErrors} issue${validationResults.remainingErrors > 1 ? 's' : ''} remaining`}`,
         validationResults: {
           valid: validationResults.valid,
           errorsFixed: validationResults.errorsFixed,
           remainingErrors: validationResults.remainingErrors,
+          errors: validationResults.lastValidationErrors,
         },
       };
     } catch (error) {
@@ -1520,6 +1642,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
       targetPath: initData.targetPath,
+      variables: initData.variables,
     };
   })
   .then(programmaticFileCopyStep)
@@ -1610,6 +1733,10 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     }
     if (validationResult.validationResults?.errorsFixed > 0) {
       messages.push(`${validationResult.validationResults.errorsFixed} validation errors fixed`);
+    }
+
+    if (validationResult.validationResults?.remainingErrors > 0) {
+      messages.push(`${validationResult.validationResults.remainingErrors} validation issues remain`);
     }
 
     const comprehensiveMessage =

@@ -19,7 +19,7 @@ export interface AgentMetadataProps {
   promptSlot: ReactNode;
   hasMemoryEnabled: boolean;
   computeToolLink: (tool: GetToolResponse) => string;
-  computeWorkflowLink: (workflow: GetWorkflowResponse) => string;
+  computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
   modelProviders: string[];
   updateModel: AgentMetadataModelSwitcherProps['updateModel'];
 }
@@ -40,7 +40,7 @@ export const AgentMetadata = ({
   const tools = Object.keys(agentTools).map(key => agentTools[key]);
 
   const agentWorkflows = agent.workflows ?? {};
-  const workflows = Object.keys(agentWorkflows).map(key => agentWorkflows[key]);
+  const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
 
   return (
     <AgentMetadataWrapper>
@@ -141,8 +141,8 @@ export const AgentMetadataScorerList = ({ entityId }: { entityId: string }) => {
 };
 
 export interface AgentMetadataWorkflowListProps {
-  workflows: GetWorkflowResponse[];
-  computeWorkflowLink: (workflow: GetWorkflowResponse) => string;
+  workflows: Array<{ id: string } & GetWorkflowResponse>;
+  computeWorkflowLink: (workflowId: string, workflow: GetWorkflowResponse) => string;
 }
 
 export const AgentMetadataWorkflowList = ({ workflows, computeWorkflowLink }: AgentMetadataWorkflowListProps) => {
@@ -155,8 +155,8 @@ export const AgentMetadataWorkflowList = ({ workflows, computeWorkflowLink }: Ag
   return (
     <AgentMetadataList>
       {workflows.map(workflow => (
-        <AgentMetadataListItem key={workflow.name}>
-          <Link href={computeWorkflowLink(workflow)}>
+        <AgentMetadataListItem key={workflow.id}>
+          <Link href={computeWorkflowLink(workflow.id, workflow)}>
             <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
           </Link>
         </AgentMetadataListItem>

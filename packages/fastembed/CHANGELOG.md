@@ -1,5 +1,11 @@
 # @mastra/fastembed
 
+## 0.10.5
+
+### Patch Changes
+
+- de3cbc6: Update the `package.json` file to include additional fields like `repository`, `homepage` or `files`.
+
 ## 0.10.5-alpha.0
 
 ### Patch Changes

@@ -21,7 +21,7 @@ This provides full visibility into your AI operations with minimal setup, helpin
 
 <Callout type="warning">
   **Experimental Feature**
-  
+
   AI Tracing is available as of `@mastra/core 0.14.0` and is currently experimental. The API may change in future releases.
 </Callout>
 
@@ -40,7 +40,7 @@ AI Tracing complements Mastra's existing [OpenTelemetry-based tracing](./tracing
 
 **Supported Exporters:**
 - ✅ [Langfuse](https://langfuse.com/) - Full support with real-time mode
-- 🔄 [Braintrust](https://www.braintrust.dev/home) - Coming soon  
+- ✅ [Braintrust](https://www.braintrust.dev/home) - Initial release
 - 🔄 [OpenTelemetry](https://opentelemetry.io/) - Coming soon
 
 **Known Limitations:**
@@ -59,18 +59,33 @@ import { LangfuseExporter } from '@mastra/langfuse';
 export const mastra = new Mastra({
   // ... other config
   observability: {
-    instances: {
-      langfuse: {
-        serviceName: 'my-service',
-        exporters: [
-          new LangfuseExporter({
-            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-            secretKey: process.env.LANGFUSE_SECRET_KEY!,
-            baseUrl: process.env.LANGFUSE_BASE_URL!,
-            realtime: true,
-          }),
-        ],
+    aiTracing: {
+      configs: {
+        langfuse: {
+          serviceName: 'my-service',
+          exporters: [
+            new LangfuseExporter({
+              publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+              secretKey: process.env.LANGFUSE_SECRET_KEY,
+              baseUrl: process.env.LANGFUSE_BASE_URL, // Optional - defaults to Langfuse cloud
+              realtime: true,
+            }),
+          ],
+        },
       },
+    },
+  },
+});
+```
+
+For the quickest setup with built-in exporters:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  // ... other config
+  observability: {
+    aiTracing: {
+      default: { enabled: true }, // Enables DefaultExporter and CloudExporter
     },
   },
 });
@@ -82,31 +97,65 @@ The AI tracing config accepts these properties:
 
 ```ts
 type AITracingConfig = {
+  // Enable default configuration with built-in exporters
+  default?: {
+    enabled?: boolean;
+  };
+
   // Map of tracing instance names to their configurations
-  instances: Record<string, AITracingInstanceConfig | MastraAITracing>;
-  
+  configs: Record<string, AITracingInstanceConfig | MastraAITracing>;
+
   // Optional function to select which tracing instance to use
-  selector?: TracingSelector;
+  configSelector?: TracingSelector;
 };
 
 type AITracingInstanceConfig = {
   // Name to identify your service in traces
   serviceName: string;
-  
+
   // Control how many traces are sampled
   sampling?: {
     type: "always" | "never" | "ratio" | "custom";
     probability?: number; // For ratio sampling (0.0 to 1.0)
     sampler?: (context: TraceContext) => boolean; // For custom sampling
   };
-  
+
   // Array of exporters to send trace data to
   exporters?: AITracingExporter[];
-  
+
   // Array of processors to transform spans before export
   processors?: AISpanProcessor[];
 };
 ```
+
+### Default Configuration
+
+When `default.enabled` is set to `true`, Mastra automatically configures AI tracing with sensible defaults:
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    aiTracing: {
+      default: { enabled: true },
+      configs: {
+        // Your custom configs can coexist with the default
+      }
+    }
+  }
+});
+```
+
+The default configuration includes:
+- **Service Name**: `"mastra"`
+- **Sampling**: Always sample (100% of traces)
+- **Exporters**: 
+  - `DefaultExporter` - Persists traces to your configured storage
+  - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
+- **Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
+
+<Callout type="info">
+  **Note**: You cannot name a custom config `"default"` when the default configuration is enabled. This will throw an error to prevent naming conflicts.
+</Callout>
 
 ### Sampling Configuration
 
@@ -115,61 +164,135 @@ Control which traces are collected and exported:
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
-    instances: {
-      langfuse: {
-        serviceName: 'my-service',
-        // Sample all traces (default)
-        sampling: { type: 'always' },
-        exporters: [langfuseExporter],
-      },
-      
-      development: {
-        serviceName: 'dev-service',
-        // Sample 10% of traces
-        sampling: { 
-          type: 'ratio', 
-          probability: 0.1 
+    aiTracing: {
+      configs: {
+        langfuse: {
+          serviceName: 'my-service',
+          // Sample all traces (default)
+          sampling: { type: 'always' },
+          exporters: [langfuseExporter],
         },
-        exporters: [langfuseExporter],
-      },
-      
-      custom: {
-        serviceName: 'custom-service',
-        // Custom sampling logic
-        sampling: {
-          type: 'custom',
-          sampler: (context) => {
-            // Only trace requests from specific users
-            return context.metadata?.userId === 'debug-user';
-          }
+
+        development: {
+          serviceName: 'dev-service',
+          // Sample 10% of traces
+          sampling: {
+            type: 'ratio',
+            probability: 0.1
+          },
+          exporters: [langfuseExporter],
         },
-        exporters: [langfuseExporter],
+
+        custom: {
+          serviceName: 'custom-service',
+          // Custom sampling logic
+          sampling: {
+            type: 'custom',
+            sampler: (context) => {
+              // Only trace requests from specific users
+              return context.metadata?.userId === 'debug-user';
+            }
+          },
+          exporters: [langfuseExporter],
+        },
       },
     },
   },
 });
 ```
 
-### Langfuse Exporter Configuration
+## Exporters
+
+### Built-in Exporters
+
+Mastra includes two built-in exporters that are automatically configured when using the default configuration:
+
+#### DefaultExporter
+
+The `DefaultExporter` persists traces to your configured Mastra storage backend. It handles batching and retry logic automatically.
+
+**Features:**
+- Automatic batching with configurable batch size
+- Retry logic for failed exports
+- Strategy selection based on storage capabilities
+- No external dependencies required
+
+**Configuration:**
+```ts
+import { DefaultExporter } from '@mastra/core';
+
+new DefaultExporter({
+  maxBatchSize: 1000,    // Maximum spans per batch
+  maxBatchWaitMs: 5000,  // Maximum wait time before flushing
+  maxRetries: 4,         // Number of retry attempts
+  strategy: 'auto',      // 'auto' | 'realtime' | 'batch-with-updates' | 'insert-only'
+});
+```
+
+<Callout type="info">
+  If storage is not configured, the DefaultExporter will log a warning and operate as a no-op, allowing your application to continue without errors.
+</Callout>
+
+#### CloudExporter
+
+The `CloudExporter` sends traces to Mastra Cloud for online visualization and analysis.
+
+**Features:**
+- Real-time trace visualization in Mastra Cloud dashboard
+- Automatic batching and compression
+- Secure token-based authentication
+- Graceful fallback when token is not configured
+
+**Configuration:**
+```ts
+import { CloudExporter } from '@mastra/core';
+
+new CloudExporter({
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN, // Required
+  endpoint: 'https://api.mastra.ai/ai/spans/publish', // Optional custom endpoint
+  maxBatchSize: 1000,    // Maximum spans per batch
+  maxBatchWaitMs: 5000,  // Maximum wait time before flushing
+});
+```
+
+**Environment Variables:**
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Your Mastra Cloud access token
+- `MASTRA_CLOUD_AI_TRACES_ENDPOINT` - Optional custom endpoint URL
+
+<Callout type="warning">
+  If `MASTRA_CLOUD_ACCESS_TOKEN` is not set, the CloudExporter will log a message directing you to sign up at [mastra.ai](https://mastra.ai) and operate as a no-op.
+</Callout>
+
+### Langfuse Exporter
+
+#### Installation
+
+```bash
+npm install @mastra/langfuse
+```
+
+#### Configuration
 
 The Langfuse exporter accepts these options:
 
 ```ts
 type LangfuseExporterConfig = {
-  // Langfuse API credentials
-  publicKey: string;
-  secretKey: string;
-  baseUrl: string;
+  // Langfuse API credentials (required)
+  publicKey?: string;
+  secretKey?: string;
+  
+  // Langfuse host URL (optional - defaults to Langfuse cloud)
+  baseUrl?: string;
   
   // Enable realtime mode for immediate trace visibility
   realtime?: boolean; // defaults to false
-  
+
   // Additional options passed to Langfuse client
   options?: any;
 };
 ```
 
-Example with environment variables:
+#### Basic Setup
 
 ```ts filename="mastra.config.ts" showLineNumbers copy
 import { LangfuseExporter } from '@mastra/langfuse';
@@ -182,9 +305,9 @@ export const mastra = new Mastra({
         sampling: { type: 'always' },
         exporters: [
           new LangfuseExporter({
-            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-            secretKey: process.env.LANGFUSE_SECRET_KEY!,
-            baseUrl: process.env.LANGFUSE_BASE_URL!,
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+            secretKey: process.env.LANGFUSE_SECRET_KEY,
+            baseUrl: process.env.LANGFUSE_BASE_URL, // Optional
             realtime: process.env.NODE_ENV === 'development',
           }),
         ],
@@ -215,31 +338,108 @@ new LangfuseExporter({
 })
 ```
 
-#### Multi-Instance Configuration
+### Braintrust Exporter
+
+The Braintrust exporter sends trace data to [Braintrust](https://www.braintrust.dev/) for AI evaluation and monitoring.
+
+#### Installation
+
+```bash
+npm install @mastra/braintrust
+```
+
+#### Configuration
+
+```ts
+type BraintrustExporterConfig = {
+  // Braintrust API key (required)
+  apiKey?: string;
+
+  // Optional custom endpoint
+  endpoint?: string;
+
+  // Logger level for diagnostic messages (default: 'warn')
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+
+  // Additional tuning parameters passed to Braintrust
+  tuningParameters?: Record<string, any>;
+};
+```
+
+#### Basic Setup
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { BraintrustExporter } from '@mastra/braintrust';
+
+export const mastra = new Mastra({
+  observability: {
+    instances: {
+      braintrust: {
+        serviceName: 'my-service',
+        exporters: [
+          new BraintrustExporter({
+            apiKey: process.env.BRAINTRUST_API_KEY,
+            endpoint: process.env.BRAINTRUST_ENDPOINT, // optional
+          }),
+        ],
+      },
+    },
+  },
+});
+```
+
+### Multi-Instance Configuration
 
 You can configure multiple tracing instances and use a selector to choose which one to use:
 
 ```ts filename="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
-    instances: {
-      production: {
-        serviceName: 'prod-service',
-        sampling: { type: 'ratio', probability: 0.1 },
-        exporters: [prodLangfuseExporter],
+    aiTracing: {
+      configs: {
+        production: {
+          serviceName: 'prod-service',
+          sampling: { type: 'ratio', probability: 0.1 },
+          exporters: [prodLangfuseExporter],
+        },
+        development: {
+          serviceName: 'dev-service',
+          sampling: { type: 'always' },
+          exporters: [devLangfuseExporter],
+        },
       },
-      development: {
-        serviceName: 'dev-service',
-        sampling: { type: 'always' },
-        exporters: [devLangfuseExporter],
+      configSelector: (context, availableTracers) => {
+        // Use development tracer for debug sessions
+        if (context.runtimeContext?.get('debug') === 'true') {
+          return 'development';
+        }
+        return 'production';
       },
     },
-    selector: (context, availableTracers) => {
-      // Use development tracer for debug sessions
-      if (context.runtimeContext?.get('debug') === 'true') {
-        return 'development';
-      }
-      return 'production';
+  },
+});
+```
+
+You can also combine the default configuration with custom configs:
+
+```ts filename="mastra.config.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: {
+    aiTracing: {
+      default: { enabled: true }, // Provides 'default' instance
+      configs: {
+        langfuse: {
+          serviceName: 'langfuse-service',
+          exporters: [langfuseExporter],
+        },
+      },
+      configSelector: (context, availableTracers) => {
+        // Route specific requests to langfuse, others to default
+        if (context.runtimeContext?.get('useExternalTracing')) {
+          return 'langfuse';
+        }
+        return 'default';
+      },
     },
   },
 });
@@ -251,12 +451,12 @@ AI Tracing automatically creates spans for different AI operations. Mastra suppo
 
 ### Agent Operation Types
 - **`AGENT_RUN`** - Agent execution from start to finish
-- **`LLM_GENERATION`** - Individual model calls with prompts and completions  
+- **`LLM_GENERATION`** - Individual model calls with prompts and completions
 - **`TOOL_CALL`** - Function/tool executions with inputs and outputs
 - **`MCP_TOOL_CALL`** - Model Context Protocol tool executions
 - **`GENERIC`** - Custom operations
 
-### Workflow Operation Types  
+### Workflow Operation Types
 - **`WORKFLOW_RUN`** - Workflow execution from start to finish
 - **`WORKFLOW_STEP`** - Individual step processing
 - **`WORKFLOW_CONDITIONAL`** - Conditional execution blocks
@@ -292,7 +492,7 @@ execute: async ({ inputData, tracingContext }) => {
       endpoint: inputData.endpoint,
     }
   });
-  
+
   const data = await response.json();
   return { data, statusCode: response.status };
 }
@@ -316,7 +516,7 @@ execute: async ({ input, tracingContext }) => {
 
   try {
     const results = await db.query(input.query, input.params);
-    
+
     // Update child span with results and end it
     querySpan?.end({
       output: results.data,
@@ -356,8 +556,8 @@ export const mastra = new Mastra({
         // SensitiveDataFilter is included by default, but you can customize it
         processors: [
           new SensitiveDataFilter([
-            'password', 'token', 'secret', 'key', 'apiKey', 
-            'auth', 'authorization', 'bearer', 'jwt', 
+            'password', 'token', 'secret', 'key', 'apiKey',
+            'auth', 'authorization', 'bearer', 'jwt',
             'credential', 'sessionId',
             // Add your custom sensitive fields
             'ssn', 'creditCard', 'bankAccount'
@@ -371,7 +571,7 @@ export const mastra = new Mastra({
 
 The `SensitiveDataFilter` automatically redacts matching fields in:
 - Span attributes
-- Span metadata  
+- Span metadata
 - Input/output data
 - Error information
 
@@ -389,11 +589,11 @@ export class PerformanceEnrichmentProcessor implements AISpanProcessor {
 
   process(span: AnyAISpan): AnyAISpan | null {
     const modifiedSpan = { ...span };
-    
+
     // Add computed performance metrics
     if (span.startTime && span.endTime) {
       const duration = span.endTime.getTime() - span.startTime.getTime();
-      
+
       modifiedSpan.metadata = {
         ...span.metadata,
         durationMs: duration,
@@ -434,5 +634,3 @@ export const mastra = new Mastra({
 ```
 
 Processors are executed in the order they're defined, and each processor receives the output of the previous one.
-
-

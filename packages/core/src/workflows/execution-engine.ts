@@ -58,5 +58,6 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
+    format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput>;
 }

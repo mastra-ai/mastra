@@ -91,6 +91,66 @@ describe('LangfuseExporter', () => {
         flushInterval: 1000,
       });
     });
+
+    it('should initialize without baseUrl (uses Langfuse default)', () => {
+      const configWithoutBaseUrl = {
+        publicKey: 'test-public-key',
+        secretKey: 'test-secret-key',
+      };
+
+      const exporterWithoutBaseUrl = new LangfuseExporter(configWithoutBaseUrl);
+
+      expect(exporterWithoutBaseUrl.name).toBe('langfuse');
+      expect(LangfuseMock).toHaveBeenCalledWith({
+        publicKey: 'test-public-key',
+        secretKey: 'test-secret-key',
+        baseUrl: undefined,
+      });
+    });
+
+    it('should warn and disable exporter when publicKey is missing', () => {
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const exporterWithMissingKey = new LangfuseExporter({
+        secretKey: 'test-secret-key',
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      // Should create exporter but disable it
+      expect(exporterWithMissingKey.name).toBe('langfuse');
+      expect((exporterWithMissingKey as any).client).toBeNull();
+
+      mockConsoleWarn.mockRestore();
+    });
+
+    it('should warn and disable exporter when secretKey is missing', () => {
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const exporterWithMissingKey = new LangfuseExporter({
+        publicKey: 'test-public-key',
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      // Should create exporter but disable it
+      expect(exporterWithMissingKey.name).toBe('langfuse');
+      expect((exporterWithMissingKey as any).client).toBeNull();
+
+      mockConsoleWarn.mockRestore();
+    });
+
+    it('should warn and disable exporter when both keys are missing', () => {
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const exporterWithMissingKeys = new LangfuseExporter({
+        baseUrl: 'https://test-langfuse.com',
+      });
+
+      // Should create exporter but disable it
+      expect(exporterWithMissingKeys.name).toBe('langfuse');
+      expect((exporterWithMissingKeys as any).client).toBeNull();
+
+      mockConsoleWarn.mockRestore();
+    });
   });
 
   describe('Trace Creation', () => {

@@ -27,7 +27,7 @@ import type {
   StreamEvent,
   ChunkType,
 } from '@mastra/core/workflows';
-import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
+import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
@@ -1007,6 +1007,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    executionContext,
     writableStream,
     tracingContext,
   }: {
@@ -1080,6 +1081,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             abortController?.abort();
           },
           [EMITTER_SYMBOL]: emitter,
+          // TODO: add streamVNext support
+          [STREAM_FORMAT_SYMBOL]: executionContext.format,
           engine: { step: this.inngestStep },
           abortSignal: abortController?.signal,
           writer: new ToolStream(
@@ -1120,6 +1123,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    executionContext,
     writableStream,
     tracingContext,
   }: {
@@ -1194,6 +1198,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             abortController?.abort();
           },
           [EMITTER_SYMBOL]: emitter,
+          [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
           engine: { step: this.inngestStep },
           abortSignal: abortController?.signal,
           writer: new ToolStream(
@@ -1674,6 +1679,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
+            tracingContext: { currentSpan: stepAISpan },
           });
         }
       });
@@ -1830,6 +1836,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   abortController.abort();
                 },
                 [EMITTER_SYMBOL]: emitter,
+                [STREAM_FORMAT_SYMBOL]: executionContext.format, // TODO: add streamVNext support
                 engine: {
                   step: this.inngestStep,
                 },

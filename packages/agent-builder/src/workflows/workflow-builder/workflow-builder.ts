@@ -180,8 +180,10 @@ const workflowResearchStep = createStep({
     try {
       // const filteredMcpTools = await initializeMcpTools();
 
+      const model = await resolveModel({ runtimeContext });
+
       const researchAgent = new Agent({
-        model: resolveModel(runtimeContext),
+        model,
         instructions: workflowBuilderPrompts.researchAgent.instructions,
         name: 'Workflow Research Agent',
         // tools: filteredMcpTools,
@@ -266,6 +268,7 @@ const taskExecutionStep = createStep({
     console.log(`Executing ${tasks.length} tasks using AgentBuilder stream...`);
 
     try {
+      const model = await resolveModel({ runtimeContext });
       const currentProjectPath = projectPath || process.cwd();
 
       // Pre-populate taskManager with the planned tasks
@@ -291,7 +294,7 @@ const taskExecutionStep = createStep({
 
       const executionAgent = new AgentBuilder({
         projectPath: currentProjectPath,
-        model: resolveModel(runtimeContext),
+        model,
         tools: {
           'task-manager': restrictedTaskManager,
         },
@@ -374,7 +377,7 @@ ${workflowBuilderPrompts.validation.instructions}`;
         const stream = await executionAgent.streamVNext(iterationPrompt, {
           structuredOutput: {
             schema: TaskExecutionIterationInputSchema(tasks.length),
-            model: resolveModel(runtimeContext),
+            model,
           },
           ...enhancedOptions,
         });

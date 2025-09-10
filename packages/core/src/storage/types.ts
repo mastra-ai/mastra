@@ -190,6 +190,8 @@ export interface AITracesPaginatedArg {
   filters?: {
     name?: string;
     spanType?: AISpanType;
+    entityId?: string;
+    entityType?: 'agent' | 'workflow';
   };
   pagination?: PaginationArgs;
 }

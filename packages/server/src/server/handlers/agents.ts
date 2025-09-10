@@ -17,7 +17,7 @@ import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
 import { handleError } from './error';
-import { validateBody } from './utils';
+import { sanitizeBody, validateBody } from './utils';
 
 type GetBody<
   T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
@@ -293,6 +293,10 @@ export async function generateLegacyHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
     const { messages, resourceId, resourceid, runtimeContext: agentRuntimeContext, ...rest } = body;
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
@@ -340,6 +344,10 @@ export async function generateVNextHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
     const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
 
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
@@ -353,10 +361,7 @@ export async function generateVNextHandler({
       ...rest,
       runtimeContext: finalRuntimeContext,
       format: rest.format || 'mastra',
-      options: {
-        ...(rest?.options ?? {}),
-        abortSignal,
-      },
+      abortSignal,
     });
 
     return result;
@@ -472,6 +477,10 @@ export function streamVNextGenerateHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
     const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
       ...Array.from(runtimeContext.entries()),
@@ -483,10 +492,7 @@ export function streamVNextGenerateHandler({
     const streamResult = agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      options: {
-        ...(rest?.options ?? {}),
-        abortSignal,
-      },
+      abortSignal,
       format: body.format ?? 'mastra',
     });
 
@@ -517,6 +523,10 @@ export async function streamVNextUIMessageHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
     const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
       ...Array.from(runtimeContext.entries()),
@@ -528,10 +538,7 @@ export async function streamVNextUIMessageHandler({
     const streamResult = await agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      options: {
-        ...(rest?.options ?? {}),
-        abortSignal,
-      },
+      abortSignal,
       format: 'aisdk',
     });
 

@@ -95,13 +95,13 @@ Below is an example of events that may be emitted. Each event always includes a 
 
 ```typescript {2,8,11}
 {
-  type: 'start',
+  type: 'workflow-start',
   runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
   from: 'WORKFLOW',
   // ...
 }
 {
-  type: 'step-start',
+  type: 'workflow-step-start',
   runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
   from: 'WORKFLOW',
   payload: {

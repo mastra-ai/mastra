@@ -63,8 +63,21 @@ export class WorkflowRegistry {
   /**
    * Register all workflows from map
    */
-  static registerTemporaryWorkflows(workflows: Record<string, Workflow>): void {
+  static registerTemporaryWorkflows(workflows: Record<string, Workflow>, mastra?: any): void {
     for (const [id, workflow] of Object.entries(workflows)) {
+      // Register Mastra instance with the workflow if provided
+      if (mastra) {
+        workflow.__registerMastra(mastra);
+        workflow.__registerPrimitives({
+          logger: mastra.getLogger(),
+          telemetry: mastra.getTelemetry(),
+          storage: mastra.getStorage(),
+          memory: mastra.getMemory(),
+          agents: mastra.getAgents(),
+          tts: mastra.getTTS(),
+          vectors: mastra.getVectors(),
+        });
+      }
       this.additionalWorkflows[id] = workflow;
     }
   }

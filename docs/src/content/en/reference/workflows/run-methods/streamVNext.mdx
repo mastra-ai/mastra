@@ -87,11 +87,11 @@ const result = await stream.result;
 
 The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
 
-- **`start`**: Workflow execution begins
-- **`step-start`**: A step begins execution
-- **`step-output`**: Custom output from a step
-- **`step-result`**: A step completes with results
-- **`finish`**: Workflow execution completes with usage statistics
+- **`workflow-start`**: Workflow execution begins
+- **`workflow-step-start`**: A step begins execution
+- **`workflow-step-output`**: Custom output from a step
+- **`workflow-step-result`**: A step completes with results
+- **`workflow-finish`**: Workflow execution completes with usage statistics
 
 ## Related
 
