@@ -24,6 +24,7 @@ import type { OutputSchema } from '../../stream/base/schema';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import { symbol } from 'zod/v4';
 
 export class MastraLLMVNext extends MastraBase {
   #model: LanguageModelV2;
@@ -145,7 +146,7 @@ export class MastraLLMVNext extends MastraBase {
       stopWhenToUse = stopWhen;
     }
 
-    const messages = messageList.get.all.aiV5.prompt();
+    const messages = messageList.get.all.aiV5.model();
 
     const model = this.#model;
     this.logger.debug(`[LLM] - Streaming text`, {
@@ -160,7 +161,7 @@ export class MastraLLMVNext extends MastraBase {
       name: `llm: '${model.modelId}'`,
       type: AISpanType.LLM_GENERATION,
       input: {
-        messages,
+        messages: [...messageList.getSystemMessages(), ...messages],
       },
       attributes: {
         model: model.modelId,
@@ -244,24 +245,6 @@ export class MastraLLMVNext extends MastraBase {
           onFinish: async props => {
             try {
               await options?.onFinish?.({ ...props, runId: runId! });
-              llmAISpan?.end({
-                output: {
-                  text: props?.text,
-                  reasoning: props?.reasoning,
-                  reasoningText: props?.reasoningText,
-                  files: props?.files,
-                  sources: props?.sources,
-                  warnings: props?.warnings,
-                },
-                attributes: {
-                  finishReason: props?.finishReason,
-                  usage: {
-                    promptTokens: props?.totalUsage?.inputTokens,
-                    completionTokens: props?.totalUsage?.outputTokens,
-                    totalTokens: props?.totalUsage?.totalTokens,
-                  },
-                },
-              });
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {
@@ -286,6 +269,25 @@ export class MastraLLMVNext extends MastraBase {
               this.logger.trackException(mastraError);
               throw mastraError;
             }
+
+            llmAISpan?.end({
+              output: {
+                text: props?.text,
+                reasoning: props?.reasoning,
+                reasoningText: props?.reasoningText,
+                files: props?.files,
+                sources: props?.sources,
+                warnings: props?.warnings,
+              },
+              attributes: {
+                finishReason: props?.finishReason,
+                usage: {
+                  promptTokens: props?.totalUsage?.inputTokens,
+                  completionTokens: props?.totalUsage?.outputTokens,
+                  totalTokens: props?.totalUsage?.totalTokens,
+                },
+              },
+            });
 
             this.logger.debug('[LLM] - Stream Finished:', {
               text: props?.text,
