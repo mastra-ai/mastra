@@ -483,11 +483,6 @@ export async function createNetworkLoop({
         payload: toolData,
       });
 
-      // await emitter.emit('watch-v2', {
-      //     type: 'tool-call-streaming-start',
-      //     ...toolData,
-      // });
-
       const run = wf.createRun();
 
       const stream = run.streamVNext({

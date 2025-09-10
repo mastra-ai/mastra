@@ -42,7 +42,7 @@ export class AgentNetwork extends MastraBase {
     super({ component: RegisteredLogger.NETWORK, name: config.name || 'AgentNetwork' });
 
     console.warn(
-      `⚠️  DEPRECATION WARNING: AgentNetwork will be deprecated on September 16th and will be removed in a future version. Please use agent.network() instead.`,
+      `⚠️  DEPRECATION WARNING: AgentNetwork will be deprecated on September 16th, 2025 and will be removed in a future version. Please use agent.network() instead.`,
     );
 
     this.#instructions = config.instructions;

@@ -890,7 +890,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    this.mastra?.getLogger().warn('createRun() will be removed on September 16th. Use createRunAsync() instead.');
+    this.mastra?.getLogger().warn('createRun() will be removed on September 16th, 2025. Use createRunAsync() instead.');
 
     return run;
   }
