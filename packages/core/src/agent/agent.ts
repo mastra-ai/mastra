@@ -31,6 +31,7 @@ import { MastraLLMVNext } from '../llm/model/model.loop';
 import type { ModelLoopStreamArgs } from '../llm/model/model.loop.types';
 import type { TripwireProperties, MastraLanguageModel } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
+import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -76,7 +77,6 @@ import type {
   ToolsInput,
   AgentMemoryOption,
 } from './types';
-import { networkLoop } from '../loop/network';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
