@@ -116,10 +116,10 @@ export const mapWorkflowStreamChunkToWatchResult = (
     return {
       ...prev,
       payload: {
-        ...prev.payload,
+        ...prev?.payload,
         currentStep: {
           id: chunk.payload.id,
-          ...(prev?.payload?.currentStep || {}),
+          ...prev?.payload?.currentStep,
           ...chunk.payload,
         },
         workflowState: {
@@ -143,7 +143,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
     return {
       ...prev,
       payload: {
-        ...prev?.payload,
+        ...prev.payload,
         currentStep: {
           id: chunk.payload.id,
           ...(prev?.payload?.currentStep || {}),
@@ -169,7 +169,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
     const status = chunk.payload.status;
     const current = prev?.payload?.workflowState?.steps?.[chunk.payload.id] || {};
 
-    return {
+    const next = {
       ...prev,
       payload: {
         ...prev.payload,
@@ -182,7 +182,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
           ...prev?.payload?.workflowState,
           status,
           steps: {
-            ...prev.payload?.workflowState.steps,
+            ...prev?.payload?.workflowState?.steps,
             [chunk.payload.id]: {
               ...current,
               ...chunk.payload,
@@ -192,15 +192,17 @@ export const mapWorkflowStreamChunkToWatchResult = (
       },
       eventTimestamp: new Date(),
     };
+
+    return next;
   }
 
   if (chunk.type === 'workflow-canceled') {
     return {
       ...prev,
       payload: {
-        ...prev.payload,
+        ...prev?.payload,
         workflowState: {
-          ...prev.payload?.workflowState,
+          ...prev?.payload?.workflowState,
           status: 'canceled',
         },
       },
@@ -212,10 +214,10 @@ export const mapWorkflowStreamChunkToWatchResult = (
     return {
       ...prev,
       payload: {
-        ...prev.payload,
+        ...prev?.payload,
         currentStep: undefined,
         workflowState: {
-          ...prev.payload?.workflowState,
+          ...prev?.payload?.workflowState,
           status: chunk.payload.workflowStatus,
         },
       },
