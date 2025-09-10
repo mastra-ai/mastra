@@ -645,7 +645,7 @@ const agentMethods = [
     name: 'generateLegacy',
     method: async (agent: Agent, prompt: string, options?: any) => {
       const result = await agent.generateLegacy(prompt, options);
-      return { text: result.text, object: result.object };
+      return { text: result.text, object: result.object, traceId: result.traceId };
     },
     model: mockModelV1,
     expectedText: 'Mock response',
@@ -654,7 +654,7 @@ const agentMethods = [
     name: 'generateVNext',
     method: async (agent: Agent, prompt: string, options?: any) => {
       const result = await agent.generateVNext(prompt, options);
-      return { text: result.text, object: result.object };
+      return { text: result.text, object: result.object, traceId: result.traceId };
     },
     model: mockModelV2,
     expectedText: 'Mock V2 streaming response',
@@ -667,7 +667,7 @@ const agentMethods = [
       for await (const chunk of result.textStream) {
         fullText += chunk;
       }
-      return { text: fullText, object: result.object };
+      return { text: fullText, object: result.object, traceId: result.traceId };
     },
     model: mockModelV1,
     expectedText: 'Mock streaming response',
@@ -680,7 +680,7 @@ const agentMethods = [
       for await (const chunk of result.textStream) {
         fullText += chunk;
       }
-      return { text: fullText, object: result.object };
+      return { text: fullText, object: result.object, traceId: result.traceId };
     },
     model: mockModelV2,
     expectedText: 'Mock V2 streaming response',
@@ -755,11 +755,13 @@ describe('AI Tracing Integration Tests', () => {
     const run = await workflow.createRunAsync();
     const result = await run.start({ inputData: { value: 15 } });
     expect(result.status).toBe('success');
+    expect(result.traceId).toBeDefined();
 
     const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
     const conditionalSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_CONDITIONAL);
-
+    expect(workflowRunSpans[0].traceId).toBe(result.traceId);
+    
     expect(workflowRunSpans.length).toBe(1); // One workflow run
     expect(workflowStepSpans.length).toBe(2); // checkCondition + processHigh (value=15 > 10)
     expect(conditionalSpans.length).toBe(1); // One branch evaluation
@@ -806,9 +808,11 @@ describe('AI Tracing Integration Tests', () => {
       inputData: { input: 'test unregistered workflow as step' },
     });
     expect(result.status).toBe('success');
+    expect(result.traceId).toBeDefined();
 
     const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
+    expect(workflowRunSpans[0].traceId).toBe(result.traceId);
 
     expect(workflowRunSpans.length).toBe(2); // Main + unregistered workflow
     expect(workflowStepSpans.length).toBe(3); // doWhile step + unregistered step + map step
@@ -853,9 +857,11 @@ describe('AI Tracing Integration Tests', () => {
     const run = await workflow.createRunAsync();
     const result = await run.start({ inputData: { input: 'nested test' } });
     expect(result.status).toBe('success');
+    expect(result.traceId).toBeDefined();
 
     const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
+    expect(workflowRunSpans[0].traceId).toBe(result.traceId);
 
     expect(workflowRunSpans.length).toBe(2); // Parent workflow + child workflow
     expect(workflowStepSpans.length).toBe(2); // nested-workflow-step + simple-step
@@ -886,11 +892,12 @@ describe('AI Tracing Integration Tests', () => {
       inputData: { a: 5, b: 3, operation: 'add' },
     });
     expect(result.status).toBe('success');
+    expect(result.traceId).toBeDefined();
 
-    // Validate span types
     const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
     // const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
+    expect(workflowRunSpans[0].traceId).toBe(result.traceId);
 
     expect(workflowRunSpans.length).toBe(1); // One workflow run
     expect(workflowStepSpans.length).toBe(1); // One step: tool-executor
@@ -938,14 +945,17 @@ describe('AI Tracing Integration Tests', () => {
     const run = await workflow.createRunAsync();
     const result = await run.start({ inputData: { value: 'tacos' } });
     expect(result.status).toBe('success');
+    expect(result.traceId).toBeDefined();
 
     const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
+    
     expect(workflowStepSpans.length).toBe(1);
-
     const stepSpan = workflowStepSpans[0];
+
     expect(stepSpan.metadata?.customValue).toBe('tacos');
     expect(stepSpan.metadata?.stepType).toBe('metadata-test');
     expect(stepSpan.metadata?.executionTime).toBeDefined();
+    expect(stepSpan.traceId).toBe(result.traceId);
 
     testExporter.finalExpectations();
   });
@@ -999,8 +1009,8 @@ describe('AI Tracing Integration Tests', () => {
     });
 
     expect(result.status).toBe('success');
+    expect(result.traceId).toBeDefined();
 
-    // Look for the parent step span and child span
     const allSpans = testExporter.getAllSpans();
     const childSpans = allSpans.filter(span => span.name === 'custom-child-operation');
     const stepSpans = allSpans.filter(
@@ -1009,17 +1019,14 @@ describe('AI Tracing Integration Tests', () => {
 
     expect(childSpans.length).toBe(1);
     expect(stepSpans.length).toBe(1);
+    const childSpan = childSpans[0];
+    const stepSpan = stepSpans[0];
 
-    // Validate parent-child relationship
-    if (childSpans.length > 0 && stepSpans.length > 0) {
-      const childSpan = childSpans[0];
-      const stepSpan = stepSpans[0];
-
-      expect(childSpan.traceId).toBe(stepSpan.traceId);
-      expect(childSpan.metadata?.childOperation).toBe('processing');
-      expect(childSpan.metadata?.inputValue).toBe('child-span-test');
-      expect(childSpan.metadata?.endValue).toBe('pizza');
-    }
+    expect(childSpan.traceId).toBe(stepSpan.traceId);
+    expect(childSpan.metadata?.childOperation).toBe('processing');
+    expect(childSpan.metadata?.inputValue).toBe('child-span-test');
+    expect(childSpan.metadata?.endValue).toBe('pizza');
+    expect(childSpan.traceId).toBe(result.traceId);
 
     testExporter.finalExpectations();
   });
@@ -1045,8 +1052,8 @@ describe('AI Tracing Integration Tests', () => {
       const agent = mastra.getAgent('testAgent');
       const result = await method(agent, 'Calculate 5 + 3');
       expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
 
-      // Validate span types
       const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
       const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
@@ -1133,6 +1140,7 @@ describe('AI Tracing Integration Tests', () => {
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { prompt: 'Hello from workflow' } });
       expect(result.status).toBe('success');
+      expect(result.traceId).toBeDefined();
 
       const workflowRunSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_RUN);
       const workflowStepSpans = testExporter.getSpansByType(AISpanType.WORKFLOW_STEP);
@@ -1141,6 +1149,7 @@ describe('AI Tracing Integration Tests', () => {
 
       // TODO: revert these expectations to assert equal to just 1 after we can hide
       // internal spans.
+      expect(workflowRunSpans[0].traceId).toBe(result.traceId);
       expect(workflowRunSpans.length).toBeGreaterThanOrEqual(1); // One workflow run (plus internal spans in vNext)
       expect(workflowStepSpans.length).toBeGreaterThanOrEqual(1); // One step: agent-executor (plus internal spans in vNext)
       expect(agentRunSpans.length).toBe(1); // One agent run within the step
@@ -1170,8 +1179,8 @@ describe('AI Tracing Integration Tests', () => {
       const agent = mastra.getAgent('workflowAgent');
       const result = await method(agent, 'Execute the simpleWorkflow with test input');
       expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
 
-      // Validate spans were created for agent, tool call, and workflow execution
       const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
       const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
@@ -1180,6 +1189,7 @@ describe('AI Tracing Integration Tests', () => {
 
       expect(agentRunSpans.length).toBe(1); // One agent run
       expect(llmGenerationSpans.length).toBe(1); // one llmGeneration per agent run
+      expect(agentRunSpans[0].traceId).toBe(result.traceId);
       expect(toolCallSpans.length).toBe(1); // tool call
 
       // TODO: revert these expectations to assert equal to just 1 after we can hide
@@ -1214,8 +1224,8 @@ describe('AI Tracing Integration Tests', () => {
       const agent = mastra.getAgent('workflowAgent');
       const result = await method(agent, 'Execute the simpleWorkflow with test input');
       expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
 
-      // Validate spans were created for agent, tool call, and workflow execution
       const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
       const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
@@ -1224,6 +1234,7 @@ describe('AI Tracing Integration Tests', () => {
 
       expect(agentRunSpans.length).toBe(1); // One agent run
       expect(llmGenerationSpans.length).toBe(1); // one llm_generation span per agent run
+      expect(agentRunSpans[0].traceId).toBe(result.traceId);
       expect(toolCallSpans.length).toBe(1); // tool call (workflow is converted into a tool dynamically)
 
       // TODO: revert these expectations to assert equal to just 1 after we can hide
@@ -1275,10 +1286,12 @@ describe('AI Tracing Integration Tests', () => {
       const agent = mastra.getAgent('testAgent');
       const result = await method(agent, 'Use metadata tool to process some data');
       expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
 
-      // Validate spans were created
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
+      
       expect(toolCallSpans.length).toBeGreaterThanOrEqual(1);
+      expect(toolCallSpans[0].traceId).toBe(result.traceId);
 
       // Find the metadata tool span and validate custom metadata
       const metadataToolSpan = toolCallSpans.find(span => span.name?.includes('metadataTool'));
@@ -1346,13 +1359,14 @@ describe('AI Tracing Integration Tests', () => {
       const agent = mastra.getAgent('testAgent');
       const result = await method(agent, 'Use child span tool to process test-data');
       expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
 
-      // Validate spans were created
       const toolCallSpans = testExporter.getSpansByType(AISpanType.TOOL_CALL);
       const genericSpans = testExporter.getSpansByType(AISpanType.GENERIC);
 
       expect(toolCallSpans.length).toBeGreaterThanOrEqual(1);
       expect(genericSpans.length).toBeGreaterThanOrEqual(1);
+      expect(toolCallSpans[0].traceId).toBe(result.traceId);
 
       // Find the child span and validate metadata
       const childSpan = genericSpans.find(span => span.name === 'tool-child-operation');
@@ -1409,13 +1423,14 @@ describe('AI Tracing Integration Tests', () => {
 
     // For structured output, result has object property instead of text
     expect(result.object || result).toBeTruthy();
+    expect(result.traceId).toBeDefined();
 
-    // Validate span types
     const agentRunSpans = testExporter.getSpansByType(AISpanType.AGENT_RUN);
     const llmGenerationSpans = testExporter.getSpansByType(AISpanType.LLM_GENERATION);
 
     expect(agentRunSpans.length).toBe(1); // One agent run
     expect(llmGenerationSpans.length).toBe(1); // One LLM generation
+    expect(agentRunSpans[0].traceId).toBe(result.traceId);
 
     testExporter.finalExpectations();
   });

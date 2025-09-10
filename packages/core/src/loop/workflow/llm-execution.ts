@@ -384,7 +384,7 @@ export function createLLMExecutionStep<
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, bail }) => {
+    execute: async ({ inputData, bail, tracingContext }) => {
       const runState = new AgenticRunState({
         _internal: _internal!,
         model,
@@ -512,6 +512,7 @@ export function createLLMExecutionStep<
           output,
           outputProcessors,
           outputProcessorRunnerMode: 'stream',
+          tracingContext,
         },
       });
 

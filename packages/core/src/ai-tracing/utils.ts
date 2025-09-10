@@ -5,7 +5,7 @@
 
 import type { RuntimeContext } from '../di';
 import { getSelectedAITracing } from './registry';
-import type { AISpan, AISpanType, AISpanTypeMap, TracingContext } from './types';
+import type { AISpan, AISpanType, AISpanTypeMap, AnyAISpan, TracingContext } from './types';
 
 const DEFAULT_KEYS_TO_STRIP = new Set(['logger', 'providerMetadata', 'steps', 'tracingContext']);
 export interface DeepCleanOptions {
@@ -183,4 +183,19 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
     },
     ...rest,
   });
+}
+
+/**
+ * Extracts the trace ID from a span if it is valid.
+ *
+ * This helper is typically used to safely retrieve the `traceId` from a span object,
+ * while gracefully handling invalid spans — such as no-op spans — by returning `undefined`.
+ *
+ * A span is considered valid if `span.isValid` is `true`.
+ *
+ * @param span - The span object to extract the trace ID from. May be `undefined`.
+ * @returns The `traceId` if the span is valid, otherwise `undefined`.
+ */
+export function getValidTraceId(span?: AnyAISpan): string | undefined {
+  return span?.isValid ? span.traceId : undefined;
 }

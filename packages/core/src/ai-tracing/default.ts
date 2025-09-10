@@ -220,6 +220,10 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     return !this.parent;
   }
 
+  get isValid(): boolean {
+    return true;
+  }
+
   async export(): Promise<string> {
     return JSON.stringify({
       id: this.id,

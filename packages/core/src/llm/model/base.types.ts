@@ -21,7 +21,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
-import type { TracingContext } from '../../ai-tracing';
+import type { TracingContext, TracingProperties } from '../../ai-tracing';
 import type { OutputProcessor } from '../../processors';
 import type { RuntimeContext } from '../../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
@@ -95,8 +95,7 @@ export type GenerateTextResult<
 > = Omit<OriginalGenerateTextResult<Tools, inferOutput<Output>>, 'experimental_output'> & {
   object?: Output extends undefined ? never : inferOutput<Output>;
   messageList?: MessageList;
-} & TripwireProperties &
-  ScoringProperties;
+} & TripwireProperties & ScoringProperties & TracingProperties;
 
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   | Parameters<typeof generateObject<inferOutput<Output>>>[0]
@@ -119,8 +118,7 @@ export type GenerateObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema
 export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   OriginalGenerateObjectResult<inferOutput<Output>> & {
     readonly reasoning?: never;
-  } & TripwireProperties &
-    ScoringProperties;
+  } & TripwireProperties & ScoringProperties & TracingProperties;
 
 export type GenerateReturn<
   Tools extends ToolSet,
@@ -157,7 +155,7 @@ export type StreamTextResult<
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = Omit<OriginalStreamTextResult<Tools, DeepPartial<inferOutput<Output>>>, 'experimental_output'> & {
   object?: inferOutput<Output>;
-} & TripwireProperties;
+} & TripwireProperties & TracingProperties;
 
 export type OriginalStreamObjectOptions<Output extends ZodSchema | JSONSchema7> =
   | Parameters<typeof streamObject<inferOutput<Output>>>[0]

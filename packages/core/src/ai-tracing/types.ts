@@ -347,6 +347,9 @@ export interface AISpan<TType extends AISpanType> {
 
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean;
+
+  /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
+  get isValid(): boolean;
 }
 
 /**
@@ -375,6 +378,14 @@ export interface AISpanOptions<TType extends AISpanType> {
   /** Is an event span? */
   isEvent: boolean;
 }
+
+/**
+ * Properties returned to the user for working with traces externally.
+ */
+export type TracingProperties = {
+  /** Trace ID used on the execution (if the execution was traced). */
+  traceId?: string;
+};
 
 // ============================================================================
 // Configuration Types

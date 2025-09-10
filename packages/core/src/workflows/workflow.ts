@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
+import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
 import type { TracingContext } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
@@ -1323,6 +1324,20 @@ export class Run<
     tracingContext?: TracingContext;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: inputData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingContext,
+      runtimeContext,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
@@ -1348,7 +1363,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
-      tracingContext,
+      workflowAISpan,
       format,
     });
 
@@ -1356,6 +1371,7 @@ export class Run<
       this.cleanup?.();
     }
 
+    result.traceId = traceId;
     return result;
   }
 
@@ -1753,6 +1769,20 @@ export class Run<
       }
     });
 
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: params.resumeData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingContext: params.tracingContext,
+      runtimeContext: runtimeContextToUse,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -1784,13 +1814,13 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-        tracingContext: params.tracingContext,
+        workflowAISpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
-
+        result.traceId = traceId;
         return result;
       });
 

@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import type { TracingContext } from '../ai-tracing';
-import { AISpanType, wrapMastra, getOrCreateSpan, selectFields } from '../ai-tracing';
+import type { AISpan, TracingContext } from '../ai-tracing';
+import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
@@ -198,29 +198,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
-    tracingContext?: TracingContext;
+    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, runtimeContext, tracingContext, disableScorers } =
-      params;
+    const { workflowId, runId, graph, input, resume, retryConfig, workflowAISpan, disableScorers } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
     //clear runCounts
     this.runCounts.clear();
-
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
-      name: `workflow run: '${workflowId}'`,
-      input,
-      attributes: {
-        workflowId,
-      },
-      tracingContext,
-      runtimeContext,
-    });
 
     if (steps.length === 0) {
       const empty_graph_error = new MastraError({
