@@ -46,6 +46,7 @@ type Variables = {
   taskStore: InMemoryTaskStore;
   playground: boolean;
   isDev: boolean;
+  customRouteAuthConfig?: Map<string, boolean>;
 };
 
 export function getToolExports(tools: Record<string, Function>[]) {
@@ -79,6 +80,19 @@ export async function createHonoServer(
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
   const a2aTaskStore = new InMemoryTaskStore();
+  const routes = server?.apiRoutes;
+
+  // Store custom route auth configurations
+  const customRouteAuthConfig = new Map<string, boolean>();
+
+  if (routes) {
+    for (const route of routes) {
+      // By default, routes require authentication unless explicitly set to false
+      const requiresAuth = route.requiresAuth !== false;
+      const routeKey = `${route.method}:${route.path}`;
+      customRouteAuthConfig.set(routeKey, requiresAuth);
+    }
+  }
 
   // Middleware
   app.use('*', async function setTelemetryInfo(c, next) {
@@ -160,6 +174,7 @@ export async function createHonoServer(
     c.set('taskStore', a2aTaskStore);
     c.set('playground', options.playground === true);
     c.set('isDev', options.isDev === true);
+    c.set('customRouteAuthConfig', customRouteAuthConfig);
     return next();
   });
 
@@ -196,8 +211,6 @@ export async function createHonoServer(
     maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
-
-  const routes = server?.apiRoutes;
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
