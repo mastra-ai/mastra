@@ -65,8 +65,6 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
         `;
 
-  console.log('instructions', instructions);
-
   return new Agent({
     name: 'routing-agent',
     instructions,
@@ -307,9 +305,7 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      console.log('prompt', { prompt, options });
       const result = await routingAgent.generateVNext(prompt, options);
-      console.log('result', result);
 
       const object = result.object;
 
@@ -468,8 +464,6 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      console.log('Workflow Step Debug - Input Data', JSON.stringify(inputData, null, 2));
-
       const workflowsMap = await agent.getWorkflows({ runtimeContext: runtimeContext });
       const wf = workflowsMap[inputData.resourceId];
 
@@ -595,7 +589,6 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
-      console.log('Started tool step', inputData);
       const toolsMap = await agent.getTools({ runtimeContext });
       const tool = toolsMap[inputData.resourceId];
 
@@ -641,8 +634,6 @@ export async function createNetworkLoop({
         },
         { toolCallId, messages: [] },
       );
-
-      console.log('finalResult', finalResult);
 
       const memory = await agent.getMemory({ runtimeContext: runtimeContext });
       const initData = await getInitData();
