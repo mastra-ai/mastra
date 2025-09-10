@@ -6,7 +6,9 @@ import { fromPackageRoot, getMatchingPaths } from '../utils';
 
 const docsBaseDir = fromPackageRoot('.docs/raw/');
 
-type ReadMdxResult = { found: true; content: string; isSecurityViolation: boolean } | { found: false; isSecurityViolation: boolean };
+type ReadMdxResult =
+  | { found: true; content: string; isSecurityViolation: boolean }
+  | { found: false; isSecurityViolation: boolean };
 
 // Helper function to list contents of a directory
 async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files: string[] }> {
@@ -212,7 +214,7 @@ export const docsTool = {
               return {
                 path,
                 content: null,
-                error: "Invalid path"
+                error: 'Invalid path',
               };
             }
             const directorySuggestions = await findNearestDirectory(path, availablePaths);
