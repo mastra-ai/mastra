@@ -2,11 +2,6 @@ import { describe, test, expect } from 'vitest';
 import { z } from 'zod';
 import { zodToJsonSchema } from './zod-to-json';
 
-type Element = {
-  id?: string;
-  extension?: Extension[];
-};
-
 type Extension = {
   url: string;
   valueString?: string;
