@@ -38,7 +38,7 @@ export abstract class MastraAITracing extends MastraBase {
     // Apply defaults for optional fields
     this.config = {
       serviceName: config.serviceName,
-      instanceName: config.instanceName,
+      name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
       exporters: config.exporters ?? [],
       processors: config.processors ?? [],
@@ -52,7 +52,7 @@ export abstract class MastraAITracing extends MastraBase {
     super.__setLogger(logger);
     // Log AI tracing initialization details after logger is properly set
     this.logger.debug(
-      `[AI Tracing] Initialized [service=${this.config.serviceName}] [instance=${this.config.instanceName}] [sampling=${this.config.sampling.type}]`,
+      `[AI Tracing] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling.type}]`,
     );
   }
 

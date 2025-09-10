@@ -17,7 +17,7 @@ import { BraintrustExporter } from '@mastra/braintrust';
 const mastra = new Mastra({
   ...,
   observability: {
-    instances: {
+    configs: {
       braintrust: {
         serviceName: 'service',
         exporters: [

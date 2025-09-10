@@ -5,7 +5,8 @@
  */
 
 import { MastraAITracing } from './base';
-import { DefaultAITracing } from './default';
+import { DefaultAITracing, SensitiveDataFilter } from './default';
+import { CloudExporter, DefaultExporter } from './exporters';
 import { SamplingStrategyType } from './types';
 import type { TracingSelector, AITracingSelectorContext, AITracingConfig, AITracingInstanceConfig } from './types';
 
@@ -194,9 +195,7 @@ export function hasAITracing(name: string): boolean {
 /**
  * Type guard to check if an object is a MastraAITracing instance
  */
-function isAITracingInstance(
-  obj: Omit<AITracingInstanceConfig, 'instanceName'> | MastraAITracing,
-): obj is MastraAITracing {
+function isAITracingInstance(obj: Omit<AITracingInstanceConfig, 'name'> | MastraAITracing): obj is MastraAITracing {
   return obj instanceof MastraAITracing;
 }
 
@@ -204,20 +203,43 @@ function isAITracingInstance(
  * Setup AI tracing from the AITracingConfig
  */
 export function setupAITracing(config: AITracingConfig): void {
-  const entries = Object.entries(config.instances);
+  // Check for naming conflict if default is enabled
+  if (config.default?.enabled && config.configs['default']) {
+    throw new Error(
+      "Cannot use 'default' as a custom config name when default tracing is enabled. " +
+        'Please rename your custom config to avoid conflicts.',
+    );
+  }
 
-  entries.forEach(([name, tracingDef], index) => {
+  // Setup default config if enabled
+  if (config.default?.enabled) {
+    const defaultInstance = new DefaultAITracing({
+      serviceName: 'mastra',
+      name: 'default',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      exporters: [new DefaultExporter(), new CloudExporter()],
+      processors: [new SensitiveDataFilter()],
+    });
+
+    // Register as default with high priority
+    registerAITracing('default', defaultInstance, true);
+  }
+
+  // Process user-provided configs
+  const instances = Object.entries(config.configs);
+
+  instances.forEach(([name, tracingDef], index) => {
     const instance = isAITracingInstance(tracingDef)
       ? tracingDef // Pre-instantiated custom implementation
-      : new DefaultAITracing({ ...tracingDef, instanceName: name }); // Config -> DefaultAITracing with instance name
+      : new DefaultAITracing({ ...tracingDef, name }); // Config -> DefaultAITracing with instance name
 
-    // First registered instance becomes default
-    const isDefault = index === 0;
+    // First user-provided instance becomes default only if no default config
+    const isDefault = !config.default?.enabled && index === 0;
     registerAITracing(name, instance, isDefault);
   });
 
   // Set selector function if provided
-  if (config.selector) {
-    setAITracingSelector(config.selector);
+  if (config.configSelector) {
+    setAITracingSelector(config.configSelector);
   }
 }
