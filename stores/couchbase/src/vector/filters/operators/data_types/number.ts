@@ -77,13 +77,16 @@ function lte_for_numbers(field: string, value: number): any {
   };
 }
 
-function Number_Handler(field: string, value: Record<string, any>): any {
+function Number_Handler(field: string, value: Record<string, number>): any {
   if (value === null || value === undefined || Object.keys(value).length === 0) {
     return {};
   }
 
   const result: { conjuncts: any[] } = { conjuncts: [] };
   for (const op in value) {
+    if (typeof value[op] !== 'number') {
+      throw new Error(`Invalid number value: ${value[op]} for operator ${op} in field ${field}`);
+    }
     switch (op) {
       case '$eq':
         result.conjuncts.push(eq_for_numbers(field, value[op]));

@@ -14,13 +14,16 @@ function ne_for_booleans(field: string, value: boolean): any {
   return not(eq_for_booleans(field, value));
 }
 
-function Boolean_Handler(field: string, value: Record<string, any>): any {
+function Boolean_Handler(field: string, value: Record<string, boolean>): any {
   if (value === null || value === undefined || Object.keys(value).length === 0) {
     return {};
   }
 
   const result: { conjuncts: any[] } = { conjuncts: [] };
   for (const op in value) {
+    if (typeof value[op] !== 'boolean') {
+      throw new Error(`Invalid boolean value: ${value[op]} for operator ${op} in field ${field}`);
+    }
     switch (op) {
       case '$eq':
         result.conjuncts.push(eq_for_booleans(field, value[op]));
