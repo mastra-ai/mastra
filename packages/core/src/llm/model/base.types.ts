@@ -22,6 +22,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
 import type { TracingContext } from '../../ai-tracing';
+import type { OutputProcessor } from '../../processors';
 import type { RuntimeContext } from '../../runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
@@ -36,6 +37,7 @@ type MastraCustomLLMOptions = {
   runtimeContext: RuntimeContext;
   tracingContext: TracingContext;
   runId?: string;
+  outputProcessors?: OutputProcessor[];
 };
 type MastraCustomLLMOptionsKeys = keyof MastraCustomLLMOptions;
 
