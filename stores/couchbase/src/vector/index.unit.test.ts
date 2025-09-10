@@ -351,11 +351,6 @@ describe('Unit Testing CouchbaseSearchStore', () => {
     it('should describe index', async () => {
       const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
 
-      expect(mockScopeSearchIndexesFn).toHaveBeenCalledTimes(2);
-
-      expect(mockGetAllIndexesFn).toHaveBeenCalledTimes(1);
-      expect(mockGetAllIndexesFn).toHaveResolved();
-
       expect(mockGetIndexFn).toHaveBeenCalledTimes(1);
       expect(mockGetIndexFn).toHaveBeenCalledWith(test_indexName);
       expect(mockGetIndexFn).toHaveResolved();
@@ -453,15 +448,6 @@ describe('Unit Testing CouchbaseSearchStore', () => {
       const queryVector = [1.0, 0.1, 0.1];
       const topK = 3;
       const results = await couchbase_client.query({ indexName: test_indexName, queryVector, topK });
-
-      expect(mockScopeSearchIndexesFn).toHaveBeenCalledTimes(2);
-
-      expect(mockGetAllIndexesFn).toHaveBeenCalledTimes(1);
-      expect(mockGetAllIndexesFn).toHaveResolved();
-
-      expect(mockGetIndexFn).toHaveBeenCalledTimes(1);
-      expect(mockGetIndexFn).toHaveBeenCalledWith(test_indexName);
-      expect(mockGetIndexFn).toHaveResolved();
 
       expect(mockSearchRequestCreateFn).toHaveBeenCalledTimes(1);
       expect(mockSearchRequestCreateFn).toHaveBeenCalledWith('mockVectorSearch');
@@ -622,12 +608,6 @@ describe('Unit Testing CouchbaseSearchStore', () => {
     it('should throw error for zero dimension in createIndex', async () => {
       await expect(couchbase_client.createIndex({ indexName: test_indexName, dimension: 0 })).rejects.toThrow(
         'Dimension must be a positive integer',
-      );
-    });
-
-    it('should throw error when describing a non-existent index', async () => {
-      await expect(couchbase_client.describeIndex({ indexName: 'non_existent_index' })).rejects.toThrow(
-        `Index non_existent_index does not exist`,
       );
     });
 

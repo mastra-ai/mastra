@@ -16,6 +16,7 @@ import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
 import type { CouchbaseVectorFilter } from './filters/filter';
 import { CouchbaseFilterTranslator } from './filters/filter';
+import pLimit from 'p-limit';
 
 type MastraMetric = 'cosine' | 'euclidean' | 'dotproduct';
 type CouchbaseMetric = 'cosine' | 'l2_norm' | 'dot_product';
@@ -24,6 +25,7 @@ export const DISTANCE_MAPPING: Record<MastraMetric, CouchbaseMetric> = {
   euclidean: 'l2_norm',
   dotproduct: 'dot_product',
 };
+const BATCH_SIZE = 10;
 
 export type CouchbaseVectorParams = {
   connectionString: string;
@@ -760,7 +762,7 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
         }
       }
 
-      const pointIds = ids || vectors.map(() => crypto.randomUUID());
+      const generatedIds = ids || vectors.map(() => crypto.randomUUID());
       const records = vectors.map((vector, i) => {
         const metadataObj = metadata?.[i] || {};
         const record: Record<string, any> = {
@@ -774,13 +776,14 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
         return record;
       });
 
+      const limit = pLimit(BATCH_SIZE);
       const allPromises = [];
       for (let i = 0; i < records.length; i++) {
-        allPromises.push(this.collection.upsert(pointIds[i]!, records[i]));
+        allPromises.push(limit(() => this.collection.upsert(generatedIds[i]!, records[i])));
       }
       await Promise.all(allPromises);
 
-      return pointIds;
+      return generatedIds;
     } catch (error) {
       throw new MastraError(
         {
@@ -803,13 +806,13 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
     try {
       await this.getCollection();
 
-      // Checking if the query vector is the same dimension as the index
-      const index_stats = await this.describeIndex({ indexName });
-      if (queryVector.length !== index_stats.dimension) {
-        throw new Error(
-          `Query vector dimension mismatch. Expected ${index_stats.dimension}, got ${queryVector.length}`,
-        );
-      }
+      //   // Checking if the query vector is the same dimension as the index
+      //   const index_stats = await this.describeIndex({ indexName });
+      //   if (queryVector.length !== index_stats.dimension) {
+      //     throw new Error(
+      //       `Query vector dimension mismatch. Expected ${index_stats.dimension}, got ${queryVector.length}`,
+      //     );
+      //   }
 
       // Translating the filter
       const translator = new CouchbaseFilterTranslator();
@@ -849,10 +852,8 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
         const cleanedMetadata: Record<string, any> = {};
         const fields = (match.fields as Record<string, any>) || {}; // Ensure fields is an object
         for (const key in fields) {
-          if (Object.prototype.hasOwnProperty.call(fields, key)) {
-            const newKey = key.startsWith('metadata.') ? key.substring('metadata.'.length) : key;
-            cleanedMetadata[newKey] = fields[key];
-          }
+          const newKey = key.startsWith('metadata.') ? key.substring('metadata.'.length) : key;
+          cleanedMetadata[newKey] = fields[key];
         }
         output.push({
           id: match.id as string,
@@ -903,9 +904,7 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     try {
       await this.getCollection();
-      if (!(await this.listIndexes()).includes(indexName)) {
-        throw new Error(`Index ${indexName} does not exist`);
-      }
+
       const index = await this.scope.searchIndexes().getIndex(indexName);
       const dimensions =
         index.params.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding?.fields?.[0]
@@ -981,15 +980,7 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
       }
       const collection = await this.getCollection();
 
-      // Check if document exists
-      try {
-        await collection.get(id);
-      } catch (err: any) {
-        if (err.code === 13 || err.message?.includes('document not found')) {
-          throw new Error(`Vector with id ${id} does not exist`);
-        }
-        throw err;
-      }
+      await collection.get(id);
 
       const specs: MutateInSpec[] = [];
       if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
@@ -1024,15 +1015,7 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
     try {
       const collection = await this.getCollection();
 
-      // Check if document exists
-      try {
-        await collection.get(id);
-      } catch (err: any) {
-        if (err.code === 13 || err.message?.includes('document not found')) {
-          throw new Error(`Vector with id ${id} does not exist`);
-        }
-        throw err;
-      }
+      await collection.get(id);
 
       await collection.remove(id);
     } catch (error) {

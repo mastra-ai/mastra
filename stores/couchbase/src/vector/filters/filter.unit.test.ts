@@ -910,7 +910,7 @@ describe('CouchbaseFilterTranslator - table-driven tests', () => {
       expect(result).toEqual({
         conjuncts: [
           {
-            conjuncts: [{ field: 'tags', term: ['tag1', 'tag2'] }],
+            conjuncts: [{ field: 'tags', terms: ['tag1', 'tag2'] }],
           },
         ],
       });

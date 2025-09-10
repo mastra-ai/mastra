@@ -28,12 +28,20 @@
     "posttest": "docker compose down -v"
   },
   "dependencies": {
+<<<<<<< HEAD
     "couchbase": "^4.6.0"
+=======
+    "couchbase": "^4.5.0",
+    "p-limit": "^7.1.1"
+>>>>>>> ce88a6473 (Enhance Couchbase vector store functionality by adding 'p-limit' for batch processing and updating dependency management. Refactor variable names for clarity and remove redundant checks in index description and document existence verification.)
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+<<<<<<< HEAD
     "@internal/storage-test-utils": "workspace:*",
+=======
+>>>>>>> ce88a6473 (Enhance Couchbase vector store functionality by adding 'p-limit' for batch processing and updating dependency management. Refactor variable names for clarity and remove redundant checks in index description and document existence verification.)
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
@@ -43,7 +51,11 @@
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
+<<<<<<< HEAD
     "vitest": "catalog:"
+=======
+    "vitest": "^3.2.4"
+>>>>>>> ce88a6473 (Enhance Couchbase vector store functionality by adding 'p-limit' for batch processing and updating dependency management. Refactor variable names for clarity and remove redundant checks in index description and document existence verification.)
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
