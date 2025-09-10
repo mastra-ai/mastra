@@ -23,12 +23,17 @@ export type TestCaseWithContext = TestCase & {
   context: string[];
 };
 
-export const createTestRun = (input: string, output: string, context?: string[]): ScoringInput => {
+export const createTestRun = (
+  input: string,
+  output: string,
+  additionalContext?: Record<string, any>,
+  runtimeContext?: Record<string, any>,
+): ScoringInput => {
   return {
     input: [{ role: 'user', content: input }],
     output: { role: 'assistant', text: output },
-    additionalContext: { context },
-    runtimeContext: {},
+    additionalContext: additionalContext ?? {},
+    runtimeContext: runtimeContext ?? {},
   };
 };
 

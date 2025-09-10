@@ -79,6 +79,16 @@
         "default": "./dist/scorers/code/index.cjs"
       }
     },
+    "./scorers/utils": {
+      "import": {
+        "types": "./dist/scorers/utils.d.ts",
+        "default": "./dist/scorers/utils.js"
+      },
+      "require": {
+        "types": "./dist/scorers/utils.d.ts",
+        "default": "./dist/scorers/utils.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
