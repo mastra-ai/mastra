@@ -1,0 +1,16 @@
+{
+  "name": "openai-compatible-example",
+  "version": "1.0.0",
+  "description": "Example of using OpenAI-compatible models in Mastra",
+  "main": "index.ts",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
