@@ -58,7 +58,7 @@ export class NewAgentNetwork extends MastraBase {
     });
 
     console.warn(
-      `⚠️  DEPRECATION WARNING: AgentNetwork vNext will be deprecated on September 9th, 2025 and will be removed in a future version. Its functionality will be added to the Agent primitive.`,
+      `⚠️  DEPRECATION WARNING: AgentNetwork vNext will be deprecated on September 16th and will be removed in a future version. Please use agent.network() instead.`,
     );
 
     this.id = id;
