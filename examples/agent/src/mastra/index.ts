@@ -2,14 +2,21 @@ import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 
-import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
+import {
+  agentBuilder,
+  agentThatHarassesYou,
+  chefAgent,
+  chefAgentResponses,
+  dynamicAgent,
+  evalAgent,
+} from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { myWorkflow } from './workflows';
 import { chefModelV2Agent } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/scores';
 
 const storage = new LibSQLStore({
-  url: 'file:./mastra.db',
+  url: 'file:../../mastra.db',
 });
 
 const testScorer = createScorer({
@@ -21,6 +28,7 @@ const testScorer = createScorer({
 
 export const mastra = new Mastra({
   agents: {
+    agentBuilder,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
