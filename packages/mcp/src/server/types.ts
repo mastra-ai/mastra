@@ -8,6 +8,7 @@ import type {
   Resource,
   ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { z } from 'zod';
 
 export type MCPServerResourceContentCallback = ({
   uri,
@@ -42,13 +43,16 @@ export type ElicitationActions = {
 
 export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
 
-export type MCPTool = {
+export type MCPTool<
+  TSchemaIn extends z.ZodSchema | undefined = undefined,
+  TSchemaOut extends z.ZodSchema | undefined = undefined,
+> = {
   id?: InternalCoreTool['id'];
   description?: InternalCoreTool['description'];
-  parameters: InternalCoreTool['parameters'];
-  outputSchema?: InternalCoreTool['outputSchema'];
+  parameters: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any;
+  outputSchema?: TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : any;
   execute: (
-    params: any,
+    params: { context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any },
     options: Parameters<NonNullable<InternalCoreTool['execute']>>[1] & {
       elicitation: ElicitationActions;
       extra: MCPRequestHandlerExtra;

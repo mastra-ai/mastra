@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mem0",
-  "version": "0.1.8",
+  "version": "0.1.12",
   "description": "Mem0 is a memory-based AI platform that allows you to store, search your memories based on the user's query.",
   "type": "module",
   "keywords": [],
@@ -9,7 +9,8 @@
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -42,14 +43,23 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "@internal/types-builder": "workspace:*"
   },
   "dependencies": {
     "mem0ai": "^2.1.36"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.15.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
     "zod": "^3.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "integrations/mem0"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

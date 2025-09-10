@@ -1,12 +1,11 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
-import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, Footprints } from 'lucide-react';
 

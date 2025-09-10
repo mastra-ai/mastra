@@ -336,6 +336,76 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Starts a workflow run and returns a stream
+   * @param params - Object containing the optional runId, inputData and runtimeContext
+   * @returns Promise containing the workflow execution results
+   */
+  async streamVNext(params: { runId?: string; inputData: Record<string, any>; runtimeContext?: RuntimeContext }) {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: { inputData: params.inputData, runtimeContext },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<
+      ArrayBuffer,
+      { type: string; payload: any; runId: string; from: 'AGENT' | 'WORKFLOW' }
+    >({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
+
+  /**
    * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the runId, step, resumeData and runtimeContext
    * @returns Promise containing the workflow resume results

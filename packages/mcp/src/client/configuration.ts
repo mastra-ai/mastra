@@ -1,7 +1,13 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { ElicitRequest, ElicitResult, Prompt, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  ElicitRequest,
+  ElicitResult,
+  Prompt,
+  Resource,
+  ResourceTemplate,
+} from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
@@ -72,17 +78,20 @@ To fix this you have three different options:
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.elicitation.onRequest(handler);
         } catch (err) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_ON_REQUEST_ELICITATION_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-            }
-          }, err);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_REQUEST_ELICITATION_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            err,
+          );
         }
-      }
-    }
+      },
+    };
   }
 
   public get resources() {
@@ -95,14 +104,17 @@ To fix this you have three different options:
             const internalClient = await this.getConnectedClientForServer(serverName);
             allResources[serverName] = await internalClient.resources.list();
           } catch (error) {
-            const mastraError = new MastraError({
-              id: 'MCP_CLIENT_LIST_RESOURCES_FAILED',
-              domain: ErrorDomain.MCP,
-              category: ErrorCategory.THIRD_PARTY,
-              details: {
-                serverName,
-              }
-            }, error);
+            const mastraError = new MastraError(
+              {
+                id: 'MCP_CLIENT_LIST_RESOURCES_FAILED',
+                domain: ErrorDomain.MCP,
+                category: ErrorCategory.THIRD_PARTY,
+                details: {
+                  serverName,
+                },
+              },
+              error,
+            );
             this.logger.trackException(mastraError);
             this.logger.error('Failed to list resources from server:', { error: mastraError.toString() });
           }
@@ -116,14 +128,17 @@ To fix this you have three different options:
             const internalClient = await this.getConnectedClientForServer(serverName);
             allTemplates[serverName] = await internalClient.resources.templates();
           } catch (error) {
-            const mastraError = new MastraError({
-              id: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
-              domain: ErrorDomain.MCP,
-              category: ErrorCategory.THIRD_PARTY,
-              details: {
-                serverName,
-              }
-            }, error);
+            const mastraError = new MastraError(
+              {
+                id: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
+                domain: ErrorDomain.MCP,
+                category: ErrorCategory.THIRD_PARTY,
+                details: {
+                  serverName,
+                },
+              },
+              error,
+            );
             this.logger.trackException(mastraError);
             this.logger.error('Failed to list resource templates from server:', { error: mastraError.toString() });
           }
@@ -135,15 +150,18 @@ To fix this you have three different options:
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.resources.read(uri);
         } catch (error) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_READ_RESOURCE_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-              uri,
-            }
-          }, error);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_READ_RESOURCE_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+                uri,
+              },
+            },
+            error,
+          );
         }
       },
       subscribe: async (serverName: string, uri: string) => {
@@ -151,15 +169,18 @@ To fix this you have three different options:
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.resources.subscribe(uri);
         } catch (error) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_SUBSCRIBE_RESOURCE_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-              uri,
-            }
-          }, error);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_SUBSCRIBE_RESOURCE_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+                uri,
+              },
+            },
+            error,
+          );
         }
       },
       unsubscribe: async (serverName: string, uri: string) => {
@@ -167,15 +188,18 @@ To fix this you have three different options:
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.resources.unsubscribe(uri);
         } catch (err) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_UNSUBSCRIBE_RESOURCE_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-              uri,
-            }
-          }, err);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_UNSUBSCRIBE_RESOURCE_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+                uri,
+              },
+            },
+            err,
+          );
         }
       },
       onUpdated: async (serverName: string, handler: (params: { uri: string }) => void) => {
@@ -183,14 +207,17 @@ To fix this you have three different options:
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.resources.onUpdated(handler);
         } catch (err) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_ON_UPDATED_RESOURCE_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-            }
-          }, err);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_UPDATED_RESOURCE_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            err,
+          );
         }
       },
       onListChanged: async (serverName: string, handler: () => void) => {
@@ -198,14 +225,17 @@ To fix this you have three different options:
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.resources.onListChanged(handler);
         } catch (err) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_ON_LIST_CHANGED_RESOURCE_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-            }
-          }, err);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_LIST_CHANGED_RESOURCE_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            err,
+          );
         }
       },
     };
@@ -221,34 +251,50 @@ To fix this you have three different options:
             const internalClient = await this.getConnectedClientForServer(serverName);
             allPrompts[serverName] = await internalClient.prompts.list();
           } catch (error) {
-            const mastraError = new MastraError({
-              id: 'MCP_CLIENT_LIST_PROMPTS_FAILED',
-              domain: ErrorDomain.MCP,
-              category: ErrorCategory.THIRD_PARTY,
-              details: {
-                serverName,
-              }
-            }, error);
+            const mastraError = new MastraError(
+              {
+                id: 'MCP_CLIENT_LIST_PROMPTS_FAILED',
+                domain: ErrorDomain.MCP,
+                category: ErrorCategory.THIRD_PARTY,
+                details: {
+                  serverName,
+                },
+              },
+              error,
+            );
             this.logger.trackException(mastraError);
             this.logger.error('Failed to list prompts from server:', { error: mastraError.toString() });
           }
         }
         return allPrompts;
       },
-      get: async ({ serverName, name, args, version }: { serverName: string, name: string, args?: Record<string, any>, version?: string }) => {
+      get: async ({
+        serverName,
+        name,
+        args,
+        version,
+      }: {
+        serverName: string;
+        name: string;
+        args?: Record<string, any>;
+        version?: string;
+      }) => {
         try {
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.prompts.get({ name, args, version });
         } catch (error) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_GET_PROMPT_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-              name,
-            }
-          }, error);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_GET_PROMPT_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+                name,
+              },
+            },
+            error,
+          );
         }
       },
       onListChanged: async (serverName: string, handler: () => void) => {
@@ -256,14 +302,17 @@ To fix this you have three different options:
           const internalClient = await this.getConnectedClientForServer(serverName);
           return internalClient.prompts.onListChanged(handler);
         } catch (error) {
-          throw new MastraError({
-            id: 'MCP_CLIENT_ON_LIST_CHANGED_PROMPT_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            details: {
-              serverName,
-            }
-          }, error);
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_LIST_CHANGED_PROMPT_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            error,
+          );
         }
       },
     };
@@ -315,11 +364,14 @@ To fix this you have three different options:
         }
       });
     } catch (error) {
-      throw new MastraError({
-        id: 'MCP_CLIENT_GET_TOOLS_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.THIRD_PARTY,
-      }, error);
+      throw new MastraError(
+        {
+          id: 'MCP_CLIENT_GET_TOOLS_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
 
     return connectedTools;
@@ -336,11 +388,14 @@ To fix this you have three different options:
         }
       });
     } catch (error) {
-      throw new MastraError({
-        id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.THIRD_PARTY,
-      }, error);
+      throw new MastraError(
+        {
+          id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
 
     return connectedToolsets;
@@ -403,15 +458,18 @@ To fix this you have three different options:
     try {
       await mcpClient.connect();
     } catch (e) {
-      const mastraError = new MastraError({
-        id: 'MCP_CLIENT_CONNECT_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.THIRD_PARTY,
-        text: `Failed to connect to MCP server ${name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
-        details: {
-          name,
-        }
-      }, e);
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_CLIENT_CONNECT_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to connect to MCP server ${name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
+          details: {
+            name,
+          },
+        },
+        e,
+      );
       this.logger.trackException(mastraError);
       this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
       this.mcpClientsById.delete(name);

@@ -1,6 +1,7 @@
 import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
+import type { TracingContext } from '../ai-tracing';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
@@ -19,6 +20,7 @@ export type ScoringInput = {
   output: Record<string, any>;
   additionalContext?: Record<string, any>;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
 };
 
 export type ScoringHookInput = {
@@ -32,6 +34,7 @@ export type ScoringHookInput = {
   entity: Record<string, any>;
   entityType: ScoringEntityType;
   runtimeContext?: Record<string, any>;
+  tracingContext?: TracingContext;
   structuredOutput?: boolean;
   traceId?: string;
   resourceId?: string;
@@ -112,3 +115,34 @@ export type ScorerRunInputForAgent = {
 };
 
 export type ScorerRunOutputForAgent = UIMessageWithMetadata[];
+
+export const saveScorePayloadSchema = z.object({
+  runId: z.string(),
+  scorerId: z.string(),
+  entityId: z.string(),
+  score: z.number(),
+  input: z.any().optional(),
+  output: z.any(),
+  source: z.enum(['LIVE', 'TEST']),
+  entityType: z.enum(['AGENT', 'WORKFLOW']).optional(),
+
+  traceId: z.string().optional(),
+  scorer: z.record(z.string(), z.any()).optional(),
+  preprocessStepResult: z.record(z.string(), z.any()).optional(),
+  extractStepResult: z.record(z.string(), z.any()).optional(),
+  analyzeStepResult: z.record(z.string(), z.any()).optional(),
+  reason: z.string().optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+  preprocessPrompt: z.string().optional(),
+  extractPrompt: z.string().optional(),
+  generateScorePrompt: z.string().optional(),
+  generateReasonPrompt: z.string().optional(),
+  analyzePrompt: z.string().optional(),
+  additionalContext: z.record(z.string(), z.any()).optional(),
+  runtimeContext: z.record(z.string(), z.any()).optional(),
+  entity: z.record(z.string(), z.any()).optional(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+});
+
+export type ValidatedSaveScorePayload = z.infer<typeof saveScorePayloadSchema>;

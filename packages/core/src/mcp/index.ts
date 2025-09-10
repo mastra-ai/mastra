@@ -48,13 +48,15 @@ export abstract class MCPServerBase extends MastraBase {
   /** Information about remote access points for this server. */
   public readonly remotes?: RemoteInfo[];
   /** The tools registered with and converted by this MCP server. */
-  public readonly convertedTools: Record<string, ConvertedTool>;
+  public convertedTools: Record<string, ConvertedTool>;
   /** Reference to the Mastra instance if this server is registered with one. */
   public mastra: Mastra | undefined;
   /** Agents to be exposed as tools. */
   protected readonly agents?: MCPServerConfig['agents'];
   /** Workflows to be exposed as tools. */
   protected readonly workflows?: MCPServerConfig['workflows'];
+  /** Original tools configuration for re-conversion when Mastra instance is registered. */
+  protected readonly originalTools: ToolsInput;
 
   /**
    * Public getter for the server's unique ID.
@@ -108,6 +110,8 @@ export abstract class MCPServerBase extends MastraBase {
    */
   __registerMastra(mastra: Mastra): void {
     this.mastra = mastra;
+    // Re-convert tools now that we have the Mastra instance to populate MCP tools execute with mastra instance
+    this.convertedTools = this.convertTools(this.originalTools, this.agents, this.workflows);
   }
 
   /**
@@ -137,6 +141,7 @@ export abstract class MCPServerBase extends MastraBase {
     this.remotes = config.remotes;
     this.agents = config.agents;
     this.workflows = config.workflows;
+    this.originalTools = config.tools;
     this.convertedTools = this.convertTools(config.tools, config.agents, config.workflows);
   }
 

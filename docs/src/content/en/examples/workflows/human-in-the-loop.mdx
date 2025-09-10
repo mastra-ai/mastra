@@ -50,8 +50,7 @@ const step2 = createStep({
     const { confirm } = resumeData ?? {};
 
     if (!confirm) {
-      await suspend({});
-      return { value: value };
+      return await suspend({});
     }
 
     return { value: value, confirmed: confirm };

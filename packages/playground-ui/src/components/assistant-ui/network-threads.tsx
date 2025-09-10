@@ -2,7 +2,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  ToolCallContentPartComponent,
+  ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
@@ -24,7 +24,7 @@ import { NextAssistantMessage } from '@/domains/networks/v-next/wrapped-assistan
 import clsx from 'clsx';
 
 export interface ThreadProps {
-  ToolFallback?: ToolCallContentPartComponent;
+  ToolFallback?: ToolCallMessagePartComponent;
   networkName?: string;
   hasMemory?: boolean;
 }
@@ -115,7 +115,7 @@ const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
         <div className="w-full bg-surface3 rounded-lg border-sm border-border1 px-3 py-4 mt-auto h-[100px]">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
-              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
+              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent resize-none"
               autoFocus
               placeholder="Enter your message..."
               name=""

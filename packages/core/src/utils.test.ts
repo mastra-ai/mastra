@@ -158,6 +158,7 @@ describe('makeCoreTool', () => {
     name: 'testTool',
     description: 'Test tool description',
     runtimeContext: new RuntimeContext(),
+    tracingContext: {},
   };
 
   it('should convert a Vercel tool correctly', async () => {
@@ -301,6 +302,7 @@ it('should log correctly for Vercel tool execution', async () => {
     name: 'testTool',
     agentName: 'testAgent',
     runtimeContext: new RuntimeContext(),
+    tracingContext: {},
   });
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });

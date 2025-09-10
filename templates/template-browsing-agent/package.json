@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "A powerful integration that combines Browserbase's Stagehand with Mastra for advanced web automation, scraping, and AI-powered web interactions. Features include web navigation, element observation, action execution, data extraction, and intelligent session management.",
   "type": "module",
   "engines": {
@@ -22,13 +22,13 @@
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
-    "@browserbasehq/stagehand": "^2.4.2",
-    "zod": "^3.25.67"
+    "@browserbasehq/stagehand": "^2.4.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.0.4",
     "mastra": "latest",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.2.1",
     "typescript": "^5.8.3"
   }
 }

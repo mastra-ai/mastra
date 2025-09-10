@@ -76,7 +76,7 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
                 computeToolLink={tool => `/tools/${agentId}/${tool.id}`}
-                computeWorkflowLink={workflow => `/workflows/${workflow.name}/graph`}
+                computeWorkflowLink={workflowId => `/workflows/${workflowId}/graph`}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
               />
             )}

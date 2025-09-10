@@ -2,6 +2,7 @@ import type {
   AgentExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
+  StructuredOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
 } from '@mastra/core/agent';
@@ -100,12 +101,24 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamVNextParams<OUTPUT extends OutputSchema | undefined = undefined> = {
+export type StreamVNextParams<
+  OUTPUT extends OutputSchema | undefined = undefined,
+  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+> = {
   messages: MessageListInput;
   output?: OUTPUT;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & WithoutMethods<Omit<AgentExecutionOptions<OUTPUT>, 'output' | 'runtimeContext' | 'clientTools' | 'options'>>;
+  // Can't serialize the model, so we need to omit it, falls back to agent's model
+  structuredOutput?: STRUCTURED_OUTPUT extends ZodSchema
+    ? Omit<StructuredOutputOptions<STRUCTURED_OUTPUT>, 'model'>
+    : never;
+} & WithoutMethods<
+  Omit<
+    AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT>,
+    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'structuredOutput'
+  >
+>;
 
 export type UpdateModelParams = {
   modelId: string;
@@ -522,6 +535,20 @@ export type GetScorerResponse = MastraScorerEntry & {
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
+}
+
+// Template installation types
+export interface TemplateInstallationRequest {
+  /** Template repository URL or slug */
+  repo: string;
+  /** Git ref (branch/tag/commit) to install from */
+  ref?: string;
+  /** Template slug for identification */
+  slug?: string;
+  /** Target project path */
+  targetPath?: string;
+  /** Environment variables for template */
+  variables?: Record<string, string>;
 }
 
 export interface GetAITraceResponse {

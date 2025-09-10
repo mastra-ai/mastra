@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-auth0",
-  "version": "0.10.2",
+  "version": "0.10.4",
   "description": "Mastra Auth0 Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -18,6 +18,10 @@
     },
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
@@ -37,5 +41,14 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "auth/auth0"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

@@ -48,7 +48,7 @@ describe('MCPClient', () => {
 
   beforeEach(async () => {
     // Give each MCPClient a unique ID to prevent re-initialization errors across tests
-    const testId = "testId"
+    const testId = 'testId';
     mcp = new MCPClient({
       id: testId,
       servers: {
@@ -87,9 +87,9 @@ describe('MCPClient', () => {
         stockPrice: {
           command: 'npx',
           args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
-        env: {
-          FAKE_CREDS: 'test',
-        },
+          env: {
+            FAKE_CREDS: 'test',
+          },
         },
         weather: {
           url: new URL(`http://localhost:${weatherServerPort}/sse`),
@@ -220,7 +220,10 @@ describe('MCPClient', () => {
             console.log(`[Test LOG] Received update for ${params.uri}, waiting for ${resourceUri}`);
           }
         });
-        setTimeout(() => reject(new Error(`Timeout waiting for resourceUpdated notification for ${resourceUri}`)), 4500);
+        setTimeout(
+          () => reject(new Error(`Timeout waiting for resourceUpdated notification for ${resourceUri}`)),
+          4500,
+        );
       });
 
       await mcp.resources.subscribe(serverName, resourceUri); // Ensure subscription is active
@@ -283,7 +286,7 @@ describe('MCPClient', () => {
         await errorClient.disconnect();
       }
     });
-  })
+  });
 
   describe('Prompts', () => {
     it('should get prompts from connected MCP servers', async () => {
@@ -324,7 +327,7 @@ describe('MCPClient', () => {
     });
 
     it('should get a specific prompt from a server', async () => {
-      const {prompt, messages} = await mcp.prompts.get({serverName: 'weather', name: 'current'});
+      const { prompt, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
       expect(prompt).toBeDefined();
       expect(prompt).toMatchObject({
         name: 'current',
@@ -391,7 +394,7 @@ describe('MCPClient', () => {
         await errorClient.disconnect();
       }
     });
-  })
+  });
 
   describe('Instance Management', () => {
     it('should allow multiple instances with different IDs', async () => {
@@ -614,7 +617,7 @@ describe('MCPClient', () => {
 
     afterEach(async () => {
       mockLogHandler.mockClear();
-      await complexClient?.disconnect().catch(() => { });
+      await complexClient?.disconnect().catch(() => {});
     });
 
     it('should process tools from firecrawl-mcp without crashing', async () => {

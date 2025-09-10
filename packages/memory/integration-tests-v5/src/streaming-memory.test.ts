@@ -174,7 +174,7 @@ describe('Memory Streaming Tests', () => {
           console.error('Mastra server error:', data.toString());
         });
 
-        setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
+        setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
       });
     });
 

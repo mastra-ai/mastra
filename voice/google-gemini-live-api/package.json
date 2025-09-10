@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-google-gemini-live",
-  "version": "0.10.7",
+  "version": "0.10.10",
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,8 +36,8 @@
     "@google/genai": "latest",
     "google-auth-library": "^10.2.1",
     "ws": "^8.18.3",
-    "zod": "^3.25.67",
-    "zod-to-json-schema": "^3.23.5"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -50,7 +51,16 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.13.0-0",
+    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
     "zod": "^3.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "voice/google-gemini-live-api"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

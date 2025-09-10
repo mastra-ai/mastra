@@ -116,7 +116,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
 
           const partType = part.type;
 
-          const transformedChunk = convertFullStreamChunkToUIMessageStream({
+          const transformedChunk = convertFullStreamChunkToUIMessageStream<UI_MESSAGE>({
             part: part as TextStreamPart<ToolSet>,
             sendReasoning,
             messageMetadataValue,

@@ -10,12 +10,14 @@ import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64 } from '@/lib/file';
+import { fileToBase64 } from '@/lib/file/toBase64';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 import { MastraModelOutput } from '@mastra/core/stream';
+import { flushSync } from 'react-dom';
+import { mapWorkflowStreamChunkToWatchResult } from '@/domains/workflows/utils';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -31,9 +33,11 @@ const handleFinishReason = (finishReason: string) => {
 };
 
 const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
-  const promises = attachments
+  const promises = (attachments ?? [])
     .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
     .map(async attachment => {
+      const isFileFromURL = attachment.name.startsWith('https://');
+
       if (attachment.type === 'document') {
         if (attachment.contentType === 'application/pdf') {
           // @ts-expect-error - TODO: fix this type issue somehow
@@ -43,7 +47,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
             content: [
               {
                 type: 'file' as const,
-                data: `data:application/pdf;base64,${pdfText}`,
+                data: isFileFromURL ? attachment.name : `data:application/pdf;base64,${pdfText}`,
                 mimeType: attachment.contentType,
                 filename: attachment.name,
               },
@@ -64,7 +68,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
         content: [
           {
             type: 'image' as const,
-            image: await fileToBase64(attachment.file!),
+            image: isFileFromURL ? attachment.name : await fileToBase64(attachment.file!),
             mimeType: attachment.file!.type,
           },
         ],
@@ -422,11 +426,52 @@ export function MastraRuntimeProvider({
                     content += chunk.payload.text;
                   }
 
-                  console.log(chunk.payload.text, 'VALUE');
-
                   updater();
                   break;
                 }
+
+                case 'tool-output': {
+                  if (!chunk.payload.output?.type.startsWith('workflow-')) return;
+
+                  flushSync(() => {
+                    setMessages(currentConversation => {
+                      const lastMessage = currentConversation[currentConversation.length - 1];
+                      const contentArray = Array.isArray(lastMessage.content)
+                        ? lastMessage.content
+                        : [{ type: 'text', text: lastMessage.content }];
+
+                      const newMessage = {
+                        ...lastMessage,
+                        content: contentArray.map(part => {
+                          if (part.type === 'tool-call') {
+                            return {
+                              ...part,
+                              ...chunk.payload,
+                              args: {
+                                ...part.args,
+                                __mastraMetadata: {
+                                  ...part.args?.__mastraMetadata,
+                                  workflowFullState: mapWorkflowStreamChunkToWatchResult(
+                                    part.args?.__mastraMetadata?.workflowFullState || {},
+                                    chunk?.payload?.output,
+                                  ),
+                                  isStreaming: true,
+                                },
+                              },
+                            };
+                          }
+
+                          return part;
+                        }),
+                      };
+
+                      return [...currentConversation.slice(0, -1), newMessage];
+                    });
+                  });
+
+                  break;
+                }
+
                 case 'tool-call': {
                   // Update the messages state
                   setMessages(currentConversation => {
@@ -445,7 +490,13 @@ export function MastraRuntimeProvider({
                                 type: 'tool-call',
                                 toolCallId: chunk.payload.toolCallId,
                                 toolName: chunk.payload.toolName,
-                                args: chunk.payload.args,
+                                args: {
+                                  ...chunk.payload.args,
+                                  __mastraMetadata: {
+                                    ...chunk.payload.args?.__mastraMetadata,
+                                    isStreaming: true,
+                                  },
+                                },
                               },
                             ]
                           : [
@@ -456,7 +507,13 @@ export function MastraRuntimeProvider({
                                 type: 'tool-call',
                                 toolCallId: chunk.payload.toolCallId,
                                 toolName: chunk.payload.toolName,
-                                args: chunk.payload.args,
+                                args: {
+                                  ...chunk.payload.args,
+                                  __mastraMetadata: {
+                                    ...chunk.payload.args?.__mastraMetadata,
+                                    isStreaming: true,
+                                  },
+                                },
                               },
                             ],
                       };
@@ -477,7 +534,10 @@ export function MastraRuntimeProvider({
                           type: 'tool-call',
                           toolCallId: chunk.payload.toolCallId,
                           toolName: chunk.payload.toolName,
-                          args: chunk.payload.args,
+                          args: {
+                            ...chunk.payload.args,
+                            __mastraMetadata: { ...chunk.payload.args?.__mastraMetadata, isStreaming: true },
+                          },
                         },
                       ],
                     };

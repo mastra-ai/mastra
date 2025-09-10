@@ -110,7 +110,7 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Self-hosted Renovate
-        uses: renovatebot/github-action@v42.0.3
+        uses: renovatebot/github-action@v43.0.9
         with:
           configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'

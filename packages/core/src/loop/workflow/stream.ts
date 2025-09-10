@@ -19,6 +19,7 @@ export function workflowLoopStream<
   modelSettings,
   _internal,
   modelStreamSpan,
+  llmAISpan,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType>({
@@ -154,6 +155,7 @@ export function workflowLoopStream<
             nonUser: [],
           },
         },
+        tracingContext: { currentSpan: llmAISpan },
       });
 
       if (executionResult.status !== 'success') {
@@ -162,7 +164,6 @@ export function workflowLoopStream<
       }
 
       if (executionResult.result.stepResult.reason === 'abort') {
-        console.log('aborted_result', JSON.stringify(executionResult.result, null, 2));
         controller.close();
         return;
       }

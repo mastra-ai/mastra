@@ -21,6 +21,8 @@ export enum AISpanType {
   GENERIC = 'generic',
   /** LLM generation with model calls, token usage, prompts, completions */
   LLM_GENERATION = 'llm_generation',
+  /** Individual LLM streaming chunk/event */
+  LLM_CHUNK = 'llm_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
   /** Function/tool execution with inputs, outputs, errors */
@@ -88,15 +90,32 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   };
   /** Model parameters */
   parameters?: {
+    maxOutputTokens?: number;
     temperature?: number;
-    maxTokens?: number;
     topP?: number;
-    frequencyPenalty?: number;
+    topK?: number;
     presencePenalty?: number;
-    stop?: string[];
+    frequencyPenalty?: number;
+    stopSequences?: string[];
+    seed?: number;
+    maxRetries?: number;
+    abortSignal?: any;
+    headers?: Record<string, string | undefined>;
   };
   /** Whether this was a streaming response */
   streaming?: boolean;
+  /** Reason the generation finished */
+  finishReason?: string;
+}
+
+/**
+ * LLM Chunk attributes - for individual streaming chunks/events
+ */
+export interface LLMChunkAttributes extends AIBaseAttributes {
+  /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
+  chunkType?: string;
+  /** Sequence number of this chunk in the stream */
+  sequenceNumber?: number;
 }
 
 /**
@@ -222,6 +241,7 @@ export interface AISpanTypeMap {
   [AISpanType.AGENT_RUN]: AgentRunAttributes;
   [AISpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [AISpanType.LLM_GENERATION]: LLMGenerationAttributes;
+  [AISpanType.LLM_CHUNK]: LLMChunkAttributes;
   [AISpanType.TOOL_CALL]: ToolCallAttributes;
   [AISpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [AISpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
@@ -257,12 +277,12 @@ export interface AISpan<TType extends AISpanType> {
   startTime: Date;
   /** When span ended */
   endTime?: Date;
+  /** Is an event span? (event occurs at startTime, has no endTime) */
+  isEvent: boolean;
   /** AI-specific attributes - strongly typed based on span type */
   attributes?: AISpanTypeMap[TType];
   /** Parent span reference (undefined for root spans) */
   parent?: AnyAISpan;
-  /** The top-level span - can be any type */
-  trace: AnyAISpan;
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
   traceId: string;
   /** Pointer to the AITracing instance */
@@ -314,6 +334,17 @@ export interface AISpan<TType extends AISpanType> {
     metadata?: Record<string, any>;
   }): AISpan<TChildType>;
 
+  /** Create event span - can be any span type independent of parent
+      Event spans have no input, and no endTime.
+  */
+  createEventSpan<TChildType extends AISpanType>(options: {
+    type: TChildType;
+    name: string;
+    output?: any;
+    attributes?: AISpanTypeMap[TChildType];
+    metadata?: Record<string, any>;
+  }): AISpan<TChildType>;
+
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean;
 }
@@ -333,12 +364,16 @@ export interface AISpanOptions<TType extends AISpanType> {
   type: TType;
   /** Input data */
   input?: any;
+  /** Output data (for event spans) */
+  output?: any;
   /** Span attributes */
   attributes?: AISpanTypeMap[TType];
   /** Span metadata */
   metadata?: Record<string, any>;
   /** Parent span */
   parent?: AnyAISpan;
+  /** Is an event span? */
+  isEvent: boolean;
 }
 
 // ============================================================================
@@ -372,14 +407,16 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.RATIO; probability: number }
   | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
 
+export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+
 /**
  * Configuration for a single AI tracing instance
  */
 export interface AITracingInstanceConfig {
+  /** Unique identifier for this config in the ai tracing registry */
+  name: string;
   /** Service name for tracing */
   serviceName: string;
-  /** Instance name from the registry */
-  instanceName: string;
   /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
   sampling?: SamplingStrategy;
   /** Custom exporters */
@@ -392,10 +429,14 @@ export interface AITracingInstanceConfig {
  * Complete AI Tracing configuration
  */
 export interface AITracingConfig {
+  /** Enables default exporters, with sampling: always, and sensitive data filtering */
+  default?: {
+    enabled?: boolean;
+  };
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  instances: Record<string, Omit<AITracingInstanceConfig, 'instanceName'> | MastraAITracing>;
+  configs?: Record<string, Omit<AITracingInstanceConfig, 'name'> | MastraAITracing>;
   /** Optional selector function to choose which tracing instance to use */
-  selector?: TracingSelector;
+  configSelector?: TracingSelector;
 }
 
 // ============================================================================
@@ -425,6 +466,9 @@ export type AITracingEvent =
 export interface AITracingExporter {
   /** Exporter name */
   name: string;
+
+  /** Initialize exporter (called after all dependencies are ready) */
+  init?(): void;
 
   /** Export tracing events */
   exportEvent(event: AITracingEvent): Promise<void>;

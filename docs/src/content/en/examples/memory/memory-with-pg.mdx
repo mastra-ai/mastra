@@ -1,97 +1,138 @@
+---
+title: "Example: Memory with PostgreSQL | Memory | Mastra Docs"
+description: Example for how to use Mastra's memory system with PostgreSQL storage and vector capabilities.
+---
+
 # Memory with Postgres
 
 This example demonstrates how to use Mastra's memory system with PostgreSQL as the storage backend.
 
-## Setup
+## Prerequisites
 
-First, set up the memory system with PostgreSQL storage and vector capabilities:
+This example uses the `openai` model and requires a PostgreSQL database with the `pgvector` extension. Make sure to add the following to your `.env` file:
 
-```typescript
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+DATABASE_URL=<your-connection-string>
+```
+
+And install the following package:
+
+```bash copy
+npm install @mastra/pg
+```
+
+## Adding memory to an agent
+
+To add PostgreSQL memory to an agent use the `Memory` class and create a new `storage` key using `PostgresStore`. The `connectionString` can either be a remote location, or a local database connection.
+
+```typescript filename="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
-import { PostgresStore, PgVector } from "@mastra/pg";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
+import { PostgresStore } from "@mastra/pg";
 
-// PostgreSQL connection details
-const host = "localhost";
-const port = 5432;
-const user = "postgres";
-const database = "postgres";
-const password = "postgres";
-const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
+export const pgAgent = new Agent({
+  name: "pg-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new PostgresStore({
+      connectionString: process.env.DATABASE_URL!
+    }),
+    options: {
+      threads: {
+        generateTitle: true
+      }
+    }
+  })
+});
+```
 
-// Initialize memory with PostgreSQL storage and vector search
-const memory = new Memory({
-  storage: new PostgresStore({
-    host,
-    port,
-    user,
-    database,
-    password,
-  }),
-  vector: new PgVector({ connectionString }),
-  options: {
-    lastMessages: 10,
+## Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash copy
+npm install @mastra/fastembed
+```
+
+Add the following to your agent:
+
+```typescript filename="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { fastembed } from "@mastra/fastembed";
+
+export const pgAgent = new Agent({
+  name: "pg-agent",
+  instructions: "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new PostgresStore({
+      connectionString: process.env.DATABASE_URL!
+    }),
+    vector: new PgVector({
+      connectionString: process.env.DATABASE_URL!
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2
+      }
+    }
+  })
+});
+```
+
+## Usage example
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript filename="src/test-pg-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("pgAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  }
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId
+  },
+  memoryOptions: {
+    lastMessages: 5,
     semanticRecall: {
       topK: 3,
-      messageRange: 2,
-    },
-  },
+      messageRange: 2
+    }
+  }
 });
 
-// Create an agent with memory capabilities
-const chefAgent = new Agent({
-  name: "chefAgent",
-  instructions:
-    "You are Michel, a practical and experienced home chef who helps people cook great meals with whatever ingredients they have available.",
-  model: openai("gpt-4o-mini"),
-  memory,
-});
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
-## Usage Example
+## Related
 
-```typescript
-import { randomUUID } from "crypto";
-
-// Start a conversation
-const threadId = randomUUID();
-const resourceId = "SOME_USER_ID";
-
-// Ask about ingredients
-const response1 = await chefAgent.stream(
-  "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?",
-  {
-    threadId,
-    resourceId,
-  },
-);
-
-// Ask about different ingredients
-const response2 = await chefAgent.stream(
-  "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and curry powder.",
-  {
-    threadId,
-    resourceId,
-  },
-);
-
-// Use memory to recall previous conversation
-const response3 = await chefAgent.stream(
-  "What did we cook before I went to my friends house?",
-  {
-    threadId,
-    resourceId,
-    memoryOptions: {
-      lastMessages: 3, // Get last 3 messages for context
-    },
-  },
-);
-```
-
-The example shows:
-
-1. Setting up PostgreSQL storage with vector search capabilities
-2. Configuring memory options for message history and semantic search
-3. Creating an agent with memory integration
-4. Using the agent to maintain conversation context across multiple interactions
+- [Calling Agents](../agents/calling-agents.mdx)

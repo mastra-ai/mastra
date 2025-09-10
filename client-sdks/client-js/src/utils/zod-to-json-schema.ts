@@ -21,8 +21,9 @@ export function zodToJsonSchema<T extends ZodType | any>(zodSchema: T) {
   }
 
   if ('toJSONSchema' in z) {
-    // @ts-expect-error - zod v4 type
-    return z.toJSONSchema(zodSchema);
+    const fn = 'toJSONSchema';
+    // @ts-expect-error Some nextjs compilation issue
+    return z[fn].call(z, zodSchema);
   }
 
   return originalZodToJsonSchema(zodSchema, { $refStrategy: 'none' });

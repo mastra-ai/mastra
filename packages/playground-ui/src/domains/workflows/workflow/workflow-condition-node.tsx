@@ -20,6 +20,7 @@ import { WorkflowStepActionBar } from './workflow-step-action-bar';
 export type ConditionNode = Node<
   {
     conditions: Condition[];
+    withoutTopHandle?: boolean;
     previousStepId: string;
     nextStepId: string;
     mapConfig?: string;
@@ -28,7 +29,7 @@ export type ConditionNode = Node<
 >;
 
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
-  const { conditions, previousStepId, nextStepId } = data;
+  const { conditions, previousStepId, nextStepId, withoutTopHandle } = data;
   const [open, setOpen] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const type = conditions[0]?.type;
@@ -41,13 +42,14 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
 
   return (
     <>
-      <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
+      {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
 
       <div
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
-          previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1 bg-accent1Darker',
-          previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2 bg-accent2Darker',
+          previousStep?.status === 'success' && nextStep && 'bg-accent1Darker',
+          previousStep?.status === 'failed' && nextStep && 'bg-accent2Darker',
+          !previousStep && Boolean(nextStep?.status) && 'bg-accent1Darker',
         )}
       >
         <Collapsible

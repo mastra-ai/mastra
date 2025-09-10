@@ -35,7 +35,10 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
   const registry = await runRegistry(verdaccioPath, ['-c', './verdaccio.yaml', '-l', `${port}`], {
     cwd: location,
   });
-  login('mastra', 'mastra-ai', port);
+
+  // Set a dummy auth token for npm/pnpm (required by npm even if registry doesn't validate it)
+  execSync(`npm config set //localhost:${port}/:_authToken dummy-token`);
+  execSync(`pnpm config set //localhost:${port}/:_authToken dummy-token`);
 
   return new Proxy(registry, {
     get(target, prop) {
@@ -46,8 +49,4 @@ export async function startRegistry(verdaccioPath, port, location = process.cwd(
       return Reflect.get(target, prop);
     },
   });
-}
-
-export function login(user, password, port) {
-  execSync(`npx npm-cli-login -u ${user} -p ${password} -e test@domain.test -r http://localhost:${port}`);
 }

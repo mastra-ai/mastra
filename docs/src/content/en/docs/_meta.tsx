@@ -4,14 +4,15 @@ const meta = {
   index: "Introduction",
   "getting-started": { title: "Getting Started" },
   agents: { title: "Agents" },
-  "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
-  memory: { title: "Memory", theme: { collapsed: true } },
   workflows: { title: "Workflows" },
   "workflows-legacy": {
     title: "Workflows (Legacy)",
     theme: { collapsed: true },
     display: "hidden",
   },
+  streaming: <Tag text="experimental">Streaming</Tag>,
+  "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
+  memory: { title: "Memory", theme: { collapsed: true } },
   "networks-vnext": { title: "Networks (vNext)" },
   rag: { title: "RAG" },
   "server-db": {

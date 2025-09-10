@@ -28,7 +28,6 @@ const tabIndicatorClass = cn(
   'px-4 py-2 text-sm transition-all border-b-2 border-transparent',
   'data-[state=active]:border-white data-[state=active]:text-white font-medium',
   'data-[state=inactive]:text-mastra-el-4 hover:data-[state=inactive]:text-mastra-el-2',
-  'focus-visible:outline-none',
 );
 
 const tabContentClass = cn('data-[state=inactive]:mt-0 min-h-0 h-full grid grid-rows-[1fr]');

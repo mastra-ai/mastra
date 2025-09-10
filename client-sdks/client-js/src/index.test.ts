@@ -272,7 +272,7 @@ describe('MastraClient Resources', () => {
       });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/agents/test-agent/generate`,
+        `${clientOptions.baseUrl}/api/agents/test-agent/generate-legacy`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining(clientOptions.headers),
@@ -392,7 +392,7 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
       expect(global.fetch).toHaveBeenCalledTimes(2);
 
       const [secondUrl, secondConfig] = (global.fetch as any).mock.calls[1];
-      expect(secondUrl).toBe(`${clientOptions.baseUrl}/api/agents/test-agent/stream`);
+      expect(secondUrl).toBe(`${clientOptions.baseUrl}/api/agents/test-agent/stream-legacy`);
 
       const secondRequestBody = JSON.parse(secondConfig.body);
       expect(secondRequestBody.messages).toHaveLength(2);

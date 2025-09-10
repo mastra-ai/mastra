@@ -1,7 +1,7 @@
-import type { IMastraLogger } from "@mastra/core/logger";
-import { ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import type { GetPromptResult, Prompt } from "@modelcontextprotocol/sdk/types.js";
-import type { InternalMastraMCPClient } from "./client";
+import type { IMastraLogger } from '@mastra/core/logger';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import type { GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { InternalMastraMCPClient } from './client';
 
 interface PromptClientActionsConfig {
   client: InternalMastraMCPClient;
@@ -28,7 +28,7 @@ export class PromptClientActions {
     try {
       const response = await this.client.listPrompts();
       if (response && response.prompts && Array.isArray(response.prompts)) {
-        return response.prompts.map((prompt) => ({ ...prompt, version: prompt.version || '' }));
+        return response.prompts.map(prompt => ({ ...prompt, version: prompt.version || '' }));
       } else {
         this.logger.warn(`Prompts response from server ${this.client.name} did not have expected structure.`, {
           response,
@@ -37,8 +37,8 @@ export class PromptClientActions {
       }
     } catch (e: any) {
       // MCP Server might not support prompts, so we return an empty array
-      if (e.code === ErrorCode.MethodNotFound) {      
-        return []
+      if (e.code === ErrorCode.MethodNotFound) {
+        return [];
       }
       this.logger.error(`Error getting prompts from server ${this.client.name}`, {
         error: e instanceof Error ? e.message : String(e),
@@ -56,8 +56,16 @@ export class PromptClientActions {
    * @param version Optional version of the prompt to get.
    * @returns The prompt content.
    */
-  public async get({name, args, version}: {name: string, args?: Record<string, any>, version?: string}): Promise<GetPromptResult> {
-    return this.client.getPrompt({name, args, version});
+  public async get({
+    name,
+    args,
+    version,
+  }: {
+    name: string;
+    args?: Record<string, any>;
+    version?: string;
+  }): Promise<GetPromptResult> {
+    return this.client.getPrompt({ name, args, version });
   }
 
   /**

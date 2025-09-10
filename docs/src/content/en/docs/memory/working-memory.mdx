@@ -61,9 +61,9 @@ const memory = new Memory({
       enabled: true,
       scope: 'thread', // Default - memory is isolated per thread
       template: `# User Profile
-- **Name**: 
-- **Interests**: 
-- **Current Goal**: 
+- **Name**:
+- **Interests**:
+- **Current Goal**:
 `,
     },
   },
@@ -87,11 +87,11 @@ const memory = new Memory({
       enabled: true,
       scope: 'resource', // Memory persists across all user threads
       template: `# User Profile
-- **Name**: 
-- **Location**: 
-- **Interests**: 
-- **Preferences**: 
-- **Long-term Goals**: 
+- **Name**:
+- **Location**:
+- **Interests**:
+- **Preferences**:
+- **Long-term Goals**:
 `,
     },
   },
@@ -137,23 +137,23 @@ const memory = new Memory({
       enabled: true,
       template: `
 # User Profile
- 
+
 ## Personal Info
- 
+
 - Name:
 - Location:
 - Timezone:
- 
+
 ## Preferences
- 
+
 - Communication Style: [e.g., Formal, Casual]
 - Project Goal:
 - Key Deadlines:
   - [Deadline 1]: [Date]
   - [Deadline 2]: [Date]
- 
+
 ## Session State
- 
+
 - Last Task Discussed:
 - Open Questions:
   - [Question 1]
@@ -367,7 +367,7 @@ await memory.updateWorkingMemory({
 
 ## Examples
 
-- [Streaming working memory](/examples/memory/streaming-working-memory)
-- [Using a working memory template](/examples/memory/streaming-working-memory-advanced)
-- [Using a working memory schema](/examples/memory/streaming-working-memory-structured)
+- [Basic working memory](/examples/memory/working-memory-basic)
+- [Working memory with template](/examples/memory/working-memory-template)
+- [Working memory with schema](/examples/memory/working-memory-schema)
 - [Per-resource working memory](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - Complete example showing resource-scoped memory persistence

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.10.3",
+  "version": "0.10.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -19,8 +19,18 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/fastembed"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",

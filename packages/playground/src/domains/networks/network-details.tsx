@@ -5,12 +5,23 @@ import { GetNetworkResponse, GetVNextNetworkResponse } from '@mastra/client-js';
 import { useContext } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-import { RadioGroup, RadioGroupItem, Entry, NetworkContext, ToolsIcon, Txt, WorkflowIcon } from '@mastra/playground-ui';
+import {
+  RadioGroup,
+  RadioGroupItem,
+  Entry,
+  NetworkContext,
+  ToolsIcon,
+  Txt,
+  WorkflowIcon,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@mastra/playground-ui';
 
 type NetworkDetailsProps = {
   network: GetNetworkResponse | GetVNextNetworkResponse;
