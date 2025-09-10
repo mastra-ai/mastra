@@ -14,6 +14,21 @@ pnpm add @mastra/cloud
 
 ## Features
 
+#### API Reference
+
+##### `MastraCloudAITracingExporter`
+
+A custom AI tracing exporter that sends AI span data to Mastra Cloud for observability and monitoring.
+
+###### Constructor Options
+
+- `accessToken` (required): Your Mastra Cloud access token
+- `endpoint` (optional): Custom endpoint URL for sending AI tracing data (defaults to `https://api.mastra.ai/ai/spans/publish`)
+- `maxBatchSize` (optional): Maximum number of spans to batch before sending (default: 1000)
+- `maxBatchWaitMs` (optional): Maximum time to wait before sending a batch in milliseconds (default: 5000)
+- `maxRetries` (optional): Maximum number of retry attempts for failed requests (default: 3)
+- `logger` (optional): Logger instance compatible with the Mastra Logger interface
+
 ### Telemetry
 
 The package currently provides OpenTelemetry integration with Mastra Cloud for instrumenting and collecting telemetry data from your applications.
@@ -52,13 +67,13 @@ export const mastra = new Mastra({
 });
 ```
 
-## API Reference
+#### API Reference
 
-### `MastraCloudExporter`
+##### `MastraCloudExporter`
 
 A custom OpenTelemetry exporter that sends telemetry data to Mastra Cloud.
 
-#### Constructor Options
+###### Constructor Options
 
 - `accessToken` (required): Your Mastra Cloud access token
 - `endpoint` (optional): Custom endpoint URL for sending telemetry data

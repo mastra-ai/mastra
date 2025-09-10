@@ -4,7 +4,7 @@ const meta = {
   "using-tools-and-mcp": "Tools and MCP",
   "input-processors": "Input Processors",
   "adding-voice": "Adding Voice",
-  "runtime-variables": "Runtime Context",
+  "runtime-context": "Runtime Context",
   "dynamic-agents": "Dynamic Agents",
 };
 
