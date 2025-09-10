@@ -68,7 +68,7 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
 };
 
 export const useWorkflowStream = (workflowFullState?: WorkflowWatchResult) => {
-  const { setResult, result } = useContext(WorkflowRunContext);
+  const { setResult } = useContext(WorkflowRunContext);
 
   useEffect(() => {
     if (!workflowFullState) return;

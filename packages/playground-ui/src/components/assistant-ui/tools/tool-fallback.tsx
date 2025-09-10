@@ -5,6 +5,7 @@ import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { LoadingBadge } from './badges/loading-badge';
+import { AgentBadge } from './badges/agent-badge';
 
 export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result, args, ...props }) => {
   return (
@@ -18,12 +19,20 @@ const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, r
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
+
   useWorkflowStream(args.__mastraMetadata?.workflowFullState);
   const { data: workflow, isLoading } = useWorkflow(toolName);
+
+  const isAgent = args.__mastraMetadata?.from === 'AGENT';
+
+  if (isAgent) {
+    return <AgentBadge agentId={toolName} messages={args?.__mastraMetadata?.messages} />;
+  }
 
   if (isLoading) return <LoadingBadge />;
 
   if (workflow) {
+    console.log('result', result);
     return (
       <WorkflowBadge
         workflowId={toolName}

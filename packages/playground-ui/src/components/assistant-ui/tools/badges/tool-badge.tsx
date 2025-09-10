@@ -5,6 +5,7 @@ import { BadgeWrapper } from './badge-wrapper';
 export interface ToolBadgeProps {
   toolName: string;
   argsText: string;
+
   result: any;
 }
 
@@ -12,10 +13,18 @@ export const ToolBadge = ({ toolName, argsText, result }: ToolBadgeProps) => {
   let argSlot;
 
   try {
-    const parsedArgs = JSON.parse(argsText);
-    argSlot = <SyntaxHighlighter data={parsedArgs} />;
+    const { __mastraMetadata: _, ...rest } = JSON.parse(argsText);
+    argSlot = <SyntaxHighlighter data={rest} />;
   } catch {
     argSlot = <pre className="whitespace-pre-wrap">{argsText}</pre>;
+  }
+
+  let resultSlot;
+  try {
+    const parsedResult = JSON.parse(result);
+    resultSlot = <SyntaxHighlighter data={parsedResult} />;
+  } catch {
+    resultSlot = <pre className="whitespace-pre-wrap">{result}</pre>;
   }
 
   return (
@@ -29,11 +38,7 @@ export const ToolBadge = ({ toolName, argsText, result }: ToolBadgeProps) => {
         {result !== undefined && (
           <div>
             <p className="font-medium pb-2">Tool result</p>
-            {typeof result === 'string' ? (
-              <pre className="whitespace-pre-wrap">{result}</pre>
-            ) : (
-              <SyntaxHighlighter data={result} />
-            )}
+            {resultSlot}
           </div>
         )}
       </div>
