@@ -714,19 +714,20 @@ export async function createNetworkLoop({
       isComplete: z.boolean(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData }) => {
-      console.log('Finish Step Debug - Input Data', JSON.stringify(inputData, null, 2));
-      console.log('Finish Step Debug - Is Complete', inputData.isComplete);
-      console.log('Finish Step Debug - Iteration', inputData.iteration);
-      console.log('Finish Step Debug - Result', inputData.result);
-      console.log('Finish Step Debug - Task', inputData.task);
-
-      return {
+    execute: async ({ inputData, writer }) => {
+      const endPayload = {
         task: inputData.task,
         result: inputData.result,
         isComplete: !!inputData.isComplete,
         iteration: inputData.iteration,
       };
+
+      await writer?.write({
+        type: 'network-execution-event-step-finish',
+        payload: endPayload,
+      });
+
+      return endPayload;
     },
   });
 
@@ -853,8 +854,15 @@ export async function networkLoop<
     id: 'final-step',
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: networkWorkflow.outputSchema,
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, writer }) => {
       if (maxIterations && inputData.iteration >= maxIterations) {
+        await writer?.write({
+          type: 'network-execution-event-finish',
+          payload: {
+            ...inputData,
+            completionReason: `Max iterations reached: ${maxIterations}`,
+          },
+        });
         return {
           ...inputData,
           completionReason: `Max iterations reached: ${maxIterations}`,
