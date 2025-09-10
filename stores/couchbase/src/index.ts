@@ -1,3 +1,3 @@
 export * from './vector';
-import { COUCHBASE_PROMPT } from './vector/prompt';
-export { COUCHBASE_PROMPT };
+import { COUCHBASE_SEARCH_STORE_PROMPT, COUCHBASE_QUERY_STORE_PROMPT } from './vector/prompt';
+export { COUCHBASE_SEARCH_STORE_PROMPT, COUCHBASE_QUERY_STORE_PROMPT };
