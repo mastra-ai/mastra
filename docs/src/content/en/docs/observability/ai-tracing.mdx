@@ -51,42 +51,11 @@ For the latest updates, see [GitHub issue #6773](https://github.com/mastra-ai/ma
 
 ## Basic Configuration
 
-Here's a simple example of enabling AI Tracing:
-
-```ts filename="src/mastra/index.ts" showLineNumbers copy
-import { LangfuseExporter } from '@mastra/langfuse';
-
-export const mastra = new Mastra({
-  // ... other config
-  observability: {
-    aiTracing: {
-      configs: {
-        langfuse: {
-          serviceName: 'my-service',
-          exporters: [
-            new LangfuseExporter({
-              publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-              secretKey: process.env.LANGFUSE_SECRET_KEY,
-              baseUrl: process.env.LANGFUSE_BASE_URL, // Optional - defaults to Langfuse cloud
-              realtime: true,
-            }),
-          ],
-        },
-      },
-    },
-  },
-});
-```
-
-For the quickest setup with built-in exporters:
-
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   // ... other config
   observability: {
-    aiTracing: {
-      default: { enabled: true }, // Enables DefaultExporter and CloudExporter
-    },
+    default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   },
 });
 ```
@@ -103,7 +72,7 @@ type AITracingConfig = {
   };
 
   // Map of tracing instance names to their configurations
-  configs: Record<string, AITracingInstanceConfig | MastraAITracing>;
+  configs?: Record<string, AITracingInstanceConfig | MastraAITracing>;
 
   // Optional function to select which tracing instance to use
   configSelector?: TracingSelector;
@@ -135,11 +104,9 @@ When `default.enabled` is set to `true`, Mastra automatically configures AI trac
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
-    aiTracing: {
-      default: { enabled: true },
-      configs: {
-        // Your custom configs can coexist with the default
-      }
+    default: { enabled: true },
+    configs: {
+      // Your custom configs can coexist with the default
     }
   }
 });
@@ -164,37 +131,35 @@ Control which traces are collected and exported:
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
-    aiTracing: {
-      configs: {
-        langfuse: {
-          serviceName: 'my-service',
-          // Sample all traces (default)
-          sampling: { type: 'always' },
-          exporters: [langfuseExporter],
-        },
+    configs: {
+      langfuse: {
+        serviceName: 'my-service',
+        // Sample all traces (default)
+        sampling: { type: 'always' },
+        exporters: [langfuseExporter],
+      },
 
-        development: {
-          serviceName: 'dev-service',
-          // Sample 10% of traces
-          sampling: {
-            type: 'ratio',
-            probability: 0.1
-          },
-          exporters: [langfuseExporter],
+      development: {
+        serviceName: 'dev-service',
+        // Sample 10% of traces
+        sampling: {
+          type: 'ratio',
+          probability: 0.1
         },
+        exporters: [langfuseExporter],
+      },
 
-        custom: {
-          serviceName: 'custom-service',
-          // Custom sampling logic
-          sampling: {
-            type: 'custom',
-            sampler: (context) => {
-              // Only trace requests from specific users
-              return context.metadata?.userId === 'debug-user';
-            }
-          },
-          exporters: [langfuseExporter],
+      custom: {
+        serviceName: 'custom-service',
+        // Custom sampling logic
+        sampling: {
+          type: 'custom',
+          sampler: (context) => {
+            // Only trace requests from specific users
+            return context.metadata?.userId === 'debug-user';
+          }
         },
+        exporters: [langfuseExporter],
       },
     },
   },
@@ -248,7 +213,7 @@ The `CloudExporter` sends traces to Mastra Cloud for online visualization and an
 import { CloudExporter } from '@mastra/core';
 
 new CloudExporter({
-  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN, // Required
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN, // Required (but can be pulled directly from the environment)
   endpoint: 'https://api.mastra.ai/ai/spans/publish', // Optional custom endpoint
   maxBatchSize: 1000,    // Maximum spans per batch
   maxBatchWaitMs: 5000,  // Maximum wait time before flushing
@@ -299,7 +264,7 @@ import { LangfuseExporter } from '@mastra/langfuse';
 
 export const mastra = new Mastra({
   observability: {
-    instances: {
+    configs: {
       langfuse: {
         serviceName: process.env.SERVICE_NAME || 'mastra-app',
         sampling: { type: 'always' },
@@ -373,7 +338,7 @@ import { BraintrustExporter } from '@mastra/braintrust';
 
 export const mastra = new Mastra({
   observability: {
-    instances: {
+    configs: {
       braintrust: {
         serviceName: 'my-service',
         exporters: [
@@ -395,26 +360,24 @@ You can configure multiple tracing instances and use a selector to choose which 
 ```ts filename="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
-    aiTracing: {
-      configs: {
-        production: {
-          serviceName: 'prod-service',
-          sampling: { type: 'ratio', probability: 0.1 },
-          exporters: [prodLangfuseExporter],
-        },
-        development: {
-          serviceName: 'dev-service',
-          sampling: { type: 'always' },
-          exporters: [devLangfuseExporter],
-        },
+    configs: {
+      production: {
+        serviceName: 'prod-service',
+        sampling: { type: 'ratio', probability: 0.1 },
+        exporters: [prodLangfuseExporter],
       },
-      configSelector: (context, availableTracers) => {
-        // Use development tracer for debug sessions
-        if (context.runtimeContext?.get('debug') === 'true') {
-          return 'development';
-        }
-        return 'production';
+      development: {
+        serviceName: 'dev-service',
+        sampling: { type: 'always' },
+        exporters: [devLangfuseExporter],
       },
+    },
+    configSelector: (context, availableTracers) => {
+      // Use development tracer for debug sessions
+      if (context.runtimeContext?.get('debug') === 'true') {
+        return 'development';
+      }
+      return 'production';
     },
   },
 });
@@ -425,21 +388,19 @@ You can also combine the default configuration with custom configs:
 ```ts filename="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
   observability: {
-    aiTracing: {
-      default: { enabled: true }, // Provides 'default' instance
-      configs: {
-        langfuse: {
-          serviceName: 'langfuse-service',
-          exporters: [langfuseExporter],
-        },
+    default: { enabled: true }, // Provides 'default' instance
+    configs: {
+      langfuse: {
+        serviceName: 'langfuse-service',
+        exporters: [langfuseExporter],
       },
-      configSelector: (context, availableTracers) => {
-        // Route specific requests to langfuse, others to default
-        if (context.runtimeContext?.get('useExternalTracing')) {
-          return 'langfuse';
-        }
-        return 'default';
-      },
+    },
+    configSelector: (context, availableTracers) => {
+      // Route specific requests to langfuse, others to default
+      if (context.runtimeContext?.get('useExternalTracing')) {
+        return 'langfuse';
+      }
+      return 'default';
     },
   },
 });

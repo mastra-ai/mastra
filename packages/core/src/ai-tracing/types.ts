@@ -434,7 +434,7 @@ export interface AITracingConfig {
     enabled?: boolean;
   };
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  configs: Record<string, Omit<AITracingInstanceConfig, 'name'> | MastraAITracing>;
+  configs?: Record<string, Omit<AITracingInstanceConfig, 'name'> | MastraAITracing>;
   /** Optional selector function to choose which tracing instance to use */
   configSelector?: TracingSelector;
 }
