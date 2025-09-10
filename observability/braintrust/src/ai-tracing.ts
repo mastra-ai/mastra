@@ -29,6 +29,7 @@ export interface BraintrustExporterConfig {
 type SpanData = {
   logger: Logger<true>; // Braintrust logger (for root spans)
   spans: Map<string, Span>; // Maps span.id to Braintrust span
+  activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
 };
 
 // Default span type for all spans
@@ -103,6 +104,11 @@ export class BraintrustExporter implements AITracingExporter {
       return;
     }
 
+    // Refcount: track active non-event spans (including root)
+    if (!span.isEvent) {
+      spanData.activeIds.add(span.id);
+    }
+
     const braintrustParent = this.getBraintrustParent({ spanData, span, method });
     if (!braintrustParent) {
       return;
@@ -151,7 +157,13 @@ export class BraintrustExporter implements AITracingExporter {
         braintrustSpan.end();
       }
 
-      if (span.isRootSpan) {
+      // Refcount: mark this span as ended
+      if (!span.isEvent) {
+        spanData.activeIds.delete(span.id);
+      }
+
+      // If no more active spans remain for this trace, clean up the trace entry
+      if (spanData.activeIds.size === 0) {
         this.traceMap.delete(span.traceId);
       }
     }
@@ -190,7 +202,6 @@ export class BraintrustExporter implements AITracingExporter {
     });
 
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
-    spanData.spans.set(span.id, braintrustSpan);
   }
 
   private async initLogger(span: AnyAISpan): Promise<void> {
@@ -201,7 +212,7 @@ export class BraintrustExporter implements AITracingExporter {
       ...this.config.tuningParameters,
     });
 
-    this.traceMap.set(span.traceId, { logger, spans: new Map() });
+    this.traceMap.set(span.traceId, { logger, spans: new Map(), activeIds: new Set() });
   }
 
   private getSpanData(options: { span: AnyAISpan; method: string }): SpanData | undefined {
@@ -235,6 +246,14 @@ export class BraintrustExporter implements AITracingExporter {
 
     if (spanData.spans.has(parentId)) {
       return spanData.spans.get(parentId);
+    }
+
+    // If the parent exists but is the root span (not represented as a Braintrust
+    // span because we use the logger as the root), attach to the logger so the
+    // span is not orphaned.
+    const parentIsRoot = !!span.parent && (span.parent as any).parent == null;
+    if (parentIsRoot) {
+      return spanData.logger;
     }
 
     this.logger.warn('Braintrust exporter: No parent data found for span', {
