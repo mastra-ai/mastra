@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { describe, test, expect } from 'vitest';
+import { z } from 'zod';
 import { zodToJsonSchema } from './zod-to-json';
 
 type Element = {
@@ -181,13 +181,6 @@ const ExtensionSchema: z.ZodType<Extension> = z.lazy(() =>
     valueCoding: CodingSchema.optional(),
     valueQuantity: QuantitySchema.optional(),
     valueReference: ReferenceSchema.optional(),
-    extension: z.array(ExtensionSchema).optional(),
-  }),
-);
-
-const ElementSchema: z.ZodType<Element> = z.lazy(() =>
-  z.object({
-    id: z.string().optional(),
     extension: z.array(ExtensionSchema).optional(),
   }),
 );
@@ -468,7 +461,6 @@ function testSchemaConversionWithTimeout(
 // ============================================================================
 
 describe('Recursive Schema Performance Analysis', () => {
-  const MEMORY_LIMIT_MB = 500; // Higher limit for realistic testing
   const TIME_LIMIT_MS = 30000; // 30 seconds
 
   test(
