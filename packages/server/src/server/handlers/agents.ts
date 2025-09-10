@@ -70,8 +70,8 @@ async function getSerializedAgentDefinition({
 }) {
   let serializedAgentAgents = {};
 
-  if ('getAgents' in agent) {
-    const agents = await agent.getAgents({ runtimeContext });
+  if ('listAgents' in agent) {
+    const agents = await agent.listAgents({ runtimeContext });
     serializedAgentAgents = Object.entries(agents || {}).reduce<any>((acc, [key, agent]) => {
       return {
         ...acc,
@@ -595,7 +595,6 @@ export function streamNetworkHandler({
         resource: rest.resourceId ?? '',
       },
       runtimeContext: finalRuntimeContext,
-      format: body.format ?? 'mastra',
     });
 
     return streamResult;
