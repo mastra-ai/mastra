@@ -3380,7 +3380,13 @@ export class Agent<
 
           if (shouldGenerate && userMessage) {
             promises.push(
-              this.genTitle(userMessage, runtimeContext, { currentSpan: agentAISpan }, titleModel, titleInstructions).then(title => {
+              this.genTitle(
+                userMessage,
+                runtimeContext,
+                { currentSpan: agentAISpan },
+                titleModel,
+                titleInstructions,
+              ).then(title => {
                 if (title) {
                   return memory.createThread({
                     threadId: thread.id,
