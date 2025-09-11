@@ -1,5 +1,5 @@
 import { WorkflowIcon } from '@/ds/icons';
-import { GetWorkflowResponse } from '@mastra/client-js';
+import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
 
 import { useContext, useEffect } from 'react';
 
@@ -7,9 +7,8 @@ import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domain
 import { useLinkComponent } from '@/lib/framework';
 import { Button } from '@/ds/components/Button';
 
-import { useHandleAgentWorkflowStream } from '@/domains/workflows/hooks/use-handle-agent-workflow-stream';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { StreamChunk } from '@/types';
+
 import { BadgeWrapper } from './badge-wrapper';
 
 export interface WorkflowBadgeProps {
@@ -68,12 +67,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   );
 };
 
-export const useWorkflowStream = (partialWorkflowOutput?: StreamChunk) => {
-  const streamResult = useHandleAgentWorkflowStream(partialWorkflowOutput);
-  const { setResult } = useContext(WorkflowRunContext);
+export const useWorkflowStream = (workflowFullState?: WorkflowWatchResult) => {
+  const { setResult, result } = useContext(WorkflowRunContext);
 
   useEffect(() => {
-    if (!streamResult) return;
-    setResult(streamResult);
-  }, [streamResult]);
+    if (!workflowFullState) return;
+    setResult(workflowFullState);
+  }, [workflowFullState]);
 };

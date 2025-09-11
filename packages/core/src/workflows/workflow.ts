@@ -6,7 +6,8 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
-import type { TracingContext } from '../ai-tracing';
+import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
+import type { TracingContext, TracingOptions } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -889,7 +890,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    this.mastra?.getLogger().warn('createRun() will be removed on September 16th. Use createRunAsync() instead.');
+    this.mastra?.getLogger().warn('createRun() will be removed on September 16th, 2025. Use createRunAsync() instead.');
 
     return run;
   }
@@ -999,6 +1000,7 @@ export class Workflow<
     abortSignal,
     runCount,
     tracingContext,
+    writer,
   }: {
     runId?: string;
     inputData: z.infer<TInput>;
@@ -1021,6 +1023,7 @@ export class Workflow<
     abort: () => any;
     runCount?: number;
     tracingContext?: TracingContext;
+    writer?: WritableStream<ChunkType>;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1048,7 +1051,7 @@ export class Workflow<
 
     const res = isResume
       ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, tracingContext })
-      : await run.start({ inputData, runtimeContext, tracingContext });
+      : await run.start({ inputData, runtimeContext, tracingContext, writableStream: writer });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1315,14 +1318,31 @@ export class Run<
     runtimeContext,
     writableStream,
     tracingContext,
+    tracingOptions,
     format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: inputData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingContext,
+      tracingOptions,
+      runtimeContext,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
@@ -1348,7 +1368,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
-      tracingContext,
+      workflowAISpan,
       format,
     });
 
@@ -1356,6 +1376,7 @@ export class Run<
       this.cleanup?.();
     }
 
+    result.traceId = traceId;
     return result;
   }
 
@@ -1369,17 +1390,20 @@ export class Run<
     runtimeContext,
     writableStream,
     tracingContext,
+    tracingOptions,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     return this._start({
       inputData,
       runtimeContext,
       writableStream,
       tracingContext,
+      tracingOptions,
       format: 'aisdk',
     });
   }
@@ -1667,6 +1691,7 @@ export class Run<
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1753,6 +1778,21 @@ export class Run<
       }
     });
 
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: params.resumeData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingContext: params.tracingContext,
+      tracingOptions: params.tracingOptions,
+      runtimeContext: runtimeContextToUse,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -1784,13 +1824,13 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-        tracingContext: params.tracingContext,
+        workflowAISpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
-
+        result.traceId = traceId;
         return result;
       });
 

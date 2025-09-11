@@ -27,7 +27,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/auth": "workspace:*",
-    "@workos-inc/node": "^7.69.1"
+    "@workos-inc/node": "^7.69.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

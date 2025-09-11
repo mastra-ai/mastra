@@ -232,6 +232,131 @@ interface TripwirePayload {
   tripwireReason: string;
 }
 
+// Network-specific payload interfaces
+interface RoutingAgentStartPayload {
+  inputData: {
+    task: string;
+    resourceId: string;
+    resourceType: string;
+    result?: string;
+    iteration: number;
+    threadId?: string;
+    threadResourceId?: string;
+    isOneOff: boolean;
+    verboseIntrospection: boolean;
+  };
+}
+
+interface RoutingAgentEndPayload {
+  task: string;
+  resourceId: string;
+  resourceType: string;
+  prompt: string;
+  result: string;
+  isComplete?: boolean;
+  selectionReason: string;
+  iteration: number;
+}
+
+interface AgentExecutionStartPayload {
+  agentId: string;
+  args: {
+    task: string;
+    resourceId: string;
+    resourceType: string;
+    prompt: string;
+    result: string;
+    isComplete?: boolean;
+    selectionReason: string;
+    iteration: number;
+  };
+  runId: string;
+}
+
+interface AgentExecutionEndPayload {
+  task: string;
+  agentId: string;
+  result: string;
+  isComplete: boolean;
+  iteration: number;
+}
+
+interface WorkflowExecutionStartPayload {
+  name: string;
+  args: {
+    task: string;
+    resourceId: string;
+    resourceType: string;
+    prompt: string;
+    result: string;
+    isComplete?: boolean;
+    selectionReason: string;
+    iteration: number;
+  };
+  runId: string;
+}
+
+interface WorkflowExecutionEndPayload {
+  task: string;
+  resourceId: string;
+  resourceType: string;
+  result: string;
+  isComplete: boolean;
+  iteration: number;
+}
+
+interface ToolExecutionStartPayload {
+  args: Record<string, any>;
+  toolName: string;
+  runId: string;
+  toolCallId: string;
+}
+
+interface ToolExecutionEndPayload {
+  task: string;
+  resourceId: string;
+  resourceType: string;
+  result: any;
+  isComplete: boolean;
+  iteration: number;
+  toolCallId: string;
+}
+
+interface NetworkStepFinishPayload {
+  task: string;
+  result: string;
+  isComplete: boolean;
+  iteration: number;
+}
+
+interface NetworkFinishPayload {
+  task: string;
+  resourceId: string;
+  resourceType: string;
+  prompt: string;
+  result: string;
+  isComplete?: boolean;
+  completionReason: string;
+  iteration: number;
+  threadId?: string;
+  threadResourceId?: string;
+  isOneOff: boolean;
+}
+
+export type NetworkChunkType =
+  | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
+  | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
+  | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
+  | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
+  | (BaseChunkType & { type: 'workflow-execution-start'; payload: WorkflowExecutionStartPayload })
+  | (BaseChunkType & { type: 'workflow-execution-end'; payload: WorkflowExecutionEndPayload })
+  | (BaseChunkType & { type: 'tool-execution-start'; payload: ToolExecutionStartPayload })
+  | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
+  | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
+  | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
+  | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: any })
+  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: any });
+
 export type ChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
@@ -263,9 +388,11 @@ export type ChunkType<OUTPUT extends OutputSchema = undefined> =
     })
   | (BaseChunkType & { type: 'tool-output'; payload: ToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
+  | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
-  | (BaseChunkType & WorkflowStreamEvent);
+  | (BaseChunkType & WorkflowStreamEvent)
+  | NetworkChunkType;
 
 export type OnResult = (result: {
   warnings: Record<string, any>;

@@ -71,16 +71,16 @@ export const ReferenceCards = () => {
             href: "/reference/agents/getAgent",
           },
           {
-            title: "createTool()",
-            href: "/reference/agents/createTool",
-          },
-          {
             title: "generate()",
             href: "/reference/agents/generate",
           },
           {
             title: "stream()",
             href: "/reference/agents/stream",
+          },
+          {
+            title: "streamVNext() (Experimental)",
+            href: "/reference/agents/streamVNext",
           },
           {
             title: "getWorkflows()",
@@ -445,6 +445,10 @@ export const ReferenceCards = () => {
           {
             title: "Answer Relevancy",
             href: "/reference/scorers/answer-relevancy",
+          },
+          {
+            title: "Answer Similarity",
+            href: "/reference/scorers/answer-similarity",
           },
           {
             title: "Bias",

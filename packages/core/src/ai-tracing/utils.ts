@@ -5,78 +5,71 @@
 
 import type { RuntimeContext } from '../di';
 import { getSelectedAITracing } from './registry';
-import type { AISpan, AISpanType, AISpanTypeMap, TracingContext } from './types';
+import type { AISpan, AISpanType, AISpanTypeMap, AnyAISpan, TracingContext, TracingOptions } from './types';
+
+const DEFAULT_KEYS_TO_STRIP = new Set(['logger', 'providerMetadata', 'steps', 'tracingContext']);
+export interface DeepCleanOptions {
+  keysToStrip?: Set<string>;
+  maxDepth?: number;
+}
 
 /**
- * Cleans an object by testing each key-value pair for circular references.
- * Problematic values are replaced with error messages for debugging.
- * @param obj - Object to clean
- * @returns Cleaned object with circular references marked
+ * Recursively cleans a value by removing circular references and stripping problematic or sensitive keys.
+ * Circular references are replaced with "[Circular]". Unserializable values are replaced with error messages.
+ * Keys like "logger" and "tracingContext" are stripped by default.
+ * A maximum recursion depth is enforced to avoid stack overflow or excessive memory usage.
+ *
+ * @param value - The value to clean (object, array, primitive, etc.)
+ * @param options - Optional configuration:
+ *   - keysToStrip: Set of keys to remove from objects (default: logger, tracingContext)
+ *   - maxDepth: Maximum recursion depth before values are replaced with "[MaxDepth]" (default: 10)
+ * @returns A cleaned version of the input with circular references, specified keys, and overly deep values handled
  */
-export function shallowCleanObject(obj: Record<string, any>): Record<string, any> {
-  const cleaned: Record<string, any> = {};
+export function deepClean(
+  value: any,
+  options: DeepCleanOptions = {},
+  _seen: WeakSet<any> = new WeakSet(),
+  _depth: number = 0,
+): any {
+  const { keysToStrip = DEFAULT_KEYS_TO_STRIP, maxDepth = 10 } = options;
 
-  for (const [key, value] of Object.entries(obj)) {
+  if (_depth > maxDepth) {
+    return '[MaxDepth]';
+  }
+
+  if (value === null || typeof value !== 'object') {
     try {
       JSON.stringify(value);
-      cleaned[key] = value;
+      return value;
     } catch (error) {
-      // Use the actual error message for debugging
+      return `[${error instanceof Error ? error.message : String(error)}]`;
+    }
+  }
+
+  if (_seen.has(value)) {
+    return '[Circular]';
+  }
+
+  _seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map(item => deepClean(item, options, _seen, _depth + 1));
+  }
+
+  const cleaned: Record<string, any> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (keysToStrip.has(key)) {
+      continue;
+    }
+
+    try {
+      cleaned[key] = deepClean(val, options, _seen, _depth + 1);
+    } catch (error) {
       cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
     }
   }
 
   return cleaned;
-}
-
-/**
- * Cleans an array by applying object cleaning to each item.
- * @param arr - Array to clean
- * @returns Cleaned array with problematic items marked
- */
-export function shallowCleanArray(arr: any[]): any[] {
-  return arr.map(item => {
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      // Apply object cleaning to each array item
-      return shallowCleanObject(item);
-    }
-
-    // For primitives, nested arrays, etc. - test directly
-    try {
-      JSON.stringify(item);
-      return item;
-    } catch (error) {
-      return `[${error instanceof Error ? error.message : String(error)}]`;
-    }
-  });
-}
-
-/**
- * Safely cleans any value by removing circular references and marking problematic data.
- * Provides detailed error information to help identify issues in source code.
- * @param value - Value to clean (object, array, primitive, etc.)
- * @returns Cleaned value with circular references marked
- */
-export function shallowClean(value: any): any {
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return shallowCleanArray(value);
-  }
-
-  if (typeof value === 'object') {
-    return shallowCleanObject(value);
-  }
-
-  // Primitives, functions, etc. - test directly
-  try {
-    JSON.stringify(value);
-    return value;
-  } catch (error) {
-    return `[${error instanceof Error ? error.message : String(error)}]`;
-  }
 }
 
 /**
@@ -164,9 +157,15 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
   attributes?: AISpanTypeMap[T];
   metadata?: Record<string, any>;
   tracingContext?: TracingContext;
+  tracingOptions?: TracingOptions;
   runtimeContext?: RuntimeContext;
 }): AISpan<T> | undefined {
-  const { type, attributes, tracingContext, runtimeContext, ...rest } = options;
+  const { type, attributes, tracingContext, tracingOptions, runtimeContext, ...rest } = options;
+
+  const metadata = {
+    ...(rest.metadata ?? {}),
+    ...(tracingOptions?.metadata ?? {}),
+  };
 
   // If we have a current span, create a child span
   if (tracingContext?.currentSpan) {
@@ -174,6 +173,7 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
       type,
       attributes,
       ...rest,
+      metadata,
     });
   }
 
@@ -189,5 +189,21 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
       runtimeContext,
     },
     ...rest,
+    metadata,
   });
+}
+
+/**
+ * Extracts the trace ID from a span if it is valid.
+ *
+ * This helper is typically used to safely retrieve the `traceId` from a span object,
+ * while gracefully handling invalid spans — such as no-op spans — by returning `undefined`.
+ *
+ * A span is considered valid if `span.isValid` is `true`.
+ *
+ * @param span - The span object to extract the trace ID from. May be `undefined`.
+ * @returns The `traceId` if the span is valid, otherwise `undefined`.
+ */
+export function getValidTraceId(span?: AnyAISpan): string | undefined {
+  return span?.isValid ? span.traceId : undefined;
 }
