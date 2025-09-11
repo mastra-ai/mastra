@@ -1944,10 +1944,10 @@ export class Agent<
           messageList,
         });
 
+        const systemMessages = messageList.getSystemMessages();
+
         const systemMessage =
-          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
-            ?.map(m => m.content)
-            ?.join(`\n`) ?? undefined;
+          [...systemMessages, ...messageList.getSystemMessages('memory')]?.map(m => m.content)?.join(`\n`) ?? undefined;
 
         const processedMemoryMessages = await memory.processMessages({
           // these will be processed
@@ -1968,6 +1968,7 @@ export class Agent<
         })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
+          .addSystem(systemMessages)
           .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
@@ -2971,10 +2972,10 @@ export class Agent<
           messageList,
         });
 
+        const systemMessages = messageList.getSystemMessages();
+
         const systemMessage =
-          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
-            ?.map(m => m.content)
-            ?.join(`\n`) ?? undefined;
+          [...systemMessages, ...messageList.getSystemMessages('memory')]?.map(m => m.content)?.join(`\n`) ?? undefined;
 
         const processedMemoryMessages = await memory.processMessages({
           // these will be processed
@@ -2995,6 +2996,7 @@ export class Agent<
         })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
+          .addSystem(systemMessages)
           .add(options.context || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user');
