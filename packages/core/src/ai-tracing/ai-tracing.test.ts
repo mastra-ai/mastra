@@ -3,13 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraError } from '../error';
 import { clearAITracingRegistry } from './registry';
 import { DefaultAITracing } from './tracers';
-import type {
-  AITracingEvent,
-  AITracingExporter,
-  LLMGenerationAttributes,
-  AISpan,
-  AITracing,
-} from './types';
+import type { AITracingEvent, AITracingExporter, LLMGenerationAttributes, AISpan, AITracing } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -655,9 +649,6 @@ describe('AI Tracing', () => {
         },
       });
 
-      console.log('ROOT');
-      console.log(rootSpan);
-
       // Clear events from root span creation
       testExporter.events = [];
 
@@ -669,9 +660,6 @@ describe('AI Tracing', () => {
           chunkType: 'text-delta',
         },
       });
-
-      console.log('EVENT');
-      console.log(eventSpan);
 
       // Should have emitted exactly one event: span_ended
       expect(testExporter.events).toHaveLength(1);

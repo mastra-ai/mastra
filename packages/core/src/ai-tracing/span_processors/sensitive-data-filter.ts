@@ -66,12 +66,11 @@ export class SensitiveDataFilter implements AISpanProcessor {
       filteredSpan.output = deepFilter(span.output);
       filteredSpan.errorInfo = deepFilter(span.errorInfo);
       return filteredSpan;
-    } catch (error) {
+    } catch {
       // If filtering fails, return heavily redacted span for security
       const safeSpan = { ...span };
       safeSpan.attributes = {
         '[FILTERING_ERROR]': 'Attributes were completely redacted due to filtering error',
-        '[ERROR_MESSAGE]': error instanceof Error ? error.message : 'Unknown filtering error',
       } as any;
       return safeSpan;
     }

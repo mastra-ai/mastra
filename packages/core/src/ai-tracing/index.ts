@@ -2,7 +2,6 @@
  * Mastra AI Tracing
  */
 
-
 // Core types and interfaces
 export * from './spans';
 export * from './tracers';

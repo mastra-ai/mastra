@@ -199,7 +199,7 @@ export function hasAITracing(name: string): boolean {
 }
 
 /**
- * Type guard to check if an object is a AITracing instance
+ * Type guard to check if an object is a BaseAITracing instance
  */
 function isAITracingInstance(obj: Omit<TracingConfig, 'name'> | AITracing): obj is AITracing {
   return obj instanceof BaseAITracing;

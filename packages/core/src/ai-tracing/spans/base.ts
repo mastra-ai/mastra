@@ -43,14 +43,14 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     this.parent = options.parent;
     this.startTime = new Date();
     this.aiTracing = aiTracing;
-    this.input = deepClean(options.input);
-    this.output = options.isEvent ? options.output : undefined;
     this.isEvent = options.isEvent ?? false;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
-      // Event spans are immediately emitted by the base class via the end() event.
+      // Event spans are immediately emitted by the BaseAITracing class via the end() event.
       this.output = deepClean(options.output);
+    } else {
+      this.input = deepClean(options.input);
     }
   }
 

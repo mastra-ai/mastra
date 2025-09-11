@@ -14,13 +14,7 @@ import {
 } from './registry';
 import { SensitiveDataFilter } from './span_processors';
 import { DefaultAITracing, BaseAITracing } from './tracers';
-import type {
-  AISpan,
-  CreateSpanOptions,
-  ConfigSelector,
-  ConfigSelectorOptions,
-  TracingConfig,
-} from './types';
+import type { AISpan, CreateSpanOptions, ConfigSelector, ConfigSelectorOptions, TracingConfig } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 describe('AI Tracing Registry', () => {

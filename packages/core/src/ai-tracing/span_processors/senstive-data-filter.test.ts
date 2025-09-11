@@ -253,7 +253,6 @@ describe('AI Tracing', () => {
 
         const attributes = filtered!.attributes;
         expect(attributes?.['[FILTERING_ERROR]']).toBe('Attributes were completely redacted due to filtering error');
-        expect(attributes?.['[ERROR_MESSAGE]']).toBe('Property access error');
 
         // Should NOT contain the original sensitive data
         expect(attributes?.['sensitiveData']).toBeUndefined();

@@ -58,7 +58,6 @@ llmSpan.end({
 agentSpan.end();
 ```
 
-
 ### Span Types
 
 - **`WORKFLOW_RUN`**: Root span for entire workflow execution
@@ -77,7 +76,7 @@ Enable AI Observability in your Mastra instance:
 export const mastra = new Mastra({
   // ... other config
   observability: {
-    default: { enabled: true }, 
+    default: { enabled: true },
   },
 });
 ```

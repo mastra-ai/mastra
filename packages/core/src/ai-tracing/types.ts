@@ -410,9 +410,9 @@ export interface CreateSpanOptions<TType extends AISpanType> extends CreateBaseO
  * Options for starting new spans
  */
 export interface StartSpanOptions<TType extends AISpanType> extends CreateSpanOptions<TType> {
- /**
- * Options passed when using a custom sampler strategy
- */
+  /**
+   * Options passed when using a custom sampler strategy
+   */
   customSamplerOptions?: CustomSamplerOptions;
 }
 

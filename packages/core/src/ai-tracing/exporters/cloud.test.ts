@@ -22,22 +22,24 @@ function createTestJWT(payload: { teamId: string; projectId: string }): string {
   return `${headerB64}.${payloadB64}.${signature}`;
 }
 
-function getMockSpan<TType extends AISpanType>(options: CreateSpanOptions<TType> & { id: string, traceId: string}): AnyAISpan {
+function getMockSpan<TType extends AISpanType>(
+  options: CreateSpanOptions<TType> & { id: string; traceId: string },
+): AnyAISpan {
   return {
-      ...options,
-      startTime: new Date(),
-      endTime: new Date(),
-      isEvent: options.isEvent ?? false,
-      isValid: true,
-      isRootSpan: true,
-      parent: undefined,
-      aiTracing: {} as any,
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-    };
+    ...options,
+    startTime: new Date(),
+    endTime: new Date(),
+    isEvent: options.isEvent ?? false,
+    isValid: true,
+    isRootSpan: true,
+    parent: undefined,
+    aiTracing: {} as any,
+    end: vi.fn(),
+    error: vi.fn(),
+    update: vi.fn(),
+    createChildSpan: vi.fn(),
+    createEventSpan: vi.fn(),
+  };
 }
 
 describe('CloudExporter', () => {
