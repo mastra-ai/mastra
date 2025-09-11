@@ -189,17 +189,9 @@ export type ModelForProvider<P extends Provider> = ProviderModels[P][number];
 
 /**
  * OpenAI-compatible model ID type
- * 
- * This type uses a union that provides intelligent autocomplete:
- * - When you start typing a provider name (e.g., "anth"), IDE filters to matching providers
- * - After typing a slash (e.g., "anthropic/"), IDE shows all models for that provider
- * 
- * The union includes both standalone providers and full provider/model paths,
- * allowing TypeScript to suggest providers first, then models after the slash.
+ * Full provider/model paths (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
  */
-export type OpenAICompatibleModelId = 
-  | Provider  // Just provider names for initial autocomplete
-  | {[P in Provider]: \`\${P}/\${ModelForProvider<P>}\`}[Provider];  // Full provider/model paths
+export type OpenAICompatibleModelId = {[P in Provider]: \`\${P}/\${ModelForProvider<P>}\`}[Provider];
 
 
 
