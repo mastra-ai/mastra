@@ -87,6 +87,7 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
   }
 
   if (content.resourceType === 'tool') {
+    console.log('TOOL', content);
     return {
       role: 'assistant',
       content: [
@@ -96,6 +97,7 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
           toolName: content.resourceId,
           result: content.finalResult.result,
           args: {
+            ...content?.input,
             __mastraMetadata: {
               networkMetadata: {
                 selectionReason: content?.selectionReason || '',

@@ -16,6 +16,7 @@ export interface ToolBadgeProps {
 export const ToolBadge = ({ toolName, argsText, result, networkMetadata }: ToolBadgeProps) => {
   let argSlot;
 
+  console.log('TOOL BADGE', { toolName, argsText, result, networkMetadata });
   try {
     const { __mastraMetadata: _, ...rest } = JSON.parse(argsText);
     argSlot = <SyntaxHighlighter data={rest} />;
@@ -23,13 +24,12 @@ export const ToolBadge = ({ toolName, argsText, result, networkMetadata }: ToolB
     argSlot = <pre className="whitespace-pre-wrap">{argsText}</pre>;
   }
 
-  let resultSlot;
-  try {
-    const parsedResult = JSON.parse(result);
-    resultSlot = <SyntaxHighlighter data={parsedResult} />;
-  } catch {
-    resultSlot = <pre className="whitespace-pre-wrap">{result}</pre>;
-  }
+  let resultSlot =
+    typeof result === 'string' ? (
+      <pre className="whitespace-pre-wrap">{result}</pre>
+    ) : (
+      <SyntaxHighlighter data={result} />
+    );
 
   return (
     <BadgeWrapper

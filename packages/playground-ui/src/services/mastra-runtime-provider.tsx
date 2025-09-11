@@ -387,20 +387,21 @@ export function MastraRuntimeProvider({
                 if (!currentEntityId) return;
                 await handleAgentChunk({ agentChunk, setMessages, entityName: currentEntityId });
               } else if (chunk.type === 'tool-execution-start') {
-                console.log('tool exec start', chunk);
                 await handleStreamChunk({
                   chunk: {
                     ...chunk,
                     type: 'tool-call',
                     payload: {
                       ...chunk?.payload,
+                      toolCallId: chunk?.payload?.args?.toolCallId,
+                      toolName: chunk?.payload?.args?.toolName,
                       args: {
-                        ...chunk?.payload?.args,
+                        ...chunk?.payload?.args?.args,
                         __mastraMetadata: {
                           ...chunk?.payload?.args?.__mastraMetadata,
                           networkMetadata: {
                             selectionReason: chunk?.payload?.args?.selectionReason || '',
-                            input: chunk?.payload?.args?.prompt,
+                            input: chunk?.payload?.args?.args,
                           },
                         },
                       },
