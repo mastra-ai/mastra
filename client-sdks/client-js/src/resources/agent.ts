@@ -245,7 +245,7 @@ export class Agent extends BaseResource {
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 23th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.generateLegacy(params);
