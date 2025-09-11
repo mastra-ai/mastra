@@ -1,9 +1,4 @@
-import {
-  AgentChat as Chat,
-  MainContentContent,
-  AgentSettingsProvider,
-  WorkingMemoryProvider,
-} from '@mastra/playground-ui';
+import { AgentChat, MainContentContent, AgentSettingsProvider, WorkingMemoryProvider } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -73,7 +68,7 @@ function Agent() {
           )}
 
           <div className="grid overflow-y-auto relative bg-surface1 py-4">
-            <Chat
+            <AgentChat
               agentId={agentId!}
               agentName={agent?.name}
               modelVersion={agent?.modelVersion}
