@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import type { Agent } from '@mastra/core/agent';
+import { MastraError } from '@mastra/core/error';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -75,7 +76,13 @@ export async function generateSpeechHandler({
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-    const audioStream = await voice.speak(body!.text!, { speaker: body!.speakerId! });
+    const audioStream = await voice.speak(body!.text!, { speaker: body!.speakerId! }).catch(err => {
+      if (err instanceof MastraError) {
+        throw new HTTPException(400, { message: err.message });
+      }
+
+      throw err;
+    });
 
     if (!audioStream) {
       throw new HTTPException(500, { message: 'Failed to generate speech' });
