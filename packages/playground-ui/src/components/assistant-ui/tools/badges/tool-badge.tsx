@@ -5,7 +5,7 @@ import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-di
 
 export interface ToolBadgeProps {
   toolName: string;
-  argsText: string;
+  args: Record<string, unknown> | string;
   result: any;
   networkMetadata?: {
     input?: string | Record<string, unknown>;
@@ -13,16 +13,9 @@ export interface ToolBadgeProps {
   };
 }
 
-export const ToolBadge = ({ toolName, argsText, result, networkMetadata }: ToolBadgeProps) => {
-  let argSlot;
-
-  console.log('TOOL BADGE', { toolName, argsText, result, networkMetadata });
-  try {
-    const { __mastraMetadata: _, ...rest } = JSON.parse(argsText);
-    argSlot = <SyntaxHighlighter data={rest} />;
-  } catch {
-    argSlot = <pre className="whitespace-pre-wrap">{argsText}</pre>;
-  }
+export const ToolBadge = ({ toolName, args, result, networkMetadata }: ToolBadgeProps) => {
+  let argSlot =
+    typeof args === 'string' ? <pre className="whitespace-pre-wrap">{args}</pre> : <SyntaxHighlighter data={args} />;
 
   let resultSlot =
     typeof result === 'string' ? (

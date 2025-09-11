@@ -52,15 +52,14 @@ export const AgentBadge = ({ agentId, messages = [], networkMetadata }: AgentBad
           return <React.Fragment key={index}>{message.content}</React.Fragment>;
         }
 
-        // for workflow runId
-        const isWorkflow = message.toolOutput?.runId;
+        const result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
 
         return (
           <React.Fragment key={index}>
             <ToolFallback
               toolName={message.toolName}
-              argsText={message.toolInput ? JSON.stringify(message.toolInput) : ''}
-              result={isWorkflow ? message.toolOutput : message.toolOutput ? JSON.stringify(message.toolOutput) : ''}
+              argsText={typeof message.args === 'string' ? message.args : JSON.stringify(message.args)}
+              result={result}
               args={message.args}
               status={{ type: 'complete' }}
               type="tool-call"

@@ -52,10 +52,9 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
           badgeMessages.push({
             type: 'tool',
             toolName: part.toolName,
-            toolInput: toolCalls?.[part.toolCallId]?.args || {},
             toolOutput: part.result, // tool output
             toolCallId: part.toolCallId,
-            args: part.args || {},
+            args: toolCalls?.[part.toolCallId]?.args || {},
           });
         } else if (part.type === 'tool-call') {
           toolCalls[part.toolCallId] = part;
