@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "langfuse": "^3.38.4"
+    "langfuse": "^3.38.5"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
