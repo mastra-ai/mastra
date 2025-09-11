@@ -19,8 +19,11 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
   if (content.resourceType === 'agent') {
     const badgeMessages: BadgeMessage[] = [];
     let toolCalls: Record<string, any> = {};
+
+    console.log('lol memory', content);
     // First message is sliced because it's the agent network prompt
     const messages = content.finalResult.messages.slice(1);
+
     for (const message of messages) {
       if (typeof message.content === 'string') {
         badgeMessages.push({
@@ -63,6 +66,8 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
           args: {
             __mastraMetadata: {
               from: 'AGENT',
+              selectionReason: content?.selectionReason || '',
+              input: content?.input || '',
               messages: badgeMessages,
             },
           },

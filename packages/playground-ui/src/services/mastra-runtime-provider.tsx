@@ -408,6 +408,7 @@ export function MastraRuntimeProvider({
                 currentEntityId = chunk.payload?.args?.resourceId;
 
                 const runId = chunk.payload.runId;
+                console.log('chunk', chunk);
                 if (!currentEntityId || !runId) return;
 
                 createRootToolAssistantMessage({
@@ -417,6 +418,8 @@ export function MastraRuntimeProvider({
                   _sideEffects,
                   chunk,
                   from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
+                  selectionReason: chunk?.payload?.args?.selectionReason || '',
+                  prompt: chunk?.payload?.args?.prompt || '',
                 });
 
                 _sideEffects.toolCallIdToName.current[runId] = currentEntityId;

@@ -26,7 +26,14 @@ const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, r
   const isAgent = args.__mastraMetadata?.from === 'AGENT';
 
   if (isAgent) {
-    return <AgentBadge agentId={toolName} messages={args?.__mastraMetadata?.messages} />;
+    return (
+      <AgentBadge
+        agentId={toolName}
+        messages={args?.__mastraMetadata?.messages}
+        selectionReason={args?.__mastraMetadata?.selectionReason || ''}
+        input={args?.__mastraMetadata?.input}
+      />
+    );
   }
 
   if (isLoading) return <LoadingBadge />;
