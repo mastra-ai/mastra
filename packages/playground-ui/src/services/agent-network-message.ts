@@ -86,7 +86,6 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
   }
 
   if (content.resourceType === 'tool') {
-    console.log('TOOL', content);
     return {
       role: 'assistant',
       content: [
