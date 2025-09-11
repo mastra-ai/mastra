@@ -81,4 +81,8 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
   get isRootSpan(): boolean {
     return !this.parent;
   }
+
+  get isValid(): boolean {
+    return false;
+  }
 }

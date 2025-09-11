@@ -124,6 +124,7 @@ describe('create mastra', () => {
                 },
               },
               "workflows": {},
+              "agents": {},
             },
           }
         `);

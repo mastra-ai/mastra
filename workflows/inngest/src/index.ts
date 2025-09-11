@@ -1783,7 +1783,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext?.currentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_CONDITIONAL,
-      name: `conditional: ${entry.conditions.length} conditions`,
+      name: `conditional: '${entry.conditions.length} conditions'`,
       input: prevOutput,
       attributes: {
         conditionCount: entry.conditions.length,
@@ -1797,7 +1797,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
             const evalSpan = conditionalSpan?.createChildSpan({
               type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
-              name: `condition ${index}`,
+              name: `condition: '${index}'`,
               input: prevOutput,
               attributes: {
                 conditionIndex: index,

@@ -14,6 +14,7 @@ Mastra provides a comprehensive set of built-in scorers for evaluating AI output
 These scorers evaluate how correct, truthful, and complete your agent's answers are:
 
 - [`answer-relevancy`](/reference/scorers/answer-relevancy): Evaluates how well responses address the input query (`0-1`, higher is better)
+- [`answer-similarity`](/reference/scorers/answer-similarity): Compares agent outputs against ground truth answers for CI/CD testing using semantic analysis (`0-1`, higher is better)
 - [`faithfulness`](/reference/scorers/faithfulness): Measures how accurately responses represent provided context (`0-1`, higher is better)
 - [`hallucination`](/reference/scorers/hallucination): Detects factual contradictions and unsupported claims (`0-1`, lower is better)
 - [`completeness`](/reference/scorers/completeness): Checks if responses include all necessary information (`0-1`, higher is better)

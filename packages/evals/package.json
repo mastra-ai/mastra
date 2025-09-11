@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.13.5-alpha.0",
+  "version": "0.13.5",
   "description": "",
   "type": "module",
   "files": [
@@ -77,6 +77,16 @@
       "require": {
         "types": "./dist/scorers/code/index.d.ts",
         "default": "./dist/scorers/code/index.cjs"
+      }
+    },
+    "./scorers/utils": {
+      "import": {
+        "types": "./dist/scorers/utils.d.ts",
+        "default": "./dist/scorers/utils.js"
+      },
+      "require": {
+        "types": "./dist/scorers/utils.d.ts",
+        "default": "./dist/scorers/utils.cjs"
       }
     },
     "./package.json": "./package.json"
