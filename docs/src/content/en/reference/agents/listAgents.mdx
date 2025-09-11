@@ -42,6 +42,8 @@ await agent.listAgents();
 ## Extended usage example
 
 ```typescript copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
 await agent.listAgents({
   runtimeContext: new RuntimeContext()
 });
