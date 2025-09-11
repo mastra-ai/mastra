@@ -7630,4 +7630,157 @@ describe('Stream ID Consistency', () => {
     expect(savedMessages[0].id).toBe(messageId);
     expect(customIdGenerator).toHaveBeenCalled();
   });
+
+  describe('onFinish callback with structured output (Issue #7722)', () => {
+    it('should include object field in onFinish callback when using structured output', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'test-structured-output-onfinish',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+
+      let onFinishResult: any = null;
+      let onFinishCalled = false;
+
+      const outputSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+      });
+
+      const response = await agent.generateVNext(
+        [
+          {
+            role: 'user',
+            content: 'Extract the person data',
+          },
+        ],
+        {
+          output: outputSchema,
+          onFinish: async result => {
+            onFinishCalled = true;
+            onFinishResult = result;
+          },
+        },
+      );
+
+      // Wait a bit to ensure onFinish is called
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // The main function should return the structured data correctly
+      expect(response.object).toBeDefined();
+      expect(response.object).toEqual({ name: 'John', age: 30 });
+
+      // onFinish should have been called
+      expect(onFinishCalled).toBe(true);
+      expect(onFinishResult).toBeDefined();
+
+      // The fix: onFinish result should now include the object field
+      expect(onFinishResult.object).toBeDefined();
+      expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
+    }, 10000); // Increase timeout to 10 seconds
+  });
+
+  it('should include object field in onFinish callback when using structuredOutput key', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'The person is John who is 30 years old' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const structuringModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'test-structured-output-processor-onfinish',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+    });
+
+    let onFinishResult: any = null;
+    let onFinishCalled = false;
+
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+
+    const response = await agent.generateVNext(
+      [
+        {
+          role: 'user',
+          content: 'Extract the person data',
+        },
+      ],
+      {
+        structuredOutput: {
+          schema: outputSchema,
+          model: structuringModel,
+        },
+        onFinish: async result => {
+          onFinishCalled = true;
+          onFinishResult = result;
+        },
+      },
+    );
+
+    // Wait a bit to ensure onFinish is called
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // The main function should return the structured data correctly
+    expect(response.object).toBeDefined();
+    expect(response.object).toEqual({ name: 'John', age: 30 });
+
+    // onFinish should have been called
+    expect(onFinishCalled).toBe(true);
+    expect(onFinishResult).toBeDefined();
+
+    // The fix: onFinish result should now include the object field
+    expect(onFinishResult.object).toBeDefined();
+    expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
+  }, 10000); // Increase timeout to 10 seconds
 });

@@ -419,9 +419,20 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     };
                   }
                 } else {
-                  self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
+                  const textContent = self.#bufferedText.join('');
+                  self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
-                  if (!self.#options.output) {
+
+                  // If we have an output schema, try to parse the JSON from the text
+                  if (self.#options.output) {
+                    try {
+                      const parsedObject = JSON.parse(textContent);
+                      self.#delayedPromises.object.resolve(parsedObject as InferSchemaOutput<OUTPUT>);
+                    } catch (e) {
+                      // If parsing fails, resolve with undefined
+                      self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                    }
+                  } else {
                     self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
                   }
                 }
@@ -493,6 +504,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
                     (toolResult: any) => toolResult.dynamic === true,
                   ),
+                  object:
+                    self.#delayedPromises.object.status.type === 'resolved'
+                      ? self.#delayedPromises.object.status.value
+                      : undefined,
                 };
 
                 await options?.onFinish?.(onFinishPayload);
