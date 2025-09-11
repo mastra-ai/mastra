@@ -1,4 +1,5 @@
-import { MastraModelGateway, type ProviderConfig } from './base.js';
+import { MastraModelGateway } from './base.js';
+import type { ProviderConfig } from './base.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -48,6 +49,10 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   perplexity: {
     url: 'https://api.perplexity.ai/chat/completions',
   },
+  vercel: {
+    url: 'https://ai-gateway.vercel.sh/v1/chat/completions',
+    apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
+  },
 };
 
 // Note: We don't exclude any providers by default. The logic below will determine
@@ -80,7 +85,9 @@ export class ModelsDevGateway extends MastraModelGateway {
 
       // Check if this is OpenAI-compatible based on npm package or overrides
       const isOpenAICompatible =
-        providerInfo.npm === '@ai-sdk/openai-compatible' || normalizedId in OPENAI_COMPATIBLE_OVERRIDES;
+        providerInfo.npm === '@ai-sdk/openai-compatible' ||
+        providerInfo.npm === '@ai-sdk/gateway' || // Vercel AI Gateway is OpenAI-compatible
+        normalizedId in OPENAI_COMPATIBLE_OVERRIDES;
 
       // Also include providers that have an API URL and env vars (likely OpenAI-compatible)
       const hasApiAndEnv = providerInfo.api && providerInfo.env && providerInfo.env.length > 0;
