@@ -123,6 +123,8 @@ export class ModelsDevGateway extends MastraModelGateway {
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
           models: modelIds,
         };
+      } else {
+        console.info(`Skipped provider ${providerInfo.name}`);
       }
     }
 
