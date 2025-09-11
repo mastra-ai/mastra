@@ -423,19 +423,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
-                  // If we have an output schema but no processors, parse JSON and resolve object
-                  // This ensures the object is available in onFinish callback
-                  if (self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
-                    try {
-                      const parsedObject = JSON.parse(textContent);
-                      // Note: We're not validating against the schema here, just parsing
-                      // Schema validation happens in the stream transformers
-                      self.#delayedPromises.object.resolve(parsedObject as InferSchemaOutput<OUTPUT>);
-                    } catch {
-                      // If parsing fails, resolve with undefined
-                      self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                    }
-                  } else if (self.#delayedPromises.object.status.type !== 'resolved') {
+                  // Resolve object promise to avoid hanging
+                  if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
                     self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
                   }
                 }
@@ -510,7 +499,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   object:
                     self.#delayedPromises.object.status.type === 'resolved'
                       ? self.#delayedPromises.object.status.value
-                      : undefined,
+                      : self.#options.output && baseFinishStep.text
+                        ? (() => {
+                            try {
+                              return JSON.parse(baseFinishStep.text);
+                            } catch {
+                              return undefined;
+                            }
+                          })()
+                        : undefined,
                 };
 
                 await options?.onFinish?.(onFinishPayload);
