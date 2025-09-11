@@ -229,7 +229,9 @@ export async function createNetworkLoop({
                           This is the result from the agent: ${inputData.result}
   
                           You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
-                          Original task: ${inputData.task}
+                          Original task: ${inputData.task}.
+
+                          When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
 
                           You must return this JSON shape.
   
@@ -273,6 +275,30 @@ export async function createNetworkLoop({
 
           console.log('Routing Complete', endPayload);
 
+          const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+          await memory?.saveMessages({
+            messages: [
+              {
+                id: generateId(),
+                type: 'text',
+                role: 'assistant',
+                content: {
+                  parts: [
+                    {
+                      type: 'text',
+                      text: completionResult?.object?.finalResult || '',
+                    },
+                  ],
+                  format: 2,
+                },
+                createdAt: new Date(),
+                threadId: initData.threadId || runId,
+                resourceId: initData.threadResourceId || networkName,
+              },
+            ] as MastraMessageV2[],
+            format: 'v2',
+          });
+
           return endPayload;
         }
       }
@@ -291,7 +317,7 @@ export async function createNetworkLoop({
   
                     Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
                     If you are calling the same agent again, make sure to adjust the prompt to be more specific.
-                    Make sure to not call the same primitive twice, unless you strongly believe it adds something to the task completion criteria. Take into account previous decision making history and results.
+                    Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
   
                     {
                         "resourceId": string,
