@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- Change SchemaCompat zodToJsonSchema ref strategy from none to relative, leading to less schema warnings and smaller converted schema sizes ([#7697](https://github.com/mastra-ai/mastra/pull/7697))
+
 ## 0.11.2
 
 ### Patch Changes

@@ -48,6 +48,8 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
           You are a router in a network of specialized AI agents. 
           Your job is to decide which agent should handle each step of a task.
           If asking for completion of a task, make sure to follow system instructions closely.
+
+          Every step will result in a prompt message. It will be a JSON object with a "selectionReason" and "finalResult" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task. 
             
           ## System Instructions
           ${instructionsToUse}
@@ -202,25 +204,36 @@ export async function createNetworkLoop({
         completionReason: z.string(),
       });
 
-      await writer.write({
-        type: 'routing-agent-start',
-        payload: {
-          inputData,
-        },
-      });
-
       const routingAgent = await getRoutingAgent({ runtimeContext, agent });
 
       let completionResult;
 
+      let iterationCount = inputData.iteration ? inputData.iteration + 1 : 0;
+
+      await writer.write({
+        type: 'routing-agent-start',
+        payload: {
+          inputData: {
+            ...inputData,
+            iteration: iterationCount,
+          },
+        },
+      });
+
       if (inputData.resourceType !== 'none' && inputData?.result) {
         // Check if the task is complete
+        console.log('Input Data for decision making', inputData);
+
         const completionPrompt = `
                           The ${inputData.resourceType} ${inputData.resourceId} has contributed to the task.
                           This is the result from the agent: ${inputData.result}
   
                           You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
-                          Original task: ${inputData.task}
+                          Original task: ${inputData.task}.
+
+                          When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
+
+                          You must return this JSON shape.
   
                           {
                               "isComplete": boolean,
@@ -241,6 +254,8 @@ export async function createNetworkLoop({
           ...routingAgentOptions,
         });
 
+        console.log('Completion Result', completionResult);
+
         if (completionResult?.object?.isComplete) {
           const endPayload = {
             task: inputData.task,
@@ -250,7 +265,7 @@ export async function createNetworkLoop({
             result: completionResult.object.finalResult,
             isComplete: true,
             selectionReason: completionResult.object.completionReason || '',
-            iteration: inputData.iteration + 1,
+            iteration: iterationCount,
           };
 
           await writer.write({
@@ -258,9 +273,37 @@ export async function createNetworkLoop({
             payload: endPayload,
           });
 
+          console.log('Routing Complete', endPayload);
+
+          const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+          await memory?.saveMessages({
+            messages: [
+              {
+                id: generateId(),
+                type: 'text',
+                role: 'assistant',
+                content: {
+                  parts: [
+                    {
+                      type: 'text',
+                      text: completionResult?.object?.finalResult || '',
+                    },
+                  ],
+                  format: 2,
+                },
+                createdAt: new Date(),
+                threadId: initData.threadId || runId,
+                resourceId: initData.threadResourceId || networkName,
+              },
+            ] as MastraMessageV2[],
+            format: 'v2',
+          });
+
           return endPayload;
         }
       }
+
+      console.log('Final Result', completionResult?.object);
 
       const prompt: MessageListInput = [
         {
@@ -274,6 +317,7 @@ export async function createNetworkLoop({
   
                     Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
                     If you are calling the same agent again, make sure to adjust the prompt to be more specific.
+                    Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
   
                     {
                         "resourceId": string,
@@ -295,7 +339,6 @@ export async function createNetworkLoop({
           selectionReason: z.string(),
         }),
         runtimeContext: runtimeContext,
-        toolChoice: 'none' as any,
         maxSteps: 1,
         memory: {
           thread: initData?.threadId ?? runId,
@@ -317,7 +360,7 @@ export async function createNetworkLoop({
         prompt: object.prompt,
         isComplete: object.resourceId === 'none' && object.resourceType === 'none',
         selectionReason: object.selectionReason,
-        iteration: inputData.iteration + 1,
+        iteration: iterationCount,
       };
 
       await writer.write({
@@ -405,6 +448,7 @@ export async function createNetworkLoop({
                     selectionReason: inputData.selectionReason,
                     resourceType: inputData.resourceType,
                     resourceId: inputData.resourceId,
+                    input: inputData.prompt,
                     finalResult: { text: await result.text, toolCalls: await result.toolCalls, messages },
                   }),
                 },
@@ -525,6 +569,7 @@ export async function createNetworkLoop({
         resourceType: inputData.resourceType,
         resourceId: inputData.resourceId,
         selectionReason: inputData.selectionReason,
+        input,
         finalResult: {
           runId: run.runId,
           runResult: workflowState,
@@ -613,10 +658,13 @@ export async function createNetworkLoop({
       await writer?.write({
         type: 'tool-execution-start',
         payload: {
-          args: inputDataToUse,
-          toolName: inputData.resourceId,
+          args: {
+            ...inputData,
+            args: inputDataToUse,
+            toolName: inputData.resourceId,
+            toolCallId,
+          },
           runId,
-          toolCallId,
         },
       });
 
@@ -652,9 +700,8 @@ export async function createNetworkLoop({
                     selectionReason: inputData.selectionReason,
                     resourceType: inputData.resourceType,
                     resourceId: inputData.resourceId,
-                    args: inputDataToUse,
-                    result: finalResult,
-                    toolCallId,
+                    finalResult: { result: finalResult, toolCallId },
+                    input: inputDataToUse,
                   }),
                 },
               ],
@@ -676,6 +723,7 @@ export async function createNetworkLoop({
         isComplete: false,
         iteration: inputData.iteration,
         toolCallId,
+        toolName: inputData.resourceId,
       };
 
       await writer?.write({
