@@ -24,7 +24,7 @@ export const BadgeWrapper = ({
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
 
   return (
-    <div className="mb-2">
+    <div className="mb-4">
       <div className="flex flex-row gap-2 items-center justify-between">
         <button
           onClick={collapsible ? () => setIsCollapsed(s => !s) : undefined}
