@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-workos",
-  "version": "0.10.5",
+  "version": "0.10.6-alpha.0",
   "description": "Mastra WorkOS Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/auth": "workspace:*",
-    "@workos-inc/node": "^7.69.1"
+    "@workos-inc/node": "^7.69.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

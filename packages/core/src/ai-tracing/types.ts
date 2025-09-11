@@ -90,12 +90,17 @@ export interface LLMGenerationAttributes extends AIBaseAttributes {
   };
   /** Model parameters */
   parameters?: {
+    maxOutputTokens?: number;
     temperature?: number;
-    maxTokens?: number;
     topP?: number;
-    frequencyPenalty?: number;
+    topK?: number;
     presencePenalty?: number;
-    stop?: string[];
+    frequencyPenalty?: number;
+    stopSequences?: string[];
+    seed?: number;
+    maxRetries?: number;
+    abortSignal?: any;
+    headers?: Record<string, string | undefined>;
   };
   /** Whether this was a streaming response */
   streaming?: boolean;
@@ -329,7 +334,7 @@ export interface AISpan<TType extends AISpanType> {
     metadata?: Record<string, any>;
   }): AISpan<TChildType>;
 
-  /** Create event span - can be any span type independent of parent 
+  /** Create event span - can be any span type independent of parent
       Event spans have no input, and no endTime.
   */
   createEventSpan<TChildType extends AISpanType>(options: {
@@ -342,6 +347,9 @@ export interface AISpan<TType extends AISpanType> {
 
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean;
+
+  /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
+  get isValid(): boolean;
 }
 
 /**
@@ -370,6 +378,34 @@ export interface AISpanOptions<TType extends AISpanType> {
   /** Is an event span? */
   isEvent: boolean;
 }
+
+// ============================================================================
+// Lifecycle Types
+// ============================================================================
+
+/**
+ * Options passed when starting a new agent or workflow execution
+ */
+export interface TracingOptions {
+  /** Metadata to add to the root trace span */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Context for AI tracing that flows through workflow and agent execution
+ */
+export interface TracingContext {
+  /** Current AI span for creating child spans and adding metadata */
+  currentSpan?: AnyAISpan;
+}
+
+/**
+ * Properties returned to the user for working with traces externally.
+ */
+export type TracingProperties = {
+  /** Trace ID used on the execution (if the execution was traced). */
+  traceId?: string;
+};
 
 // ============================================================================
 // Configuration Types
@@ -408,10 +444,10 @@ export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
  * Configuration for a single AI tracing instance
  */
 export interface AITracingInstanceConfig {
+  /** Unique identifier for this config in the ai tracing registry */
+  name: string;
   /** Service name for tracing */
   serviceName: string;
-  /** Instance name from the registry */
-  instanceName: string;
   /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
   sampling?: SamplingStrategy;
   /** Custom exporters */
@@ -424,10 +460,14 @@ export interface AITracingInstanceConfig {
  * Complete AI Tracing configuration
  */
 export interface AITracingConfig {
+  /** Enables default exporters, with sampling: always, and sensitive data filtering */
+  default?: {
+    enabled?: boolean;
+  };
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  instances: Record<string, Omit<AITracingInstanceConfig, 'instanceName'> | MastraAITracing>;
+  configs?: Record<string, Omit<AITracingInstanceConfig, 'name'> | MastraAITracing>;
   /** Optional selector function to choose which tracing instance to use */
-  selector?: TracingSelector;
+  configSelector?: TracingSelector;
 }
 
 // ============================================================================
@@ -500,11 +540,3 @@ export type TracingSelector = (
   context: AITracingSelectorContext,
   availableTracers: ReadonlyMap<string, MastraAITracing>,
 ) => string | undefined;
-
-/**
- * Context for AI tracing that flows through workflow and agent execution
- */
-export interface TracingContext {
-  /** Current AI span for creating child spans and adding metadata */
-  currentSpan?: AnyAISpan;
-}

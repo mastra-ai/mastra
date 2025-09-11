@@ -164,7 +164,6 @@ export function workflowLoopStream<
       }
 
       if (executionResult.result.stepResult.reason === 'abort') {
-        console.log('aborted_result', JSON.stringify(executionResult.result, null, 2));
         controller.close();
         return;
       }

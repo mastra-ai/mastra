@@ -1,5 +1,6 @@
 import type {
   AgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
   StructuredOutputOptions,
@@ -69,11 +70,15 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
+export type NetworkStreamParams = {
+  messages: MessageListInput;
+} & MultiPrimitiveExecutionOptions;
 export interface GetAgentResponse {
   name: string;
   instructions: string;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
+  agents: Record<string, { id: string; name: string }>;
   provider: string;
   modelId: string;
   modelVersion: string;

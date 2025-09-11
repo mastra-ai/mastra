@@ -1,5 +1,5 @@
 import { WorkflowIcon } from '@/ds/icons';
-import { GetWorkflowResponse } from '@mastra/client-js';
+import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
 
 import { useContext, useEffect } from 'react';
 
@@ -7,19 +7,23 @@ import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domain
 import { useLinkComponent } from '@/lib/framework';
 import { Button } from '@/ds/components/Button';
 
-import { useHandleAgentWorkflowStream } from '@/domains/workflows/hooks/use-handle-agent-workflow-stream';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { StreamChunk } from '@/types';
+
 import { BadgeWrapper } from './badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 
 export interface WorkflowBadgeProps {
   workflow: GetWorkflowResponse;
   workflowId: string;
   runId?: string;
   isStreaming?: boolean;
+  networkMetadata?: {
+    input?: string | Record<string, unknown>;
+    selectionReason?: string;
+  };
 }
 
-export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, networkMetadata }: WorkflowBadgeProps) => {
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
@@ -29,7 +33,19 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: Work
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
   return (
-    <BadgeWrapper icon={<WorkflowIcon className="text-accent3" />} title={workflow.name} initialCollapsed={false}>
+    <BadgeWrapper
+      icon={<WorkflowIcon className="text-accent3" />}
+      title={workflow.name}
+      initialCollapsed={false}
+      extraInfo={
+        networkMetadata && (
+          <NetworkChoiceMetadataDialogTrigger
+            selectionReason={networkMetadata?.selectionReason || ''}
+            input={networkMetadata?.input}
+          />
+        )
+      }
+    >
       {!isStreaming && !isLoading && (
         <WorkflowRunProvider snapshot={snapshot}>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
@@ -68,12 +84,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   );
 };
 
-export const useWorkflowStream = (partialWorkflowOutput?: StreamChunk) => {
-  const streamResult = useHandleAgentWorkflowStream(partialWorkflowOutput);
+export const useWorkflowStream = (workflowFullState?: WorkflowWatchResult) => {
   const { setResult } = useContext(WorkflowRunContext);
 
   useEffect(() => {
-    if (!streamResult) return;
-    setResult(streamResult);
-  }, [streamResult]);
+    if (!workflowFullState) return;
+    setResult(workflowFullState);
+  }, [workflowFullState]);
 };

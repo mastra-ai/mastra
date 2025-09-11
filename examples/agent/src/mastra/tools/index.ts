@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const cookingTool = createTool({
   id: 'cooking-tool',
-  description: 'My cooking tool description',
+  description: 'Used to cook given an ingredient',
   inputSchema: z.object({
     ingredient: z.string(),
   }),
