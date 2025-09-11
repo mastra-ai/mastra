@@ -3972,7 +3972,7 @@ export class Agent<
     | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
   > {
     this.logger.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.streamLegacy(messages, streamOptions);
