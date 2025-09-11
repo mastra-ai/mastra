@@ -48,6 +48,8 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
           You are a router in a network of specialized AI agents. 
           Your job is to decide which agent should handle each step of a task.
           If asking for completion of a task, make sure to follow system instructions closely.
+
+          Every step will result in a prompt message. It will be a JSON object with a "selectionReason" and "finalResult" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task. 
             
           ## System Instructions
           ${instructionsToUse}
@@ -245,7 +247,7 @@ export async function createNetworkLoop({
           memory: {
             thread: initData?.threadId ?? runId,
             resource: initData?.threadResourceId ?? networkName,
-            // readOnly: true,
+            readOnly: true,
           },
           ...routingAgentOptions,
         });
@@ -289,6 +291,7 @@ export async function createNetworkLoop({
   
                     Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
                     If you are calling the same agent again, make sure to adjust the prompt to be more specific.
+                    Make sure to not call the same primitive twice, unless you strongly believe it adds something to the task completion criteria. Take into account previous decision making history and results.
   
                     {
                         "resourceId": string,
@@ -314,7 +317,7 @@ export async function createNetworkLoop({
         memory: {
           thread: initData?.threadId ?? runId,
           resource: initData?.threadResourceId ?? networkName,
-          // readOnly: true,
+          readOnly: true,
         },
         ...routingAgentOptions,
       };
