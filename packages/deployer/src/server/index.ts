@@ -105,9 +105,10 @@ export async function createHonoServer(
 
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
-  // Add Mastra to context
+  // Configure hono context
   app.use('*', async function setContext(c, next) {
     let runtimeContext = new RuntimeContext();
+    // Parse runtime context from request body and add to context
     if (c.req.method === 'POST' || c.req.method === 'PUT') {
       const contentType = c.req.header('content-type');
       if (contentType?.includes('application/json')) {
@@ -122,6 +123,36 @@ export async function createHonoServer(
         }
       }
     }
+
+    // Parse runtime context from query params and add to context
+    if (c.req.method === 'GET') {
+      try {
+        const encodedRuntimeContext = c.req.query('runtimeContext');
+        if (encodedRuntimeContext) {
+          let parsedRuntimeContext: Record<string, any> | undefined;
+          // Try JSON first
+          try {
+            parsedRuntimeContext = JSON.parse(encodedRuntimeContext);
+          } catch {
+            // Fallback to base64(JSON)
+            try {
+              const json = Buffer.from(encodedRuntimeContext, 'base64').toString('utf-8');
+              parsedRuntimeContext = JSON.parse(json);
+            } catch {
+              // ignore if still invalid
+            }
+          }
+
+          if (parsedRuntimeContext && typeof parsedRuntimeContext === 'object') {
+            runtimeContext = new RuntimeContext([...runtimeContext.entries(), ...Object.entries(parsedRuntimeContext)]);
+          }
+        }
+      } catch {
+        // ignore query parsing errors
+      }
+    }
+
+    // Add relevant contexts to hono context
 
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);

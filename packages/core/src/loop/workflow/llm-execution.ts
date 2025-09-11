@@ -403,7 +403,6 @@ export function createLLMExecutionStep<
             supportedUrls: model?.supportedUrls as Record<string, RegExp[]>,
           };
           let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
-          console.log('inputMessages', JSON.stringify(inputMessages, null, 2));
 
           // Call prepareStep callback if provided
           let stepModel = model;
