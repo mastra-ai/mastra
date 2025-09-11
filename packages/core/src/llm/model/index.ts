@@ -1,2 +1,2 @@
 export * from './model';
-export { type OpenAICompatibleModelId } from './provider-registry.generated';
+export { type OpenAICompatibleModelId, type Provider, type ModelForProvider } from './provider-registry.generated';
