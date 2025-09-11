@@ -317,7 +317,7 @@ export function generateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23th, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
   );
   return generateLegacyHandler({ mastra, ...args });
 }
