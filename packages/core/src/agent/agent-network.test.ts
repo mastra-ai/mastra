@@ -155,7 +155,7 @@ describe('Agent - network', () => {
     }
   });
 
-  it.only('LOOP - execute a single agent then workflow', async () => {
+  it('LOOP - execute a single agent then workflow', async () => {
     const anStream = await network.network(
       'Research dolphins then execute workflow1 based on the location where dolphins live',
       {
