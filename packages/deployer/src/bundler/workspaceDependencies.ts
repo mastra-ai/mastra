@@ -131,9 +131,10 @@ export const packWorkspaceDependencies = async ({
       await Promise.all(
         batch.map(async pkgName => {
           const dep = workspaceMap.get(pkgName);
+          const sanitizedName = slugify(pkgName);
           if (!dep) return;
 
-          await depsService.pack({ dir: dep.location, destination: workspaceDirPath });
+          await depsService.pack({ dir: dep.location, destination: workspaceDirPath, sanitizedName: sanitizedName });
         }),
       );
     }

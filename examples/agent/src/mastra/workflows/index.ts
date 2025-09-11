@@ -2,8 +2,8 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 export const myWorkflow = createWorkflow({
-  id: 'my-workflow',
-  description: 'My workflow description',
+  id: 'recipe-maker',
+  description: 'Returns a recipe based on an ingredient',
   inputSchema: z.object({
     ingredient: z.string(),
   }),
@@ -22,6 +22,7 @@ const step = createStep({
     result: z.string(),
   }),
   execute: async ({ inputData }) => {
+    await new Promise(resolve => setTimeout(resolve, 3000));
     return {
       result: inputData.ingredient,
     };
@@ -37,11 +38,8 @@ const step2 = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
-  execute: async ({ inputData, mastra, tracingContext }) => {
-    const agent = mastra.getAgent('chefAgentResponses');
-    const response = await agent.generate(inputData.result, {
-      tracingContext,
-    });
+  execute: async () => {
+    await new Promise(resolve => setTimeout(resolve, 3000));
     return {
       result: 'suh',
     };

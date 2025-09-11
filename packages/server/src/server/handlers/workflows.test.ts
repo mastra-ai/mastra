@@ -310,11 +310,11 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result).toEqual({
+        error: undefined,
         status: 'success',
         result: { result: 'success' },
         payload: {},
         steps: {
-          input: {},
           'test-step': {
             status: 'success',
             output: { result: 'success' },

@@ -61,14 +61,21 @@ export class Deps extends MastraBase {
     return `file:./workspace-module/${pkgName}-${version}.tgz`;
   }
 
-  public async pack({ dir, destination }: { dir: string; destination: string }) {
+  public async pack({ dir, destination, sanitizedName }: { dir: string; destination: string; sanitizedName: string }) {
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
       root: dir,
     });
 
+    let destinationFlag = `--pack-destination ${destination}`;
+    if (this.packageManager === 'yarn') {
+      // %s includes an '@' at the start of packages names with an '@'
+      // so we need to use our sanitizedName instead.
+      destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
+    }
+
     return cpLogger({
-      cmd: `${this.packageManager} pack --pack-destination ${destination}`,
+      cmd: `${this.packageManager} pack ${destinationFlag}`,
       args: [],
       env: {
         PATH: process.env.PATH!,

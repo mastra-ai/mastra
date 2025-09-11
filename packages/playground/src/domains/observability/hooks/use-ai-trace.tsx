@@ -1,7 +1,7 @@
 import { useQuery } from '@mastra/playground-ui';
 import { client } from '@/lib/client';
 
-export const useAITrace = (traceId: string | null | undefined) => {
+export const useAITrace = (traceId: string | null | undefined, options?: { enabled: boolean }) => {
   const query = useQuery({
     queryKey: ['ai-trace', traceId],
     queryFn: async () => {
@@ -15,6 +15,7 @@ export const useAITrace = (traceId: string | null | undefined) => {
     enabled: !!traceId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
+    ...options,
   });
 
   return query;

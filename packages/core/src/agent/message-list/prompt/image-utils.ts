@@ -150,3 +150,105 @@ export function getImageCacheKey(image: ImageContent): string | number {
 
   return image;
 }
+
+/**
+ * Checks if a string is a valid URL (including protocol-relative URLs).
+ *
+ * @param str - The string to check
+ * @returns true if the string is a valid URL
+ */
+export function isValidUrl(str: string): boolean {
+  try {
+    new URL(str);
+    return true;
+  } catch {
+    // Try as protocol-relative URL
+    if (str.startsWith('//')) {
+      try {
+        new URL(`https:${str}`);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
+/**
+ * Categorizes a string as a URL, data URI, or raw data (base64/other).
+ * Also extracts MIME type from data URIs when present.
+ *
+ * @param data - The string data to categorize
+ * @param fallbackMimeType - Optional fallback MIME type
+ * @returns Categorized data with type and extracted MIME type
+ */
+export function categorizeFileData(
+  data: string,
+  fallbackMimeType?: string,
+): {
+  type: 'url' | 'dataUri' | 'raw';
+  mimeType?: string;
+  data: string;
+} {
+  // Parse as data URI first to extract MIME type
+  const parsed = parseDataUri(data);
+  const mimeType = parsed.isDataUri && parsed.mimeType ? parsed.mimeType : fallbackMimeType;
+
+  // Check if it's a data URI
+  if (parsed.isDataUri) {
+    return {
+      type: 'dataUri',
+      mimeType,
+      data,
+    };
+  }
+
+  // Check if it's a URL
+  if (isValidUrl(data)) {
+    return {
+      type: 'url',
+      mimeType,
+      data,
+    };
+  }
+
+  // Otherwise it's raw data (likely base64 or other string data)
+  return {
+    type: 'raw',
+    mimeType,
+    data,
+  };
+}
+
+/**
+ * Classifies a string as a URL, data URI, or raw data.
+ *
+ * @param data - The string to classify
+ * @returns Object with classification and extracted metadata
+ */
+export function classifyFileData(data: string): {
+  type: 'url' | 'dataUri' | 'base64' | 'other';
+  mimeType?: string;
+} {
+  // Check if it's a data URI
+  const parsed = parseDataUri(data);
+  if (parsed.isDataUri) {
+    return {
+      type: 'dataUri',
+      mimeType: parsed.mimeType,
+    };
+  }
+
+  // Check if it's a URL
+  if (isValidUrl(data)) {
+    return { type: 'url' };
+  }
+
+  // Check if it looks like base64 (simple heuristic)
+  if (/^[A-Za-z0-9+/\-_]+=*$/.test(data) && data.length > 20) {
+    return { type: 'base64' };
+  }
+
+  return { type: 'other' };
+}
