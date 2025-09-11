@@ -658,10 +658,13 @@ export async function createNetworkLoop({
       await writer?.write({
         type: 'tool-execution-start',
         payload: {
-          args: inputDataToUse,
-          toolName: inputData.resourceId,
+          args: {
+            ...inputData,
+            args: inputDataToUse,
+            toolName: inputData.resourceId,
+            toolCallId,
+          },
           runId,
-          toolCallId,
         },
       });
 
