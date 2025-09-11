@@ -74,8 +74,10 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
           args: {
             __mastraMetadata: {
               from: 'AGENT',
-              selectionReason: content?.selectionReason || '',
-              input: content?.input || '',
+              networkMetadata: {
+                selectionReason: content?.selectionReason || '',
+                input: content?.input || '',
+              },
               messages: badgeMessages,
             },
           },

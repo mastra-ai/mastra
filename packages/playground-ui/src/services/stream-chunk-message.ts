@@ -528,8 +528,10 @@ interface CreateRootToolAssistantMessageOptions {
   runId: string;
   _sideEffects: HandleStreamChunkOptions['_sideEffects'];
   from: 'AGENT' | 'WORKFLOW';
-  selectionReason: string;
-  prompt?: string;
+  networkMetadata: {
+    selectionReason?: string;
+    input?: string | Record<string, unknown>;
+  };
 }
 
 export const createRootToolAssistantMessage = ({
@@ -539,8 +541,7 @@ export const createRootToolAssistantMessage = ({
   runId,
   _sideEffects,
   from,
-  selectionReason,
-  prompt,
+  networkMetadata,
 }: CreateRootToolAssistantMessageOptions) => {
   setMessages(currentConversation => {
     if (!entityName || !runId) return currentConversation;
@@ -561,11 +562,10 @@ export const createRootToolAssistantMessage = ({
                 toolName: entityName,
                 args: {
                   __mastraMetadata: {
-                    selectionReason,
+                    networkMetadata,
                     from,
                     ...chunk.payload.args?.__mastraMetadata,
                     isStreaming: true,
-                    prompt,
                   },
                 },
               },
@@ -578,11 +578,10 @@ export const createRootToolAssistantMessage = ({
                 toolName: entityName,
                 args: {
                   __mastraMetadata: {
-                    selectionReason,
+                    networkMetadata,
                     from,
                     ...chunk.payload.args?.__mastraMetadata,
                     isStreaming: true,
-                    prompt,
                   },
                 },
               },
@@ -608,8 +607,7 @@ export const createRootToolAssistantMessage = ({
           args: {
             __mastraMetadata: {
               from,
-              selectionReason,
-              prompt,
+              networkMetadata,
               ...chunk.payload.args?.__mastraMetadata,
               isStreaming: true,
             },

@@ -26,17 +26,26 @@ export type BadgeMessage = TextMessage | ToolMessage;
 export interface AgentBadgeProps {
   agentId: string;
   messages: BadgeMessage[];
-  selectionReason?: string;
-  input?: string | Record<string, unknown>;
+  networkMetadata?: {
+    selectionReason?: string;
+    input?: string | Record<string, unknown>;
+  };
 }
 
-export const AgentBadge = ({ agentId, messages = [], selectionReason, input }: AgentBadgeProps) => {
+export const AgentBadge = ({ agentId, messages = [], networkMetadata }: AgentBadgeProps) => {
   return (
     <BadgeWrapper
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
       initialCollapsed={false}
-      extraInfo={<NetworkChoiceMetadataDialogTrigger selectionReason={selectionReason || ''} input={input} />}
+      extraInfo={
+        networkMetadata && (
+          <NetworkChoiceMetadataDialogTrigger
+            selectionReason={networkMetadata?.selectionReason || ''}
+            input={networkMetadata?.input}
+          />
+        )
+      }
     >
       {messages.map((message, index) => {
         if (message.type === 'text') {

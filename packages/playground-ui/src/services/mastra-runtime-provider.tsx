@@ -387,8 +387,25 @@ export function MastraRuntimeProvider({
                 if (!currentEntityId) return;
                 await handleAgentChunk({ agentChunk, setMessages, entityName: currentEntityId });
               } else if (chunk.type === 'tool-execution-start') {
+                console.log('tool exec start', chunk);
                 await handleStreamChunk({
-                  chunk: { ...chunk, type: 'tool-call' },
+                  chunk: {
+                    ...chunk,
+                    type: 'tool-call',
+                    payload: {
+                      ...chunk?.payload,
+                      args: {
+                        ...chunk?.payload?.args,
+                        __mastraMetadata: {
+                          ...chunk?.payload?.args?.__mastraMetadata,
+                          networkMetadata: {
+                            selectionReason: chunk?.payload?.args?.selectionReason || '',
+                            input: chunk?.payload?.args?.prompt,
+                          },
+                        },
+                      },
+                    },
+                  },
                   setMessages,
                   refreshWorkingMemory,
                   _sideEffects,
@@ -411,6 +428,8 @@ export function MastraRuntimeProvider({
                 console.log('chunk', chunk);
                 if (!currentEntityId || !runId) return;
 
+                const isAgent = chunk.type === 'agent-execution-start';
+
                 createRootToolAssistantMessage({
                   entityName: currentEntityId,
                   setMessages,
@@ -418,8 +437,10 @@ export function MastraRuntimeProvider({
                   _sideEffects,
                   chunk,
                   from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
-                  selectionReason: chunk?.payload?.args?.selectionReason || '',
-                  prompt: chunk?.payload?.args?.prompt || '',
+                  networkMetadata: {
+                    selectionReason: chunk?.payload?.args?.selectionReason || '',
+                    input: chunk?.payload?.args?.prompt,
+                  },
                 });
 
                 _sideEffects.toolCallIdToName.current[runId] = currentEntityId;

@@ -30,8 +30,7 @@ const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, r
       <AgentBadge
         agentId={toolName}
         messages={args?.__mastraMetadata?.messages}
-        selectionReason={args?.__mastraMetadata?.selectionReason || ''}
-        input={args?.__mastraMetadata?.input}
+        networkMetadata={args?.__mastraMetadata?.networkMetadata}
       />
     );
   }
