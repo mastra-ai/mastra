@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.16.3-alpha.1
+
+### Patch Changes
+
+- Delayed deprecation notice for streamVNext() replacing stream() until Sept 23rd ([#7739](https://github.com/mastra-ai/mastra/pull/7739))
+
+- Fix onFinish callback in VNext functions to properly resolve the result ([#7733](https://github.com/mastra-ai/mastra/pull/7733))
+
+- cleanup ([#7736](https://github.com/mastra-ai/mastra/pull/7736))
+
 ## 0.16.3-alpha.0
 
 ### Patch Changes
