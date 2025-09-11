@@ -543,55 +543,6 @@ export const createRootToolAssistantMessage = ({
 }: CreateRootToolAssistantMessageOptions) => {
   setMessages(currentConversation => {
     if (!entityName || !runId) return currentConversation;
-    // Get the last message (should be the assistant's message)
-    const lastMessage = currentConversation[currentConversation.length - 1];
-
-    // Only process if the last message is from the assistant
-    if (lastMessage && lastMessage.role === 'assistant') {
-      // Create a new message with the tool call part
-      const updatedMessage: ThreadMessageLike = {
-        ...lastMessage,
-        content: Array.isArray(lastMessage.content)
-          ? [
-              ...lastMessage.content,
-              {
-                type: 'tool-call',
-                toolCallId: runId,
-                toolName: entityName,
-                args: {
-                  __mastraMetadata: {
-                    networkMetadata,
-                    from,
-                    ...chunk.payload.args?.__mastraMetadata,
-                    isStreaming: true,
-                  },
-                },
-              },
-            ]
-          : [
-              ...(typeof lastMessage.content === 'string' ? [{ type: 'text', text: lastMessage.content }] : []),
-              {
-                type: 'tool-call',
-                toolCallId: runId,
-                toolName: entityName,
-                args: {
-                  __mastraMetadata: {
-                    networkMetadata,
-                    from,
-                    ...chunk.payload.args?.__mastraMetadata,
-                    isStreaming: true,
-                  },
-                },
-              },
-            ],
-      };
-
-      _sideEffects.assistantToolCallAddedForUpdater = true;
-      _sideEffects.assistantToolCallAddedForContent = true;
-
-      // Replace the last message with the updated one
-      return [...currentConversation.slice(0, -1), updatedMessage];
-    }
 
     // If there's no assistant message yet, create one
     const newMessage: ThreadMessageLike = {
