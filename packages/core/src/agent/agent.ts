@@ -2200,7 +2200,9 @@ export class Agent<
 
         agentAISpan?.end({
           output: {
-            status: 'success',
+            text: result?.text,
+            object: result?.object,
+            files: result?.files,
           },
         });
 
@@ -2701,6 +2703,7 @@ export class Agent<
     const instructions = options.instructions || (await this.getInstructions({ runtimeContext }));
 
     // Set AI Tracing context
+    // Note this span is ended at the end of #executeOnFinish
     const agentAISpan = getOrCreateSpan({
       type: AISpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
@@ -2712,7 +2715,7 @@ export class Agent<
       metadata: {
         runId,
         resourceId,
-        threadId: threadFromArgs ? threadFromArgs.id : undefined,
+        threadId: threadFromArgs?.id,
       },
       tracingContext: options.tracingContext,
       tracingOptions: options.tracingOptions,
@@ -3058,7 +3061,7 @@ export class Agent<
       steps: [prepareToolsStep, prepareMemory],
     })
       .parallel([prepareToolsStep, prepareMemory])
-      .map(async ({ inputData, bail, tracingContext }) => {
+      .map(async ({ inputData, bail }) => {
         const result = {
           ...options,
           tools: inputData['prepare-tools-step'].convertedTools as Record<string, Tool>,
@@ -3211,7 +3214,7 @@ export class Agent<
                   resourceId,
                   memoryConfig,
                   runtimeContext,
-                  tracingContext,
+                  agentAISpan: agentAISpan,
                   runId,
                   messageList,
                   threadExists: inputData['prepare-memory-step'].threadExists,
@@ -3258,12 +3261,6 @@ export class Agent<
     const run = await executionWorkflow.createRunAsync();
     const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
 
-    agentAISpan?.end({
-      output: {
-        status: result.status,
-      },
-    });
-
     return result;
   }
 
@@ -3276,7 +3273,7 @@ export class Agent<
     memoryConfig,
     outputText,
     runtimeContext,
-    tracingContext,
+    agentAISpan,
     runId,
     messageList,
     threadExists,
@@ -3291,7 +3288,7 @@ export class Agent<
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
-    tracingContext: TracingContext;
+    agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
     memoryConfig: MemoryConfig | undefined;
     outputText: string;
     messageList: MessageList;
@@ -3385,7 +3382,13 @@ export class Agent<
 
           if (shouldGenerate && userMessage) {
             promises.push(
-              this.genTitle(userMessage, runtimeContext, tracingContext, titleModel, titleInstructions).then(title => {
+              this.genTitle(
+                userMessage,
+                runtimeContext,
+                { currentSpan: agentAISpan },
+                titleModel,
+                titleInstructions,
+              ).then(title => {
                 if (title) {
                   return memory.createThread({
                     threadId: thread.id,
@@ -3452,7 +3455,15 @@ export class Agent<
       runtimeContext,
       structuredOutput,
       overrideScorers,
-      tracingContext,
+      tracingContext: { currentSpan: agentAISpan },
+    });
+
+    agentAISpan?.end({
+      output: {
+        text: result?.text,
+        object: result?.object,
+        files: result?.files,
+      },
     });
   }
 
