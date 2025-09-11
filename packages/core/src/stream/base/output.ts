@@ -428,7 +428,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     try {
                       const parsedObject = JSON.parse(textContent);
                       self.#delayedPromises.object.resolve(parsedObject as InferSchemaOutput<OUTPUT>);
-                    } catch (e) {
+                    } catch {
                       // If parsing fails, resolve with undefined
                       self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
                     }
