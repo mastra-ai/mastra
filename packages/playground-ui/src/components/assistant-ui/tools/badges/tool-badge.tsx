@@ -1,15 +1,19 @@
 import { ToolsIcon } from '@/ds/icons';
 import { SyntaxHighlighter } from '../../../ui/syntax-highlighter';
 import { BadgeWrapper } from './badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 
 export interface ToolBadgeProps {
   toolName: string;
   argsText: string;
-
   result: any;
+  networkMetadata?: {
+    input?: string | Record<string, unknown>;
+    selectionReason?: string;
+  };
 }
 
-export const ToolBadge = ({ toolName, argsText, result }: ToolBadgeProps) => {
+export const ToolBadge = ({ toolName, argsText, result, networkMetadata }: ToolBadgeProps) => {
   let argSlot;
 
   try {
@@ -28,7 +32,18 @@ export const ToolBadge = ({ toolName, argsText, result }: ToolBadgeProps) => {
   }
 
   return (
-    <BadgeWrapper icon={<ToolsIcon className="text-[#ECB047]" />} title={toolName}>
+    <BadgeWrapper
+      icon={<ToolsIcon className="text-[#ECB047]" />}
+      title={toolName}
+      extraInfo={
+        networkMetadata && (
+          <NetworkChoiceMetadataDialogTrigger
+            selectionReason={networkMetadata?.selectionReason || ''}
+            input={networkMetadata?.input}
+          />
+        )
+      }
+    >
       <div className="space-y-4">
         <div>
           <p className="font-medium pb-2">Tool arguments</p>

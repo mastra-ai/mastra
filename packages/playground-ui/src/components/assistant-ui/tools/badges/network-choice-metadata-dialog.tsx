@@ -1,6 +1,11 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Txt } from '@/ds/components/Txt';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
+import { TooltipIconButton } from '../../tooltip-icon-button';
+import { Icon } from '@/ds/icons';
+import { Share2 } from 'lucide-react';
+import { useState } from 'react';
+
 interface NetworkChoiceMetadataProps {
   selectionReason: string;
   open: boolean;
@@ -8,7 +13,7 @@ interface NetworkChoiceMetadataProps {
   input?: string | Record<string, unknown>;
 }
 
-export const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: NetworkChoiceMetadataProps) => {
+const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: NetworkChoiceMetadataProps) => {
   let inputSlot = null;
 
   if (input) {
@@ -42,5 +47,31 @@ export const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, inp
         </div>
       </DialogContent>
     </Dialog>
+  );
+};
+
+export interface NetworkChoiceMetadataDialogTriggerProps {
+  selectionReason: string;
+  input?: string | Record<string, unknown>;
+}
+
+export const NetworkChoiceMetadataDialogTrigger = ({
+  selectionReason,
+  input,
+}: NetworkChoiceMetadataDialogTriggerProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <>
+      <TooltipIconButton tooltip="Show selection reason" side="top" onClick={() => setIsOpen(s => !s)}>
+        <Share2 className="text-icon3 size-5" />
+      </TooltipIconButton>
+
+      <NetworkChoiceMetadata
+        selectionReason={selectionReason || ''}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        input={input}
+      />
+    </>
   );
 };

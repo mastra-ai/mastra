@@ -1,14 +1,10 @@
-import { AgentIcon, Icon } from '@/ds/icons';
+import { AgentIcon } from '@/ds/icons';
 import { BadgeWrapper } from './badge-wrapper';
 import { ToolFallback } from '../tool-fallback';
 
-import React, { useState } from 'react';
+import React from 'react';
 
-import { Share2 } from 'lucide-react';
-
-import { TooltipIconButton } from '../../tooltip-icon-button';
-
-import { NetworkChoiceMetadata } from './network-choice-metadata-dialog';
+import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 
 type TextMessage = {
   type: 'text';
@@ -35,28 +31,12 @@ export interface AgentBadgeProps {
 }
 
 export const AgentBadge = ({ agentId, messages = [], selectionReason, input }: AgentBadgeProps) => {
-  const [isOpen, setIsOpen] = useState(false);
   return (
     <BadgeWrapper
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
       initialCollapsed={false}
-      extraInfo={
-        <>
-          <TooltipIconButton tooltip="Show selection reason" side="top" onClick={() => setIsOpen(s => !s)}>
-            <Icon size="sm" className="text-icon3">
-              <Share2 />
-            </Icon>
-          </TooltipIconButton>
-
-          <NetworkChoiceMetadata
-            selectionReason={selectionReason || ''}
-            open={isOpen}
-            onOpenChange={setIsOpen}
-            input={input}
-          />
-        </>
-      }
+      extraInfo={<NetworkChoiceMetadataDialogTrigger selectionReason={selectionReason || ''} input={input} />}
     >
       {messages.map((message, index) => {
         if (message.type === 'text') {

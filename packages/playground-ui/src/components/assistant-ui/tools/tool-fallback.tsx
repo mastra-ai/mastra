@@ -39,16 +39,25 @@ const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, r
   if (isLoading) return <LoadingBadge />;
 
   if (workflow) {
-    // console.log('result', result);
     return (
       <WorkflowBadge
         workflowId={toolName}
         workflow={workflow}
         isStreaming={args.__mastraMetadata?.isStreaming}
         runId={result?.runId}
+        networkMetadata={args?.__mastraMetadata?.networkMetadata}
       />
     );
   }
 
-  return <ToolBadge toolName={toolName} argsText={argsText} result={result} />;
+  console.log('args?.__mastraMetadata', args?.__mastraMetadata);
+
+  return (
+    <ToolBadge
+      toolName={toolName}
+      argsText={argsText}
+      result={result}
+      networkMetadata={args?.__mastraMetadata?.networkMetadata}
+    />
+  );
 };

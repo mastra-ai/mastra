@@ -11,6 +11,15 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
           toolCallId: content.finalResult.runId,
           toolName: content.resourceId,
           result: { runId: content.finalResult.runId },
+          args: {
+            __mastraMetadata: {
+              from: 'WORKFLOW',
+              networkMetadata: {
+                selectionReason: content?.selectionReason,
+                input: content?.input,
+              },
+            },
+          },
         },
       ],
     };
@@ -20,7 +29,6 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
     const badgeMessages: BadgeMessage[] = [];
     let toolCalls: Record<string, any> = {};
 
-    console.log('lol memory', content);
     // First message is sliced because it's the agent network prompt
     const messages = content.finalResult.messages.slice(1);
 
@@ -82,10 +90,17 @@ export const handleNetworkMessageFromMemory = (content: any): ThreadMessageLike 
       content: [
         {
           type: 'tool-call',
-          toolCallId: content.toolCallId,
+          toolCallId: content.finalResult.toolCallId,
           toolName: content.resourceId,
-          result: content.result,
-          args: content.args,
+          result: content.finalResult.result,
+          args: {
+            __mastraMetadata: {
+              networkMetadata: {
+                selectionReason: content?.selectionReason || '',
+                input: content?.input || '',
+              },
+            },
+          },
         },
       ],
     };
