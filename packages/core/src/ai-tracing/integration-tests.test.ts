@@ -1097,17 +1097,19 @@ describe('AI Tracing Integration Tests', () => {
       switch (name) {
         case 'generateLegacy':
           expect(llmGenerationSpan.output.text).toBe('Mock response');
+          expect(agentRunSpan.output.text).toBe('Mock response');
           break;
         case 'streamLegacy':
           expect(llmGenerationSpan.output.text).toBe('Mock streaming response');
+          expect(agentRunSpan.output.text).toBe('Mock streaming response');
           break;
         default: // VNext generate & stream
           expect(llmGenerationSpan.output.text).toBe('Mock V2 streaming response');
+          expect(agentRunSpan.output.text).toBe('Mock V2 streaming response');
           break;
       }
       expect(llmGenerationSpan.attributes?.usage?.totalTokens).toBeGreaterThan(1);
 
-      expect(agentRunSpan.output?.status).toBe('success');
       testExporter.finalExpectations();
     });
   });
