@@ -2,24 +2,26 @@
  * MastraAITracing - Abstract base class for AI Tracing implementations
  */
 
-import { MastraBase } from '../base';
-import type { IMastraLogger } from '../logger';
-import { RegisteredLogger } from '../logger/constants';
-import type { RuntimeContext } from '../runtime-context';
-import { NoOpAISpan } from './no-op';
+import { MastraBase } from '../../base';
+import type { IMastraLogger } from '../../logger';
+import { RegisteredLogger } from '../../logger/constants';
+import { NoOpAISpan } from '../spans/no-op';
 import type {
-  AITracingInstanceConfig,
+  TracingConfig,
   AISpan,
-  AISpanOptions,
   AISpanType,
   AITracingExporter,
   AISpanProcessor,
   AITracingEvent,
-  TraceContext,
-  AISpanTypeMap,
   AnyAISpan,
-} from './types';
-import { SamplingStrategyType, AITracingEventType } from './types';
+  EndSpanOptions,
+  UpdateSpanOptions,
+  StartSpanOptions,
+  CreateSpanOptions,
+  AITracing,
+  CustomSamplerOptions,
+} from '../types';
+import { SamplingStrategyType, AITracingEventType } from '../types';
 
 // ============================================================================
 // Abstract Base Class
@@ -27,12 +29,11 @@ import { SamplingStrategyType, AITracingEventType } from './types';
 
 /**
  * Abstract base class for all AI Tracing implementations in Mastra.
- *
  */
-export abstract class MastraAITracing extends MastraBase {
-  protected config: Required<AITracingInstanceConfig>;
+export abstract class BaseAITracing extends MastraBase implements AITracing {
+  protected config: Required<TracingConfig>;
 
-  constructor(config: AITracingInstanceConfig) {
+  constructor(config: TracingConfig) {
     super({ component: RegisteredLogger.AI_TRACING, name: config.serviceName });
 
     // Apply defaults for optional fields
@@ -75,41 +76,14 @@ export abstract class MastraAITracing extends MastraBase {
   /**
    * Start a new span of a specific AISpanType
    */
-  startSpan<TType extends AISpanType>(options: {
-    type: TType;
-    name: string;
-    input?: any;
-    output?: any;
-    attributes?: AISpanTypeMap[TType];
-    metadata?: Record<string, any>;
-    parent?: AnyAISpan;
-    startOptions?: {
-      runtimeContext?: RuntimeContext;
-    };
-    isEvent?: boolean;
-  }): AISpan<TType> {
-    const { type, name, input, output, attributes, metadata, parent, startOptions, isEvent } = options;
-    const { runtimeContext } = startOptions || {};
+  startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType> {
+    const { customSamplerOptions, ...createSpanOptions } = options;
 
-    if (!this.shouldSample({ runtimeContext })) {
-      return new NoOpAISpan<TType>(
-        { type, name, input, output, attributes, metadata, parent, isEvent: isEvent === true },
-        this,
-      );
+    if (!this.shouldSample(customSamplerOptions)) {
+      return new NoOpAISpan<TType>(createSpanOptions, this);
     }
 
-    const spanOptions: AISpanOptions<TType> = {
-      type,
-      name,
-      input,
-      output,
-      attributes,
-      metadata,
-      parent,
-      isEvent: isEvent === true,
-    };
-
-    const span = this.createSpan(spanOptions);
+    const span = this.createSpan<TType>(createSpanOptions);
 
     if (span.isEvent) {
       this.emitSpanEnded(span);
@@ -140,7 +114,7 @@ export abstract class MastraAITracing extends MastraBase {
    * - Wire span lifecycle callbacks
    * - Emit span_started event
    */
-  protected abstract createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType>;
+  protected abstract createSpan<TType extends AISpanType>(options: CreateSpanOptions<TType>): AISpan<TType>;
 
   // ============================================================================
   // Configuration Management
@@ -149,7 +123,7 @@ export abstract class MastraAITracing extends MastraBase {
   /**
    * Get current configuration
    */
-  getConfig(): Readonly<Required<AITracingInstanceConfig>> {
+  getConfig(): Readonly<Required<TracingConfig>> {
     return { ...this.config };
   }
 
@@ -192,11 +166,7 @@ export abstract class MastraAITracing extends MastraBase {
     const originalUpdate = span.update.bind(span);
 
     // Wrap methods to automatically emit tracing events
-    span.end = (options?: {
-      output?: any;
-      attributes?: Partial<AISpanTypeMap[TType]>;
-      metadata?: Record<string, any>;
-    }) => {
+    span.end = (options?: EndSpanOptions<TType>) => {
       if (span.isEvent) {
         this.logger.warn(`End event is not available on event spans`);
         return;
@@ -205,12 +175,7 @@ export abstract class MastraAITracing extends MastraBase {
       this.emitSpanEnded(span);
     };
 
-    span.update = (options?: {
-      input?: any;
-      output?: any;
-      attributes?: Partial<AISpanTypeMap[TType]>;
-      metadata?: Record<string, any>;
-    }) => {
+    span.update = (options: UpdateSpanOptions<TType>) => {
       if (span.isEvent) {
         this.logger.warn(`Update() is not available on event spans`);
         return;
@@ -227,7 +192,7 @@ export abstract class MastraAITracing extends MastraBase {
   /**
    * Check if an AI trace should be sampled
    */
-  protected shouldSample(traceContext: TraceContext): boolean {
+  protected shouldSample(options?: CustomSamplerOptions): boolean {
     // Check built-in sampling strategy
     const { sampling } = this.config;
 
@@ -245,7 +210,7 @@ export abstract class MastraAITracing extends MastraBase {
         }
         return Math.random() < sampling.probability;
       case SamplingStrategyType.CUSTOM:
-        return sampling.sampler(traceContext);
+        return sampling.sampler(options);
       default:
         throw new Error(`Sampling strategy type not implemented: ${(sampling as any).type}`);
     }
