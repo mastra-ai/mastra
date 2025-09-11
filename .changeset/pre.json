@@ -82,5 +82,36 @@
     "@mastra/voice-speechify": "0.11.4",
     "@mastra/inngest": "0.13.1"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_auth-workos-7568-dependencies",
+    "@mastra_core-7545-dependencies",
+    "@mastra_deployer-7545-dependencies",
+    "@mastra_langfuse-7714-dependencies",
+    "busy-coins-return",
+    "cute-hotels-make",
+    "fast-kings-care",
+    "floppy-moons-agree",
+    "fresh-papers-help",
+    "fuzzy-carrots-yell",
+    "lovely-turtles-taste",
+    "nasty-dancers-fry",
+    "olive-lands-argue",
+    "plain-rooms-fry",
+    "plenty-actors-clean",
+    "polite-spiders-build",
+    "proud-beers-perform",
+    "quick-goats-wish",
+    "seven-oranges-matter",
+    "sharp-clowns-tell",
+    "sharp-news-lie",
+    "soft-geckos-jam",
+    "solid-chefs-trade",
+    "strong-emus-pump",
+    "sweet-toys-build",
+    "swift-pots-love",
+    "twenty-coins-sort",
+    "two-ways-sink",
+    "warm-horses-juggle",
+    "wicked-tigers-sit"
+  ]
 }
