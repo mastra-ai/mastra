@@ -1,5 +1,7 @@
 # create-mastra
 
+## 0.12.3-alpha.0
+
 ## 0.12.2
 
 ## 0.12.2-alpha.0
