@@ -318,7 +318,6 @@ export const handleAgentChunk = ({ agentChunk, setMessages, entityName }: Handle
             if (part.type === 'tool-call') {
               const messages: BadgeMessage[] = part.args?.__mastraMetadata?.messages || [];
 
-              console.log('agentChunk', agentChunk);
               const next = {
                 ...part,
                 toolName: part?.entityName || entityName,
@@ -364,7 +363,6 @@ export const handleAgentChunk = ({ agentChunk, setMessages, entityName }: Handle
           content: contentArray.map(part => {
             if (part.type === 'tool-call') {
               const messages: BadgeMessage[] = part.args?.__mastraMetadata?.messages || [];
-              console.log('TOOL CALL', agentChunk);
 
               const next = {
                 ...part,
@@ -392,8 +390,6 @@ export const handleAgentChunk = ({ agentChunk, setMessages, entityName }: Handle
                   },
                 },
               };
-
-              console.log('TOOL CALL NEXT', { next, part });
 
               return next;
             }
@@ -452,7 +448,6 @@ export const handleAgentChunk = ({ agentChunk, setMessages, entityName }: Handle
     }
 
     case 'tool-output': {
-      console.log('TOOL OUTPUT', agentChunk);
       flushSync(() => {
         setMessages(currentConversation => {
           if (!agentChunk.payload.output.type.startsWith('workflow-')) return currentConversation;
