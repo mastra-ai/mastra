@@ -22,7 +22,7 @@ export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live') => {
   return useQuery({
     staleTime: 0,
     gcTime: 0,
-    queryKey: ['evals', agentId, type],
+    queryKey: ['evals', agentId, type, JSON.stringify(runtimeContext)],
     queryFn: () =>
       type === 'live'
         ? client.getAgent(agentId).liveEvals(runtimeContext)

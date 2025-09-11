@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 export const useAgents = () => {
   const { runtimeContext } = usePlaygroundStore();
   const query = useQuery({
-    queryKey: ['agents'],
+    queryKey: ['agents', JSON.stringify(runtimeContext)],
     queryFn: () => client.getAgents(runtimeContext),
   });
 
@@ -19,7 +19,7 @@ export const useAgents = () => {
 export const useAgent = (agentId: string) => {
   const { runtimeContext } = usePlaygroundStore();
   return useQuery({
-    queryKey: ['agent', agentId],
+    queryKey: ['agent', agentId, JSON.stringify(runtimeContext)],
     queryFn: () => client.getAgent(agentId).details(runtimeContext),
     enabled: !!agentId,
   });
