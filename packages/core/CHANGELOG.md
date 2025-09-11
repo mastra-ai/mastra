@@ -1,5 +1,135 @@
 # @mastra/core
 
+## 0.16.3-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#7545](https://github.com/mastra-ai/mastra/pull/7545))
+  - Updated dependency [`hono@^4.9.6` ↗︎](https://www.npmjs.com/package/hono/v/4.9.6) (from `^4.8.12`, in `dependencies`)
+
+- support JSONSchema7 output option with generateVNext, streamVNext ([#7630](https://github.com/mastra-ai/mastra/pull/7630))
+
+- various improvements to input & output data on ai spans ([#7636](https://github.com/mastra-ai/mastra/pull/7636))
+
+- add network method ([#7704](https://github.com/mastra-ai/mastra/pull/7704))
+
+- Fix memory not being affected by agent output processors (#7087). Output processors now correctly modify messages before they are saved to memory storage. The fix ensures that any transformations applied by output processors (like redacting sensitive information) are properly propagated to the memory system. ([#7647](https://github.com/mastra-ai/mastra/pull/7647))
+
+- Fix agent structuredOutput option types ([#7668](https://github.com/mastra-ai/mastra/pull/7668))
+
+- "added output to agent spans in ai-tracing" ([#7717](https://github.com/mastra-ai/mastra/pull/7717))
+
+- Ensure system messages are persisted in processedList ([#7715](https://github.com/mastra-ai/mastra/pull/7715))
+
+- AN Merge pt 1 ([#7702](https://github.com/mastra-ai/mastra/pull/7702))
+
+- Custom metadata for traces can now be set when starting agents or workflows ([#7689](https://github.com/mastra-ai/mastra/pull/7689))
+
+- Workflow & Agent executions now return traceId. ([#7663](https://github.com/mastra-ai/mastra/pull/7663))
+
+- fixed bugs in observability config parsing ([#7669](https://github.com/mastra-ai/mastra/pull/7669))
+
+- fix playground UI issue about dynmic workflow exec in agent thread ([#7665](https://github.com/mastra-ai/mastra/pull/7665))
+
+- Updated dependencies [[`779d469`](https://github.com/mastra-ai/mastra/commit/779d469366bb9f7fcb6d1638fdabb9f3acc49218)]:
+  - @mastra/schema-compat@0.11.3-alpha.0
+
+## 0.16.2
+
+### Patch Changes
+
+- Export server types ([#7657](https://github.com/mastra-ai/mastra/pull/7657))
+
+## 0.16.2-alpha.0
+
+### Patch Changes
+
+- Export server types ([#7657](https://github.com/mastra-ai/mastra/pull/7657))
+
+## 0.16.1
+
+### Patch Changes
+
+- Fixed ai tracing for workflows nested directly in agents ([#7599](https://github.com/mastra-ai/mastra/pull/7599))
+
+- Fixed provider defined tools for stream/generate vnext ([#7642](https://github.com/mastra-ai/mastra/pull/7642))
+
+- Made tracing context optional on tool execute() ([#7532](https://github.com/mastra-ai/mastra/pull/7532))
+
+- Fixed ai tracing context propagation in tool calls ([#7531](https://github.com/mastra-ai/mastra/pull/7531))
+
+- Call getMemoryMessages even during first turn in a thread when semantic recall scope is resource ([#7529](https://github.com/mastra-ai/mastra/pull/7529))
+
+- add usage and total usage to streamVNext onFinish callback ([#7598](https://github.com/mastra-ai/mastra/pull/7598))
+
+- Add prepareStep to generate/stream VNext options. ([#7646](https://github.com/mastra-ai/mastra/pull/7646))
+
+- Change to createRunAsync ([#7632](https://github.com/mastra-ai/mastra/pull/7632))
+
+- Fix type in worfklow ([#7519](https://github.com/mastra-ai/mastra/pull/7519))
+
+- Execute tool calls in parallel in generate/stream VNext methods ([#7524](https://github.com/mastra-ai/mastra/pull/7524))
+
+- Allow streamVNext and generateVNext to use structuredOutputs from the MastraClient ([#7597](https://github.com/mastra-ai/mastra/pull/7597))
+
+- Use workflow streamVNext in playground ([#7575](https://github.com/mastra-ai/mastra/pull/7575))
+
+- Revert "feat(mcp): add createMCPTool helper for proper execute types" ([#7513](https://github.com/mastra-ai/mastra/pull/7513))
+
+- Fix InvalidDataContentError when using image messages with AI SDK ([#7542](https://github.com/mastra-ai/mastra/pull/7542))
+
+  Resolves an issue where passing image content in messages would throw an InvalidDataContentError. The fix properly handles multi-part content arrays containing both text and image parts when converting between Mastra and AI SDK message formats.
+
+- Flatten loop config in stream options and pass to loop options ([#7643](https://github.com/mastra-ai/mastra/pull/7643))
+
+- Pass mastra instance into MCP Server tools ([#7520](https://github.com/mastra-ai/mastra/pull/7520))
+
+- Fix image input handling for Google Gemini models in AI SDK V5 ([#7490](https://github.com/mastra-ai/mastra/pull/7490))
+
+  Resolves issue #7362 where Gemini threw `AI_InvalidDataContentError` when receiving URLs in image parts. The fix properly handles V3 message file parts that contain both URL and data fields, ensuring URLs are passed as URLs rather than being incorrectly treated as base64 data.
+
+- Vnext output schema injection ([#6990](https://github.com/mastra-ai/mastra/pull/6990))
+
+- removed duplicate 'float' switch case ([#7516](https://github.com/mastra-ai/mastra/pull/7516))
+
+- Fix issue with response message id consistency between stream/generate response and the message ids saveed in the DB. Also fixed the custom generatorId implementation to work with this. ([#7606](https://github.com/mastra-ai/mastra/pull/7606))
+
+## 0.16.1-alpha.3
+
+### Patch Changes
+
+- Add prepareStep to generate/stream VNext options. ([#7646](https://github.com/mastra-ai/mastra/pull/7646))
+
+## 0.16.1-alpha.2
+
+### Patch Changes
+
+- Fixed provider defined tools for stream/generate vnext ([#7642](https://github.com/mastra-ai/mastra/pull/7642))
+
+- Change to createRunAsync ([#7632](https://github.com/mastra-ai/mastra/pull/7632))
+
+- Flatten loop config in stream options and pass to loop options ([#7643](https://github.com/mastra-ai/mastra/pull/7643))
+
+- Fix issue with response message id consistency between stream/generate response and the message ids saveed in the DB. Also fixed the custom generatorId implementation to work with this. ([#7606](https://github.com/mastra-ai/mastra/pull/7606))
+
+## 0.16.1-alpha.1
+
+### Patch Changes
+
+- Fixed ai tracing for workflows nested directly in agents ([#7599](https://github.com/mastra-ai/mastra/pull/7599))
+
+- Fixed ai tracing context propagation in tool calls ([#7531](https://github.com/mastra-ai/mastra/pull/7531))
+
+- add usage and total usage to streamVNext onFinish callback ([#7598](https://github.com/mastra-ai/mastra/pull/7598))
+
+- Allow streamVNext and generateVNext to use structuredOutputs from the MastraClient ([#7597](https://github.com/mastra-ai/mastra/pull/7597))
+
+- Use workflow streamVNext in playground ([#7575](https://github.com/mastra-ai/mastra/pull/7575))
+
+- Fix InvalidDataContentError when using image messages with AI SDK ([#7542](https://github.com/mastra-ai/mastra/pull/7542))
+
+  Resolves an issue where passing image content in messages would throw an InvalidDataContentError. The fix properly handles multi-part content arrays containing both text and image parts when converting between Mastra and AI SDK message formats.
+
 ## 0.16.1-alpha.0
 
 ### Patch Changes

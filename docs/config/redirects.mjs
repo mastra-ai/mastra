@@ -1,5 +1,15 @@
 export const redirectList = [
   {
+    source: "/:locale/docs/agents/runtime-variables",
+    destination: "/:locale/docs/agents/runtime-context",
+    permanent: true,
+  },
+  {
+    source: "/:locale/docs/tools-mcp/dynamic-context",
+    destination: "/:locale/docs/tools-mcp/runtime-context",
+    permanent: true,
+  },
+  {
     source: "/:locale/docs/08-running-evals",
     destination: "/:locale/docs/evals/overview",
     permanent: true,
@@ -786,6 +796,11 @@ export const redirectList = [
   {
     source: "/:locale/reference/workflows/waitForEvent",
     destination: "/:locale/reference/workflows/workflow-methods/waitForEvent",
+    permanent: true,
+  },
+  {
+    source: "/:locale/reference/templates",
+    destination: "/:locale/reference/templates/overview",
     permanent: true,
   },
 ];

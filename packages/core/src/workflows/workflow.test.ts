@@ -1693,7 +1693,7 @@ describe('Workflow', () => {
           payload: {
             stepName: 'mapping_mock-uuid-2',
             id: 'mapping_mock-uuid-2',
-            stepCallId: 'mock-uuid-26',
+            stepCallId: 'mock-uuid-27',
             payload: {},
             startedAt: expect.any(Number),
             status: 'running',
@@ -1706,7 +1706,7 @@ describe('Workflow', () => {
           payload: {
             stepName: 'mapping_mock-uuid-2',
             id: 'mapping_mock-uuid-2',
-            stepCallId: 'mock-uuid-26',
+            stepCallId: 'mock-uuid-27',
             status: 'success',
             output: {
               prompt: 'Capital of UK, just the name',
@@ -1721,7 +1721,7 @@ describe('Workflow', () => {
           payload: {
             stepName: 'test-agent-2',
             id: 'test-agent-2',
-            stepCallId: 'mock-uuid-27',
+            stepCallId: 'mock-uuid-28',
             payload: {
               prompt: 'Capital of UK, just the name',
             },

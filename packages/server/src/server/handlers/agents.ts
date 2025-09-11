@@ -61,6 +61,83 @@ export async function getSerializedAgentTools(tools: Record<string, any>) {
   }, {});
 }
 
+async function getSerializedAgentDefinition({
+  agent,
+  runtimeContext,
+}: {
+  agent: Agent;
+  runtimeContext: RuntimeContext;
+}) {
+  let serializedAgentAgents = {};
+
+  if ('listAgents' in agent) {
+    const agents = await agent.listAgents({ runtimeContext });
+    serializedAgentAgents = Object.entries(agents || {}).reduce<any>((acc, [key, agent]) => {
+      return {
+        ...acc,
+        [key]: { id: agent.id, name: agent.name },
+      };
+    }, {});
+  }
+  return serializedAgentAgents;
+}
+
+async function formatAgentList({
+  id,
+  mastra,
+  agent,
+  runtimeContext,
+}: {
+  id: string;
+  mastra: Context['mastra'];
+  agent: Agent;
+  runtimeContext: RuntimeContext;
+}) {
+  const instructions = await agent.getInstructions({ runtimeContext });
+  const tools = await agent.getTools({ runtimeContext });
+  const llm = await agent.getLLM({ runtimeContext });
+  const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
+  const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
+  const serializedAgentTools = await getSerializedAgentTools(tools);
+
+  let serializedAgentWorkflows = {};
+
+  if ('getWorkflows' in agent) {
+    const logger = mastra.getLogger();
+    try {
+      const workflows = await agent.getWorkflows({ runtimeContext });
+      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+        return {
+          ...acc,
+          [key]: {
+            name: workflow.name,
+          },
+        };
+      }, {});
+    } catch (error) {
+      logger.error('Error getting workflows for agent', { agentName: agent.name, error });
+    }
+  }
+
+  const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext });
+
+  const model = llm?.getModel();
+
+  return {
+    id,
+    name: agent.name,
+    instructions,
+    agents: serializedAgentAgents,
+    tools: serializedAgentTools,
+    workflows: serializedAgentWorkflows,
+    provider: llm?.getProvider(),
+    modelId: llm?.getModelId(),
+    modelVersion: model?.specificationVersion,
+    defaultGenerateOptions: defaultGenerateOptions as any,
+    defaultStreamOptions: defaultStreamOptions as any,
+  };
+}
+
 // Agent handlers
 export async function getAgentsHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
   try {
@@ -68,47 +145,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
 
     const serializedAgentsMap = await Promise.all(
       Object.entries(agents).map(async ([id, agent]) => {
-        const instructions = await agent.getInstructions({ runtimeContext });
-        const tools = await agent.getTools({ runtimeContext });
-        const llm = await agent.getLLM({ runtimeContext });
-        const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
-        const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
-
-        const serializedAgentTools = await getSerializedAgentTools(tools);
-
-        let serializedAgentWorkflows = {};
-
-        if ('getWorkflows' in agent) {
-          const logger = mastra.getLogger();
-          try {
-            const workflows = await agent.getWorkflows({ runtimeContext });
-            serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
-              return {
-                ...acc,
-                [key]: {
-                  name: workflow.name,
-                },
-              };
-            }, {});
-          } catch (error) {
-            logger.error('Error getting workflows for agent', { agentName: agent.name, error });
-          }
-        }
-
-        const model = llm?.getModel();
-
-        return {
-          id,
-          name: agent.name,
-          instructions,
-          tools: serializedAgentTools,
-          workflows: serializedAgentWorkflows,
-          provider: llm?.getProvider(),
-          modelId: llm?.getModelId(),
-          modelVersion: model?.specificationVersion,
-          defaultGenerateOptions: defaultGenerateOptions as any,
-          defaultStreamOptions: defaultStreamOptions as any,
-        };
+        return formatAgentList({ id, mastra, agent, runtimeContext });
       }),
     );
 
@@ -125,50 +162,47 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
   }
 }
 
-export async function getAgentByIdHandler({
+async function formatAgent({
   mastra,
+  agent,
   runtimeContext,
-  agentId,
-  isPlayground = false,
-}: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }) {
-  try {
-    const agent = mastra.getAgent(agentId);
+  isPlayground,
+}: {
+  mastra: Context['mastra'];
+  agent: Agent;
+  runtimeContext: RuntimeContext;
+  isPlayground: boolean;
+}) {
+  const tools = await agent.getTools({ runtimeContext });
 
-    if (!agent) {
-      throw new HTTPException(404, { message: 'Agent not found' });
-    }
+  const serializedAgentTools = await getSerializedAgentTools(tools);
 
-    const tools = await agent.getTools({ runtimeContext });
+  let serializedAgentWorkflows = {};
 
-    const serializedAgentTools = await getSerializedAgentTools(tools);
+  if ('getWorkflows' in agent) {
+    const logger = mastra.getLogger();
+    try {
+      const workflows = await agent.getWorkflows({ runtimeContext });
 
-    let serializedAgentWorkflows = {};
-
-    if ('getWorkflows' in agent) {
-      const logger = mastra.getLogger();
-      try {
-        const workflows = await agent.getWorkflows({ runtimeContext });
-
-        serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
-          return {
-            ...acc,
-            [key]: {
-              name: workflow.name,
-              steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
-                return {
-                  ...acc,
-                  [key]: {
-                    id: step.id,
-                    description: step.description,
-                  },
-                };
-              }, {}),
-            },
-          };
-        }, {});
-      } catch (error) {
-        logger.error('Error getting workflows for agent', { agentName: agent.name, error });
-      }
+      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+        return {
+          ...acc,
+          [key]: {
+            name: workflow.name,
+            steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+              return {
+                ...acc,
+                [key]: {
+                  id: step.id,
+                  description: step.description,
+                },
+              };
+            }, {}),
+          },
+        };
+      }, {});
+    } catch (error) {
+      logger.error('Error getting workflows for agent', { agentName: agent.name, error });
     }
 
     let proxyRuntimeContext = runtimeContext;
@@ -193,10 +227,13 @@ export async function getAgentByIdHandler({
 
     const model = llm?.getModel();
 
+    const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
+
     return {
       name: agent.name,
       instructions,
       tools: serializedAgentTools,
+      agents: serializedAgentAgents,
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
@@ -204,6 +241,21 @@ export async function getAgentByIdHandler({
       defaultGenerateOptions: defaultGenerateOptions as any,
       defaultStreamOptions: defaultStreamOptions as any,
     };
+  }
+}
+
+export async function getAgentByIdHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  isPlayground = false,
+}: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }) {
+  try {
+    const agent = mastra.getAgent(agentId);
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+    return formatAgent({ mastra, agent, runtimeContext, isPlayground });
   } catch (error) {
     return handleError(error, 'Error getting agent');
   }
@@ -265,7 +317,7 @@ export function generateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 16th. Please use generateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\nGenerate method will switch to use generateVNext implementation September 16th, 2025. Please use generateLegacyHandler if you don't want to upgrade just yet.",
   );
   return generateLegacyHandler({ mastra, ...args });
 }
@@ -361,10 +413,7 @@ export async function generateVNextHandler({
       ...rest,
       runtimeContext: finalRuntimeContext,
       format: rest.format || 'mastra',
-      options: {
-        ...(rest?.options ?? {}),
-        abortSignal,
-      },
+      abortSignal,
     });
 
     return result;
@@ -388,7 +437,7 @@ export async function streamGenerateHandler({
 }) {
   const logger = mastra.getLogger();
   logger?.warn(
-    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 16th. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
+    "Deprecation NOTICE:\n Stream method will switch to use streamVNext implementation September 16th, 2025. Please use streamGenerateLegacyHandler if you don't want to upgrade just yet.",
   );
 
   return streamGenerateLegacyHandler({ mastra, ...args });
@@ -495,16 +544,62 @@ export function streamVNextGenerateHandler({
     const streamResult = agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      options: {
-        ...(rest?.options ?? {}),
-        abortSignal,
-      },
+      abortSignal,
       format: body.format ?? 'mastra',
     });
 
     return streamResult;
   } catch (error) {
     return handleError(error, 'error streaming agent response');
+  }
+}
+
+export function streamNetworkHandler({
+  mastra,
+  runtimeContext,
+  agentId,
+  body,
+  // abortSignal,
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: string;
+  body: GetBody<'network'> & {
+    thread?: string;
+    resourceId?: string;
+  };
+  // abortSignal?: AbortSignal;
+}): ReturnType<Agent['network']> {
+  try {
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(body, ['tools']);
+
+    const { messages, runtimeContext: agentRuntimeContext, ...rest } = body;
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(agentRuntimeContext ?? {})),
+    ]);
+
+    validateBody({ messages });
+
+    const streamResult = agent.network(messages, {
+      ...rest,
+      memory: {
+        thread: rest.thread ?? '',
+        resource: rest.resourceId ?? '',
+      },
+      runtimeContext: finalRuntimeContext,
+    });
+
+    return streamResult;
+  } catch (error) {
+    return handleError(error, 'error streaming agent loop response');
   }
 }
 
@@ -544,10 +639,7 @@ export async function streamVNextUIMessageHandler({
     const streamResult = await agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      options: {
-        ...(rest?.options ?? {}),
-        abortSignal,
-      },
+      abortSignal,
       format: 'aisdk',
     });
 

@@ -690,11 +690,70 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             }),
           }),
+          _internal: { generateId: () => '1234', currentDate: () => new Date(0), now: () => 0 },
           messageList: new MessageList(),
         });
 
-        expect(result.steps?.[0]?.response).toMatchSnapshot();
-        expect(await result.response).toMatchSnapshot();
+        expect(result.steps?.[0]?.response).toMatchInlineSnapshot(`
+          {
+            "body": "test body",
+            "headers": {
+              "custom-response-header": "response-header-value",
+            },
+            "id": "test-id-from-model",
+            "messages": [
+              {
+                "content": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
+                "role": "assistant",
+              },
+            ],
+            "modelId": "test-response-model-id",
+            "timestamp": 1970-01-01T00:00:10.000Z,
+          }
+        `);
+        expect(await result.response).toMatchInlineSnapshot(`
+          {
+            "body": "test body",
+            "headers": {
+              "custom-response-header": "response-header-value",
+            },
+            "id": "test-id-from-model",
+            "messages": [
+              {
+                "content": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
+                "role": "assistant",
+              },
+            ],
+            "modelId": "test-response-model-id",
+            "timestamp": 1970-01-01T00:00:10.000Z,
+            "uiMessages": [
+              {
+                "id": "1234",
+                "metadata": {
+                  "__originalContent": "Hello, world!",
+                  "createdAt": 2024-01-01T00:00:00.000Z,
+                },
+                "parts": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
+                "role": "assistant",
+              },
+            ],
+          }
+        `);
       });
     });
 

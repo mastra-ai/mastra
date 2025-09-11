@@ -719,6 +719,22 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
   ],
   "modelId": "test-response-model-id",
   "timestamp": 1970-01-01T00:00:10.000Z,
+  "uiMessages": [
+    {
+      "id": "GhOQiW2oZck1AgkJ",
+      "metadata": {
+        "__originalContent": "Hello, world!",
+        "createdAt": 2025-09-09T17:52:08.767Z,
+      },
+      "parts": [
+        {
+          "text": "Hello, world!",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
 }
 `;
 
