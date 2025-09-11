@@ -27,6 +27,7 @@ import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 
 export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
@@ -70,6 +71,7 @@ export interface AgentConfig<
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
   defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
   mastra?: Mastra;
+  agents?: DynamicArgument<Record<string, Agent>>;
   scorers?: DynamicArgument<MastraScorers>;
   evals?: TMetrics;
   memory?: DynamicArgument<MastraMemory>;
@@ -82,6 +84,7 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
   options?: MemoryConfig;
+  readOnly?: boolean;
 };
 
 /**

@@ -15,6 +15,27 @@ import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
 
+export type MultiPrimitiveExecutionOptions = {
+  /** Memory configuration for conversation persistence and retrieval */
+  memory?: AgentMemoryOption;
+  /** Unique identifier for this execution run */
+  runId?: string;
+
+  /** Runtime context containing dynamic configuration and state */
+  runtimeContext?: RuntimeContext;
+
+  /** Maximum number of steps to run */
+  maxSteps?: number;
+
+  /** AI tracing context for span hierarchy and metadata */
+  tracingContext?: TracingContext;
+
+  /** Model-specific settings like temperature, maxTokens, topP, etc. */
+  modelSettings?: LoopOptions['modelSettings'];
+
+  telemetry?: TelemetrySettings;
+};
+
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
   STRUCTURED_OUTPUT extends ZodSchemaV3 | ZodAny | JSONSchema7 | undefined = undefined,
