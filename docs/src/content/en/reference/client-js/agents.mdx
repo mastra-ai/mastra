@@ -20,7 +20,7 @@ const agents = await mastraClient.getAgents();
 Get an instance of a specific agent:
 
 ```typescript
-const agent = mastraClient.getAgent("agent-id");
+const agent = mastraClient.getAgent("testAgent");
 ```
 
 ## Agent Methods
@@ -56,7 +56,7 @@ const response = await agent.generate({
 Stream responses from the agent for real-time interactions:
 
 ```typescript
-const response = await agent.stream({
+const stream = await agent.stream({
   messages: [
     {
       role: "user",
@@ -66,7 +66,7 @@ const response = await agent.stream({
 });
 
 // Process data stream with the processDataStream util
-response.processDataStream({
+stream.processDataStream({
   onTextPart: (text) => {
     process.stdout.write(text);
   },

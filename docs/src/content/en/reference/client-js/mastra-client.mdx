@@ -3,7 +3,7 @@ title: MastraClient
 description: Learn how to interact with Mastra using the client-js SDK.
 ---
 
-# Mastra Client SDK
+# MastraClient Class
 
 The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/deployment/server-deployment.mdx) from your client environment.
 
@@ -17,7 +17,7 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-## Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -52,6 +52,12 @@ export const mastraClient = new MastraClient({
       name: "headers",
       type: "Record<string, string>",
       description: "An object containing custom HTTP headers to include with every request.",
+      isOptional: true,
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      description: "Abort signal for request cancellation.",
       isOptional: true,
     },
     {
@@ -98,13 +104,38 @@ export const mastraClient = new MastraClient({
       description: "Saves one or more messages to the memory system.",
     },
     {
-      name: "getMemoryStatus()",
-      type: "Promise<MemoryStatus>",
-      description: "Returns the current status of the memory system.",
+      name: "getMemoryStatus(agentId)",
+      type: "Promise<{ result: boolean }>",
+      description: "Returns the current status of the memory system for a specific agent.",
+    },
+    {
+      name: "getNetworkMemoryThreads(params)",
+      type: "Promise<StorageThreadType[]>",
+      description: "Retrieves memory threads for network-based agents.",
+    },
+    {
+      name: "createNetworkMemoryThread(params)",
+      type: "Promise<MemoryThread>",
+      description: "Creates a new memory thread for network-based agents.",
+    },
+    {
+      name: "getNetworkMemoryThread(threadId, networkId)",
+      type: "Promise<MemoryThread>",
+      description: "Fetches a specific network memory thread by ID.",
+    },
+    {
+      name: "saveNetworkMessageToMemory(params)",
+      type: "Promise<void>",
+      description: "Saves messages to network-based memory system.",
+    },
+    {
+      name: "getNetworkMemoryStatus(networkId)",
+      type: "Promise<{ result: boolean }>",
+      description: "Returns the current status of the network memory system.",
     },
     {
       name: "getTools()",
-      type: "Record<string, Tool>",
+      type: "Promise<Record<string, GetToolResponse>>",
       description: "Returns all available tools.",
     },
     {
@@ -114,7 +145,7 @@ export const mastraClient = new MastraClient({
     },
     {
       name: "getWorkflows()",
-      type: "Record<string, Workflow>",
+      type: "Promise<Record<string, GetWorkflowResponse>>",
       description: "Returns all available workflow instances.",
     },
     {
@@ -124,7 +155,7 @@ export const mastraClient = new MastraClient({
     },
     {
       name: "getVector(vectorName)",
-      type: "MastraVector",
+      type: "Vector",
       description: "Returns a vector store instance by name.",
     },
     {
@@ -139,8 +170,118 @@ export const mastraClient = new MastraClient({
     },
     {
       name: "getLogTransports()",
-      type: "string[]",
+      type: "Promise<{ transports: string[] }>",
       description: "Returns the list of configured log transport types.",
+    },
+    {
+      name: "getTelemetry(params)",
+      type: "Promise<GetTelemetryResponse>",
+      description: "Fetches telemetry data with optional filtering parameters.",
+    },
+    {
+      name: "getNetworks()",
+      type: "Promise<Array<GetNetworkResponse>>",
+      description: "Returns all available network instances.",
+    },
+    {
+      name: "getVNextNetworks()",
+      type: "Promise<Array<GetVNextNetworkResponse>>",
+      description: "Returns all available vNext network instances.",
+    },
+    {
+      name: "getNetwork(networkId)",
+      type: "Network",
+      description: "Retrieves a specific network instance by ID.",
+    },
+    {
+      name: "getVNextNetwork(networkId)",
+      type: "VNextNetwork",
+      description: "Retrieves a specific vNext network instance by ID.",
+    },
+    {
+      name: "getMcpServers(params)",
+      type: "Promise<McpServerListResponse>",
+      description: "Returns all available MCP servers with optional pagination.",
+    },
+    {
+      name: "getMcpServerDetails(serverId, params)",
+      type: "Promise<ServerDetailInfo>",
+      description: "Retrieves detailed information about a specific MCP server.",
+    },
+    {
+      name: "getMcpServerTools(serverId)",
+      type: "Promise<McpServerToolListResponse>",
+      description: "Returns all tools available on a specific MCP server.",
+    },
+    {
+      name: "getMcpServerTool(serverId, toolId)",
+      type: "MCPTool",
+      description: "Retrieves a specific tool from an MCP server.",
+    },
+    {
+      name: "getA2A(agentId)",
+      type: "A2A",
+      description: "Returns an A2A (Agent-to-Agent) instance for the specified agent.",
+    },
+    {
+      name: "getWorkingMemory({agentId, threadId, resourceId})",
+      type: "Promise<any>",
+      description: "Retrieves working memory for a specific thread and agent.",
+    },
+    {
+      name: "updateWorkingMemory({agentId, threadId, workingMemory, resourceId})",
+      type: "Promise<any>",
+      description: "Updates working memory for a specific thread and agent.",
+    },
+    {
+      name: "getScorers()",
+      type: "Promise<Record<string, GetScorerResponse>>",
+      description: "Returns all available scorers.",
+    },
+    {
+      name: "getScorer(scorerId)",
+      type: "Promise<GetScorerResponse>",
+      description: "Retrieves a specific scorer by ID.",
+    },
+    {
+      name: "getScoresByScorerId(params)",
+      type: "Promise<GetScoresResponse>",
+      description: "Fetches scores filtered by scorer ID.",
+    },
+    {
+      name: "getScoresByRunId(params)",
+      type: "Promise<GetScoresResponse>",
+      description: "Fetches scores filtered by run ID.",
+    },
+    {
+      name: "getScoresByEntityId(params)",
+      type: "Promise<GetScoresResponse>",
+      description: "Fetches scores filtered by entity ID.",
+    },
+    {
+      name: "saveScore(params)",
+      type: "Promise<SaveScoreResponse>",
+      description: "Saves a new score entry.",
+    },
+    {
+      name: "getLegacyWorkflows()",
+      type: "Promise<Record<string, GetLegacyWorkflowResponse>>",
+      description: "Returns all available legacy workflow instances.",
+    },
+    {
+      name: "getLegacyWorkflow(workflowId)",
+      type: "LegacyWorkflow",
+      description: "Retrieves a specific legacy workflow instance by ID.",
+    },
+    {
+      name: "getAgentBuilderActions()",
+      type: "Promise<Record<string, WorkflowInfo>>",
+      description: "Returns all available agent builder actions.",
+    },
+    {
+      name: "getAgentBuilderAction(actionId)",
+      type: "Workflow",
+      description: "Retrieves a specific agent builder action by ID.",
     },
   ]}
 />
