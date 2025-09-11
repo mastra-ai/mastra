@@ -8,7 +8,8 @@ import type {
   LanguageModelV2CallWarning,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import { parseModelString, getProviderConfig, type OpenAICompatibleModelId } from './provider-registry.generated';
+import { parseModelString, getProviderConfig } from './provider-registry.generated';
+import type { OpenAICompatibleModelId } from './provider-registry.generated';
 import type { OpenAICompatibleConfig } from './shared.types';
 
 // Helper function to resolve API key from environment
@@ -30,6 +31,7 @@ function buildHeaders(
   apiKey?: string,
   apiKeyHeader?: string,
   customHeaders?: Record<string, string>,
+  provider?: string,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -46,9 +48,15 @@ function buildHeaders(
     }
   }
 
+  // Add provider-specific headers
+  if (provider === 'anthropic') {
+    headers['anthropic-version'] = '2023-06-01';
+  }
+
   return headers;
 }
 
+// TODO: get these types from openai
 interface OpenAIStreamChunk {
   id?: string;
   object?: string;
@@ -78,6 +86,7 @@ interface OpenAIStreamChunk {
   };
 }
 
+// TODO: get these types from openai
 interface OpenAICompletionResponse {
   id: string;
   object: string;
@@ -215,16 +224,10 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
     // Get provider config for headers
     const providerConfig = this.provider !== 'openai-compatible' ? getProviderConfig(this.provider) : undefined;
 
-    // Merge default headers from provider config with custom headers
-    const mergedHeaders = {
-      ...providerConfig?.defaultHeaders,
-      ...parsedConfig.headers,
-    };
-
     // Set final properties
     this.modelId = parsedConfig.id;
     this.url = parsedConfig.url;
-    this.headers = buildHeaders(parsedConfig.apiKey, providerConfig?.apiKeyHeader, mergedHeaders);
+    this.headers = buildHeaders(parsedConfig.apiKey, providerConfig?.apiKeyHeader, parsedConfig.headers, this.provider);
   }
 
   private convertMessagesToOpenAI(messages: LanguageModelV2CallOptions['prompt']): any[] {
@@ -245,10 +248,10 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
                 return { type: 'text', text: part.text };
               }
               // Note: v2 uses 'file' type with image property
-              if (part.type === 'file' && 'image' in part) {
+              if (part.type === 'file') {
                 return {
                   type: 'image_url',
-                  image_url: { url: (part as any).image.url },
+                  image_url: { url: part.data },
                 };
               }
               return null;
@@ -259,7 +262,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
           if (contentParts.every(p => p?.type === 'text')) {
             return {
               role: 'user',
-              content: contentParts.map((p: any) => p.text).join(''),
+              content: contentParts.map(p => p?.text || '').join(''),
             };
           }
 
@@ -272,17 +275,17 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
         if (msg.role === 'assistant') {
           const textContent = msg.content
             .filter(part => part.type === 'text')
-            .map(part => (part as any).text)
+            .map(part => part.text)
             .join('');
 
           const toolCalls = msg.content
             .filter(part => part.type === 'tool-call')
-            .map((part: any) => ({
+            .map(part => ({
               id: part.toolCallId,
               type: 'function',
               function: {
                 name: part.toolName,
-                arguments: JSON.stringify(part.args),
+                arguments: JSON.stringify(part.input || {}),
               },
             }));
 
@@ -294,10 +297,10 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
         }
 
         if (msg.role === 'tool') {
-          return msg.content.map((toolResponse: any) => ({
+          return msg.content.map(toolResponse => ({
             role: 'tool',
             tool_call_id: toolResponse.toolCallId,
-            content: JSON.stringify(toolResponse.result),
+            content: JSON.stringify(toolResponse.output),
           }));
         }
 
@@ -360,6 +363,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   }> {
     const { prompt, tools, toolChoice, providerOptions } = options;
 
+    // TODO: lets get a real body type here, not any
     const body: any = {
       messages: this.convertMessagesToOpenAI(prompt),
       model: this.modelId,
@@ -467,6 +471,7 @@ export class OpenAICompatibleModel implements LanguageModelV2 {
   }> {
     const { prompt, tools, toolChoice, providerOptions } = options;
 
+    // TODO: real body type, not any
     const body: any = {
       messages: this.convertMessagesToOpenAI(prompt),
       model: this.modelId,
