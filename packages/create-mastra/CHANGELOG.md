@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.12.3-alpha.1
+
+### Patch Changes
+
+- Client SDK Agents, Mastra server - support runtimeContext with GET requests ([#7734](https://github.com/mastra-ai/mastra/pull/7734))
+
 ## 0.12.3-alpha.0
 
 ## 0.12.2

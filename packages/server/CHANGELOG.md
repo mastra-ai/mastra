@@ -1,5 +1,18 @@
 # @mastra/server
 
+## 0.16.3-alpha.1
+
+### Patch Changes
+
+- Delayed deprecation notice for streamVNext() replacing stream() until Sept 23rd ([#7739](https://github.com/mastra-ai/mastra/pull/7739))
+
+- Update peer deps ([#7741](https://github.com/mastra-ai/mastra/pull/7741))
+
+- Client SDK Agents, Mastra server - support runtimeContext with GET requests ([#7734](https://github.com/mastra-ai/mastra/pull/7734))
+
+- Updated dependencies [[`2a6585f`](https://github.com/mastra-ai/mastra/commit/2a6585f7cb71f023f805d521d1c3c95fb9a3aa59), [`3d26e83`](https://github.com/mastra-ai/mastra/commit/3d26e8353a945719028f087cc6ac4b06f0ce27d2), [`56e55d1`](https://github.com/mastra-ai/mastra/commit/56e55d1e9eb63e7d9e41aa46e012aae471256812)]:
+  - @mastra/core@0.16.3-alpha.1
+
 ## 0.16.3-alpha.0
 
 ### Patch Changes
