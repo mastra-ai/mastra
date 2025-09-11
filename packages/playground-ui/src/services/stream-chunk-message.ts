@@ -554,6 +554,7 @@ export const createRootToolAssistantMessage = ({
           toolCallId: runId,
           toolName: entityName,
           args: {
+            ...chunk?.payload?.args,
             __mastraMetadata: {
               from,
               networkMetadata,
