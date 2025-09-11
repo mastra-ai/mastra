@@ -878,8 +878,8 @@ importers:
   observability/braintrust:
     dependencies:
       braintrust:
-        specifier: ^0.3.6
-        version: 0.3.6(@aws-sdk/credential-provider-web-identity@3.864.0)(zod@4.1.5)
+        specifier: ^0.3.7
+        version: 0.3.7(@aws-sdk/credential-provider-web-identity@3.864.0)(zod@4.1.5)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -5752,9 +5752,6 @@ packages:
   '@bcoe/v8-coverage@1.0.2':
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
-
-  '@braintrust/core@0.0.95':
-    resolution: {integrity: sha512-bxTqM/SQE4q5qKYUyGtwcvhTprxP7rSWOd5IuhAErO297qz4UrkLBcAV/9JjQJ3dZw+58GMVnQr026K8t4l/QQ==}
 
   '@bufbuild/protobuf@2.5.2':
     resolution: {integrity: sha512-foZ7qr0IsUBjzWIq+SuBLfdQCpJ1j8cTuNNT4owngTHoN5KsJb8L9t65fzz7SCeSWzescoOil/0ldqiL041ABg==}
@@ -11274,8 +11271,8 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  braintrust@0.3.6:
-    resolution: {integrity: sha512-2SyC8B09WIw7klxf+j8G5oXpnThlx02YvT6iB4A0hwuTkeCMAnpIB60StqlnukQHPgvaoOrefds3sQPHhDAgBQ==}
+  braintrust@0.3.7:
+    resolution: {integrity: sha512-P6nJLgM98IOiBvAsgfUn9dbrLhmTfvED/+2ouacImTgs9adlZoGrIib9BkRAm+keSTfKLBPFqMmUi7QZ4ClemQ==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.34
@@ -20216,11 +20213,6 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
-  '@braintrust/core@0.0.95':
-    dependencies:
-      uuid: 9.0.1
-      zod: 3.25.76
-
   '@bufbuild/protobuf@2.5.2': {}
 
   '@cfworker/json-schema@4.1.1': {}
@@ -26603,10 +26595,9 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  braintrust@0.3.6(@aws-sdk/credential-provider-web-identity@3.864.0)(zod@4.1.5):
+  braintrust@0.3.7(@aws-sdk/credential-provider-web-identity@3.864.0)(zod@4.1.5):
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@braintrust/core': 0.0.95
       '@next/env': 14.2.32
       '@vercel/functions': 1.6.0(@aws-sdk/credential-provider-web-identity@3.864.0)
       argparse: 2.0.1
