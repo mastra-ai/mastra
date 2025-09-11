@@ -22,9 +22,6 @@ export const agent = new Agent({
     options: {
       workingMemory: {
         enabled: true
-      },
-      threads: {
-        generateTitle: true
       }
     }
   })
@@ -138,6 +135,12 @@ export const agent = new Agent({
       connectionUrl: "file:./vector-memory.db"
     }),
     options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+        scope: 'resource'
+      },
       workingMemory: {
         enabled: true
       },
