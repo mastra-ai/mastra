@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraError } from '../error';
 import { clearAITracingRegistry } from './registry';
 import { DefaultAITracing } from './tracers';
-import type { AITracingEvent, AITracingExporter, LLMGenerationAttributes, AISpan, AITracing } from './types';
+import type { AITracingEvent, AITracingExporter, LLMGenerationAttributes, AITracing, ExportedAISpan } from './types';
 import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -263,7 +263,7 @@ describe('AI Tracing', () => {
       // Should emit span_started
       expect(testExporter.events).toHaveLength(1);
       expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_STARTED);
-      expect(testExporter.events[0].span.id).toBe(span.id);
+      expect(testExporter.events[0].exportedSpan.id).toBe(span.id);
 
       // Update span - cast to LLM attributes type for usage field
       span.update({ attributes: { usage: { totalTokens: 100 } } });
@@ -271,7 +271,7 @@ describe('AI Tracing', () => {
       // Should emit span_updated
       expect(testExporter.events).toHaveLength(2);
       expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_UPDATED);
-      expect((testExporter.events[1].span.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(100);
+      expect((testExporter.events[1].exportedSpan.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(100);
 
       // End span
       span.end({ attributes: { usage: { totalTokens: 150 } } });
@@ -279,8 +279,8 @@ describe('AI Tracing', () => {
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(3);
       expect(testExporter.events[2].type).toBe(AITracingEventType.SPAN_ENDED);
-      expect(testExporter.events[2].span.endTime).toBeInstanceOf(Date);
-      expect((testExporter.events[2].span.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(150);
+      expect(testExporter.events[2].exportedSpan.endTime).toBeInstanceOf(Date);
+      expect((testExporter.events[2].exportedSpan.attributes as LLMGenerationAttributes).usage?.totalTokens).toBe(150);
     });
 
     it('should handle errors with default endSpan=true', () => {
@@ -664,7 +664,7 @@ describe('AI Tracing', () => {
       // Should have emitted exactly one event: span_ended
       expect(testExporter.events).toHaveLength(1);
       expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_ENDED);
-      expect(testExporter.events[0].span).toBe(eventSpan);
+      expect(testExporter.events[0].exportedSpan).toStrictEqual(eventSpan.exportSpan());
 
       rootSpan.end();
     });
@@ -904,7 +904,7 @@ describe('AI Tracing', () => {
       // Should have exported the event span
       expect(testExporter.events).toHaveLength(1);
       const exportedEvent = testExporter.events[0];
-      const exportedSpan = exportedEvent.span as AISpan<AISpanType.LLM_CHUNK>;
+      const exportedSpan = exportedEvent.exportedSpan as ExportedAISpan<AISpanType.LLM_CHUNK>;
 
       // Verify exported span properties
       expect(exportedSpan.isEvent).toBe(true);

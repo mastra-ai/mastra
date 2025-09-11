@@ -264,11 +264,13 @@ export type AnyAISpanAttributes = AISpanTypeMap[keyof AISpanTypeMap];
 // ============================================================================
 
 /**
- * AI Span interface with type safety
+ * Base Span interface
  */
-export interface AISpan<TType extends AISpanType> {
+interface BaseSpan<TType extends AISpanType> {
   /** Unique span identifier */
   id: string;
+  /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
+  traceId: string;
   /** Name of the span */
   name: string;
   /** Type of the span */
@@ -277,22 +279,14 @@ export interface AISpan<TType extends AISpanType> {
   startTime: Date;
   /** When span ended */
   endTime?: Date;
-  /** Is an event span? (event occurs at startTime, has no endTime) */
-  isEvent: boolean;
-  /** AI-specific attributes - strongly typed based on span type */
+  /** Is an internal span? (spans internal to the operation of mastra) */
   attributes?: AISpanTypeMap[TType];
-  /** Parent span reference (undefined for root spans) */
-  parent?: AnyAISpan;
-  /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
-  traceId: string;
-  /** Pointer to the AITracing instance */
-  aiTracing: AITracing;
-
+  /** User-defined metadata */
+  metadata?: Record<string, any>;
   /** Input passed at the start of the span */
   input?: any;
   /** Output generated at the end of the span */
   output?: any;
-
   /** Error information if span failed */
   errorInfo?: {
     message: string;
@@ -301,9 +295,20 @@ export interface AISpan<TType extends AISpanType> {
     category?: string;
     details?: Record<string, any>;
   };
+  /** Is an event span? (event occurs at startTime, has no endTime) */
+  isEvent: boolean;
+}
 
-  /** User-defined metadata */
-  metadata?: Record<string, any>;
+/**
+ * AI Span interface, used internally for tracing
+ */
+export interface AISpan<TType extends AISpanType> extends BaseSpan<TType> {
+  /** Is an internal span? (spans internal to the operation of mastra) */
+  isInternal: boolean;
+  /** Parent span reference (undefined for root spans) */
+  parent?: AnyAISpan;
+  /** Pointer to the AITracing instance */
+  aiTracing: AITracing;
 
   // Methods for span lifecycle
   /** End the span */
@@ -326,12 +331,33 @@ export interface AISpan<TType extends AISpanType> {
 
   /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
   get isValid(): boolean;
+
+  /** Get the closest parent spanId that isn't an internal span */
+  getParentSpanId(includeInternalSpans?: boolean): string | undefined;
+
+  /** Returns a lightweight span ready for export */
+  exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> | undefined;
+}
+
+/**
+ * Exported AI Span interface, used for tracing exporters
+ */
+export interface ExportedAISpan<TType extends AISpanType> extends BaseSpan<TType> {
+  /** Parent span id reference (undefined for root spans) */
+  parentSpanId?: string;
+  /** `TRUE` if the span is the root span of a trace */
+  isRootSpan: boolean;
 }
 
 /**
  * Union type for cases that need to handle any span
  */
 export type AnyAISpan = AISpan<keyof AISpanTypeMap>;
+
+/**
+ * Union type for cases that need to handle any exported span
+ */
+export type AnyExportedAISpan = ExportedAISpan<keyof AISpanTypeMap>;
 
 // ============================================================================
 // Tracing Interfaces
@@ -390,6 +416,8 @@ interface CreateBaseOptions<TType extends AISpanType> {
   name: string;
   /** Span type */
   type: TType;
+  /** Is an internal span? */
+  isInternal?: boolean;
 }
 
 /**
@@ -477,6 +505,8 @@ export interface TracingOptions {
 export interface TracingContext {
   /** Current AI span for creating child spans and adding metadata */
   currentSpan?: AnyAISpan;
+  /** Is the processing internal? Should new spans be created as such? */
+  isInternal?: boolean;
 }
 
 /**
@@ -505,6 +535,8 @@ export interface TracingConfig {
   exporters?: AITracingExporter[];
   /** Custom processors */
   processors?: AISpanProcessor[];
+  /** Set to `true` if you want to see spans internal to the operation of mastra */
+  includeInternalSpans?: boolean;
 }
 
 /**
@@ -569,9 +601,9 @@ export enum AITracingEventType {
  * Tracing events that can be exported
  */
 export type AITracingEvent =
-  | { type: AITracingEventType.SPAN_STARTED; span: AnyAISpan }
-  | { type: AITracingEventType.SPAN_UPDATED; span: AnyAISpan }
-  | { type: AITracingEventType.SPAN_ENDED; span: AnyAISpan };
+  | { type: AITracingEventType.SPAN_STARTED; exportedSpan: AnyExportedAISpan }
+  | { type: AITracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedAISpan }
+  | { type: AITracingEventType.SPAN_ENDED; exportedSpan: AnyExportedAISpan };
 
 /**
  * Interface for tracing exporters
@@ -597,7 +629,7 @@ export interface AISpanProcessor {
   /** Processor name */
   name: string;
   /** Process span before export */
-  process(span: AnyAISpan): AnyAISpan | null;
+  process(span: AnyAISpan): AnyAISpan | undefined;
   /** Shutdown processor */
   shutdown(): Promise<void>;
 }

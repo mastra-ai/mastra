@@ -1045,6 +1045,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     if (fn) {
@@ -1059,6 +1060,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepSpan,
+            isInternal: sleepSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1162,6 +1164,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     if (fn) {
@@ -1176,6 +1179,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepUntilSpan,
+            isInternal: sleepUntilSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1285,6 +1289,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         stepId: step.id,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     const startedAt = await this.inngestStep.run(
@@ -1545,6 +1550,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: {
             currentSpan: stepAISpan,
+            isInternal: stepAISpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1679,7 +1685,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan },
+            tracingContext: { currentSpan: stepAISpan, isInternal: true },
           });
         }
       });
@@ -1788,6 +1794,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         conditionCount: entry.conditions.length,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     let execResults: any;
@@ -1802,6 +1809,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               attributes: {
                 conditionIndex: index,
               },
+              isInternal: tracingContext?.isInternal,
             });
 
             try {
@@ -1814,6 +1822,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 inputData: prevOutput,
                 tracingContext: {
                   currentSpan: evalSpan,
+                  isInternal: evalSpan?.isInternal,
                 },
                 getInitData: () => stepResults?.input as any,
                 getStepResult: (step: any) => {
@@ -1910,6 +1919,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           disableScorers,
           tracingContext: {
             currentSpan: conditionalSpan,
+            isInternal: conditionalSpan?.isInternal,
           },
         }),
       ),
