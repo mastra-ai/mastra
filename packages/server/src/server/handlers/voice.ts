@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import type { Agent } from '@mastra/core/agent';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -8,12 +9,13 @@ import { validateBody } from './utils';
 
 interface VoiceContext extends Context {
   agentId?: string;
+  runtimeContext?: RuntimeContext;
 }
 
 /**
  * Get available speakers for an agent
  */
-export async function getSpeakersHandler({ mastra, agentId }: VoiceContext) {
+export async function getSpeakersHandler({ mastra, agentId, runtimeContext }: VoiceContext) {
   try {
     if (!agentId) {
       throw new HTTPException(400, { message: 'Agent ID is required' });
@@ -25,7 +27,7 @@ export async function getSpeakersHandler({ mastra, agentId }: VoiceContext) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const voice = await agent.getVoice();
+    const voice = await agent.getVoice({ runtimeContext });
 
     if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
@@ -45,6 +47,7 @@ export async function generateSpeechHandler({
   mastra,
   agentId,
   body,
+  runtimeContext,
 }: VoiceContext & {
   body?: {
     text?: string;
@@ -66,7 +69,7 @@ export async function generateSpeechHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const voice = await agent.getVoice();
+    const voice = await agent.getVoice({ runtimeContext });
 
     if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
@@ -91,6 +94,7 @@ export async function transcribeSpeechHandler({
   mastra,
   agentId,
   body,
+  runtimeContext,
 }: VoiceContext & {
   body?: {
     audioData?: Buffer;
@@ -112,7 +116,7 @@ export async function transcribeSpeechHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const voice = await agent.getVoice();
+    const voice = await agent.getVoice({ runtimeContext });
 
     if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
@@ -132,7 +136,7 @@ export async function transcribeSpeechHandler({
 /**
  * Get available listeners for an agent
  */
-export async function getListenerHandler({ mastra, agentId }: VoiceContext) {
+export async function getListenerHandler({ mastra, agentId, runtimeContext }: VoiceContext) {
   try {
     if (!agentId) {
       throw new HTTPException(400, { message: 'Agent ID is required' });
@@ -144,7 +148,7 @@ export async function getListenerHandler({ mastra, agentId }: VoiceContext) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const voice = await agent.getVoice();
+    const voice = await agent.getVoice({ runtimeContext });
 
     if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
