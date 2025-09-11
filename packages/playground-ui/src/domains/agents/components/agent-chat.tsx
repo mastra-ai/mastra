@@ -12,7 +12,6 @@ export const AgentChat = ({
   initialMessages,
   memory,
   refreshThreadList,
-  onInputChange,
   modelVersion,
 }: ChatProps) => {
   const { settings } = useAgentSettings();
