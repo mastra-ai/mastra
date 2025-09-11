@@ -8,11 +8,11 @@ export function usePromptVersions(agentId: string, instructions?: string) {
   const [copiedVersions, setCopiedVersions] = useState<Record<number, boolean>>({});
   const [isUpdating, setIsUpdating] = useState(false);
   const [versionToDelete, setVersionToDelete] = useState<number | null>(null);
+  const client = useMastraClient();
+  const { runtimeContext } = usePlaygroundStore();
 
   // Fetch eval results for a version
   const fetchEvalResults = async (): Promise<EvalResult[]> => {
-    const client = useMastraClient();
-    const { runtimeContext } = usePlaygroundStore();
     try {
       const response = await client.getAgent(agentId).liveEvals(runtimeContext);
       return response?.evals;
