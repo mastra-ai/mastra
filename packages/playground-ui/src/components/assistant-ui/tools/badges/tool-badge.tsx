@@ -14,8 +14,14 @@ export interface ToolBadgeProps {
 }
 
 export const ToolBadge = ({ toolName, args, result, networkMetadata }: ToolBadgeProps) => {
-  let argSlot =
-    typeof args === 'string' ? <pre className="whitespace-pre-wrap">{args}</pre> : <SyntaxHighlighter data={args} />;
+  let argSlot = null;
+
+  try {
+    const { __mastraMetadata: _, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
+    argSlot = <SyntaxHighlighter data={formattedArgs} />;
+  } catch {
+    argSlot = <pre className="whitespace-pre-wrap">{args as string}</pre>;
+  }
 
   let resultSlot =
     typeof result === 'string' ? (
