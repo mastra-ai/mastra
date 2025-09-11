@@ -420,6 +420,13 @@ export function MastraRuntimeProvider({
                 });
 
                 _sideEffects.toolCallIdToName.current[runId] = currentEntityId;
+              } else if (chunk.type === 'network-execution-event-step-finish') {
+                setMessages(currentConversation => {
+                  return [
+                    ...currentConversation,
+                    { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
+                  ];
+                });
               } else {
                 await handleStreamChunk({ chunk, setMessages, refreshWorkingMemory, _sideEffects });
               }
