@@ -78,7 +78,7 @@ export async function generateSpeechHandler({
 
     const audioStream = await Promise.resolve()
       .then(() => voice.speak(body!.text!, { speaker: body!.speakerId! }))
-      .catch((err) => {
+      .catch(err => {
         if (err instanceof MastraError) {
           throw new HTTPException(400, { message: err.message });
         }
