@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MastraClient } from '../client';
 import type { ClientOptions } from '../types';
 import { Workflow } from './workflow';
-import { MastraClient } from '../client';
 
 const createJsonResponse = (data: any) => ({ ok: true, json: async () => data });
 
