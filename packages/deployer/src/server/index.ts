@@ -120,7 +120,9 @@ export async function createHonoServer(
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
   // Configure hono context
+  // Configure hono context
   app.use('*', async function setContext(c, next) {
+    // Parse runtime context from request body and add to context
     let runtimeContext = new RuntimeContext();
     // Parse runtime context from request body and add to context
     if (c.req.method === 'POST' || c.req.method === 'PUT') {
@@ -167,7 +169,6 @@ export async function createHonoServer(
     }
 
     // Add relevant contexts to hono context
-
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', options.tools);

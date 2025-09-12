@@ -121,7 +121,7 @@ export type StreamVNextParams<
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT>,
-    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'structuredOutput'
+    'output' | 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
   >
 >;
 

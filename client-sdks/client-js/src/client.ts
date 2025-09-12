@@ -61,7 +61,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available agents
-   * @param runtimeContext - Runtime context to use for the agents
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
   public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
@@ -182,10 +182,20 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available tools
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public getTools(): Promise<Record<string, GetToolResponse>> {
-    return this.request('/api/tools');
+  public getTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/tools${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -216,10 +226,22 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available workflows
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing map of workflow IDs to workflow details
    */
-  public getWorkflows(): Promise<Record<string, GetWorkflowResponse>> {
-    return this.request('/api/workflows');
+  public getWorkflows(
+    runtimeContext?: RuntimeContext | Record<string, any>,
+  ): Promise<Record<string, GetWorkflowResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/workflows${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
