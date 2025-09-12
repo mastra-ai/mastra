@@ -5,7 +5,7 @@ import { PostgresStore, PgVector } from '@mastra/pg';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { getResuableTests } from './reusable-tests';
+import { getReusableTests } from './reusable-tests';
 
 dotenv.config({ path: '.env.test' });
 
@@ -45,7 +45,7 @@ describe('Memory with PostgresStore Integration', () => {
     },
   });
 
-  getResuableTests(memory);
+  getReusableTests(memory);
 
   describe('Pagination Bug #6787', () => {
     const resourceId = 'test-resource';
