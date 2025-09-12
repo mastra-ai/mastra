@@ -1,9 +1,6 @@
-import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { TelemetrySettings } from 'ai';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { z } from 'zod';
-import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
-import type { ZodAny } from 'zod/v4';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
@@ -39,7 +36,7 @@ export type MultiPrimitiveExecutionOptions = {
 
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchemaV3 | ZodAny | JSONSchema7 | undefined = undefined,
+  STRUCTURED_OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
   /**
@@ -137,8 +134,9 @@ export type AgentExecutionOptions<
 
 export type InnerAgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
+  STRUCTURED_OUTPUT extends OutputSchema | undefined = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> = AgentExecutionOptions<OUTPUT, any, FORMAT> & {
+> = AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT> & {
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
   methodType: 'generate' | 'stream' | 'streamVNext';
