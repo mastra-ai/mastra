@@ -19,7 +19,7 @@ export const traceEntity = new Entity({
     },
     parentSpanId: {
       type: 'string',
-      required: false,
+      default: 'ROOT_SPAN',
     },
     name: {
       type: 'string',
@@ -124,6 +124,21 @@ export const traceEntity = new Entity({
       index: 'gsi2',
       pk: { field: 'gsi2pk', composite: ['entity', 'scope'] },
       sk: { field: 'gsi2sk', composite: ['startTime'] },
+    },
+    byParentSpanAndName: {
+      index: 'gsi3',
+      pk: { field: 'gsi3pk', composite: ['entity', 'parentSpanId', 'name'] },
+      sk: { field: 'gsi3sk', composite: ['createdAt'] },
+    },
+    byParentSpanAndScope: {
+      index: 'gsi4',
+      pk: { field: 'gsi4pk', composite: ['entity', 'parentSpanId', 'scope'] },
+      sk: { field: 'gsi4sk', composite: ['createdAt'] },
+    },
+    byTraceId: {
+      index: 'gsi5',
+      pk: { field: 'gsi5pk', composite: ['entity', 'traceId'] },
+      sk: { field: 'gsi5sk', composite: ['createdAt'] },
     },
   },
 });

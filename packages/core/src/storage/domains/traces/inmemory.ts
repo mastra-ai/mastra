@@ -1,4 +1,5 @@
-import type { Trace } from '../../../telemetry';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import type { Trace, TraceRecord } from '../../../telemetry';
 import { TABLE_TRACES } from '../../constants';
 import type { StorageGetTracesArg, PaginationInfo, StorageGetTracesPaginatedArg } from '../../types';
 import type { StoreOperations } from '../operations';
@@ -52,6 +53,25 @@ export class TracesInMemory extends TracesStorage {
     return traces.slice(start, end);
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const allSpans = Array.from(this.collection.values());
+    const spans = allSpans.filter(span => span.traceId === traceId);
+
+    if (spans.length === 0) {
+      throw new MastraError({
+        id: 'TRACES_STORAGE_GET_TRACE_NOT_FOUND',
+        domain: ErrorDomain.MASTRA_TELEMETRY,
+        category: ErrorCategory.SYSTEM,
+        text: `Trace with id ${traceId} not found`,
+      });
+    }
+
+    return {
+      id: traceId,
+      spans,
+    };
+  }
+
   async getTracesPaginated({
     name,
     scope,
@@ -61,9 +81,8 @@ export class TracesInMemory extends TracesStorage {
     dateRange,
   }: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     this.logger.debug(`MockStore: getTracesPaginated called`);
-    // Mock implementation - basic filtering
-    let traces = Array.from(this.collection.values());
 
+    let traces = Array.from(this.collection.values()).filter(span => span.parentSpanId === null);
     if (name) traces = traces.filter((t: any) => t.name?.startsWith(name));
     if (scope) traces = traces.filter((t: any) => t.scope === scope);
     if (attributes) {

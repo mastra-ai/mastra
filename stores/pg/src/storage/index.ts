@@ -19,7 +19,7 @@ import type {
   StorageDomains,
   ThreadSortOptions,
 } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
@@ -192,6 +192,10 @@ export class PostgresStore extends MastraStorage {
    */
   public async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
     return this.stores.traces.getTraces(args);
+  }
+
+  public async getTrace(traceId: string): Promise<TraceRecord> {
+    return this.stores.traces.getTrace(traceId);
   }
 
   public async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {

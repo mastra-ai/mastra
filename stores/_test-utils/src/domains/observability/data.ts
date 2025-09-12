@@ -56,7 +56,7 @@ export function createSampleAISpanForDB({
 /**
  * Creates a root span (no parent) for testing
  */
-export function createRootSpan(
+export function createRootAISpan(
   {
     name,
     scope,
@@ -93,7 +93,7 @@ export function createRootSpan(
 /**
  * Creates a child span with a specified parent span ID
  */
-export function createChildSpan({
+export function createChildAISpan({
   name,
   scope,
   parentSpanId,

@@ -49,6 +49,7 @@ import type {
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
+  GetTraceResponse,
 } from './types';
 import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
@@ -401,6 +402,10 @@ export class MastraClient extends BaseResource {
     } else {
       return this.request(`/api/telemetry`);
     }
+  }
+
+  public getTrace(traceId: string): Promise<GetTraceResponse> {
+    return this.request(`/api/telemetry/${traceId}`);
   }
 
   /**

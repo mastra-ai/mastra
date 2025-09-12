@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
 import type { StorageGetTracesArg, StorageGetTracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
+import type { Trace, TraceRecord } from '@mastra/core/telemetry';
 import type { StoreOperationsCloudflare } from '../operations';
 
 export class TracesStorageCloudflare extends TracesStorage {
@@ -50,6 +50,66 @@ export class TracesStorageCloudflare extends TracesStorage {
     }
   }
 
+  async getTrace(traceId: string): Promise<TraceRecord> {
+    const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
+
+    let keyObjs: { name: string }[] = [];
+    try {
+      keyObjs = await this.operations.listKV(TABLE_TRACES, { prefix: `${prefix}${TABLE_TRACES}` });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_TRACE_LIST_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to list traces for traceId: ${traceId}`,
+          details: {
+            prefix: `${prefix}${TABLE_TRACES}`,
+          },
+        },
+        error,
+      );
+    }
+
+    const spans: any[] = [];
+    for (const { name: key } of keyObjs) {
+      try {
+        const data = await this.operations.getKV(TABLE_TRACES, key);
+        if (!data) continue;
+        if (data.traceId === traceId) {
+          spans.push(data);
+        }
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: 'CLOUDFLARE_STORAGE_GET_SPAN_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `Failed to get span for traceId: ${traceId}`,
+            details: {
+              key,
+            },
+          },
+          error,
+        );
+      }
+    }
+
+    if (!spans.length) {
+      throw new MastraError({
+        id: 'CLOUDFLARE_STORAGE_GET_TRACE_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Trace not found`,
+        details: { traceId },
+      });
+    }
+    return {
+      id: traceId,
+      spans,
+    };
+  }
+
   async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
     try {
       const { name, scope, attributes, filters, page = 0, perPage = 100, dateRange } = args;
@@ -64,6 +124,11 @@ export class TracesStorageCloudflare extends TracesStorage {
         try {
           const data = await this.operations.getKV(TABLE_TRACES, key);
           if (!data) continue;
+
+          // skip child spans
+          if (data.parentSpanId) {
+            continue;
+          }
 
           // Filter by name
           if (name && data.name !== name) continue;

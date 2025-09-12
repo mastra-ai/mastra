@@ -62,6 +62,10 @@ export class StoreOperationsDynamoDB extends StoreOperations {
   private preprocessRecord(record: Record<string, any>): Record<string, any> {
     const processed = { ...record };
 
+    if (!processed.parentSpanId) {
+      processed.parentSpanId = 'ROOT_SPAN';
+    }
+
     // Convert Date objects to ISO strings for date fields
     // This prevents ElectroDB validation errors that occur when Date objects are passed
     // to string-typed attributes, even when the attribute has a setter that converts dates
