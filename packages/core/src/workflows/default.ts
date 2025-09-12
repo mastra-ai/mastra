@@ -839,6 +839,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           throw validatedInput.error;
         }
 
+        const resumeData = resume?.steps[0] === step.id ? resume?.resumePayload : undefined;
+
+        if (resumeData && step.resumeSchema) {
+          const validatedResumeData = await step.resumeSchema.safeParseAsync(resumeData);
+          if (!validatedResumeData.success) {
+            throw validatedResumeData.error;
+          }
+        }
+
         const result = await runStep({
           runId,
           workflowId,
