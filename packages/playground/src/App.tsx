@@ -37,6 +37,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import AgentNetworkPage from './pages/net/$agentId';
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
@@ -131,6 +132,7 @@ function App() {
                     </Layout>
                   }
                 >
+                  <Route path="/net/:agentId" element={<AgentNetworkPage />} />
                   <Route path="/agents" element={<Agents />} />
                   <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                   <Route
