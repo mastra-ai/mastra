@@ -1,5 +1,15 @@
 # @mastra/deployer-cloudflare
 
+## 0.13.8-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#6887](https://github.com/mastra-ai/mastra/pull/6887))
+  - Updated dependency [`@babel/core@^7.28.4` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.4) (from `^7.28.0`, in `dependencies`)
+- Updated dependencies [[`b1c155b`](https://github.com/mastra-ai/mastra/commit/b1c155b57ce702674f207f1d4c6a4ebf94225f44)]:
+  - @mastra/deployer@0.16.4-alpha.3
+  - @mastra/core@0.16.4-alpha.3
+
 ## 0.13.8-alpha.0
 
 ### Patch Changes

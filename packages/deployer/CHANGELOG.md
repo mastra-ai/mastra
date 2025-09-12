@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.16.4-alpha.3
+
+### Patch Changes
+
+- dependencies updates: ([#6887](https://github.com/mastra-ai/mastra/pull/6887))
+  - Updated dependency [`@babel/core@^7.28.4` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.4) (from `^7.28.0`, in `dependencies`)
+- Updated dependencies []:
+  - @mastra/core@0.16.4-alpha.3
+  - @mastra/server@0.16.4-alpha.3
+
 ## 0.16.4-alpha.2
 
 ### Patch Changes
