@@ -243,7 +243,7 @@ export const AgentMetadataModelSwitcher = ({
             onOpenAutoFocus={e => e.preventDefault()}
             className="flex flex-col gap-2 w-[var(--radix-popover-trigger-width)] max-h-[calc(var(--radix-popover-content-available-height)-50px)] overflow-y-auto"
           >
-            {filteredModels.slice(0, 50).map(item => {
+            {filteredModels.map(item => {
               return (
                 <div
                   className="flex items-center gap-2 cursor-pointer hover:bg-surface5 p-2"
@@ -258,9 +258,6 @@ export const AgentMetadataModelSwitcher = ({
                 </div>
               );
             })}
-            {filteredModels.length > 50 && (
-              <div className="text-xs text-gray-500 p-2">...and {filteredModels.length - 50} more models</div>
-            )}
           </PopoverContent>
         )}
       </Popover>

@@ -24,29 +24,38 @@ export class NetlifyGateway extends MastraModelGateway {
     }
 
     const data = (await response.json()) as NetlifyResponse;
-    const providerConfigs: Record<string, ProviderConfig> = {};
 
-    // Convert Netlify format to our standard format
+    // Consolidate all models from all providers into a single Netlify provider
+    const allModels: string[] = [];
+
     for (const [providerId, provider] of Object.entries(data.providers)) {
-      // Since we have a prefix, the provider ID will be "netlify/openai" etc.
-      const prefixedId = `${this.prefix}/${providerId}`;
-
-      providerConfigs[prefixedId] = {
-        // Netlify handles the actual URL routing, we just need to point to their gateway
-        url: `https://api.netlify.com/api/v1/ai-gateway/${providerId}/chat/completions`,
-        apiKeyEnvVar: provider.token_env_var,
-        apiKeyHeader: 'Authorization', // Netlify uses standard Bearer auth
-        name: `${providerId.charAt(0).toUpperCase() + providerId.slice(1)} (via Netlify)`,
-        models: provider.models.sort(),
-      };
+      // Prefix each model with its original provider for clarity
+      // e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet"
+      for (const model of provider.models) {
+        allModels.push(`${providerId}/${model}`);
+      }
     }
 
-    console.log(`Found ${Object.keys(providerConfigs).length} providers via Netlify Gateway`);
+    // Return a single Netlify provider with all models
+    const providerConfigs: Record<string, ProviderConfig> = {
+      [this.prefix]: {
+        // Generic Netlify gateway URL - the actual provider will be determined from the model
+        url: 'https://api.netlify.com/api/v1/ai-gateway',
+        apiKeyEnvVar: 'NETLIFY_API_KEY',
+        apiKeyHeader: 'Authorization',
+        name: 'Netlify AI Gateway',
+        models: allModels.sort(),
+      },
+    };
+
+    console.log(
+      `Netlify Gateway: consolidated ${allModels.length} models from ${Object.keys(data.providers).length} providers`,
+    );
     return providerConfigs;
   }
 
   buildUrl(modelId: string, envVars: Record<string, string>): string | false {
-    // Check if this model ID is for our gateway
+    // Check if this model ID is for our gateway: "netlify/openai/gpt-4o"
     if (!modelId.startsWith(`${this.prefix}/`)) {
       return false; // Not our prefix
     }
@@ -57,26 +66,25 @@ export class NetlifyGateway extends MastraModelGateway {
       return false; // Invalid format
     }
 
-    const provider = parts[1];
+    const provider = parts[1]; // e.g., "openai"
     if (!provider) {
       return false;
     }
 
-    // Look for the Netlify API key
+    // Look for the Netlify API key or provider's direct API key
     const netlifyApiKey = envVars['NETLIFY_API_KEY'];
-    if (!netlifyApiKey) {
-      // Also check if we have the provider's direct API key
-      const providerApiKeyVar = this.getProviderApiKeyVar(provider);
-      if (!envVars[providerApiKeyVar]) {
-        return false; // No API key available
-      }
+    const providerApiKeyVar = this.getProviderApiKeyVar(provider);
+    const providerApiKey = envVars[providerApiKeyVar];
+
+    if (!netlifyApiKey && !providerApiKey) {
+      return false; // No API key available
     }
 
     // Check for custom Netlify base URL (for enterprise/self-hosted)
     const customBaseUrl = envVars['NETLIFY_AI_GATEWAY_URL'];
     const baseUrl = customBaseUrl || 'https://api.netlify.com/api/v1/ai-gateway';
 
-    // Return the Netlify gateway URL
+    // Return the Netlify gateway URL with the provider path
     return `${baseUrl}/${provider}/chat/completions`;
   }
 

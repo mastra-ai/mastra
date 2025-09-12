@@ -818,54 +818,38 @@ export const PROVIDER_REGISTRY = {
       "kimi-k2-turbo-preview"
     ]
   },
-  "netlify/anthropic": {
-    "url": "https://api.netlify.com/api/v1/ai-gateway/anthropic/chat/completions",
-    "apiKeyEnvVar": "ANTHROPIC_API_KEY",
+  "netlify": {
+    "url": "https://api.netlify.com/api/v1/ai-gateway",
+    "apiKeyEnvVar": "NETLIFY_API_KEY",
     "apiKeyHeader": "Authorization",
-    "name": "Anthropic (via Netlify)",
+    "name": "Netlify AI Gateway",
     "models": [
-      "claude-3-5-haiku-20241022",
-      "claude-3-7-sonnet-20250219",
-      "claude-3-haiku-20240307",
-      "claude-opus-4-20250514",
-      "claude-sonnet-4-20250514"
-    ]
-  },
-  "netlify/gemini": {
-    "url": "https://api.netlify.com/api/v1/ai-gateway/gemini/chat/completions",
-    "apiKeyEnvVar": "GEMINI_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Gemini (via Netlify)",
-    "models": [
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-8b",
-      "gemini-1.5-pro",
-      "gemini-2.0-flash",
-      "gemini-2.0-flash-lite",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.5-pro",
-      "imagen-4.0-generate-001",
-      "veo-3.0-generate-preview"
-    ]
-  },
-  "netlify/openai": {
-    "url": "https://api.netlify.com/api/v1/ai-gateway/openai/chat/completions",
-    "apiKeyEnvVar": "OPENAI_API_KEY",
-    "apiKeyHeader": "Authorization",
-    "name": "Openai (via Netlify)",
-    "models": [
-      "codex-mini-latest",
-      "dall-e-2",
-      "dall-e-3",
-      "gpt-3.5-turbo",
-      "gpt-4-turbo",
-      "gpt-4o",
-      "gpt-4o-mini",
-      "gpt-image-1",
-      "o1",
-      "o1-mini",
-      "o3-mini"
+      "anthropic/claude-3-5-haiku-20241022",
+      "anthropic/claude-3-7-sonnet-20250219",
+      "anthropic/claude-3-haiku-20240307",
+      "anthropic/claude-opus-4-20250514",
+      "anthropic/claude-sonnet-4-20250514",
+      "gemini/gemini-1.5-flash",
+      "gemini/gemini-1.5-flash-8b",
+      "gemini/gemini-1.5-pro",
+      "gemini/gemini-2.0-flash",
+      "gemini/gemini-2.0-flash-lite",
+      "gemini/gemini-2.5-flash",
+      "gemini/gemini-2.5-flash-lite",
+      "gemini/gemini-2.5-pro",
+      "gemini/imagen-4.0-generate-001",
+      "gemini/veo-3.0-generate-preview",
+      "openai/codex-mini-latest",
+      "openai/dall-e-2",
+      "openai/dall-e-3",
+      "openai/gpt-3.5-turbo",
+      "openai/gpt-4-turbo",
+      "openai/gpt-4o",
+      "openai/gpt-4o-mini",
+      "openai/gpt-image-1",
+      "openai/o1",
+      "openai/o1-mini",
+      "openai/o3-mini"
     ]
   }
 } as const;
@@ -1463,37 +1447,33 @@ export const PROVIDER_MODELS = {
     "kimi-k2-0905-preview",
     "kimi-k2-turbo-preview"
   ],
-  "netlify/anthropic": [
-    "claude-3-5-haiku-20241022",
-    "claude-3-7-sonnet-20250219",
-    "claude-3-haiku-20240307",
-    "claude-opus-4-20250514",
-    "claude-sonnet-4-20250514"
-  ],
-  "netlify/gemini": [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
-    "imagen-4.0-generate-001",
-    "veo-3.0-generate-preview"
-  ],
-  "netlify/openai": [
-    "codex-mini-latest",
-    "dall-e-2",
-    "dall-e-3",
-    "gpt-3.5-turbo",
-    "gpt-4-turbo",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-image-1",
-    "o1",
-    "o1-mini",
-    "o3-mini"
+  "netlify": [
+    "anthropic/claude-3-5-haiku-20241022",
+    "anthropic/claude-3-7-sonnet-20250219",
+    "anthropic/claude-3-haiku-20240307",
+    "anthropic/claude-opus-4-20250514",
+    "anthropic/claude-sonnet-4-20250514",
+    "gemini/gemini-1.5-flash",
+    "gemini/gemini-1.5-flash-8b",
+    "gemini/gemini-1.5-pro",
+    "gemini/gemini-2.0-flash",
+    "gemini/gemini-2.0-flash-lite",
+    "gemini/gemini-2.5-flash",
+    "gemini/gemini-2.5-flash-lite",
+    "gemini/gemini-2.5-pro",
+    "gemini/imagen-4.0-generate-001",
+    "gemini/veo-3.0-generate-preview",
+    "openai/codex-mini-latest",
+    "openai/dall-e-2",
+    "openai/dall-e-3",
+    "openai/gpt-3.5-turbo",
+    "openai/gpt-4-turbo",
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    "openai/gpt-image-1",
+    "openai/o1",
+    "openai/o1-mini",
+    "openai/o3-mini"
   ]
 } as const;
 
