@@ -246,9 +246,9 @@ await store.upsert({
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
-  import { CouchbaseVector } from '@mastra/couchbase'
+  import { CouchbaseSearchStore } from '@mastra/couchbase'
 
-  const store = new CouchbaseVector({
+  const store = new CouchbaseSearchStore({
     connectionString: process.env.COUCHBASE_CONNECTION_STRING,
     username: process.env.COUCHBASE_USERNAME,
     password: process.env.COUCHBASE_PASSWORD,
