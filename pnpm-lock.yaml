@@ -1067,7 +1067,7 @@ importers:
         specifier: workspace:*
         version: link:..
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.6.1
         version: 16.6.1
       zod:
         specifier: ^3.25.76
@@ -2277,7 +2277,7 @@ importers:
         specifier: workspace:*
         version: link:..
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.6.1
         version: 16.6.1
       json-schema:
         specifier: ^0.4.0
