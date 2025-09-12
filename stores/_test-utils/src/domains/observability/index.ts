@@ -256,7 +256,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
     describe('getAITracesPaginated', () => {
       beforeEach(async () => {
         // Create test traces with different properties for filtering
-        const traces = [
+        const rootSpans = [
           // Trace 1: Workflow spans
           createRootSpan({
             name: 'workflow-trace-1',
@@ -287,10 +287,79 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           }),
         ];
 
-        await storage.batchCreateAISpans({ records: traces });
+        // Create child spans for some of the root spans to verify root-only filtering
+        const childSpans = [
+          // Child spans for workflow-trace-1
+          createChildSpan({
+            name: 'workflow-step-1',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[0]!.spanId,
+            traceId: rootSpans[0]!.traceId,
+            startedAt: new Date('2024-01-01T00:05:00Z'),
+          }),
+          createChildSpan({
+            name: 'workflow-step-2',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[0]!.spanId,
+            traceId: rootSpans[0]!.traceId,
+            startedAt: new Date('2024-01-01T00:10:00Z'),
+          }),
+
+          // Child spans for agent-trace-1
+          createChildSpan({
+            name: 'agent-reasoning',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[1]!.spanId,
+            traceId: rootSpans[1]!.traceId,
+            startedAt: new Date('2024-01-02T00:05:00Z'),
+          }),
+          createChildSpan({
+            name: 'agent-action',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[1]!.spanId,
+            traceId: rootSpans[1]!.traceId,
+            startedAt: new Date('2024-01-02T00:10:00Z'),
+          }),
+
+          // Child span for tool-trace-1
+          createChildSpan({
+            name: 'tool-execution',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[2]!.spanId,
+            traceId: rootSpans[2]!.traceId,
+            startedAt: new Date('2024-01-03T00:05:00Z'),
+          }),
+        ];
+
+        // Combine all spans for storage
+        const allSpans = [...rootSpans, ...childSpans];
+
+        await storage.batchCreateAISpans({ records: allSpans });
       });
 
       describe('basic pagination', () => {
+        it('should return only root spans (no child spans)', async () => {
+          const result = await storage.getAITracesPaginated({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result).toHaveProperty('spans');
+          expect(result).toHaveProperty('pagination');
+          expect(Array.isArray(result.spans)).toBe(true);
+
+          // Verify all returned spans are root spans (parentSpanId is null)
+          result.spans.forEach(span => {
+            expect(span.parentSpanId).toBeNull();
+          });
+
+          // We should have exactly 4 root spans, not the 5 child spans
+          expect(result.spans.length).toBe(4);
+
+          // Verify we have the expected root span names
+          const spanNames = result.spans.map(span => span.name).sort();
+          expect(spanNames).toEqual(['agent-trace-1', 'tool-trace-1', 'workflow-trace-1', 'workflow-trace-2']);
+        });
+
         it('should return root spans with pagination info', async () => {
           const result = await storage.getAITracesPaginated({
             pagination: { page: 0, perPage: 10 },

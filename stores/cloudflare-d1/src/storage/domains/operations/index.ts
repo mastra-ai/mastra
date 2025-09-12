@@ -1,10 +1,10 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
-import { createSqlBuilder } from '../../sql-builder';
-import type { SqlParam, SqlQueryOptions } from '../../sql-builder';
+import { createSqlBuilder } from '@mastra/core/storage/sql-builder';
+import type { SqlParam, SqlQueryOptions } from '@mastra/core/storage/sql-builder';
 import { deserializeValue } from '../utils';
 
 export type D1QueryResult = Awaited<ReturnType<Cloudflare['d1']['database']['query']>>['result'];
@@ -208,6 +208,10 @@ export class StoreOperationsD1 extends StoreOperations {
       const tableConstraints: string[] = [];
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         tableConstraints.push('UNIQUE (workflow_name, run_id)');
+      }
+
+      if (tableName === TABLE_AI_SPANS) {
+        tableConstraints.push('UNIQUE (traceId, spanId)');
       }
 
       const query = createSqlBuilder().createTable(fullTableName, columnDefinitions, tableConstraints);
