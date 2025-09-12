@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { cookingTool } from '../tools';
 import { myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
+import { chefAgent, dynamicAgent } from './index';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -42,6 +43,10 @@ export const chefModelV2Agent = new Agent({
   },
   workflows: {
     myWorkflow,
+  },
+  agents: {
+    dynamicAgent,
+    chefAgent,
   },
   scorers: ({ mastra }) => {
     if (!mastra) {
