@@ -161,6 +161,12 @@
         "default": "./dist/zod-to-json.cjs"
       }
     },
+    "./storage/sql-builder": {
+      "import": {
+        "types": "./dist/storage/sql-builder.d.ts",
+        "default": "./dist/storage/sql-builder.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,

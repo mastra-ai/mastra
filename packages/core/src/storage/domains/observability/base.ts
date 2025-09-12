@@ -1,7 +1,14 @@
 import type { TracingStrategy } from '../../../ai-tracing';
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '../../types';
+import type {
+  AISpanRecord,
+  AISpanUpdatePayload,
+  AITraceRecord,
+  AITracesPaginatedArg,
+  PaginationInfo,
+} from '../../types';
+import { AISpanCreateSchema, AISpanUpdateSchema } from './schemas';
 
 export class ObservabilityStorage extends MastraBase {
   constructor() {
@@ -37,6 +44,22 @@ export class ObservabilityStorage extends MastraBase {
     });
   }
 
+  protected validateCreateAISpanPayload(span: AISpanRecord) {
+    try {
+      return AISpanCreateSchema.parse(span);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'OBSERVABILITY_STORAGE_CREATE_AI_SPAN_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_OBSERVABILITY,
+          category: ErrorCategory.SYSTEM,
+          text: 'Failed to validate AI span payload',
+        },
+        error,
+      );
+    }
+  }
+
   /**
    * Updates a single AI span with partial data. Primarily used for realtime trace creation.
    */
@@ -51,6 +74,22 @@ export class ObservabilityStorage extends MastraBase {
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support updating AI spans',
     });
+  }
+
+  protected validateUpdateAISpanPayload(span: AISpanUpdatePayload) {
+    try {
+      return AISpanUpdateSchema.parse(span);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'OBSERVABILITY_STORAGE_UPDATE_AI_SPAN_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_OBSERVABILITY,
+          category: ErrorCategory.SYSTEM,
+          text: 'Failed to validate AI span payload',
+        },
+        error,
+      );
+    }
   }
 
   /**

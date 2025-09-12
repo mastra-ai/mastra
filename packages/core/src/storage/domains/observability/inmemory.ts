@@ -26,29 +26,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   async createAISpan(span: AISpanRecord): Promise<void> {
-    this.validateCreateAISpan(span);
-    const id = this.generateId(span);
-    this.collection.set(id, span);
-  }
-
-  private validateCreateAISpan(record: AISpanRecord): void {
-    if (!record.spanId) {
-      throw new MastraError({
-        id: 'OBSERVABILITY_SPAN_ID_REQUIRED',
-        domain: ErrorDomain.MASTRA_OBSERVABILITY,
-        category: ErrorCategory.SYSTEM,
-        text: 'Span ID is required for creating a span',
-      });
-    }
-
-    if (!record.traceId) {
-      throw new MastraError({
-        id: 'OBSERVABILITY_TRACE_ID_REQUIRED',
-        domain: ErrorDomain.MASTRA_OBSERVABILITY,
-        category: ErrorCategory.SYSTEM,
-        text: 'Trace ID is required for creating a span',
-      });
-    }
+    const payload = this.validateCreateAISpanPayload(span);
+    const id = this.generateId(payload);
+    this.collection.set(id, payload as AISpanRecord);
   }
 
   private generateId({ traceId, spanId }: { traceId: string; spanId: string }): string {
@@ -138,6 +118,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     traceId: string;
     updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
   }): Promise<void> {
+    const validatedPayload = this.validateUpdateAISpanPayload(params.updates);
     const id = this.generateId({ traceId: params.traceId, spanId: params.spanId });
     const span = this.collection.get(id);
 
@@ -150,14 +131,14 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       });
     }
 
-    this.collection.set(id, { ...span, ...params.updates });
+    this.collection.set(id, { ...span, ...validatedPayload });
   }
 
   async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
     for (const record of args.records) {
-      this.validateCreateAISpan(record);
+      const validatedPayload = this.validateCreateAISpanPayload(record);
       const id = this.generateId({ traceId: record.traceId, spanId: record.spanId });
-      this.collection.set(id, record);
+      this.collection.set(id, validatedPayload);
     }
   }
 
@@ -165,6 +146,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
   }): Promise<void> {
     for (const record of args.records) {
+      const validatedPayload = this.validateUpdateAISpanPayload(record.updates);
       const id = this.generateId({ traceId: record.traceId, spanId: record.spanId });
       const span = this.collection.get(id);
       if (!span) {
@@ -175,7 +157,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           text: 'Span not found for batch update',
         });
       }
-      this.collection.set(id, { ...span, ...record.updates });
+      this.collection.set(id, { ...span, ...validatedPayload });
     }
   }
 
