@@ -1,0 +1,20 @@
+{
+  "name": "@inner/ts",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@mastra/core": "monorepo-test",
+    "round-to": "^6.0.0"
+  }
+}
