@@ -84,7 +84,7 @@ export abstract class StoreOperations extends MastraBase {
    * Creates a database index on specified columns
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async createIndex(options: CreateIndexOptions): Promise<void> {
+  async createIndex(_options: CreateIndexOptions): Promise<void> {
     throw new MastraError({
       id: 'MASTRA_STORAGE_CREATE_INDEX_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
@@ -97,7 +97,7 @@ export abstract class StoreOperations extends MastraBase {
    * Drops a database index by name
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async dropIndex(indexName: string): Promise<void> {
+  async dropIndex(_indexName: string): Promise<void> {
     throw new MastraError({
       id: 'MASTRA_STORAGE_DROP_INDEX_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
@@ -110,7 +110,7 @@ export abstract class StoreOperations extends MastraBase {
    * Lists database indexes for a table or all tables
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
+  async listIndexes(_tableName?: string): Promise<IndexInfo[]> {
     throw new MastraError({
       id: 'MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
@@ -123,7 +123,7 @@ export abstract class StoreOperations extends MastraBase {
    * Gets detailed statistics for a specific index
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+  async describeIndex(_indexName: string): Promise<StorageIndexStats> {
     throw new MastraError({
       id: 'MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
