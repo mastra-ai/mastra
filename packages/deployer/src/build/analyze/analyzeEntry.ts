@@ -1,9 +1,10 @@
-import type { IMastraLogger } from '@mastra/core/logger';
+import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
 import { fileURLToPath } from 'node:url';
 import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
+import resolveFrom from 'resolve-from';
 import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
 import { removeDeployer } from '../plugins/remove-deployer';
@@ -77,6 +78,11 @@ function getInputPlugins(
 async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
+  {
+    logger,
+  }: {
+    logger: IMastraLogger;
+  },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
 
@@ -97,6 +103,75 @@ async function captureDependenciesToOptimize(
 
     depsToOptimize.set(dependency, { exports: bindings, rootPath, isWorkspace });
   }
+
+  /**
+   * Recursively discovers and analyzes transitive workspace dependencies
+   */
+  async function checkTransitiveDependencies(
+    internalMap: Map<string, DependencyMetadata>,
+    maxDepth = 10,
+    currentDepth = 0,
+  ) {
+    // Could be a circular dependency...
+    if (currentDepth >= maxDepth) {
+      logger.warn('Maximum dependency depth reached while checking transitive dependencies.');
+      return;
+    }
+
+    // Make a copy so that we can safely iterate over it
+    const depsSnapshot = new Map(depsToOptimize);
+    let hasAddedDeps = false;
+
+    for (const [dep, meta] of depsSnapshot) {
+      // We only care about workspace deps that we haven't already processed
+      if (!meta.isWorkspace || internalMap.has(dep)) {
+        continue;
+      }
+
+      try {
+        // Absolute path to the dependency
+        const resolvedPath = resolveFrom(process.cwd(), dep);
+
+        if (!resolvedPath) {
+          logger.warn(`Could not resolve path for workspace dependency ${dep}`);
+          continue;
+        }
+
+        const analysis = await analyzeEntry({ entry: resolvedPath, isVirtualFile: false }, '', {
+          workspaceMap,
+          logger: noopLogger,
+          sourcemapEnabled: false,
+        });
+
+        if (!analysis?.dependencies) {
+          continue;
+        }
+
+        for (const [innerDep, innerMeta] of analysis.dependencies) {
+          /**
+           * Only add to depsToOptimize if:
+           * - It's a workspace package
+           * - We haven't already processed it
+           * - We haven't already discovered it at the beginning
+           */
+          if (innerMeta.isWorkspace && !internalMap.has(innerDep) && !depsToOptimize.has(innerDep)) {
+            depsToOptimize.set(innerDep, innerMeta);
+            internalMap.set(innerDep, innerMeta);
+            hasAddedDeps = true;
+          }
+        }
+      } catch (err) {
+        logger.error(`Failed to resolve or analyze dependency ${dep}: ${(err as Error).message}`);
+      }
+    }
+
+    // Continue until no new deps are found
+    if (hasAddedDeps) {
+      await checkTransitiveDependencies(internalMap, maxDepth, currentDepth + 1);
+    }
+  }
+
+  await checkTransitiveDependencies(new Map());
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
@@ -134,6 +209,7 @@ export async function analyzeEntry(
   },
   mastraEntry: string,
   {
+    logger,
     sourcemapEnabled,
     workspaceMap,
   }: {
@@ -164,7 +240,7 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap);
+  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, { logger });
 
   return {
     dependencies: depsToOptimize,

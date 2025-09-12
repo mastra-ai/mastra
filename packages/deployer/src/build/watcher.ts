@@ -1,5 +1,6 @@
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
+import { join } from 'node:path';
 import * as pkg from 'empathic/package';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
@@ -40,8 +41,12 @@ export async function getInputOptions(
       deps.set(dep, metadata);
     }
   }
+
+  // In `analyzeBundle` we output this file and we want to use that instead of the original entry file
+  const analyzedEntryFile = join(path.join(process.cwd(), '.mastra/.build'), 'entry-0.mjs');
+
   const inputOptions = await getBundlerInputOptions(
-    entryFile,
+    analyzedEntryFile,
     {
       dependencies: deps,
       externalDependencies: new Set(),

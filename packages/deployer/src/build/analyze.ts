@@ -146,10 +146,8 @@ If you think your configuration is valid, please open an issue.`);
       workspaceMap,
     });
 
-    if (process.env.MASTRA_BUNDLER_DEBUG === 'true') {
-      // Write the entry file to the output dir for debugging purposes
-      await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
-    }
+    // Write the entry file to the output dir so that we can use it for workspace resolution stuff
+    await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
 
     // Merge dependencies from each entry (main, tools, etc.)
     for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
