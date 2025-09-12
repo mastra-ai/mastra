@@ -177,63 +177,39 @@ These indexes significantly improve performance for filtered queries with sortin
 
 ### Creating Custom Indexes
 
+Create additional indexes to optimize specific query patterns:
+
 ```typescript
-// Basic index
+// Basic index for common queries
 await store.createIndex({
   name: 'idx_threads_resource',
   table: 'mastra_threads',
   columns: ['resourceId'],
 });
 
-// Composite index with sort order
+// Composite index with sort order for filtering + sorting
 await store.createIndex({
   name: 'idx_messages_composite',
   table: 'mastra_messages',
   columns: ['thread_id', 'createdAt DESC'],
 });
 
-// Unique index
-await store.createIndex({
-  name: 'idx_unique_email',
-  table: 'mastra_resources',
-  columns: ['email'],
-  unique: true,
-});
-
-// Partial index with WHERE clause
-await store.createIndex({
-  name: 'idx_active_threads',
-  table: 'mastra_threads',
-  columns: ['resourceId'],
-  where: '"status" = \'active\'',
-});
-
-// GIN index for JSONB columns
+// GIN index for JSONB columns (fast JSON queries)
 await store.createIndex({
   name: 'idx_traces_attributes',
   table: 'mastra_traces',
   columns: ['attributes'],
   method: 'gin',
 });
-
-// BRIN index for time-series data
-await store.createIndex({
-  name: 'idx_threads_created_brin',
-  table: 'mastra_threads',
-  columns: ['createdAt'],
-  method: 'brin',
-});
-
-// Index with storage parameters
-await store.createIndex({
-  name: 'idx_optimized',
-  table: 'mastra_messages',
-  columns: ['thread_id'],
-  storage: {
-    fillfactor: 90, // Leave 10% free space for updates
-  },
-});
 ```
+
+For more advanced use cases, you can also use:
+
+- `unique: true` for unique constraints
+- `where: 'condition'` for partial indexes
+- `method: 'brin'` for time-series data
+- `storage: { fillfactor: 90 }` for update-heavy tables
+- `concurrent: true` for non-blocking creation (default)
 
 ### Managing Indexes
 
@@ -306,25 +282,6 @@ if (efficiency < 0.5) {
   console.log(`Index ${stats.name} has low efficiency: ${efficiency}`);
 }
 ```
-
-### Performance Best Practices
-
-1. **Index Selection**:
-   - Use **btree** for most queries (supports `<`, `>`, `=`, `BETWEEN`)
-   - Use **hash** for simple equality checks on large tables
-   - Use **gin** for JSONB queries and array contains operations
-   - Use **brin** for time-series data with natural ordering
-
-2. **Monitoring**:
-   - Use `describeIndex()` to track index usage statistics
-   - Regularly review index scans to identify unused indexes
-   - Check index sizes to monitor storage overhead
-
-3. **Trade-offs**:
-   - Indexes speed up reads but slow down writes
-   - Each index requires additional storage
-   - Too many indexes can degrade overall performance
-   - CONCURRENT creation avoids table locks but takes longer
 
 ## Related Links
 

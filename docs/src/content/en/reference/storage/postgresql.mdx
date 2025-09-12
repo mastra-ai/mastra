@@ -132,42 +132,18 @@ These indexes significantly improve performance for filtered queries with sortin
 Create additional indexes to optimize specific query patterns:
 
 ```typescript copy
-// Single column index
+// Basic index for common queries
 await storage.createIndex({
-  name: 'idx_threads_status',
+  name: 'idx_threads_resource',
   table: 'mastra_threads',
-  columns: ['status']
+  columns: ['resourceId']
 });
 
-// Composite index with sort order
+// Composite index with sort order for filtering + sorting
 await storage.createIndex({
   name: 'idx_messages_composite',
   table: 'mastra_messages',
-  columns: ['thread_id', 'createdAt DESC', 'id ASC']
-});
-
-// Unique index
-await storage.createIndex({
-  name: 'idx_unique_email',
-  table: 'mastra_resources',
-  columns: ['email'],
-  unique: true
-});
-
-// Hash index for equality comparisons
-await storage.createIndex({
-  name: 'idx_hash_userid',
-  table: 'mastra_messages',
-  columns: ['user_id'],
-  method: 'hash'
-});
-
-// Partial index with WHERE clause
-await storage.createIndex({
-  name: 'idx_active_threads',
-  table: 'mastra_threads',
-  columns: ['resourceId'],
-  where: '"status" = \'active\''
+  columns: ['thread_id', 'createdAt DESC']
 });
 
 // GIN index for JSONB columns (fast JSON queries)
@@ -177,42 +153,14 @@ await storage.createIndex({
   columns: ['attributes'],
   method: 'gin'
 });
-
-// BRIN index for time-series data (very space-efficient)
-await storage.createIndex({
-  name: 'idx_threads_created_brin',
-  table: 'mastra_threads',
-  columns: ['createdAt'],
-  method: 'brin'
-});
-
-// SP-GiST index for text search
-await storage.createIndex({
-  name: 'idx_threads_title_spgist',
-  table: 'mastra_threads',
-  columns: ['title'],
-  method: 'spgist'
-});
-
-// Index with storage parameters
-await storage.createIndex({
-  name: 'idx_optimized',
-  table: 'mastra_messages',
-  columns: ['thread_id'],
-  method: 'btree',
-  storage: {
-    fillfactor: 90  // Leave 10% free space for updates
-  }
-});
-
-// Index with custom tablespace
-await storage.createIndex({
-  name: 'idx_fast_ssd',
-  table: 'mastra_traces',
-  columns: ['traceId'],
-  tablespace: 'fast_ssd'  // Place on SSD tablespace
-});
 ```
+
+For more advanced use cases, you can also use:
+- `unique: true` for unique constraints
+- `where: 'condition'` for partial indexes
+- `method: 'brin'` for time-series data
+- `storage: { fillfactor: 90 }` for update-heavy tables
+- `concurrent: true` for non-blocking creation (default)
 
 ### Index Options
 
@@ -354,51 +302,4 @@ PostgreSQL offers different index types optimized for specific scenarios:
 | **gist** | Geometric data, full-text search | Moderate | Fast for nearest-neighbor |
 | **spgist** | Non-balanced data, text patterns | Small | Fast for specific patterns |
 | **brin** | Large tables with natural ordering | Very small | Fast for ranges |
-
-### Performance Best Practices
-
-1. **Index Selection**:
-   - Use **btree** for most queries (supports `<`, `>`, `=`, `BETWEEN`)
-   - Use **hash** for simple equality checks on large tables
-   - Use **gin** for JSONB queries and array contains operations
-   - Use **brin** for time-series data with natural ordering
-   - Add indexes for columns frequently used in WHERE clauses
-   - Create composite indexes for multi-column filters
-   - Use partial indexes for frequently filtered subsets
-
-2. **Monitoring**:
-   - Use `describeIndex()` to track index usage statistics
-   - Regularly review index scans to identify unused indexes
-   - Check index sizes to monitor storage overhead
-   - Remove unused indexes to improve write performance
-
-3. **Trade-offs**:
-   - Indexes speed up reads but slow down writes
-   - Each index requires additional storage
-   - Too many indexes can degrade overall performance
-   - CONCURRENT creation avoids table locks but takes longer
-
-### Monitoring Index Usage
-
-Use `describeIndex()` to identify underutilized indexes:
-
-```typescript copy
-// Check index performance metrics
-const stats = await storage.describeIndex('idx_threads_resource');
-
-// Identify unused indexes (no scans)
-if (stats.scans === 0) {
-  console.log(`Index ${stats.name} is unused - consider removing`);
-  await storage.dropIndex(stats.name);
-}
-
-// Monitor index efficiency
-const efficiency = stats.tuples_fetched / stats.tuples_read;
-if (efficiency < 0.5) {
-  console.log(`Index ${stats.name} has low efficiency: ${efficiency}`);
-}
-
-// Track index growth
-console.log(`Index size: ${stats.size}`);
-```
 
