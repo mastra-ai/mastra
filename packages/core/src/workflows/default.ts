@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
+import type z from 'zod';
 import type { AISpan, TracingContext } from '../ai-tracing';
 import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RuntimeContext } from '../di';
@@ -836,16 +837,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const validatedInput = await inputSchema.safeParseAsync(prevOutput);
 
         if (!validatedInput.success) {
-          throw validatedInput.error;
-        }
-
-        const resumeData = resume?.steps[0] === step.id ? resume?.resumePayload : undefined;
-
-        if (resumeData && step.resumeSchema) {
-          const validatedResumeData = await step.resumeSchema.safeParseAsync(resumeData);
-          if (!validatedResumeData.success) {
-            throw validatedResumeData.error;
-          }
+          const errorMessages = validatedInput.error.errors
+            .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
+            ?.join('\n');
+          throw new Error('Step input validation failed: \n' + errorMessages);
         }
 
         const result = await runStep({

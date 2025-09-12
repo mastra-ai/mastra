@@ -4645,6 +4645,166 @@ describe('Workflow', () => {
       });
       expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Error: Step execution failed/);
     });
+
+    it('should throw error if inputData is invalid', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: successAction,
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRunAsync();
+
+      const result = await run.start({
+        inputData: {
+          start: 2 as unknown as 'string',
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain(
+          'Error: Step input validation failed: \n- start: Expected string, received number',
+        ); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: 2 });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'failed',
+        payload: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step1Result as any)?.error).toContain(
+        'Error: Step input validation failed: \n- start: Expected string, received number',
+      );
+    });
+
+    it('should throw error if inputData is invalid in workflow with .map()', async () => {
+      const successAction = vi.fn<any>().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { start: inputData.start };
+        },
+        inputSchema: z.object({
+          start: z.number(),
+        }),
+        outputSchema: z.object({
+          start: z.number(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: successAction,
+        inputSchema: z.object({
+          start: z.string(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          start: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      workflow
+        .then(step1)
+        .map(async ({ inputData }) => {
+          return {
+            start: inputData.start,
+          };
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRunAsync();
+
+      const result = await run.start({
+        inputData: {
+          start: 2,
+        },
+      });
+
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toContain(
+          'Error: Step input validation failed: \n- start: Expected string, received number',
+        ); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({ start: 2 });
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'success',
+        payload: { start: 2 },
+        output: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      const step2Result = result.steps?.step2;
+      expect(step2Result).toBeDefined();
+      expect(step2Result).toMatchObject({
+        status: 'failed',
+        payload: { start: 2 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+        error: expect.any(String),
+      });
+      expect((step2Result as any)?.error).toContain(
+        'Error: Step input validation failed: \n- start: Expected string, received number',
+      );
+    });
   });
 
   describe('Complex Conditions', () => {
