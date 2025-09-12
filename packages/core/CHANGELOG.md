@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.16.4-alpha.2
+
+### Patch Changes
+
+- Postgresql Storage Query Index Performance: Adds index operations and automatic indexing for Postgresql ([#7757](https://github.com/mastra-ai/mastra/pull/7757))
+
+- Fixes assistant message ids when using toUIMessageStream, preserves the original messageId rather than creating a new id for this message. ([#7783](https://github.com/mastra-ai/mastra/pull/7783))
+
 ## 0.16.4-alpha.1
 
 ### Patch Changes
