@@ -205,13 +205,12 @@ export class Agent<
         this.logger.error(mastraError.toString());
         throw mastraError;
       }
-      this.model =
-        config.model.map(mdl => ({
-          id: randomUUID(),
-          model: mdl.model,
-          maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
-          enabled: mdl.enabled ?? true,
-        })) ?? [];
+      this.model = config.model.map(mdl => ({
+        id: randomUUID(),
+        model: mdl.model,
+        maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
+        enabled: mdl.enabled ?? true,
+      }));
     } else {
       this.model = config.model;
     }

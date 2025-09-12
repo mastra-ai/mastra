@@ -3961,7 +3961,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             );
           }
         } catch (err: any) {
-          console.log('error----', err);
           caught = true;
           expect(err.message).toMatch(/Simulated error in onStepFinish/i);
         }
