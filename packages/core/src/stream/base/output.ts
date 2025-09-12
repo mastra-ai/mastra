@@ -423,8 +423,21 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
-                  // Resolve object promise to avoid hanging
-                  if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+                  // Check for structuredOutput in metadata (from output processors in stream mode)
+                  const messages = self.messageList.get.response.v2();
+                  const messagesWithStructuredData = messages.filter(
+                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
+                  );
+
+                  if (
+                    messagesWithStructuredData[0] &&
+                    // this is to make typescript happy
+                    messagesWithStructuredData[0].content.metadata?.structuredOutput
+                  ) {
+                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
+                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
+                  } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
+                    // Resolve object promise to avoid hanging
                     self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
                   }
                 }

@@ -27,6 +27,15 @@ function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   if (baseSchema instanceof zV3.ZodObject || baseSchema instanceof z.ZodObject) {
     subSchema = Object.entries(baseSchema.shape).map(([key, field]) => parseField(key, field as z.ZodTypeAny));
   }
+  if (baseSchema instanceof zV3.ZodIntersection || baseSchema instanceof z.ZodIntersection) {
+    const subSchemaLeft = Object.entries(baseSchema._def.left.shape).map(([key, field]) =>
+      parseField(key, field as z.ZodTypeAny),
+    );
+    const subSchemaRight = Object.entries(baseSchema._def.right.shape).map(([key, field]) =>
+      parseField(key, field as z.ZodTypeAny),
+    );
+    subSchema = [...subSchemaLeft, ...subSchemaRight];
+  }
   if (baseSchema instanceof zV3.ZodArray || baseSchema instanceof z.ZodArray) {
     // @ts-expect-error - property element exists in zod v4 Arrays
     subSchema = [parseField('0', baseSchema._zod.def.element)];

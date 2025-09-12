@@ -226,7 +226,7 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       type: "Zod schema | JsonSchema7",
       isOptional: true,
       description:
-        "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+        "**Deprecated.** Use structuredOutput with maxSteps:1 to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
       name: "memory",
