@@ -14,7 +14,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@mastra/core": "monorepo-test",
-    "round-to": "^6.0.0"
+    "tinyrainbow": "^3.0.3"
   }
 }

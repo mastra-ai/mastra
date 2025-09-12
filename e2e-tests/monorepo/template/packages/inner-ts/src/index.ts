@@ -1,2 +1,1 @@
-export * from './tool';
-export * from './round';
+export * from './rainbow';

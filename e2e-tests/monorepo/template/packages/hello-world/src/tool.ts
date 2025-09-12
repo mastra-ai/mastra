@@ -1,8 +1,9 @@
 import { createTool } from '@mastra/core/tools';
+import { colorfulText } from '@inner/ts';
 import { HELLO_WORLD } from './constants';
 
 export const helloWorldTool = createTool({
   id: 'hello-world',
   description: 'A tool that returns hello world',
-  execute: async () => HELLO_WORLD,
+  execute: async () => colorfulText(HELLO_WORLD),
 });
