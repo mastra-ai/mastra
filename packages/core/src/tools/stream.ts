@@ -26,7 +26,7 @@ export class ToolStream<T> extends WritableStream<T> {
             from: 'USER',
             payload: {
               output: chunk,
-              ...(prefix === 'workflow'
+              ...(prefix === 'workflow-step'
                 ? {
                     runId,
                     stepName: name,
