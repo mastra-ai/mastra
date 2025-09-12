@@ -7,7 +7,13 @@ import type { RuntimeContext } from '../di';
 import { getSelectedAITracing } from './registry';
 import type { AISpan, AISpanType, AISpanTypeMap, AnyAISpan, TracingContext, TracingOptions } from './types';
 
-const DEFAULT_KEYS_TO_STRIP = new Set(['logger', 'providerMetadata', 'steps', 'tracingContext']);
+const DEFAULT_KEYS_TO_STRIP = new Set([
+  'logger',
+  'experimental_providerMetadata',
+  'providerMetadata',
+  'steps',
+  'tracingContext',
+]);
 export interface DeepCleanOptions {
   keysToStrip?: Set<string>;
   maxDepth?: number;
