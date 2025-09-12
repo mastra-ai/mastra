@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { saveScorePayloadSchema } from '@mastra/core/scores';
 import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
@@ -136,39 +137,50 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     try {
       const now = new Date();
       const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const scoreValidatedData = saveScorePayloadSchema.parse(score);
 
       const scoreData = {
         id: scoreId,
-        entityId: score.entityId,
-        entityType: score.entityType,
-        scorerId: score.scorerId,
-        traceId: score.traceId || '',
-        runId: score.runId,
-        scorer: typeof score.scorer === 'string' ? safelyParseJSON(score.scorer) : score.scorer,
+        entityId: scoreValidatedData.entityId,
+        entityType: scoreValidatedData.entityType,
+        scorerId: scoreValidatedData.scorerId,
+        traceId: scoreValidatedData.traceId || '',
+        runId: scoreValidatedData.runId,
+        scorer:
+          typeof scoreValidatedData.scorer === 'string'
+            ? safelyParseJSON(scoreValidatedData.scorer)
+            : scoreValidatedData.scorer,
         preprocessStepResult:
-          typeof score.preprocessStepResult === 'string'
-            ? safelyParseJSON(score.preprocessStepResult)
-            : score.preprocessStepResult,
+          typeof scoreValidatedData.preprocessStepResult === 'string'
+            ? safelyParseJSON(scoreValidatedData.preprocessStepResult)
+            : scoreValidatedData.preprocessStepResult,
         analyzeStepResult:
-          typeof score.analyzeStepResult === 'string'
-            ? safelyParseJSON(score.analyzeStepResult)
-            : score.analyzeStepResult,
-        score: score.score,
-        reason: score.reason,
-        preprocessPrompt: score.preprocessPrompt,
-        generateScorePrompt: score.generateScorePrompt,
-        generateReasonPrompt: score.generateReasonPrompt,
-        analyzePrompt: score.analyzePrompt,
-        reasonPrompt: score.reasonPrompt,
-        input: typeof score.input === 'string' ? safelyParseJSON(score.input) : score.input,
-        output: typeof score.output === 'string' ? safelyParseJSON(score.output) : score.output,
+          typeof scoreValidatedData.analyzeStepResult === 'string'
+            ? safelyParseJSON(scoreValidatedData.analyzeStepResult)
+            : scoreValidatedData.analyzeStepResult,
+        score: scoreValidatedData.score,
+        reason: scoreValidatedData.reason,
+        preprocessPrompt: scoreValidatedData.preprocessPrompt,
+        generateScorePrompt: scoreValidatedData.generateScorePrompt,
+        generateReasonPrompt: scoreValidatedData.generateReasonPrompt,
+        analyzePrompt: scoreValidatedData.analyzePrompt,
+        input:
+          typeof scoreValidatedData.input === 'string'
+            ? safelyParseJSON(scoreValidatedData.input)
+            : scoreValidatedData.input,
+        output:
+          typeof scoreValidatedData.output === 'string'
+            ? safelyParseJSON(scoreValidatedData.output)
+            : scoreValidatedData.output,
         additionalContext: score.additionalContext,
         runtimeContext:
-          typeof score.runtimeContext === 'string' ? safelyParseJSON(score.runtimeContext) : score.runtimeContext,
+          typeof scoreValidatedData.runtimeContext === 'string'
+            ? safelyParseJSON(scoreValidatedData.runtimeContext)
+            : scoreValidatedData.runtimeContext,
         entity: typeof score.entity === 'string' ? safelyParseJSON(score.entity) : score.entity,
-        source: score.source,
-        resourceId: score.resourceId || '',
-        threadId: score.threadId || '',
+        source: scoreValidatedData.source,
+        resourceId: scoreValidatedData.resourceId || '',
+        threadId: scoreValidatedData.threadId || '',
         createdAt: now,
         updatedAt: now,
       };
