@@ -2,6 +2,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
+import esmShim from '@rollup/plugin-esm-shim';
 import { basename } from 'node:path/posix';
 import * as path from 'node:path';
 import { rollup, type OutputChunk, type OutputAsset } from 'rollup';
@@ -115,6 +116,9 @@ async function getInputPlugins(
   virtualDependencies: Map<string, { virtual: string }>,
   transpilePackages: Set<string>,
   workspaceMap: Map<string, WorkspacePackageInfo>,
+  bundlerOptions: {
+    enableEsmShim: boolean;
+  },
 ) {
   const transpilePackagesMap = new Map<string, string>();
   for (const pkg of transpilePackages) {
@@ -151,6 +155,7 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
+    bundlerOptions.enableEsmShim ? esmShim() : undefined,
     nodeResolve({
       preferBuiltins: true,
       exportConditions: ['node'],
@@ -175,12 +180,16 @@ async function buildExternalDependencies(
     workspaceMap,
     rootDir,
     outputDir,
+    bundlerOptions,
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     rootDir: string;
     outputDir: string;
+    bundlerOptions: {
+      enableEsmShim: boolean;
+    };
   },
 ) {
   /**
@@ -201,7 +210,7 @@ async function buildExternalDependencies(
     ),
     external: externals,
     treeshake: 'smallest',
-    plugins: getInputPlugins(virtualDependencies, packagesToTranspile, workspaceMap),
+    plugins: getInputPlugins(virtualDependencies, packagesToTranspile, workspaceMap, bundlerOptions),
   });
 
   const outputDirRelative = prepareEntryFileName(outputDir, rootDir);
@@ -271,6 +280,7 @@ export async function bundleExternals(
       externals?: string[];
       transpilePackages?: string[];
       isDev?: boolean;
+      enableEsmShim?: boolean;
     } | null;
     projectRoot?: string;
     workspaceRoot?: string;
@@ -278,7 +288,12 @@ export async function bundleExternals(
   },
 ) {
   const { workspaceRoot = null, workspaceMap = new Map(), projectRoot = outputDir, bundlerOptions = {} } = options;
-  const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
+  const {
+    externals: customExternals = [],
+    transpilePackages = [],
+    isDev = false,
+    enableEsmShim = true,
+  } = bundlerOptions || {};
   const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...customExternals];
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
@@ -296,6 +311,9 @@ export async function bundleExternals(
     workspaceMap: isDev ? workspaceMap : new Map(),
     rootDir: workspaceRoot || projectRoot,
     outputDir,
+    bundlerOptions: {
+      enableEsmShim,
+    },
   });
 
   const moduleResolveMap = new Map<string, Map<string, string>>();

@@ -102,11 +102,15 @@ export async function analyzeBundle(
     outputDir,
     projectRoot,
     isDev = false,
+    bundlerOptions: _bundlerOptions,
   }: {
     outputDir: string;
     projectRoot: string;
     platform: 'node' | 'browser';
     isDev?: boolean;
+    bundlerOptions?: {
+      enableEsmShim?: boolean;
+    } | null;
   },
   logger: IMastraLogger,
 ) {
@@ -130,6 +134,7 @@ export const mastra = new Mastra({
 If you think your configuration is valid, please open an issue.`);
   }
 
+  const { enableEsmShim = true } = _bundlerOptions || {};
   const bundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
@@ -187,6 +192,7 @@ If you think your configuration is valid, please open an issue.`);
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
       ...bundlerOptions,
+      enableEsmShim,
       isDev,
     },
     projectRoot,

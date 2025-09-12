@@ -115,7 +115,12 @@ export abstract class Bundler extends MastraBundler {
     return createBundlerUtil(inputOptions, outputOptions);
   }
 
-  protected async analyze(entry: string | string[], mastraFile: string, outputDirectory: string) {
+  protected async analyze(
+    entry: string | string[],
+    mastraFile: string,
+    outputDirectory: string,
+    { enableEsmShim = true }: { enableEsmShim?: boolean } = {},
+  ) {
     return await analyzeBundle(
       ([] as string[]).concat(entry),
       mastraFile,
@@ -123,6 +128,9 @@ export abstract class Bundler extends MastraBundler {
         outputDir: join(outputDirectory, this.analyzeOutputDir),
         projectRoot: outputDirectory,
         platform: 'node',
+        bundlerOptions: {
+          enableEsmShim,
+        },
       },
       this.logger,
     );
@@ -242,7 +250,11 @@ export abstract class Bundler extends MastraBundler {
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
-    { projectRoot, outputDirectory }: { projectRoot: string; outputDirectory: string },
+    {
+      projectRoot,
+      outputDirectory,
+      enableEsmShim = true,
+    }: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean },
     toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
@@ -266,6 +278,9 @@ export abstract class Bundler extends MastraBundler {
           outputDir: analyzeDir,
           projectRoot,
           platform: 'node',
+          bundlerOptions: {
+            enableEsmShim,
+          },
         },
         this.logger,
       );
