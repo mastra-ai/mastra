@@ -4,11 +4,13 @@ A Mastra vector store implementation for Couchbase with vector similarity search
 
 ## Features
 
-- Vector similarity search with filtering support
-- Cosine, Euclidean (L2), and Dot Product distance metrics
-- Search index management (create, list, describe, delete)
-- Compatible with Couchbase Server 7.6.4+ and Couchbase Capella
-- Built-in telemetry support
+- **Vector similarity search with metadata filtering** - Filter search results by indexed metadata fields
+- **Flexible field indexing** - Specify which metadata fields to index for filtering during index creation
+- **Multiple distance metrics** - Cosine, Euclidean (L2), and Dot Product similarity measures
+- **Complete index management** - Create, list, describe, and delete search indexes
+- **Couchbase compatibility** - Works with Couchbase Server 7.6.4+ and Couchbase Capella
+- **Advanced filtering operators** - Support for equality, comparison, and logical operators
+- **Built-in telemetry support** - Monitor performance and usage
 
 ## Prerequisites
 
@@ -37,7 +39,7 @@ Instantiate `CouchbaseSearchStore` with your cluster details.
 
 ```typescript
 import { CouchbaseSearchStore } from '@mastra/couchbase';
-// For backward compatibility, CouchbaseVector is also available:
+// For backward compatibility, CouchbaseVector is also available (deprecated):
 // import { CouchbaseVector } from '@mastra/couchbase';
 
 const connectionString = 'couchbases://your_cluster_host?ssl=no_verify'; // Use couchbases:// for Capella/TLS, couchbase:// for local/non-TLS
@@ -281,7 +283,13 @@ new CouchbaseSearchStore({
 
 ### Legacy `CouchbaseVector` (Deprecated)
 
-⚠️ Use `CouchbaseSearchStore` for new projects. `CouchbaseVector` lacks filtering support.
+⚠️ **Use `CouchbaseSearchStore` for new projects.** The legacy `CouchbaseVector` class is deprecated and lacks the following features:
+
+- **No metadata filtering support** - cannot filter search results by metadata fields
+- **No fields indexing** - cannot specify which metadata fields to index for filtering
+- **Limited query capabilities** - basic vector similarity search only
+
+The `CouchbaseSearchStore` class provides all the functionality of `CouchbaseVector` plus enhanced filtering and indexing capabilities.
 
 ## Important Notes
 

@@ -405,10 +405,10 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
   </Tabs.Tab>
 
   <Tabs.Tab>
-  The `CouchbaseVector` class provides methods to create indexes and insert embeddings into Couchbase, a distributed NoSQL database with vector search capabilities.
+  The `CouchbaseSearchStore` class provides methods to create indexes and insert embeddings into Couchbase, a distributed NoSQL database with vector search capabilities.
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
-    import { CouchbaseVector } from '@mastra/couchbase';
+    import { CouchbaseSearchStore } from '@mastra/couchbase';
     import { MDocument } from '@mastra/rag';
     import { embedMany } from 'ai';
 
@@ -421,7 +421,7 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       model: openai.embedding('text-embedding-3-small'),
     });
 
-    const couchbase = new CouchbaseVector({
+    const couchbase = new CouchbaseSearchStore({
       connectionString: process.env.COUCHBASE_CONNECTION_STRING,
       username: process.env.COUCHBASE_USERNAME,
       password: process.env.COUCHBASE_PASSWORD,

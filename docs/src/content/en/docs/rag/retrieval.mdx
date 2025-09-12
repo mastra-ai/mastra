@@ -271,7 +271,7 @@ The tabs demonstrate the consistent pattern of importing the store-specific prom
 This helps users understand how to properly configure their RAG agents for different vector database backends.
 The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch and S3 Vectors.
 */}
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'S3 Vectors']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'S3 Vectors', 'Couchbase']}>
   <Tabs.Tab>
 ```ts showLineNumbers copy
 import { openai } from '@ai-sdk/openai';
@@ -453,6 +453,23 @@ export const ragAgent = new Agent({
   instructions: `
   Process queries using the provided context. Structure responses to be concise and relevant.
   ${S3VECTORS_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+</Tabs.Tab>
+
+<Tabs.Tab>
+```ts filename="vector-store.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { COUCHBASE_SEARCH_STORE_PROMPT } from "@mastra/s3vectors";
+
+export const ragAgent = new Agent({
+  name: 'RAG Agent',
+  model: openai('gpt-4o-mini'),
+  instructions: `
+  Process queries using the provided context. Structure responses to be concise and relevant.
+  ${COUCHBASE_SEARCH_STORE_PROMPT}
   `,
   tools: { vectorQueryTool },
 });
