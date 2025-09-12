@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { MastraModelGateway, type ProviderConfig } from '../src/llm/model/gateways/index.js';
 import { ModelsDevGateway } from '../src/llm/model/gateways/models-dev.js';
+import { NetlifyGateway } from '../src/llm/model/gateways/netlify.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,11 +18,10 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
       const providers = await gateway.fetchProviders();
 
       for (const [providerId, config] of Object.entries(providers)) {
-        // Apply prefix if gateway has one
-        const finalProviderId = gateway.prefix ? `${gateway.prefix}/${providerId}` : providerId;
-
-        allProviders[finalProviderId] = config;
-        allModels[finalProviderId] = config.models;
+        // The gateway's fetchProviders() method already includes the prefix in the provider IDs
+        // so we just use them as-is
+        allProviders[providerId] = config;
+        allModels[providerId] = config.models;
       }
     } catch (error) {
       console.error(`Failed to fetch from gateway ${gateway.name}:`, error);
@@ -146,11 +146,7 @@ export function isValidModelId(modelId: string): modelId is OpenAICompatibleMode
 // Main execution
 async function main() {
   // Configure which gateways to use
-  const gateways: MastraModelGateway[] = [
-    new ModelsDevGateway(),
-    // We can add NetlifyGateway here later:
-    // new NetlifyGateway(),
-  ];
+  const gateways: MastraModelGateway[] = [new ModelsDevGateway(), new NetlifyGateway()];
 
   await generateProviderRegistry(gateways);
 }

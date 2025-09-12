@@ -1,4 +1,5 @@
-import { MastraModelGateway, type ProviderConfig } from './base.js';
+import { MastraModelGateway } from './base.js';
+import type { ProviderConfig } from './base.js';
 
 interface NetlifyProviderResponse {
   token_env_var: string;
