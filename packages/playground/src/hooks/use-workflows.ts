@@ -3,6 +3,7 @@ import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js'
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@mastra/playground-ui';
 import { useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { mapWorkflowStreamChunkToWatchResult } from '@mastra/playground-ui';
@@ -70,21 +71,23 @@ export const useWorkflows = () => {
 };
 
 export const useLegacyWorkflow = (workflowId: string, enabled = true) => {
+  const { runtimeContext } = usePlaygroundStore();
   return useQuery({
     gcTime: 0,
     staleTime: 0,
     queryKey: ['legacy-workflow', workflowId],
-    queryFn: () => client.getLegacyWorkflow(workflowId).details(),
+    queryFn: () => client.getLegacyWorkflow(workflowId).details(runtimeContext),
     enabled,
   });
 };
 
 export const useWorkflow = (workflowId: string, enabled = true) => {
+  const { runtimeContext } = usePlaygroundStore();
   return useQuery({
     gcTime: 0,
     staleTime: 0,
     queryKey: ['workflow', workflowId],
-    queryFn: () => client.getWorkflow(workflowId).details(),
+    queryFn: () => client.getWorkflow(workflowId).details(runtimeContext),
     enabled,
   });
 };
