@@ -1,0 +1,84 @@
+---
+title: "Weights & Biases | Models | Mastra"
+description: "Use Weights & Biases models with Mastra. 10 models available."
+---
+
+# <img src="https://models.dev/logos/wandb.svg" alt="Weights & Biases logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Weights & Biases
+
+Access 10 Weights & Biases models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
+
+Learn more in the [Weights & Biases documentation](https://weave-docs.wandb.ai).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+WANDB_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.inference.wandb.ai/v1/chat/completions",
+    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    apiKey: process.env.WANDB_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507"
+      : "wandb/Qwen/Qwen3-235B-A22B-Thinking-2507";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `wandb/Qwen/Qwen3-235B-A22B-Instruct-2507` |
+| `wandb/Qwen/Qwen3-235B-A22B-Thinking-2507` |
+| `wandb/Qwen/Qwen3-Coder-480B-A35B-Instruct` |
+| `wandb/deepseek-ai/DeepSeek-R1-0528` |
+| `wandb/deepseek-ai/DeepSeek-V3-0324` |
+| `wandb/meta-llama/Llama-3.1-8B-Instruct` |
+| `wandb/meta-llama/Llama-3.3-70B-Instruct` |
+| `wandb/meta-llama/Llama-4-Scout-17B-16E-Instruct` |
+| `wandb/microsoft/Phi-4-mini-instruct` |
+| `wandb/moonshotai/Kimi-K2-Instruct` |

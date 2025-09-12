@@ -1,0 +1,76 @@
+---
+title: "DeepSeek | Models | Mastra"
+description: "Use DeepSeek models with Mastra. 2 models available."
+---
+
+# <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
+
+Access 2 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
+
+Learn more in the [DeepSeek documentation](https://platform.deepseek.com).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "deepseek/deepseek-chat"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+DEEPSEEK_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.deepseek.com/chat/completions",
+    modelId: "deepseek-chat",
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "deepseek/deepseek-chat"
+      : "deepseek/deepseek-reasoner";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `deepseek/deepseek-chat` |
+| `deepseek/deepseek-reasoner` |

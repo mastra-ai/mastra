@@ -1,0 +1,77 @@
+---
+title: "Morph | Models | Mastra"
+description: "Use Morph models with Mastra. 3 models available."
+---
+
+# <img src="https://models.dev/logos/morph.svg" alt="Morph logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Morph
+
+Access 3 Morph models through Mastra's model router. Authentication is handled automatically using the `MORPH_API_KEY` environment variable.
+
+Learn more in the [Morph documentation](https://docs.morphllm.com).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "morph/auto"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+MORPH_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.morphllm.com/v1/chat/completions",
+    modelId: "auto",
+    apiKey: process.env.MORPH_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "morph/auto"
+      : "morph/morph-v3-fast";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `morph/auto` |
+| `morph/morph-v3-fast` |
+| `morph/morph-v3-large` |

@@ -1,0 +1,77 @@
+---
+title: "LMStudio | Models | Mastra"
+description: "Use LMStudio models with Mastra. 3 models available."
+---
+
+# <img src="https://models.dev/logos/lmstudio.svg" alt="LMStudio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LMStudio
+
+Access 3 LMStudio models through Mastra's model router. Authentication is handled automatically using the `LMSTUDIO_API_KEY` environment variable.
+
+Learn more in the [LMStudio documentation](https://lmstudio.ai/models).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "lmstudio/openai/gpt-oss-20b"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+LMSTUDIO_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "http://127.0.0.1:1234/v1/chat/completions",
+    modelId: "openai/gpt-oss-20b",
+    apiKey: process.env.LMSTUDIO_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "lmstudio/openai/gpt-oss-20b"
+      : "lmstudio/qwen/qwen3-30b-a3b-2507";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `lmstudio/openai/gpt-oss-20b` |
+| `lmstudio/qwen/qwen3-30b-a3b-2507` |
+| `lmstudio/qwen/qwen3-coder-30b` |

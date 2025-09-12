@@ -1,0 +1,97 @@
+---
+title: "Chutes | Models | Mastra"
+description: "Use Chutes models with Mastra. 23 models available."
+---
+
+# <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
+
+Access 23 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+
+Learn more in the [Chutes documentation](https://llm.chutes.ai).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+CHUTES_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://llm.chutes.ai/v1/chat/completions",
+    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    apiKey: process.env.CHUTES_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507"
+      : "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `chutes/Qwen/Qwen3-235B-A22B-Instruct-2507` |
+| `chutes/Qwen/Qwen3-235B-A22B-Thinking-2507` |
+| `chutes/Qwen/Qwen3-30B-A3B` |
+| `chutes/Qwen/Qwen3-30B-A3B-Instruct-2507` |
+| `chutes/Qwen/Qwen3-Coder-30B-A3B-Instruct` |
+| `chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` |
+| `chutes/chutesai/Devstral-Small-2505` |
+| `chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506` |
+| `chutes/deepseek-ai/DeepSeek-R1-0528` |
+| `chutes/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B` |
+| `chutes/deepseek-ai/DeepSeek-R1-Distill-Llama-70B` |
+| `chutes/deepseek-ai/DeepSeek-V3-0324` |
+| `chutes/deepseek-ai/DeepSeek-V3.1` |
+| `chutes/deepseek-ai/DeepSeek-V3.1:THINKING` |
+| `chutes/moonshotai/Kimi-Dev-72B` |
+| `chutes/moonshotai/Kimi-K2-Instruct-0905` |
+| `chutes/moonshotai/Kimi-K2-Instruct-75k` |
+| `chutes/moonshotai/Kimi-VL-A3B-Thinking` |
+| `chutes/openai/gpt-oss-120b` |
+| `chutes/tngtech/DeepSeek-R1T-Chimera` |
+| `chutes/tngtech/DeepSeek-TNG-R1T2-Chimera` |
+| `chutes/zai-org/GLM-4.5-Air` |
+| `chutes/zai-org/GLM-4.5-FP8` |

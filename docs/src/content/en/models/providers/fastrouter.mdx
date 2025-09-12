@@ -1,0 +1,88 @@
+---
+title: "FastRouter | Models | Mastra"
+description: "Use FastRouter models with Mastra. 14 models available."
+---
+
+# <img src="https://models.dev/logos/fastrouter.svg" alt="FastRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />FastRouter
+
+Access 14 FastRouter models through Mastra's model router. Authentication is handled automatically using the `FASTROUTER_API_KEY` environment variable.
+
+Learn more in the [FastRouter documentation](https://fastrouter.ai/models).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "fastrouter/anthropic/claude-opus-4.1"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+FASTROUTER_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://go.fastrouter.ai/api/v1/chat/completions",
+    modelId: "anthropic/claude-opus-4.1",
+    apiKey: process.env.FASTROUTER_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "fastrouter/anthropic/claude-opus-4.1"
+      : "fastrouter/anthropic/claude-sonnet-4";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `fastrouter/anthropic/claude-opus-4.1` |
+| `fastrouter/anthropic/claude-sonnet-4` |
+| `fastrouter/deepseek-ai/deepseek-r1-distill-llama-70b` |
+| `fastrouter/google/gemini-2.5-flash` |
+| `fastrouter/google/gemini-2.5-pro` |
+| `fastrouter/moonshotai/kimi-k2` |
+| `fastrouter/openai/gpt-4.1` |
+| `fastrouter/openai/gpt-5` |
+| `fastrouter/openai/gpt-5-mini` |
+| `fastrouter/openai/gpt-5-nano` |
+| `fastrouter/openai/gpt-oss-120b` |
+| `fastrouter/openai/gpt-oss-20b` |
+| `fastrouter/qwen/qwen3-coder` |
+| `fastrouter/x-ai/grok-4` |

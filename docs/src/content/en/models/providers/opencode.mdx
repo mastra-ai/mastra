@@ -1,0 +1,81 @@
+---
+title: "opencode | Models | Mastra"
+description: "Use opencode models with Mastra. 7 models available."
+---
+
+# <img src="https://models.dev/logos/opencode.svg" alt="opencode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />opencode
+
+Access 7 opencode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+
+Learn more in the [opencode documentation](https://opencode.ai/docs).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "opencode/claude-3-5-haiku"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+OPENCODE_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://opencode.ai/zen/v1/chat/completions",
+    modelId: "claude-3-5-haiku",
+    apiKey: process.env.OPENCODE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "opencode/claude-3-5-haiku"
+      : "opencode/claude-opus-4-1";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `opencode/claude-3-5-haiku` |
+| `opencode/claude-opus-4-1` |
+| `opencode/claude-sonnet-4` |
+| `opencode/gpt-5` |
+| `opencode/grok-code` |
+| `opencode/kimi-k2` |
+| `opencode/qwen3-coder` |

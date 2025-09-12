@@ -1,0 +1,93 @@
+---
+title: "Mistral | Models | Mastra"
+description: "Use Mistral models with Mastra. 19 models available."
+---
+
+# <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
+
+Access 19 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+
+Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "mistral/codestral-latest"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+MISTRAL_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.mistral.ai/v1/chat/completions",
+    modelId: "codestral-latest",
+    apiKey: process.env.MISTRAL_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "mistral/codestral-latest"
+      : "mistral/devstral-medium-2507";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `mistral/codestral-latest` |
+| `mistral/devstral-medium-2507` |
+| `mistral/devstral-small-2505` |
+| `mistral/devstral-small-2507` |
+| `mistral/magistral-medium-latest` |
+| `mistral/magistral-small` |
+| `mistral/ministral-3b-latest` |
+| `mistral/ministral-8b-latest` |
+| `mistral/mistral-large-latest` |
+| `mistral/mistral-medium-2505` |
+| `mistral/mistral-medium-2508` |
+| `mistral/mistral-medium-latest` |
+| `mistral/mistral-nemo` |
+| `mistral/mistral-small-latest` |
+| `mistral/open-mistral-7b` |
+| `mistral/open-mixtral-8x22b` |
+| `mistral/open-mixtral-8x7b` |
+| `mistral/pixtral-12b` |
+| `mistral/pixtral-large-latest` |

@@ -10,13 +10,33 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 ## Usage example
 
 ```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core";
 
 export const agent = new Agent({
   name: "test-agent",
-  instructions: 'message for agent',
-  model: openai("gpt-4o")
+  instructions: 'You are a helpful AI assistant',
+  model: "openai/gpt-4o"
+});
+```
+
+### More model examples
+
+```typescript
+// Use any of the 40+ available providers
+const anthropicAgent = new Agent({
+  name: "anthropic-agent",
+  model: "anthropic/claude-3-5-sonnet-20241022"
+});
+
+const geminiAgent = new Agent({
+  name: "gemini-agent", 
+  model: "google/gemini-2.0-flash"
+});
+
+// Use gateway providers for caching and analytics
+const netlifyAgent = new Agent({
+  name: "netlify-agent",
+  model: "netlify/openai/gpt-4o"  // Routes through Netlify's AI Gateway
 });
 ```
 
@@ -50,9 +70,9 @@ export const agent = new Agent({
     },
     {
       name: "model",
-      type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+      type: "string | MastraModelConfig | MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
-      description: "The language model used by the agent. Can be provided statically or resolved at runtime.",
+      description: "The language model used by the agent. Can be a provider/model string (e.g., 'openai/gpt-4o'), a configuration object, or a language model instance. Can be provided statically or resolved at runtime.",
     },
     {
       name: "tools",
@@ -128,6 +148,104 @@ export const agent = new Agent({
     },
   ]}
 />
+
+## Model Configuration
+
+Mastra supports 40+ AI providers with over 540 models through OpenAI-compatible endpoints. No additional AI SDK packages are required.
+
+### Provider/Model String Pattern
+
+The simplest way to configure a model is using the `provider/model` string pattern:
+
+```typescript
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o"  // Format: "provider/model"
+});
+```
+
+### Available Providers
+
+Mastra includes built-in support for these providers:
+
+<details>
+<summary>View all 40 providers</summary>
+
+- **OpenAI**: `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1`, `openai/o1-mini`
+- **Anthropic**: `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-3-5-haiku-20241022`
+- **Google**: `google/gemini-2.0-flash`, `google/gemini-1.5-pro`
+- **DeepSeek**: `deepseek/deepseek-chat`, `deepseek/deepseek-reasoner`
+- **Groq**: `groq/llama-3.3-70b-versatile`, `groq/mixtral-8x7b-32768`
+- **Mistral**: `mistral/mistral-large-latest`, `mistral/codestral-latest`
+- **xAI**: `xai/grok-2`, `xai/grok-beta`
+- **Cerebras**: `cerebras/llama3.1-8b`, `cerebras/llama3.1-70b`
+- **Together AI**: `togetherai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo`
+- **Fireworks AI**: `fireworks_ai/llama-v3p3-70b-instruct`, `fireworks_ai/qwen2p5-72b-instruct`
+- **GitHub Models**: `github_models/gpt-4o`, `github_models/o1-mini`
+- **OpenRouter**: `openrouter/openai/gpt-4`, `openrouter/anthropic/claude-3.5-sonnet`
+- **Vercel AI Gateway**: `vercel/deepseek/deepseek-r1`, `vercel/meta/llama-4-scout`
+- **Venice AI**: `venice/llama-3.3-70b`, `venice/nous-hermes-3-405b`
+
+...and 26 more providers with hundreds of models.
+
+</details>
+
+### Gateway Providers
+
+Use gateway providers for additional features like caching, rate limiting, and analytics:
+
+```typescript
+// Netlify AI Gateway - provides caching and analytics
+const netlifyAgent = new Agent({
+  name: "cached-agent",
+  model: "netlify/openai/gpt-4o"  // Routes through Netlify
+});
+
+// Vercel AI Gateway
+const vercelAgent = new Agent({
+  name: "vercel-agent",
+  model: "vercel/deepseek/deepseek-r1"
+});
+```
+
+### Extended Configuration
+
+For custom endpoints or additional headers, use the configuration object:
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://custom-api.example.com/v1/chat/completions",
+    modelId: "gpt-4o",
+    apiKey: process.env.CUSTOM_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Environment Variables
+
+Models automatically use standard environment variables for API keys:
+
+- `OPENAI_API_KEY` for OpenAI models
+- `ANTHROPIC_API_KEY` for Anthropic models
+- `GEMINI_API_KEY` for Google Gemini models
+- `GROQ_API_KEY` for Groq models
+- `NETLIFY_API_KEY` for Netlify gateway (optional, falls back to provider keys)
+- And many more...
+
+You can also use custom base URLs via environment variables:
+
+```bash
+OPENAI_BASE_URL=https://custom.openai.proxy/v1/chat/completions
+```
+
+### AI SDK Compatibility
+
+Mastra also supports [Vercel AI SDK](https://sdk.vercel.ai/providers/ai-sdk-providers) model providers for additional flexibility.
 
 ## Returns
 
