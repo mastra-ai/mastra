@@ -1,6 +1,6 @@
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ClientOptions, McpToolInfo } from '../types';
-import { base64RuntimeContext, parseClientRuntimeContext } from '../utils';
+import { runtimeContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -23,16 +23,7 @@ export class MCPTool extends BaseResource {
    * @returns Promise containing the tool's information (name, description, schema).
    */
   details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<McpToolInfo> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**

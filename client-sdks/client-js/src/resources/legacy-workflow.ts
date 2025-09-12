@@ -6,7 +6,7 @@ import type {
   GetWorkflowRunsParams,
   GetLegacyWorkflowResponse,
 } from '../types';
-import { base64RuntimeContext, parseClientRuntimeContext } from '../utils';
+import { base64RuntimeContext, parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
 
@@ -26,16 +26,7 @@ export class LegacyWorkflow extends BaseResource {
    * @returns Promise containing legacy workflow details including steps and graphs
    */
   details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetLegacyWorkflowResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/workflows/legacy/${this.workflowId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/workflows/legacy/${this.workflowId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**

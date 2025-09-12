@@ -29,7 +29,7 @@ import type {
   NetworkStreamParams,
 } from '../types';
 
-import { parseClientRuntimeContext, base64RuntimeContext } from '../utils';
+import { parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -167,16 +167,7 @@ export class AgentVoice extends BaseResource {
   getSpeakers(
     runtimeContext?: RuntimeContext | Record<string, any>,
   ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/voice/speakers${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/voice/speakers${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
@@ -186,16 +177,7 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing a check if the agent has listening capabilities
    */
   getListener(runtimeContext?: RuntimeContext | Record<string, any>): Promise<{ enabled: boolean }> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/voice/listener${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/voice/listener${runtimeContextQueryString(runtimeContext)}`);
   }
 }
 
@@ -216,16 +198,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing agent details including model and instructions
    */
   details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetAgentResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
@@ -1629,16 +1602,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing tool details
    */
   getTool(toolId: string, runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetToolResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
@@ -1667,16 +1631,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing agent evaluations
    */
   evals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/evals/ci${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/evals/ci${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
@@ -1685,16 +1640,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing live agent evaluations
    */
   liveEvals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/agents/${this.agentId}/evals/live${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/agents/${this.agentId}/evals/live${runtimeContextQueryString(runtimeContext)}`);
   }
   /**
    * Updates the model for the agent

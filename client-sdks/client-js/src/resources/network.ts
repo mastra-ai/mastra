@@ -4,7 +4,7 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { GenerateParams, ClientOptions, StreamParams, GetNetworkResponse } from '../types';
-import { base64RuntimeContext, parseClientRuntimeContext } from '../utils';
+import { runtimeContextQueryString } from '../utils';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 
 import { BaseResource } from './base';
@@ -23,16 +23,7 @@ export class Network extends BaseResource {
    * @returns Promise containing network details
    */
   details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetNetworkResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/networks/${this.networkId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/networks/${this.networkId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**

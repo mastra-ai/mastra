@@ -7,7 +7,7 @@ import type {
   ClientOptions,
   UpsertVectorParams,
 } from '../types';
-import { base64RuntimeContext, parseClientRuntimeContext } from '../utils';
+import { runtimeContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
 
@@ -26,16 +26,9 @@ export class Vector extends BaseResource {
    * @returns Promise containing vector index details
    */
   details(indexName: string, runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetVectorIndexResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/vector/${this.vectorName}/indexes/${indexName}${queryString ? `?${queryString}` : ''}`);
+    return this.request(
+      `/api/vector/${this.vectorName}/indexes/${indexName}${runtimeContextQueryString(runtimeContext)}`,
+    );
   }
 
   /**
@@ -55,16 +48,7 @@ export class Vector extends BaseResource {
    * @returns Promise containing array of index names
    */
   getIndexes(runtimeContext?: RuntimeContext | Record<string, any>): Promise<{ indexes: string[] }> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/vector/${this.vectorName}/indexes${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/vector/${this.vectorName}/indexes${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**

@@ -10,7 +10,7 @@ import type {
   LoopStreamVNextNetworkParams,
 } from '../types';
 
-import { parseClientRuntimeContext, base64RuntimeContext } from '../utils';
+import { parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
 const RECORD_SEPARATOR = '\x1E';
@@ -29,16 +29,7 @@ export class VNextNetwork extends BaseResource {
    * @returns Promise containing vNext network details
    */
   details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetVNextNetworkResponse> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
-
-    const searchParams = new URLSearchParams();
-
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
-    }
-
-    const queryString = searchParams.toString();
-    return this.request(`/api/networks/v-next/${this.networkId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/networks/v-next/${this.networkId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**
