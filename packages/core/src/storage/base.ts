@@ -372,15 +372,22 @@ export abstract class MastraStorage extends MastraBase {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this?.alterTable?.({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
   }
 
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     await this.init();
@@ -388,6 +395,7 @@ export abstract class MastraStorage extends MastraBase {
     const data = {
       workflow_name: workflowName,
       run_id: runId,
+      resourceId,
       snapshot,
       createdAt: new Date(),
       updatedAt: new Date(),

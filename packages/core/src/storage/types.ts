@@ -41,6 +41,7 @@ export interface WorkflowRuns {
 export interface StorageWorkflowRun {
   workflow_name: string;
   run_id: string;
+  resourceId?: string;
   snapshot: WorkflowRunState | string;
   createdAt: Date;
   updatedAt: Date;
