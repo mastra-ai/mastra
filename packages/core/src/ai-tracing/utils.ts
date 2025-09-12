@@ -124,6 +124,7 @@ export function getOrCreateSpan<T extends AISpanType>(options: {
       attributes,
       ...rest,
       metadata,
+      isInternal: tracingContext?.isInternal,
     });
   }
 
