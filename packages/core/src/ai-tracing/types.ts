@@ -629,7 +629,7 @@ export interface AISpanProcessor {
   /** Processor name */
   name: string;
   /** Process span before export */
-  process(span: AnyAISpan): AnyAISpan | undefined;
+  process(span?: AnyAISpan): AnyAISpan | undefined;
   /** Shutdown processor */
   shutdown(): Promise<void>;
 }

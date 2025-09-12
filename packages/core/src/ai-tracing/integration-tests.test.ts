@@ -14,7 +14,7 @@ import { createWorkflow, createStep } from '../workflows';
 // AI Tracing imports
 import { clearAITracingRegistry, shutdownAITracingRegistry } from './registry';
 import { AISpanType, AITracingEventType } from './types';
-import type { AITracingExporter, AITracingEvent, AISpan, ExportedAISpan, AnyExportedAISpan } from './types';
+import type { AITracingExporter, AITracingEvent, ExportedAISpan, AnyExportedAISpan } from './types';
 
 /**
  * Test exporter for AI tracing events with real-time span lifecycle validation.
@@ -128,7 +128,7 @@ class TestExporter implements AITracingExporter {
         // Return the final span from SPAN_ENDED event
         const endEvent = state.events.find(e => e.type === AITracingEventType.SPAN_ENDED);
         return endEvent!.exportedSpan;
-      }) as AISpan<T>[];
+      }) as ExportedAISpan<T>[];
   }
 
   // Helper to get all incomplete spans (spans that started but never ended)
