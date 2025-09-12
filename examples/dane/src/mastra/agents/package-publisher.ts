@@ -33,12 +33,6 @@ const packages_llm_text = `
   ## 4. Speech packages - STRICT RULES:
   - ALL speech packages must be directly under speech/
   - Format: @mastra/speech-{name} -> speech/{name}
-
-  ## 5. Integrations - STRICT RULES:
-  - ALL integration packages are under integrations/
-  @mastra/composio -> integrations/composio
-  @mastra/github -> integrations/github
-  @mastra/firecrawl -> integrations/firecrawl
   
   ##VALIDATION:
   1. Never mix examples/ or integrations/ with package paths
