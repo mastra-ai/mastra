@@ -26,8 +26,15 @@ export class ToolStream<T> extends WritableStream<T> {
             from: 'USER',
             payload: {
               output: chunk,
-              [`${prefix}CallId`]: callId,
-              [`${prefix}Name`]: name,
+              ...(prefix === 'workflow'
+                ? {
+                    runId,
+                    stepName: name,
+                  }
+                : {
+                    [`${prefix}CallId`]: callId,
+                    [`${prefix}Name`]: name,
+                  }),
             },
           });
         } finally {
