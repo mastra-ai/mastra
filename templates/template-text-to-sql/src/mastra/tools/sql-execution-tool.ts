@@ -36,31 +36,87 @@ const validateQuery = (query: string) => {
     throw new Error('Only SELECT queries are allowed for security reasons');
   }
 
-  // Block common dangerous patterns
+  // Normalize the query by removing comments and extra whitespace for pattern matching
+  const normalizedQuery = query
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')  // Remove /* */ comments
+    .replace(/--.*$/gm, ' ')            // Remove -- comments
+    .replace(/\s+/g, ' ')               // Normalize whitespace
+    .toLowerCase();
+
+  // Block common dangerous patterns with more robust regex
   const dangerousPatterns = [
-    /pg_\w+\(/i,           // PostgreSQL system functions
-    /\bcopy\b/i,           // COPY command
-    /\binto\s+outfile/i,   // File operations
-    /\bload_file\b/i,      // File loading
-    /\beval\b/i,           // Code evaluation
-    /\bexecute\b/i,        // Dynamic execution
-    /\bsleep\b/i,          // Sleep execution
+    // PostgreSQL system functions - handles whitespace and comments
+    /pg_\s*\w+\s*\(/i,
+
+    // Information schema access
+    /information_schema/i,
+
+    // System catalogs
+    /pg_catalog/i,
+
+    // File operations
+    /\bcopy\s+/i,
+    /\binto\s+outfile/i,
+    /\bload_file\s*\(/i,
+
+    // Code evaluation and execution
+    /\beval\s*\(/i,
+    /\bexecute\s+/i,
+
+    // Time/resource manipulation
+    /\bsleep\s*\(/i,
+    /\bpg_sleep\s*\(/i,
+
+    // Administrative functions
+    /\bcurrent_setting\s*\(/i,
+    /\bset_config\s*\(/i,
+
+    // Process/system functions
+    /\bpg_terminate_backend\s*\(/i,
+    /\bpg_cancel_backend\s*\(/i,
+
+    // File system functions
+    /\bpg_read_file\s*\(/i,
+    /\bpg_ls_dir\s*\(/i,
+    /\bpg_stat_file\s*\(/i,
+
+    // Network functions
+    /\binet_client_addr\s*\(/i,
+    /\binet_server_addr\s*\(/i,
   ];
 
   for (const pattern of dangerousPatterns) {
-    if (pattern.test(trimmedQuery)) {
-      throw new Error('Query contains potentially dangerous operations');
+    if (pattern.test(normalizedQuery)) {
+      throw new Error(`Query contains potentially dangerous operations: matched pattern ${pattern}`);
     }
   }
 
-  // Check function calls against allow list
-  const functionMatches = trimmedQuery.match(/\b(\w+)\s*\(/g);
+  // Extract and validate function calls more robustly
+  // This regex finds function calls while handling whitespace
+  const functionMatches = normalizedQuery.match(/\b(\w+)\s*\(/g);
   if (functionMatches) {
     for (const match of functionMatches) {
-      const functionName = match.replace(/\s*\(/, '').toLowerCase();
+      const functionName = match.replace(/\s*\(/, '').trim().toLowerCase();
       if (!ALLOWED_FUNCTIONS.has(functionName)) {
         throw new Error(`Function '${functionName}' is not allowed for security reasons`);
       }
+    }
+  }
+
+  // Additional checks for SQL injection patterns
+  const injectionPatterns = [
+    /;\s*drop\s+/i,
+    /;\s*delete\s+/i,
+    /;\s*update\s+/i,
+    /;\s*insert\s+/i,
+    /;\s*create\s+/i,
+    /;\s*alter\s+/i,
+    /union\s+.*select/i,
+  ];
+
+  for (const pattern of injectionPatterns) {
+    if (pattern.test(normalizedQuery)) {
+      throw new Error('Query contains potentially malicious SQL injection patterns');
     }
   }
 };
