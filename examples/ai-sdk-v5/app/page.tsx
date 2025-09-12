@@ -2,7 +2,7 @@
 
 import { UIMessage, useChat } from "@ai-sdk/react";
 import useSWR from "swr";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -12,9 +12,16 @@ export default function Chat() {
     fetcher,
   );
 
-  const { messages, sendMessage, status } = useChat({
-    messages: initialMessages,
+  const { messages, sendMessage, status, setMessages } = useChat({
+    messages: [] as UIMessage[],
   });
+
+  // Update messages when initialMessages loads
+  useEffect(() => {
+    if (initialMessages.length > 0) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages, setMessages]);
 
   const [input, setInput] = useState("");
 

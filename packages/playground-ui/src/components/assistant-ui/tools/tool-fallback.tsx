@@ -5,21 +5,35 @@ import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { LoadingBadge } from './badges/loading-badge';
+import { AgentBadge } from './badges/agent-badge';
 
-export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result, args, ...props }) => {
+export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, result, args, ...props }) => {
   return (
     <WorkflowRunProvider>
-      <ToolFallbackInner toolName={toolName} argsText={argsText} result={result} args={args} {...props} />
+      <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
     </WorkflowRunProvider>
   );
 };
 
-const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, result, args }) => {
+const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, result, args }) => {
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
+
   useWorkflowStream(args.__mastraMetadata?.workflowFullState);
   const { data: workflow, isLoading } = useWorkflow(toolName);
+
+  const isAgent = args.__mastraMetadata?.from === 'AGENT';
+
+  if (isAgent) {
+    return (
+      <AgentBadge
+        agentId={toolName}
+        messages={args?.__mastraMetadata?.messages}
+        networkMetadata={args?.__mastraMetadata?.networkMetadata}
+      />
+    );
+  }
 
   if (isLoading) return <LoadingBadge />;
 
@@ -30,9 +44,17 @@ const ToolFallbackInner: ToolCallMessagePartComponent = ({ toolName, argsText, r
         workflow={workflow}
         isStreaming={args.__mastraMetadata?.isStreaming}
         runId={result?.runId}
+        networkMetadata={args?.__mastraMetadata?.networkMetadata}
       />
     );
   }
 
-  return <ToolBadge toolName={toolName} argsText={argsText} result={result} />;
+  return (
+    <ToolBadge
+      toolName={toolName}
+      args={args}
+      result={result}
+      networkMetadata={args?.__mastraMetadata?.networkMetadata}
+    />
+  );
 };

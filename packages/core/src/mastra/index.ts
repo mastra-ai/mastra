@@ -1,6 +1,6 @@
 import type { Agent } from '../agent';
 import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
-import type { AITracingConfig } from '../ai-tracing';
+import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -50,7 +50,7 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
-  observability?: AITracingConfig;
+  observability?: ObservabilityRegistryConfig;
   idGenerator?: MastraIdGenerator;
   deployer?: MastraDeployer;
   server?: ServerConfig;

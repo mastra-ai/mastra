@@ -3,9 +3,9 @@
  */
 
 import type { MastraError } from '../error';
+import type { IMastraLogger } from '../logger';
 import type { RuntimeContext } from '../runtime-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
-import type { MastraAITracing } from './base';
 
 // ============================================================================
 // Core AI-Specific Span Types
@@ -286,7 +286,7 @@ export interface AISpan<TType extends AISpanType> {
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
   traceId: string;
   /** Pointer to the AITracing instance */
-  aiTracing: MastraAITracing;
+  aiTracing: AITracing;
 
   /** Input passed at the start of the span */
   input?: any;
@@ -307,43 +307,19 @@ export interface AISpan<TType extends AISpanType> {
 
   // Methods for span lifecycle
   /** End the span */
-  end(options?: { output?: any; attributes?: Partial<AISpanTypeMap[TType]>; metadata?: Record<string, any> }): void;
+  end(options?: EndSpanOptions<TType>): void;
 
   /** Record an error for the span, optionally end the span as well */
-  error(options: {
-    error: MastraError | Error;
-    attributes?: Partial<AISpanTypeMap[TType]>;
-    metadata?: Record<string, any>;
-    endSpan?: boolean;
-  }): void;
+  error(options: ErrorSpanOptions<TType>): void;
 
   /** Update span attributes */
-  update(options?: {
-    input?: any;
-    output?: any;
-    attributes?: Partial<AISpanTypeMap[TType]>;
-    metadata?: Record<string, any>;
-  }): void;
+  update(options: UpdateSpanOptions<TType>): void;
 
   /** Create child span - can be any span type independent of parent */
-  createChildSpan<TChildType extends AISpanType>(options: {
-    type: TChildType;
-    name: string;
-    input?: any;
-    attributes?: AISpanTypeMap[TChildType];
-    metadata?: Record<string, any>;
-  }): AISpan<TChildType>;
+  createChildSpan<TChildType extends AISpanType>(options: ChildSpanOptions<TChildType>): AISpan<TChildType>;
 
-  /** Create event span - can be any span type independent of parent
-      Event spans have no input, and no endTime.
-  */
-  createEventSpan<TChildType extends AISpanType>(options: {
-    type: TChildType;
-    name: string;
-    output?: any;
-    attributes?: AISpanTypeMap[TChildType];
-    metadata?: Record<string, any>;
-  }): AISpan<TChildType>;
+  /** Create event span - can be any span type independent of parent */
+  createEventSpan<TChildType extends AISpanType>(options: ChildEventOptions<TChildType>): AISpan<TChildType>;
 
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean;
@@ -357,26 +333,130 @@ export interface AISpan<TType extends AISpanType> {
  */
 export type AnyAISpan = AISpan<keyof AISpanTypeMap>;
 
+// ============================================================================
+// Tracing Interfaces
+// ============================================================================
+
 /**
- * Options for span creation
+ * Primary interface for AI Tracing
  */
-export interface AISpanOptions<TType extends AISpanType> {
-  /** Span name */
-  name: string;
-  /** Span type */
-  type: TType;
-  /** Input data */
-  input?: any;
-  /** Output data (for event spans) */
-  output?: any;
+export interface AITracing {
+  /**
+   * Get current configuration
+   */
+  getConfig(): Readonly<Required<TracingConfig>>;
+
+  /**
+   * Get all exporters
+   */
+  getExporters(): readonly AITracingExporter[];
+
+  /**
+   * Get all processors
+   */
+  getProcessors(): readonly AISpanProcessor[];
+
+  /**
+   * Get the logger instance (for exporters and other components)
+   */
+  getLogger(): IMastraLogger;
+
+  /**
+   * Start a new span of a specific AISpanType
+   */
+  startSpan<TType extends AISpanType>(options: StartSpanOptions<TType>): AISpan<TType>;
+
+  /**
+   * Shutdown AI tracing and clean up resources
+   */
+  shutdown(): Promise<void>;
+
+  /**
+   * Override setLogger to add AI tracing specific initialization log
+   */
+  __setLogger(logger: IMastraLogger): void;
+}
+
+// ============================================================================
+// Span Create/Update/Error Option Types
+// ============================================================================
+
+interface CreateBaseOptions<TType extends AISpanType> {
   /** Span attributes */
   attributes?: AISpanTypeMap[TType];
   /** Span metadata */
   metadata?: Record<string, any>;
+  /** Span name */
+  name: string;
+  /** Span type */
+  type: TType;
+}
+
+/**
+ * Options for creating new spans
+ */
+export interface CreateSpanOptions<TType extends AISpanType> extends CreateBaseOptions<TType> {
+  /** Input data */
+  input?: any;
+  /** Output data (for event spans) */
+  output?: any;
   /** Parent span */
   parent?: AnyAISpan;
   /** Is an event span? */
-  isEvent: boolean;
+  isEvent?: boolean;
+}
+
+/**
+ * Options for starting new spans
+ */
+export interface StartSpanOptions<TType extends AISpanType> extends CreateSpanOptions<TType> {
+  /**
+   * Options passed when using a custom sampler strategy
+   */
+  customSamplerOptions?: CustomSamplerOptions;
+}
+
+/**
+ * Options for new child spans
+ */
+export interface ChildSpanOptions<TType extends AISpanType> extends CreateBaseOptions<TType> {
+  /** Input data */
+  input?: any;
+}
+
+/**
+ * Options for new child events
+ * Event spans have no input, and no endTime
+ */
+export interface ChildEventOptions<TType extends AISpanType> extends CreateBaseOptions<TType> {
+  /** Output data */
+  output?: any;
+}
+
+interface UpdateBaseOptions<TType extends AISpanType> {
+  /** Span attributes */
+  attributes?: Partial<AISpanTypeMap[TType]>;
+  /** Span metadata */
+  metadata?: Record<string, any>;
+}
+
+export interface EndSpanOptions<TType extends AISpanType> extends UpdateBaseOptions<TType> {
+  /** Output data */
+  output?: any;
+}
+
+export interface UpdateSpanOptions<TType extends AISpanType> extends UpdateBaseOptions<TType> {
+  /** Input data */
+  input?: any;
+  /** Output data */
+  output?: any;
+}
+
+export interface ErrorSpanOptions<TType extends AISpanType> extends UpdateBaseOptions<TType> {
+  /** The error associated with the issue */
+  error: MastraError | Error;
+  /** End the span when true */
+  endSpan?: boolean;
 }
 
 // ============================================================================
@@ -408,42 +488,13 @@ export type TracingProperties = {
 };
 
 // ============================================================================
-// Configuration Types
+// Registry Config Interfaces
 // ============================================================================
 
 /**
- * Sampling strategy types
+ * Configuration for a single tracing instance
  */
-export enum SamplingStrategyType {
-  ALWAYS = 'always',
-  NEVER = 'never',
-  RATIO = 'ratio',
-  CUSTOM = 'custom',
-}
-
-/**
- * Context for TraceSampling
- */
-export interface TraceContext {
-  runtimeContext?: RuntimeContext;
-  metadata?: Record<string, any>;
-}
-
-/**
- * Sampling strategy configuration
- */
-export type SamplingStrategy =
-  | { type: SamplingStrategyType.ALWAYS }
-  | { type: SamplingStrategyType.NEVER }
-  | { type: SamplingStrategyType.RATIO; probability: number }
-  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: TraceContext) => boolean };
-
-export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
-
-/**
- * Configuration for a single AI tracing instance
- */
-export interface AITracingInstanceConfig {
+export interface TracingConfig {
   /** Unique identifier for this config in the ai tracing registry */
   name: string;
   /** Service name for tracing */
@@ -457,17 +508,48 @@ export interface AITracingInstanceConfig {
 }
 
 /**
- * Complete AI Tracing configuration
+ * Complete AI Tracing registry configuration
  */
-export interface AITracingConfig {
+export interface ObservabilityRegistryConfig {
   /** Enables default exporters, with sampling: always, and sensitive data filtering */
   default?: {
     enabled?: boolean;
   };
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  configs?: Record<string, Omit<AITracingInstanceConfig, 'name'> | MastraAITracing>;
+  configs?: Record<string, Omit<TracingConfig, 'name'> | AITracing>;
   /** Optional selector function to choose which tracing instance to use */
-  configSelector?: TracingSelector;
+  configSelector?: ConfigSelector;
+}
+
+// ============================================================================
+// Sampling Strategy Interfaces
+// ============================================================================
+
+/**
+ * Sampling strategy types
+ */
+export enum SamplingStrategyType {
+  ALWAYS = 'always',
+  NEVER = 'never',
+  RATIO = 'ratio',
+  CUSTOM = 'custom',
+}
+
+/**
+ * Sampling strategy configuration
+ */
+export type SamplingStrategy =
+  | { type: SamplingStrategyType.ALWAYS }
+  | { type: SamplingStrategyType.NEVER }
+  | { type: SamplingStrategyType.RATIO; probability: number }
+  | { type: SamplingStrategyType.CUSTOM; sampler: (options?: CustomSamplerOptions) => boolean };
+
+/**
+ * Options passed when using a custom sampler strategy
+ */
+export interface CustomSamplerOptions {
+  runtimeContext?: RuntimeContext;
+  metadata?: Record<string, any>;
 }
 
 // ============================================================================
@@ -521,13 +603,13 @@ export interface AISpanProcessor {
 }
 
 // ============================================================================
-// AI Tracing Selection Types
+// Tracing Config Selector Interfaces
 // ============================================================================
 
 /**
- * Context provided to tracing selector functions
+ *  Options passed when using a custom tracing config selector
  */
-export interface AITracingSelectorContext {
+export interface ConfigSelectorOptions {
   /** Runtime context */
   runtimeContext?: RuntimeContext;
 }
@@ -536,7 +618,13 @@ export interface AITracingSelectorContext {
  * Function to select which AI tracing instance to use for a given span
  * Returns the name of the tracing instance, or undefined to use default
  */
-export type TracingSelector = (
-  context: AITracingSelectorContext,
-  availableTracers: ReadonlyMap<string, MastraAITracing>,
+export type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: ReadonlyMap<string, AITracing>,
 ) => string | undefined;
+
+// ============================================================================
+// Tracing Storage Interfaces
+// ============================================================================
+
+export type TracingStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';

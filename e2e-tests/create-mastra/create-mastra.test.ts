@@ -95,6 +95,7 @@ describe('create mastra', () => {
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
             "weatherAgent": {
+              "agents": {},
               "defaultGenerateOptions": {},
               "defaultStreamOptions": {},
               "instructions": "
@@ -124,7 +125,6 @@ describe('create mastra', () => {
                 },
               },
               "workflows": {},
-              "agents": {},
             },
           }
         `);
