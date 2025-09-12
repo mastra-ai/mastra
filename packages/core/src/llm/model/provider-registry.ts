@@ -3,12 +3,28 @@
  */
 
 import { MastraError } from '../../error';
+import { PROVIDER_REGISTRY as GENERATED_REGISTRY } from './provider-registry.generated';
 
 export interface ProviderConfig {
   url: string;
   defaultHeaders?: Record<string, string>;
   apiKeyEnvVar?: string; // Environment variable name for API key
   apiKeyHeader?: string; // Header name for API key (default: Authorization)
+}
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  url: string;
+  apiKeyEnvVar?: string;
+  apiKeyHeader?: string;
+  models: string[];
+}
+
+export interface ModelWithProvider {
+  provider: string;
+  model: string;
+  providerName: string;
 }
 
 // `${T extends providers ? something??}/${model<T>}` | `openai/gpt-4o` | `openai/o3`
@@ -137,4 +153,61 @@ export function resolveApiKey(config: { provider?: string | null; apiKey?: strin
     category: 'USER',
     domain: 'MASTRA',
   });
+}
+
+/**
+ * Get all available provider IDs
+ */
+export function getAllProviders(): string[] {
+  return Object.keys(GENERATED_REGISTRY);
+}
+
+/**
+ * Get all models for a specific provider
+ */
+export function getProviderModels(provider: string): string[] {
+  const providerData = GENERATED_REGISTRY[provider as keyof typeof GENERATED_REGISTRY];
+  if (!providerData) {
+    return [];
+  }
+  return [...(providerData.models || [])];
+}
+
+/**
+ * Get detailed information about a provider
+ */
+export function getProviderInfo(provider: string): ProviderInfo | null {
+  const providerData = GENERATED_REGISTRY[provider as keyof typeof GENERATED_REGISTRY];
+  if (!providerData) {
+    return null;
+  }
+
+  return {
+    id: provider,
+    name: providerData.name || provider,
+    url: providerData.url,
+    apiKeyEnvVar: providerData.apiKeyEnvVar,
+    apiKeyHeader: providerData.apiKeyHeader,
+    models: [...(providerData.models || [])],
+  };
+}
+
+/**
+ * Get all models with their provider information
+ */
+export function getAllModelsWithProvider(): ModelWithProvider[] {
+  const result: ModelWithProvider[] = [];
+
+  for (const [providerId, providerData] of Object.entries(GENERATED_REGISTRY)) {
+    const models = providerData.models || [];
+    for (const model of models) {
+      result.push({
+        provider: providerId,
+        model,
+        providerName: providerData.name || providerId,
+      });
+    }
+  }
+
+  return result;
 }

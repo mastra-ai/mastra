@@ -7,11 +7,9 @@ import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { ScorerList } from '@/domains/scores';
-import { Icon } from '@/ds/icons';
-import { EditIcon } from 'lucide-react';
 import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './agent-metadata-model-switcher';
 
 export interface AgentMetadataProps {
@@ -33,9 +31,6 @@ export const AgentMetadata = ({
   updateModel,
   modelProviders,
 }: AgentMetadataProps) => {
-  const [isEditingModel, setIsEditingModel] = useState(false);
-  const providerIcon = providerMapToIcon[(agent.provider || 'openai.chat') as keyof typeof providerMapToIcon];
-
   const agentTools = agent.tools ?? {};
   const tools = Object.keys(agentTools).map(key => agentTools[key]);
 
@@ -45,26 +40,12 @@ export const AgentMetadata = ({
   return (
     <AgentMetadataWrapper>
       <AgentMetadataSection title="Model">
-        {isEditingModel ? (
-          <AgentMetadataModelSwitcher
-            defaultProvider={agent.provider}
-            defaultModel={agent.modelId}
-            updateModel={updateModel}
-            closeEditor={() => setIsEditingModel(false)}
-            modelProviders={modelProviders}
-          />
-        ) : (
-          <div className="flex items-center gap-2">
-            <Badge icon={providerIcon} className="font-medium">
-              {agent.modelId || 'N/A'}
-            </Badge>
-            <button onClick={() => setIsEditingModel(true)} className="text-icon3 hover:text-icon6">
-              <Icon>
-                <EditIcon />
-              </Icon>
-            </button>
-          </div>
-        )}
+        <AgentMetadataModelSwitcher
+          defaultProvider={agent.provider}
+          defaultModel={agent.modelId}
+          updateModel={updateModel}
+          modelProviders={modelProviders}
+        />
       </AgentMetadataSection>
 
       <AgentMetadataSection
