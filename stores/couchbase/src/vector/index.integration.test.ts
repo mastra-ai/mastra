@@ -832,4 +832,515 @@ describe('Integration Testing CouchbaseSearchStore', async () => {
       }
     }, 50000);
   });
+
+  describe('Advanced Filter Operations', () => {
+    // Test index name specific for filter tests
+    const filterIndexName = `${test_indexName}_filters`;
+    const filterDimension = 3;
+
+    // Sample test vectors - simple 3D vectors
+    const testVectors = [
+      [1.0, 0.0, 0.0], // Vector 1
+      [0.0, 1.0, 0.0], // Vector 2
+      [0.0, 0.0, 1.0], // Vector 3
+      [0.5, 0.5, 0.0], // Vector 4
+      [0.0, 0.5, 0.5], // Vector 5
+      [0.5, 0.0, 0.5], // Vector 6
+      [0.3, 0.3, 0.3], // Vector 7
+      [0.7, 0.7, 0.7], // Vector 8
+    ];
+
+    // Metadata for testing different filter types
+    const testMetadata = [
+      {
+        category: 'electronics',
+        price: 100,
+        inStock: true,
+        tags: ['popular', 'discount'],
+        rating: 4.5,
+        createdAt: new Date('2023-01-01T00:00:00Z'),
+        name: 'Product A',
+        description: 'High quality product',
+      },
+      {
+        category: 'electronics',
+        price: 200,
+        inStock: false,
+        tags: ['premium'],
+        rating: 4.8,
+        createdAt: new Date('2023-02-01T00:00:00Z'),
+        name: 'Product B',
+        description: 'Premium quality product',
+      },
+      {
+        category: 'clothing',
+        price: 50,
+        inStock: true,
+        tags: ['discount', 'seasonal'],
+        rating: 3.5,
+        createdAt: new Date('2023-03-01T00:00:00Z'),
+        name: 'Product C',
+        description: 'Budget friendly item',
+      },
+      {
+        category: 'clothing',
+        price: 150,
+        inStock: true,
+        tags: ['premium', 'seasonal'],
+        rating: 4.2,
+        createdAt: new Date('2023-04-01T00:00:00Z'),
+        name: 'Product D',
+        description: 'Premium clothing item',
+      },
+      {
+        category: 'home',
+        price: 120,
+        inStock: false,
+        tags: ['new', 'premium'],
+        rating: 4.0,
+        createdAt: new Date('2023-05-01T00:00:00Z'),
+        name: 'Product E',
+        description: 'Home decoration item',
+      },
+      {
+        category: 'home',
+        price: 80,
+        inStock: true,
+        tags: ['discount', 'new'],
+        rating: 3.8,
+        createdAt: new Date('2023-06-01T00:00:00Z'),
+        name: 'Product F',
+        description: 'Budget home item',
+      },
+      {
+        category: 'books',
+        price: 20,
+        inStock: true,
+        tags: ['popular', 'new'],
+        rating: 4.9,
+        createdAt: new Date('2023-07-01T00:00:00Z'),
+        name: 'Product G',
+        description: 'Bestselling book',
+      },
+      {
+        category: 'books',
+        price: 25,
+        inStock: true,
+        tags: ['premium'],
+        rating: 4.7,
+        createdAt: new Date('2023-08-01T00:00:00Z'),
+        name: 'Product H',
+        description: 'Premium book edition',
+      },
+    ];
+
+    // Store document IDs to reference them if needed in future tests
+    let _docIds: string[] = [];
+
+    beforeAll(async () => {
+      // Drop and recreate the collection for a fresh start
+      const scopeName = test_scopeName;
+      const collectionName = test_collectionName;
+      await bucket.collections().dropCollection(collectionName, scopeName);
+      await bucket.collections().createCollection(collectionName, scopeName);
+      collection = bucket.scope(scopeName).collection(collectionName);
+
+      // Create a search index with all needed fields for filtering
+      await couchbase_client.createIndex({
+        indexName: filterIndexName,
+        dimension: filterDimension,
+        metric: 'cosine',
+        fields_to_index: [
+          { name: 'price', type: 'number' },
+          { name: 'rating', type: 'number' },
+          { name: 'inStock', type: 'boolean' },
+          { name: 'category', type: 'text' },
+          { name: 'tags', type: 'text' },
+          { name: 'name', type: 'text' },
+          { name: 'description', type: 'text' },
+          { name: 'createdAt', type: 'datetime' },
+        ],
+      });
+
+      // Insert test data
+      _docIds = await couchbase_client.upsert({
+        indexName: filterIndexName,
+        vectors: testVectors,
+        metadata: testMetadata,
+      });
+
+      // Wait for documents to be indexed
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }, 60000);
+
+    afterAll(async () => {
+      // Clean up by deleting the test index
+      await couchbase_client.deleteIndex({ indexName: filterIndexName });
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }, 50000);
+
+    it('should filter by equality on string fields', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.category': { $eq: 'electronics' },
+        },
+      });
+
+      // Should match exactly 2 documents
+      expect(results).toHaveLength(2);
+
+      // Verify all returned documents have the correct category
+      for (const result of results) {
+        expect(result.metadata?.category).toBe('electronics');
+      }
+    }, 50000);
+
+    it('should filter by equality on numeric fields', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $eq: 100 },
+        },
+      });
+
+      // Should match exactly 1 document
+      expect(results).toHaveLength(1);
+
+      // Verify returned document has the correct price
+      expect(results[0].metadata?.price).toBe(100);
+    }, 50000);
+
+    it('should filter by boolean fields', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.inStock': { $eq: true },
+        },
+      });
+
+      // Should match documents where inStock is true (6 documents)
+      expect(results.length).toBe(6);
+
+      // Verify all returned documents have inStock = true
+      for (const result of results) {
+        expect(result.metadata?.inStock).toBe(true);
+      }
+    }, 50000);
+
+    it('should filter by inequality operators', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $ne: 100 },
+        },
+      });
+
+      // Should match documents where price is not 100 (7 documents)
+      expect(results.length).toBe(7);
+
+      // Verify none of the returned documents have price = 100
+      for (const result of results) {
+        expect(result.metadata?.price).not.toBe(100);
+      }
+    }, 50000);
+
+    it('should filter by comparison operators on numeric fields', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      // Test $gt (greater than)
+      const resultsGt = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $gt: 100 },
+        },
+      });
+
+      // Should match documents where price > 100 (3 documents)
+      expect(resultsGt.length).toBe(3);
+      for (const result of resultsGt) {
+        expect(result.metadata?.price).toBeGreaterThan(100);
+      }
+
+      // Test $gte (greater than or equal)
+      const resultsGte = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $gte: 100 },
+        },
+      });
+
+      // Should match documents where price >= 100 (4 documents)
+      expect(resultsGte.length).toBe(4);
+      for (const result of resultsGte) {
+        expect(result.metadata?.price).toBeGreaterThanOrEqual(100);
+      }
+
+      // Test $lt (less than)
+      const resultsLt = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $lt: 50 },
+        },
+      });
+
+      // Should match documents where price < 50 (2 documents - books)
+      expect(resultsLt.length).toBe(2);
+      for (const result of resultsLt) {
+        expect(result.metadata?.price).toBeLessThan(50);
+      }
+
+      // Test $lte (less than or equal)
+      const resultsLte = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $lte: 50 },
+        },
+      });
+
+      // Should match documents where price <= 50 (3 documents - books and one clothing)
+      expect(resultsLte.length).toBe(3);
+      for (const result of resultsLte) {
+        expect(result.metadata?.price).toBeLessThanOrEqual(50);
+      }
+    }, 50000);
+
+    it('should filter by date comparison operators', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const resultsAfter = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.createdAt': { $gt: new Date('2023-05-01T00:00:00Z') },
+        },
+      });
+
+      // Should match documents created after May 1, 2023 (3 documents)
+      expect(resultsAfter.length).toBe(3);
+      for (const result of resultsAfter) {
+        const date1 = new Date(result.metadata?.createdAt as string);
+        const date2 = new Date('2023-05-01T00:00:00Z');
+        expect(date1 > date2).toBe(true);
+      }
+
+      const resultsBefore = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.createdAt': { $lt: new Date('2023-03-01T00:00:00Z') },
+        },
+      });
+
+      // Should match documents created before Mar 1, 2023 (2 documents)
+      expect(resultsBefore.length).toBe(2);
+      for (const result of resultsBefore) {
+        const date1 = new Date(result.metadata?.createdAt as string);
+        const date2 = new Date('2023-03-01T00:00:00Z');
+        expect(date1 < date2).toBe(true);
+      }
+    }, 50000);
+
+    it('should support logical AND operator for combining filters', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          $and: [{ 'metadata.price': { $lt: 100 } }, { 'metadata.inStock': { $eq: true } }],
+        },
+      });
+
+      // Should match documents where price < 100 AND inStock is true (4 documents)
+      expect(results.length).toBe(4);
+      for (const result of results) {
+        expect(result.metadata?.price).toBeLessThan(100);
+        expect(result.metadata?.inStock).toBe(true);
+      }
+    }, 50000);
+
+    it('should support logical OR operator for combining filters', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          $or: [{ 'metadata.category': { $eq: 'electronics' } }, { 'metadata.category': { $eq: 'books' } }],
+        },
+      });
+
+      // Should match documents where category is electronics OR books (4 documents)
+      expect(results.length).toBe(4);
+      for (const result of results) {
+        expect(['electronics', 'books']).toContain(result.metadata?.category);
+      }
+    }, 50000);
+
+    it('should support NOT operator for negating filters', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          $not: {
+            'metadata.inStock': { $eq: true },
+          },
+        },
+      });
+
+      // Should match documents where NOT (inStock is true), i.e., inStock is false (2 documents)
+      expect(results.length).toBe(2);
+      for (const result of results) {
+        expect(result.metadata?.inStock).toBe(false);
+      }
+    }, 50000);
+
+    it('should support complex nested logical operators', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          $and: [
+            { 'metadata.price': { $gte: 50 } },
+            {
+              $or: [{ 'metadata.category': { $eq: 'electronics' } }, { 'metadata.category': { $eq: 'clothing' } }],
+            },
+            { 'metadata.inStock': { $eq: true } },
+          ],
+        },
+      });
+
+      // Should match documents where:
+      // - price >= 50 AND
+      // - (category is electronics OR category is clothing) AND
+      // - inStock is true
+      // (3 documents should match: electronics with price 100, and 2 clothing items)
+      expect(results.length).toBe(3);
+
+      for (const result of results) {
+        expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
+        expect(['electronics', 'clothing']).toContain(result.metadata?.category);
+        expect(result.metadata?.inStock).toBe(true);
+      }
+    }, 50000);
+
+    it('should filter by multiple conditions on the same field', async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $gte: 50, $lte: 150 },
+        },
+      });
+
+      // Should match documents where price is between 50 and 150 inclusive (5 documents)
+      expect(results.length).toBe(5);
+      for (const result of results) {
+        expect(result.metadata?.price).toBeGreaterThanOrEqual(50);
+        expect(result.metadata?.price).toBeLessThanOrEqual(150);
+      }
+    }, 50000);
+
+    it('should apply filters while respecting vector similarity', async () => {
+      // Use a query vector that is closest to vector 1 [1.0, 0.0, 0.0]
+      const queryVector = [0.9, 0.1, 0.1];
+      const topK = 3;
+
+      // No filter - should return closest vectors by cosine similarity
+      const resultsNoFilter = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+      });
+
+      // Should prioritize vector similarity, expecting the first vector to be closest
+      expect(resultsNoFilter[0].metadata?.name).toBe('Product A');
+
+      // Apply filter that includes the closest vector (electronics)
+      const resultsWithFilter = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          $or: [{ 'metadata.category': { $eq: 'electronics' } }, { 'metadata.category': { $eq: 'home' } }],
+        },
+      });
+
+      // Should return filtered results ordered by vector similarity
+      // First result should still be Product A (electronics)
+      expect(resultsWithFilter[0].metadata?.name).toBe('Product A');
+
+      // All results should match the filter
+      for (const result of resultsWithFilter) {
+        expect(['electronics', 'home']).toContain(result.metadata?.category);
+      }
+    }, 50000);
+
+    it("should handle empty result sets when filter doesn't match any documents", async () => {
+      const queryVector = [0.5, 0.5, 0.5];
+      const topK = 10;
+
+      // Filter that won't match any documents
+      const results = await couchbase_client.query({
+        indexName: filterIndexName,
+        queryVector,
+        topK,
+        filter: {
+          'metadata.price': { $gt: 1000 }, // No products with price > 1000
+        },
+      });
+
+      // Should return an empty array
+      expect(results).toEqual([]);
+    }, 50000);
+  });
 });
