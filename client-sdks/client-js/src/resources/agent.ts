@@ -161,6 +161,7 @@ export class AgentVoice extends BaseResource {
   /**
    * Get available speakers for the agent's voice provider
    * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing list of available speakers
    */
   getSpeakers(
@@ -180,6 +181,7 @@ export class AgentVoice extends BaseResource {
 
   /**
    * Get the listener configuration for the agent's voice provider
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
@@ -245,7 +247,7 @@ export class Agent extends BaseResource {
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
   >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 16th, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
     );
     // @ts-expect-error - generic type issues
     return this.generateLegacy(params);
@@ -775,7 +777,7 @@ export class Agent extends BaseResource {
     }
   > {
     console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 16th, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
+      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
     );
     return this.streamLegacy(params);
   }
@@ -1694,7 +1696,6 @@ export class Agent extends BaseResource {
     const queryString = searchParams.toString();
     return this.request(`/api/agents/${this.agentId}/evals/live${queryString ? `?${queryString}` : ''}`);
   }
-
   /**
    * Updates the model for the agent
    * @param params - Parameters for updating the model

@@ -34,6 +34,7 @@ export interface ModelSettings {
   chatWithGenerate?: boolean;
   chatWithGenerateVNext?: boolean;
   chatWithStreamVNext?: boolean;
+  chatWithNetwork?: boolean;
 }
 
 export interface AgentSettingsType {
