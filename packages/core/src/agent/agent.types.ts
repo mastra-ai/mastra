@@ -6,6 +6,7 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
 import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
@@ -65,7 +66,10 @@ export type AgentExecutionOptions<
   /** Runtime context containing dynamic configuration and state */
   runtimeContext?: RuntimeContext;
 
-  /** Schema for structured output generation (Zod schema or JSON Schema) @experimental */
+  /**
+   * Schema for structured output generation (Zod schema or JSON Schema)
+   * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
+   */
   output?: OUTPUT;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
@@ -138,4 +142,6 @@ export type InnerAgentExecutionOptions<
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
   methodType: 'generate' | 'stream' | 'streamVNext';
+  /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
+  model?: MastraLanguageModel;
 };

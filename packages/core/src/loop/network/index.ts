@@ -1,4 +1,3 @@
-import { TransformStream } from 'stream/web';
 import type { JSONSchema7 } from 'json-schema';
 import z from 'zod';
 import type { ZodSchema } from 'zod';
@@ -8,7 +7,8 @@ import { Agent } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
 import type { RuntimeContext } from '../../runtime-context';
-import type { ChunkType, OutputSchema } from '../../stream';
+import type { OutputSchema } from '../../stream';
+import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { RESOURCE_TYPES } from '../types';
@@ -957,36 +957,21 @@ export async function networkLoop<
 
   const task = getLastMessage(messages);
 
-  function transformToNetworkChunk(chunk: ChunkType) {
-    if (chunk.type === 'workflow-step-output') {
-      const innerChunk = chunk.payload.output;
-      const innerChunkType = innerChunk.payload.output;
-
-      return innerChunkType;
-    }
-  }
-
-  const stream = run.streamVNext({
-    inputData: {
-      task,
-      resourceId: '',
-      resourceType: 'none',
-      iteration: 0,
-      threadResourceId: thread?.resourceId,
-      threadId: thread?.id,
-      isOneOff: false,
-      verboseIntrospection: true,
+  return new MastraAgentNetworkStream({
+    run,
+    createStream: () => {
+      return run.streamVNext({
+        inputData: {
+          task,
+          resourceId: '',
+          resourceType: 'none',
+          iteration: 0,
+          threadResourceId: thread?.resourceId,
+          threadId: thread?.id,
+          isOneOff: false,
+          verboseIntrospection: true,
+        },
+      });
     },
   });
-
-  return stream.pipeThrough(
-    new TransformStream({
-      transform(chunk, controller) {
-        const transformedChunk = transformToNetworkChunk(chunk);
-        if (transformedChunk !== undefined) {
-          controller.enqueue(transformedChunk);
-        }
-      },
-    }),
-  );
 }

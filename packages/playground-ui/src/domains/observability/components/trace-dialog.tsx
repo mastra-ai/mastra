@@ -29,6 +29,8 @@ type TraceDialogProps = {
   onNext?: () => void;
   onPrevious?: () => void;
   isLoadingSpans?: boolean;
+  computeAgentsLink?: () => string;
+  computeWorkflowsLink?: () => string;
 };
 
 export function TraceDialog({
@@ -40,6 +42,8 @@ export function TraceDialog({
   onNext,
   onPrevious,
   isLoadingSpans,
+  computeAgentsLink,
+  computeWorkflowsLink,
 }: TraceDialogProps) {
   const { Link } = useLinkComponent();
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
@@ -102,7 +106,7 @@ export function TraceDialog({
     return currentIndex > 0;
   };
 
-  const traceInfo = getTraceInfo(traceDetails);
+  const traceInfo = getTraceInfo(traceDetails, computeAgentsLink, computeWorkflowsLink);
   const selectedSpanInfo = getSpanInfo({ span: selectedSpan, withTraceId: !combinedView, withSpanId: combinedView });
 
   return (
