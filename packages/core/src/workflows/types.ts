@@ -1,5 +1,6 @@
 import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
+import type { TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
 import type { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -141,7 +142,9 @@ export type StreamEvent =
 export type WorkflowStreamEvent =
   | {
       type: 'workflow-start';
-      payload: {};
+      payload: {
+        workflowId: string;
+      };
     }
   | {
       type: 'workflow-finish';
@@ -202,21 +205,6 @@ export type WorkflowStreamEvent =
         resumePayload?: Record<string, any>;
         suspendPayload?: Record<string, any>;
       };
-    }
-  | {
-      type: 'workflow-agent-call-start';
-      payload: {
-        name: string;
-        args: any;
-      };
-    }
-  | {
-      type: 'workflow-agent-call-finish';
-      payload: {
-        name: string;
-        args: any;
-      };
-      args: any;
     };
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
@@ -389,7 +377,7 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
 };
 
 export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<string, any, any>[]> =
-  | {
+  | ({
       status: 'success';
       result: z.infer<TOutput>;
       steps: {
@@ -402,8 +390,8 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
-    }
-  | {
+    } & TracingProperties)
+  | ({
       status: 'failed';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -416,8 +404,8 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
             >;
       };
       error: Error;
-    }
-  | {
+    } & TracingProperties)
+  | ({
       status: 'suspended';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -430,7 +418,7 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
             >;
       };
       suspended: [string[], ...string[][]];
-    };
+    } & TracingProperties);
 
 export type WorkflowConfig<
   TWorkflowId extends string = string,

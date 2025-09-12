@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 
 const myAgent = mastra.getAgent("weatherAgent");
 export async function GET() {
-  const result = await myAgent.getMemory()?.query({
+  const memory = await myAgent.getMemory();
+  const result = await memory?.query({
     threadId: "2",
   });
 

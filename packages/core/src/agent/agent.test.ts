@@ -370,7 +370,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finalText).toContain('Donald Trump');
     });
 
-    it('should get a structured response from the agent', async () => {
+    it('should get a structured response from the agent with', async () => {
       const electionAgent = new Agent({
         name: 'US Election agent',
         instructions: 'You know about the past US elections',
@@ -440,6 +440,69 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       expect(response.object.length).toBeGreaterThan(1);
       expect(response.object).toMatchObject([
+        {
+          year: '2012',
+          winner: 'Barack Obama',
+        },
+        {
+          year: '2016',
+          winner: 'Donald Trump',
+        },
+      ]);
+    });
+    it('should support JSONSchema7 structured output type', async () => {
+      const electionAgent = new Agent({
+        name: 'US Election agent',
+        instructions: 'You know about the past US elections',
+        model: openaiModel,
+      });
+
+      const mastra = new Mastra({
+        agents: { electionAgent },
+        logger: false,
+      });
+
+      const agentOne = mastra.getAgent('electionAgent');
+
+      let response;
+      if (version === 'v1') {
+        response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
+          output: {
+            type: 'object',
+            properties: {
+              winners: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { winner: { type: 'string' }, year: { type: 'string' } },
+                  required: ['winner', 'year'],
+                },
+              },
+            },
+            required: ['winners'],
+          },
+        });
+      } else {
+        response = await agentOne.generateVNext('Give me the winners of 2012 and 2016 US presidential elections', {
+          output: {
+            type: 'object',
+            properties: {
+              winners: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: { winner: { type: 'string' }, year: { type: 'string' } },
+                  required: ['winner', 'year'],
+                },
+              },
+            },
+            required: ['winners'],
+          },
+        });
+      }
+
+      expect(response.object.winners.length).toBeGreaterThan(1);
+      expect(response.object.winners).toMatchObject([
         {
           year: '2012',
           winner: 'Barack Obama',
@@ -5206,6 +5269,128 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
     });
   });
 
+  if (version === 'v2') {
+    describe('streamVNext options', () => {
+      it('should call options.onError when stream error occurs in streamVNext', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw new Error('Simulated stream error');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-options-onerror',
+          name: 'Test Options OnError',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let errorCaught = false;
+        let caughtError: any = null;
+
+        const stream = await agent.streamVNext('Hello', {
+          onError: ({ error }) => {
+            errorCaught = true;
+            caughtError = error;
+          },
+        });
+
+        // Consume the stream to trigger the error
+        try {
+          await stream.consumeStream();
+        } catch {}
+
+        expect(errorCaught).toBe(true);
+        expect(caughtError).toBeDefined();
+        expect(caughtError.message).toMatch(/Simulated stream error/);
+      });
+
+      it('should call options.onChunk when streaming in streamVNext', async () => {
+        const agent = new Agent({
+          id: 'test-options-onchunk',
+          name: 'Test Options OnChunk',
+          model: dummyModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const chunks: any[] = [];
+
+        const stream = await agent.streamVNext('Hello', {
+          onChunk: (event: any) => {
+            chunks.push(event.chunk);
+          },
+        });
+
+        // Consume the stream to trigger chunks
+        await stream.consumeStream();
+
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks[0]).toHaveProperty('type');
+      });
+
+      it('should call options.onAbort when stream is aborted in streamVNext', async () => {
+        const abortController = new AbortController();
+        let pullCalls = 0;
+
+        const abortModel = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              pull(controller) {
+                switch (pullCalls++) {
+                  case 0:
+                    controller.enqueue({
+                      type: 'stream-start',
+                      warnings: [],
+                    });
+                    break;
+                  case 1:
+                    controller.enqueue({
+                      type: 'text-start',
+                      id: '1',
+                    });
+                    break;
+                  case 2:
+                    // Abort during streaming
+                    abortController.abort();
+                    controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                    break;
+                }
+              },
+            }),
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-options-onabort',
+          name: 'Test Options OnAbort',
+          model: abortModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let abortCalled = false;
+        let abortEvent: any = null;
+
+        const stream = await agent.streamVNext('Hello', {
+          onAbort: event => {
+            abortCalled = true;
+            abortEvent = event;
+          },
+          abortSignal: abortController.signal,
+        });
+
+        // Consume the stream to trigger the abort
+        try {
+          await stream.consumeStream();
+        } catch {}
+
+        expect(abortCalled).toBe(true);
+        expect(abortEvent).toBeDefined();
+      });
+    });
+  }
+
   describe(`${version} - dynamic memory configuration`, () => {
     let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
     if (version === 'v1') {
@@ -5470,6 +5655,417 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
       expect(thread).toBeDefined();
       expect(thread?.resourceId).toBe('user-1');
+    });
+
+    it('should preserve system messages from user input when memory is enabled', async () => {
+      const mockMemory = new MockMemory();
+
+      // Mock the LLM to capture what messages it receives
+      let capturedMessages: any[] = [];
+      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        dummyModel = new MockLanguageModelV1({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              text: 'Test response with jokes! Super!!!!',
+              usage: { promptTokens: 10, completionTokens: 5 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: [], rawSettings: {} },
+            };
+          },
+        });
+      } else {
+        dummyModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              content: [{ type: 'text', text: 'Test response with jokes! Super!!!!' }],
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        name: 'system-message-test-agent',
+        instructions: 'You are a test agent',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const testMessages = [
+        {
+          role: 'user' as const,
+          content: 'Hello, my name is John',
+        },
+        {
+          role: 'system' as const,
+          content: 'You always put jokes in your conversation and also always say Super!!!!',
+        },
+      ];
+
+      if (version === 'v1') {
+        await agent.generate(testMessages, {
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          runId: 'test-run',
+        });
+      } else {
+        await agent.generateVNext(testMessages, {
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          runId: 'test-run',
+        });
+      }
+
+      // Check if system message from user input is preserved in the final prompt
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const userSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
+      );
+
+      expect(userSystemMessage).toBeDefined();
+      expect(userSystemMessage?.content).toContain(
+        'You always put jokes in your conversation and also always say Super!!!!',
+      );
+    });
+
+    it('should preserve system messages from user input when memory is enabled (stream)', async () => {
+      const mockMemory = new MockMemory();
+      let capturedMessages: any[] = [];
+      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        dummyModel = new MockLanguageModelV1({
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: prompt, rawSettings: {} },
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      } else {
+        dummyModel = new MockLanguageModelV2({
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        name: 'system-message-test-agent-stream',
+        instructions: 'You are a test agent',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const testMessages = [
+        {
+          role: 'user' as const,
+          content: 'Hello, my name is John',
+        },
+        {
+          role: 'system' as const,
+          content: 'You always put jokes in your conversation and also always say Super!!!!',
+        },
+      ];
+
+      if (version === 'v1') {
+        const stream = await agent.stream(testMessages, {
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          runId: 'test-run',
+        });
+        // Consume the stream to trigger the model call
+        for await (const _chunk of stream.textStream) {
+          // Just consume the stream
+        }
+      } else {
+        const stream = await agent.streamVNext(testMessages, {
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          runId: 'test-run',
+        });
+        // Consume the stream to trigger the model call
+        for await (const _chunk of stream.fullStream) {
+          // Just consume the stream
+        }
+      }
+
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const userSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
+      );
+
+      expect(userSystemMessage).toBeDefined();
+      expect(userSystemMessage?.content).toContain(
+        'You always put jokes in your conversation and also always say Super!!!!',
+      );
+    });
+
+    it('should preserve system messages from user input without memory (stream)', async () => {
+      let capturedMessages: any[] = [];
+      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        dummyModel = new MockLanguageModelV1({
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: prompt, rawSettings: {} },
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-delta', textDelta: 'Test response with jokes! Super!!!!' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      } else {
+        dummyModel = new MockLanguageModelV2({
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id-3',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        name: 'system-message-test-agent-stream-no-memory',
+        instructions: 'You are a test agent',
+        model: dummyModel,
+      });
+
+      const testMessages = [
+        {
+          role: 'user' as const,
+          content: 'Hello, my name is John',
+        },
+        {
+          role: 'system' as const,
+          content: 'You always put jokes in your conversation and also always say Super!!!!',
+        },
+      ];
+
+      if (version === 'v1') {
+        const stream = await agent.stream(testMessages);
+        // Consume the stream to trigger the model call
+        for await (const _chunk of stream.textStream) {
+          // Just consume the stream
+        }
+      } else {
+        const stream = await agent.streamVNext(testMessages);
+        // Consume the stream to trigger the model call
+        for await (const _chunk of stream.fullStream) {
+          // Just consume the stream
+        }
+      }
+
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const userSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
+      );
+
+      expect(userSystemMessage).toBeDefined();
+      expect(userSystemMessage?.content).toContain(
+        'You always put jokes in your conversation and also always say Super!!!!',
+      );
+    });
+
+    it('should preserve system messages from user input without memory', async () => {
+      // Mock the LLM to capture what messages it receives
+      let capturedMessages: any[] = [];
+      let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        dummyModel = new MockLanguageModelV1({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              text: 'Test response with jokes! Super!!!!',
+              usage: { promptTokens: 10, completionTokens: 5 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: [], rawSettings: {} },
+            };
+          },
+        });
+      } else {
+        dummyModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              content: [{ type: 'text', text: 'Test response with jokes! Super!!!!' }],
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+          doStream: async ({ prompt }) => {
+            capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id-2',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: '1' },
+                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: '1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        name: 'system-message-test-agent-no-memory',
+        instructions: 'You are a test agent',
+        model: dummyModel,
+      });
+
+      const testMessages = [
+        {
+          role: 'user' as const,
+          content: 'Hello, my name is John',
+        },
+        {
+          role: 'system' as const,
+          content: 'You always put jokes in your conversation and also always say Super!!!!',
+        },
+      ];
+
+      if (version === 'v1') {
+        await agent.generate(testMessages);
+      } else {
+        await agent.generateVNext(testMessages);
+      }
+
+      // Check if system message from user input is preserved in the final prompt
+      const systemMessages = capturedMessages.filter(m => m.role === 'system');
+      const userSystemMessage = systemMessages.find(
+        m => typeof m.content === 'string' && m.content.includes('You always put jokes in your conversation'),
+      );
+
+      expect(userSystemMessage).toBeDefined();
+      expect(userSystemMessage?.content).toContain(
+        'You always put jokes in your conversation and also always say Super!!!!',
+      );
     });
   });
 
@@ -6119,6 +6715,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         },
       ];
+
       if (version === 'v1') {
         await agent.generate(messagesWithMetadata, {
           memory: {
@@ -7175,3 +7772,713 @@ describe('Agent Tests', () => {
 //     });
 
 // });
+
+describe('Stream ID Consistency', () => {
+  /**
+   * Test to verify that stream response IDs match database-saved message IDs
+   */
+
+  let memory: MockMemory;
+  let mastra: Mastra;
+
+  beforeEach(() => {
+    memory = new MockMemory();
+    mastra = new Mastra();
+  });
+
+  it('should return stream response IDs that can fetch saved messages from database', async () => {
+    const model = new MockLanguageModelV1({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          initialDelayInMs: 0,
+          chunkDelayInMs: 1,
+          chunks: [
+            { type: 'text-delta', textDelta: 'Hello! ' },
+            { type: 'text-delta', textDelta: 'I am ' },
+            { type: 'text-delta', textDelta: 'a helpful assistant.' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+            },
+          ],
+        }),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      // model: openai('gpt-4o'),
+      memory,
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const streamResult = await agent.stream('Hello!', {
+      threadId,
+      resourceId,
+    });
+
+    let streamResponseId: string | undefined;
+    for await (const _chunk of streamResult.fullStream) {
+      console.log('DEBUG chunk', _chunk);
+    }
+    await streamResult.consumeStream();
+
+    const finishedResult = streamResult;
+    const response = await finishedResult.response;
+
+    streamResponseId = response?.messages?.[0]?.id;
+
+    console.log('DEBUG streamResponseId', streamResponseId);
+    expect(streamResponseId).toBeDefined();
+
+    const savedMessages = await memory.getMessages({ threadId });
+
+    const messageById = savedMessages.find(m => m.id === streamResponseId);
+
+    expect(messageById).toBeDefined();
+    expect(messageById!.id).toBe(streamResponseId);
+  });
+
+  it('should use custom ID generator for streaming and keep stream response IDs consistent with database', async () => {
+    let customIdCounter = 0;
+    const customIdGenerator = vi.fn(() => `custom-id-${++customIdCounter}`);
+
+    const model = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'Hello! I am a helpful assistant.',
+      }),
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          initialDelayInMs: 0,
+          chunkDelayInMs: 1,
+          chunks: [
+            { type: 'text-delta', textDelta: 'Hello! ' },
+            { type: 'text-delta', textDelta: 'I am ' },
+            { type: 'text-delta', textDelta: 'a helpful assistant.' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+            },
+          ],
+        }),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+      }),
+    });
+
+    const mastraWithCustomId = new Mastra({
+      idGenerator: customIdGenerator,
+      logger: false,
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+    });
+
+    agent.__registerMastra(mastraWithCustomId);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const stream = await agent.stream('Hello!', { threadId, resourceId });
+
+    await stream.consumeStream();
+    const res = await stream.response;
+    const messageId = res.messages[0].id;
+
+    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+
+    expect(savedMessages).toHaveLength(1);
+    expect(savedMessages[0].id).toBe(messageId);
+    expect(customIdGenerator).toHaveBeenCalled();
+  });
+
+  it('should return streamVNext response IDs that can fetch saved messages from database', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          {
+            type: 'stream-start',
+            warnings: [],
+          },
+          {
+            type: 'response-metadata',
+            id: 'v2-msg-xyz123',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'Hello! ' },
+          { type: 'text-delta', id: '1', delta: 'I am a ' },
+          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const streamResult = await agent.streamVNext('Hello!', {
+      threadId,
+      resourceId,
+    });
+
+    await streamResult.consumeStream();
+
+    let streamResponseId: string | undefined;
+    const res = await streamResult.response;
+    streamResponseId = res.uiMessages[0].id;
+
+    expect(streamResponseId).toBeDefined();
+
+    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: streamResponseId! }] } });
+    const messageById = savedMessages.find(m => m.id === streamResponseId);
+
+    expect(messageById).toBeDefined();
+    expect(messageById!.id).toBe(streamResponseId);
+  });
+
+  it('should use custom ID generator for streamVNext and keep stream response IDs consistent with database', async () => {
+    let customIdCounter = 0;
+    const customIdGenerator = vi.fn(() => `custom-v2-id-${++customIdCounter}`);
+
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: 'Hello! I am a helpful assistant.',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          {
+            type: 'stream-start',
+            warnings: [],
+          },
+          {
+            type: 'response-metadata',
+            id: 'custom-v2-msg-xyz123',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'Hello! ' },
+          { type: 'text-delta', id: '1', delta: 'I am a ' },
+          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mastraWithCustomId = new Mastra({
+      idGenerator: customIdGenerator,
+      logger: false,
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+    });
+
+    agent.__registerMastra(mastraWithCustomId);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const stream = await agent.streamVNext('Hello!', { threadId, resourceId });
+
+    await stream.consumeStream();
+    const res = await stream.response;
+    const messageId = res.uiMessages[0].id;
+    const savedMessages = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+    expect(savedMessages).toHaveLength(1);
+    expect(savedMessages[0].id).toBe(messageId);
+    expect(customIdGenerator).toHaveBeenCalled();
+  });
+
+  describe('onFinish callback with structured output (Issue #7722)', () => {
+    it('should include object field in onFinish callback when using structured output', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'test-structured-output-onfinish',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+
+      let onFinishResult: any = null;
+      let onFinishCalled = false;
+
+      const outputSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+      });
+
+      const response = await agent.generateVNext(
+        [
+          {
+            role: 'user',
+            content: 'Extract the person data',
+          },
+        ],
+        {
+          output: outputSchema,
+          onFinish: async result => {
+            onFinishCalled = true;
+            onFinishResult = result;
+          },
+        },
+      );
+
+      // Wait a bit to ensure onFinish is called
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // The main function should return the structured data correctly
+      expect(response.object).toBeDefined();
+      expect(response.object).toEqual({ name: 'John', age: 30 });
+
+      // onFinish should have been called
+      expect(onFinishCalled).toBe(true);
+      expect(onFinishResult).toBeDefined();
+
+      // The fix: onFinish result should now include the object field
+      expect(onFinishResult.object).toBeDefined();
+      expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
+    }, 10000); // Increase timeout to 10 seconds
+  });
+
+  it('should include object field in onFinish callback when using structuredOutput key', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: 'The person is John who is 30 years old' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const structuringModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: '1' },
+          { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
+          { type: 'text-end', id: '1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'test-structured-output-processor-onfinish',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+    });
+
+    let onFinishResult: any = null;
+    let onFinishCalled = false;
+
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+
+    const response = await agent.generateVNext(
+      [
+        {
+          role: 'user',
+          content: 'Extract the person data',
+        },
+      ],
+      {
+        structuredOutput: {
+          schema: outputSchema,
+          model: structuringModel,
+        },
+        onFinish: async result => {
+          onFinishCalled = true;
+          onFinishResult = result;
+        },
+      },
+    );
+
+    // Wait a bit to ensure onFinish is called
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // The main function should return the structured data correctly
+    expect(response.object).toBeDefined();
+    expect(response.object).toEqual({ name: 'John', age: 30 });
+
+    // onFinish should have been called
+    expect(onFinishCalled).toBe(true);
+    expect(onFinishResult).toBeDefined();
+
+    // The fix: onFinish result should now include the object field
+    expect(onFinishResult.object).toBeDefined();
+    expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
+  }, 10000); // Increase timeout to 10 seconds
+});
+
+describe('Agent structuredOutput to output deprecation mapping', () => {
+  const structuredOutputPrompt = 'Extract and structure the key information';
+
+  it('should map structuredOutput to output when maxSteps is 1', async () => {
+    let structuredOutputProcessorGotCalled = false;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '{"name": "John", "age": 30}',
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          warnings: [],
+        };
+      },
+      doStream: async options => {
+        if (
+          options.prompt.some(
+            p =>
+              Array.isArray(p.content) &&
+              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
+          )
+        ) {
+          structuredOutputProcessorGotCalled = true;
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{"name": "John", "age": 30}' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'test-structured-deprecation',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+    });
+
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+
+    const result = await agent.streamVNext(
+      [
+        {
+          role: 'user',
+          content: 'Generate a person',
+        },
+      ],
+      {
+        structuredOutput: {
+          schema: outputSchema,
+        },
+        maxSteps: 1,
+      },
+    );
+
+    expect(structuredOutputProcessorGotCalled).toBe(false);
+    expect(await result.object).toEqual({ name: 'John', age: 30 });
+  });
+
+  it('should NOT map structuredOutput to output when maxSteps is not 1', async () => {
+    let structuredOutputProcessorGotCalled = false;
+
+    const structuringModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        if (
+          options.prompt.some(
+            p =>
+              Array.isArray(p.content) &&
+              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
+          )
+        ) {
+          structuredOutputProcessorGotCalled = true;
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '{"name": "John", "age": 30}',
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          warnings: [],
+        };
+      },
+      doStream: async options => {
+        if (
+          options.prompt.some(
+            p =>
+              Array.isArray(p.content) &&
+              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
+          )
+        ) {
+          structuredOutputProcessorGotCalled = true;
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{"name": "John", "age": 30}' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Response text',
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Response text' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'test-structured-no-deprecation',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+    });
+
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+
+    const result = await agent.streamVNext(
+      [
+        {
+          role: 'user',
+          content: 'Generate a person',
+        },
+      ],
+      {
+        structuredOutput: {
+          schema: outputSchema,
+          model: structuringModel,
+        },
+        maxSteps: 2,
+      },
+    );
+
+    await result.consumeStream();
+
+    expect(structuredOutputProcessorGotCalled).toBe(true);
+    expect(await result.object).toEqual({ name: 'John', age: 30 });
+  });
+
+  it('should use model override from structuredOutput when maxSteps is 1', async () => {
+    let defaultModelGotCalled = false;
+    let overrideModelGotCalled = false;
+    const defaultModel = new MockLanguageModelV2({
+      modelId: 'default-model',
+      doGenerate: async () => ({
+        content: [
+          {
+            type: 'text',
+            text: 'Default model response',
+          },
+        ],
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        warnings: [],
+      }),
+
+      doStream: async () => {
+        defaultModelGotCalled = true;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{"name": "Default", "age": 1}' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const overrideModel = new MockLanguageModelV2({
+      modelId: 'override-model',
+      doGenerate: async () => ({
+        content: [
+          {
+            type: 'text',
+            text: 'Override model response',
+          },
+        ],
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        warnings: [],
+      }),
+      doStream: async () => {
+        overrideModelGotCalled = true;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: '{"name": "Override", "age": 99}' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'test-model-override',
+      instructions: 'You are a helpful assistant.',
+      model: defaultModel,
+    });
+
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+
+    const result = await agent.streamVNext(
+      [
+        {
+          role: 'user',
+          content: 'Generate a person',
+        },
+      ],
+      {
+        structuredOutput: {
+          schema: outputSchema,
+          model: overrideModel,
+        },
+        maxSteps: 1,
+      },
+    );
+
+    await result.consumeStream();
+
+    expect(defaultModelGotCalled).toBe(false);
+    expect(overrideModelGotCalled).toBe(true);
+    expect(await result.object).toEqual({ name: 'Override', age: 99 });
+  });
+});

@@ -4,9 +4,10 @@ import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodAny } from 'zod/v4';
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
-import type { LoopConfig, LoopOptions } from '../loop/types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
@@ -14,6 +15,27 @@ import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions } from './types';
+
+export type MultiPrimitiveExecutionOptions = {
+  /** Memory configuration for conversation persistence and retrieval */
+  memory?: AgentMemoryOption;
+  /** Unique identifier for this execution run */
+  runId?: string;
+
+  /** Runtime context containing dynamic configuration and state */
+  runtimeContext?: RuntimeContext;
+
+  /** Maximum number of steps to run */
+  maxSteps?: number;
+
+  /** AI tracing context for span hierarchy and metadata */
+  tracingContext?: TracingContext;
+
+  /** Model-specific settings like temperature, maxTokens, topP, etc. */
+  modelSettings?: LoopOptions['modelSettings'];
+
+  telemetry?: TelemetrySettings;
+};
 
 export type AgentExecutionOptions<
   OUTPUT extends OutputSchema | undefined = undefined,
@@ -44,7 +66,10 @@ export type AgentExecutionOptions<
   /** Runtime context containing dynamic configuration and state */
   runtimeContext?: RuntimeContext;
 
-  /** Schema for structured output generation (Zod schema or JSON Schema) @experimental */
+  /**
+   * Schema for structured output generation (Zod schema or JSON Schema)
+   * @deprecated Use `structuredOutput` instead. The `output` property will be removed in a future version.
+   */
   output?: OUTPUT;
 
   /** @deprecated Use memory.resource instead. Identifier for the resource/user */
@@ -64,20 +89,28 @@ export type AgentExecutionOptions<
   /** Provider-specific options passed to the language model */
   providerOptions?: LoopOptions['providerOptions'];
 
-  /** Advanced loop configuration options */
-  options?: Omit<LoopConfig, 'onStepFinish' | 'onFinish'>;
-
   /** Callback fired after each execution step. Type varies by format */
   onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
   /** Callback fired when execution completes. Type varies by format */
   onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
+
+  /** Callback fired for each streaming chunk received */
+  onChunk?: LoopConfig['onChunk'];
+  /** Callback fired when an error occurs during streaming */
+  onError?: LoopConfig['onError'];
+  /** Callback fired when streaming is aborted */
+  onAbort?: LoopConfig['onAbort'];
+  /** Tools that are active for this execution */
+  activeTools?: LoopConfig['activeTools'];
+  /** Signal to abort the streaming operation */
+  abortSignal?: LoopConfig['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessor[];
   /** Output processors to use for this execution (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
   /** Structured output generation with enhanced developer experience  @experimental */
-  structuredOutput?: STRUCTURED_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<STRUCTURED_OUTPUT> : never;
+  structuredOutput?: StructuredOutputOptions<STRUCTURED_OUTPUT extends z.ZodTypeAny ? STRUCTURED_OUTPUT : never>;
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;
@@ -95,6 +128,11 @@ export type AgentExecutionOptions<
   returnScorerData?: boolean;
   /** AI tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
+  /** AI tracing options for starting new traces */
+  tracingOptions?: TracingOptions;
+
+  /** Callback function called before each step of multi-step execution */
+  prepareStep?: PrepareStepFunction<any>;
 };
 
 export type InnerAgentExecutionOptions<
@@ -104,4 +142,6 @@ export type InnerAgentExecutionOptions<
   writableStream?: WritableStream<ChunkType>;
   messages: MessageListInput;
   methodType: 'generate' | 'stream' | 'streamVNext';
+  /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
+  model?: MastraLanguageModel;
 };

@@ -23,9 +23,7 @@ const WORKFLOW_METHODS_TO_WRAP = ['execute', 'createRun', 'createRunAsync'];
  */
 function isNoOpSpan(span: AnyAISpan): boolean {
   // Check if this is a NoOp span implementation
-  return (
-    span.constructor.name === 'NoOpAISpan' || (span as any).__isNoOp === true || !span.aiTracing // NoOp spans might not have aiTracing reference
-  );
+  return span.constructor.name === 'NoOpAISpan' || (span as any).__isNoOp === true;
 }
 
 /**
