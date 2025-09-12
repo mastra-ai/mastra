@@ -58,7 +58,7 @@ export class PostgresPerformanceTest {
     // Clean up traces and evals (if tables exist)
     try {
       await db.none('DELETE FROM mastra_traces WHERE id LIKE $1', ['trace_%']);
-    } catch (error) {
+    } catch {
       // Table might not exist
     }
 
@@ -67,7 +67,7 @@ export class PostgresPerformanceTest {
         '%perf_test%',
         'global_run_%',
       ]);
-    } catch (error) {
+    } catch {
       // Table might not exist
     }
 
@@ -483,7 +483,7 @@ export class PostgresPerformanceTest {
           scenario,
         ),
       );
-    } catch (error) {
+    } catch {
       // Skip if traces table doesn't exist or no traces
       console.log('Skipping getTracesPaginated test (table may not exist)');
     }
@@ -497,7 +497,7 @@ export class PostgresPerformanceTest {
           scenario,
         ),
       );
-    } catch (error) {
+    } catch {
       // Skip if evals table doesn't exist or no evals
       console.log('Skipping getEvals test (table may not exist)');
     }

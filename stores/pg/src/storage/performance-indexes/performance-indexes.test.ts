@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PostgresStore } from '../index';
 import { StoreOperationsPG } from '../domains/operations';
+import { PostgresStore } from '../index';
 
 // Mock pg-promise
 const mockClient = {
@@ -13,15 +13,10 @@ const mockPgp = vi.fn(() => mockClient);
 vi.mock('pg-promise', () => ({ default: vi.fn(() => mockPgp) }));
 
 describe('PostgresStore Performance Indexes', () => {
-  let store: PostgresStore;
   let operations: StoreOperationsPG;
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    store = new PostgresStore({
-      connectionString: 'postgresql://test:test@localhost:5432/test',
-    });
 
     operations = new StoreOperationsPG({
       client: mockClient as any,
