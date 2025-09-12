@@ -2,6 +2,7 @@
 title: Mastra Client Agents API
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
 ---
+import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
 
 # Agents API
 
@@ -157,4 +158,56 @@ const evals = await agent.evals();
 
 // Get live evaluations
 const liveEvals = await agent.liveEvals();
+```
+
+
+### Stream VNext (Experimental)
+
+<StreamVNextCallout />
+
+Stream responses using the enhanced VNext API with improved method signatures. This method provides enhanced capabilities and format flexibility, with support for both Mastra's native format and AI SDK v5 compatibility:
+
+```typescript
+const response = await agent.streamVNext(
+  "Tell me a story",
+  {
+    format: 'mastra', // Default: Mastra's native format
+    threadId: "thread-1",
+    clientTools: { colorChangeTool },
+  }
+);
+
+// AI SDK v5 compatible format
+const response = await agent.streamVNext(
+  "Tell me a story",
+  {
+    format: 'aisdk', // Enable AI SDK v5 compatibility
+    threadId: "thread-1",
+  }
+);
+
+// Process the stream
+response.processDataStream({
+  onChunk: (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+The `format` parameter determines the output stream format:
+- `'mastra'` (default): Returns Mastra's native format
+- `'aisdk'`: Returns AI SDK v5 compatible format for frontend integration
+
+### Generate VNext (Experimental)
+
+Generate a response using the enhanced VNext API with improved method signatures and AI SDK v5 compatibility:
+
+```typescript
+const response = await agent.generateVNext(
+  "Hello, how are you?",
+  {
+    threadId: "thread-1",
+    resourceid: "resource-1",
+  }
+);
 ```

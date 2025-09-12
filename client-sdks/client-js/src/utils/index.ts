@@ -16,3 +16,12 @@ export function base64RuntimeContext(runtimeContext?: Record<string, any>): stri
   }
   return undefined;
 }
+
+export function runtimeContextQueryString(runtimeContext?: RuntimeContext | Record<string, any>): string {
+  const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+  if (!runtimeContextParam) return '';
+  const searchParams = new URLSearchParams();
+  searchParams.set('runtimeContext', runtimeContextParam);
+  const queryString = searchParams.toString();
+  return queryString ? `?${queryString}` : '';
+}
