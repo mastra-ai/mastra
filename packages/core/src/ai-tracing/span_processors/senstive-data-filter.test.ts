@@ -4,15 +4,6 @@ import type { AITracingEvent, AITracingExporter } from '../types';
 import { AISpanType, SamplingStrategyType } from '../types';
 import { SensitiveDataFilter } from './sensitive-data-filter';
 
-// Mock console for exporter tests
-const mockConsole = {
-  log: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  info: vi.fn(),
-};
-vi.stubGlobal('console', mockConsole);
-
 // Test exporter for capturing events
 class TestExporter implements AITracingExporter {
   name = 'test-exporter';
@@ -81,7 +72,6 @@ describe('AI Tracing', () => {
         expect(attributes?.['SECRET']).toBe('[REDACTED]');
         expect(attributes?.['apiKey']).toBe('[REDACTED]');
         expect(attributes?.['AUTHORIZATION']).toBe('[REDACTED]');
-        expect(attributes?.['sessionId']).toBe('[REDACTED]');
 
         // Check that normal fields are visible
         expect(attributes?.['normalField']).toBe('visible-data');
@@ -89,7 +79,7 @@ describe('AI Tracing', () => {
       });
 
       it('should allow custom sensitive fields', () => {
-        const processor = new SensitiveDataFilter(['customSecret', 'internalId']);
+        const processor = new SensitiveDataFilter({ sensitiveFields: ['customSecret', 'internalId'] });
 
         const mockSpan = {
           id: 'test-span-1',
@@ -252,11 +242,11 @@ describe('AI Tracing', () => {
         expect(filtered).not.toBeNull();
 
         const attributes = filtered!.attributes;
-        expect(attributes?.['[FILTERING_ERROR]']).toBe('Attributes were completely redacted due to filtering error');
+        expect(attributes?.['error']).toStrictEqual({ processor: 'sensitive-data-filter' });
 
         // Should NOT contain the original sensitive data
-        expect(attributes?.['sensitiveData']).toBeUndefined();
         expect(attributes?.['agentId']).toBeUndefined();
+        expect(attributes?.['sensitiveData']).toBeUndefined();
         expect(attributes?.['problematicObject']).toBeUndefined();
       });
     });
@@ -277,7 +267,7 @@ describe('AI Tracing', () => {
           attributes: {
             agentId: 'agent-123',
             instructions: 'Test agent',
-          } as any,
+          },
         });
 
         // Update span with non-standard field that should be filtered
@@ -289,12 +279,12 @@ describe('AI Tracing', () => {
         expect(testExporter.events).toHaveLength(3);
 
         // Check that the exported span has filtered attributes
-        const startSpan = testExporter.events[0].span;
+        const startSpan = testExporter.events[0].exportedSpan;
         expect(startSpan.attributes?.['agentId']).toBe('agent-123');
         expect(startSpan.attributes?.['instructions']).toBe('Test agent');
 
         // Check the updated span for the filtered field
-        const updatedSpan = testExporter.events[1].span; // span_updated event
+        const updatedSpan = testExporter.events[1].exportedSpan; // span_updated event
         expect(updatedSpan.attributes?.['apiKey']).toBe('[REDACTED]');
       });
     });

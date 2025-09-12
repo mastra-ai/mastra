@@ -259,6 +259,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           tracingContext: {
             currentSpan: workflowAISpan,
+            isInternal: workflowAISpan?.isInternal,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -458,6 +459,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     if (fn) {
@@ -471,6 +473,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
+          isInternal: sleepSpan?.isInternal,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -571,6 +574,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     if (fn) {
@@ -584,6 +588,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
+          isInternal: sleepUntilSpan?.isInternal,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -657,6 +662,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventName: event,
         timeoutMs: timeout,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     const startTime = Date.now();
@@ -748,9 +754,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attributes: {
         stepId: step.id,
       },
+      isInternal: tracingContext?.isInternal,
     });
-
-    const innerTracingContext: TracingContext = { currentSpan: stepAISpan };
 
     if (!skipEmits) {
       await emitter.emit('watch', {
@@ -839,12 +844,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId,
           resourceId,
           workflowId,
-          mastra: this.mastra ? wrapMastra(this.mastra, innerTracingContext) : undefined,
+          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
           runtimeContext,
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: innerTracingContext,
+          tracingContext: { currentSpan: stepAISpan, isInternal: stepAISpan?.isInternal },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
             if (!step?.id) {
@@ -906,7 +911,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
-            tracingContext,
+            tracingContext: { currentSpan: tracingContext.currentSpan, isInternal: true },
           });
         }
 
@@ -1127,6 +1132,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         branchCount: entry.steps.length,
         parallelSteps: entry.steps.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     let execResults: any;
@@ -1151,6 +1157,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           tracingContext: {
             currentSpan: parallelSpan,
+            isInternal: parallelSpan?.isInternal,
           },
           emitter,
           abortController,
@@ -1248,6 +1255,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attributes: {
         conditionCount: entry.conditions.length,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     let execResults: any;
@@ -1261,6 +1269,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             attributes: {
               conditionIndex: index,
             },
+            isInternal: tracingContext?.isInternal,
           });
 
           try {
@@ -1273,6 +1282,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               runCount: -1,
               tracingContext: {
                 currentSpan: evalSpan,
+                isInternal: evalSpan?.isInternal,
               },
               getInitData: () => stepResults?.input as any,
               getStepResult: (step: any) => {
@@ -1383,6 +1393,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           tracingContext: {
             currentSpan: conditionalSpan,
+            isInternal: conditionalSpan?.isInternal,
           },
           emitter,
           abortController,
@@ -1505,6 +1516,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attributes: {
         loopType: entry.loopType,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     let isTrue = true;
@@ -1525,6 +1537,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevOutput: (result as { output: any }).output,
         tracingContext: {
           currentSpan: loopSpan,
+          isInternal: loopSpan?.isInternal,
         },
         emitter,
         abortController,
@@ -1556,6 +1569,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         attributes: {
           conditionIndex: iteration,
         },
+        isInternal: tracingContext?.isInternal,
       });
 
       isTrue = await condition({
@@ -1567,6 +1581,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runCount: -1,
         tracingContext: {
           currentSpan: evalSpan,
+          isInternal: evalSpan?.isInternal,
         },
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -1679,6 +1694,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         loopType: 'foreach',
         concurrency,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     await emitter.emit('watch', {
@@ -1726,7 +1742,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionContext,
             resume,
             prevOutput: item,
-            tracingContext: { currentSpan: loopSpan },
+            tracingContext: { currentSpan: loopSpan, isInternal: loopSpan?.isInternal },
             emitter,
             abortController,
             runtimeContext,

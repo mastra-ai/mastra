@@ -117,6 +117,14 @@ Create or update ~/.codeium/windsurf/mcp_config.json:
 
 For more installation options visit [https://www.npmjs.com/package/@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server)
 
+### In Claude Code
+
+After installing Claude Code run:
+
+```sh
+claude mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+```
+
 ## Contributing
 
 Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.

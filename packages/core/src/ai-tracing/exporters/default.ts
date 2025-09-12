@@ -4,7 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraStorage } from '../../storage/base';
 import type { AISpanRecord } from '../../storage/types';
 import { AITracingEventType } from '../types';
-import type { AITracingEvent, AITracingExporter, AnyAISpan, TracingStrategy } from '../types';
+import type { AITracingEvent, AITracingExporter, AnyExportedAISpan, TracingStrategy } from '../types';
 
 type InternalAISpanRecord = Omit<AISpanRecord, 'spanId' | 'traceId' | 'createdAt' | 'updatedAt'>;
 
@@ -174,8 +174,8 @@ export class DefaultExporter implements AITracingExporter {
    */
   private handleOutOfOrderUpdate(event: AITracingEvent): void {
     this.logger.warn('Out-of-order span update detected - skipping event', {
-      spanId: event.span.id,
-      traceId: event.span.traceId,
+      spanId: event.exportedSpan.id,
+      traceId: event.exportedSpan.traceId,
       eventType: event.type,
     });
   }
@@ -184,7 +184,7 @@ export class DefaultExporter implements AITracingExporter {
    * Adds an event to the appropriate buffer based on strategy
    */
   private addToBuffer(event: AITracingEvent): void {
-    const spanKey = this.buildSpanKey(event.span.traceId, event.span.id);
+    const spanKey = this.buildSpanKey(event.exportedSpan.traceId, event.exportedSpan.id);
 
     // Set first event time if buffer is empty
     if (this.buffer.totalSize === 0) {
@@ -195,9 +195,9 @@ export class DefaultExporter implements AITracingExporter {
       case AITracingEventType.SPAN_STARTED:
         if (this.resolvedStrategy === 'batch-with-updates') {
           const createRecord = {
-            traceId: event.span.traceId,
-            spanId: event.span.id,
-            ...this.buildCreateRecord(event.span),
+            traceId: event.exportedSpan.traceId,
+            spanId: event.exportedSpan.id,
+            ...this.buildCreateRecord(event.exportedSpan),
             createdAt: new Date(),
             updatedAt: null,
           };
@@ -212,10 +212,10 @@ export class DefaultExporter implements AITracingExporter {
           if (this.buffer.seenSpans.has(spanKey)) {
             // Normal case: create already in buffer
             this.buffer.updates.push({
-              traceId: event.span.traceId,
-              spanId: event.span.id,
+              traceId: event.exportedSpan.traceId,
+              spanId: event.exportedSpan.id,
               updates: {
-                ...this.buildUpdateRecord(event.span),
+                ...this.buildUpdateRecord(event.exportedSpan),
                 updatedAt: new Date(),
               },
               sequenceNumber: this.getNextSequence(spanKey),
@@ -234,20 +234,20 @@ export class DefaultExporter implements AITracingExporter {
           if (this.buffer.seenSpans.has(spanKey)) {
             // Normal case: create already in buffer
             this.buffer.updates.push({
-              traceId: event.span.traceId,
-              spanId: event.span.id,
+              traceId: event.exportedSpan.traceId,
+              spanId: event.exportedSpan.id,
               updates: {
-                ...this.buildUpdateRecord(event.span),
+                ...this.buildUpdateRecord(event.exportedSpan),
                 updatedAt: new Date(),
               },
               sequenceNumber: this.getNextSequence(spanKey),
             });
-          } else if (event.span.isEvent) {
+          } else if (event.exportedSpan.isEvent) {
             // Event-type spans only emit SPAN_ENDED (no prior SPAN_STARTED)
             const createRecord = {
-              traceId: event.span.traceId,
-              spanId: event.span.id,
-              ...this.buildCreateRecord(event.span),
+              traceId: event.exportedSpan.traceId,
+              spanId: event.exportedSpan.id,
+              ...this.buildCreateRecord(event.exportedSpan),
               createdAt: new Date(),
               updatedAt: null,
             };
@@ -261,9 +261,9 @@ export class DefaultExporter implements AITracingExporter {
         } else if (this.resolvedStrategy === 'insert-only') {
           // Only process SPAN_ENDED for insert-only strategy
           const createRecord = {
-            traceId: event.span.traceId,
-            spanId: event.span.id,
-            ...this.buildCreateRecord(event.span),
+            traceId: event.exportedSpan.traceId,
+            spanId: event.exportedSpan.id,
+            ...this.buildCreateRecord(event.exportedSpan),
             createdAt: new Date(),
             updatedAt: null,
           };
@@ -335,7 +335,7 @@ export class DefaultExporter implements AITracingExporter {
    * Serializes span attributes to storage record format
    * Handles all AI span types and their specific attributes
    */
-  private serializeAttributes(span: AnyAISpan): Record<string, any> | null {
+  private serializeAttributes(span: AnyExportedAISpan): Record<string, any> | null {
     if (!span.attributes) {
       return null;
     }
@@ -368,9 +368,9 @@ export class DefaultExporter implements AITracingExporter {
     }
   }
 
-  private buildCreateRecord(span: AnyAISpan): InternalAISpanRecord {
+  private buildCreateRecord(span: AnyExportedAISpan): InternalAISpanRecord {
     return {
-      parentSpanId: span.parent?.id ?? null,
+      parentSpanId: span.parentSpanId ?? null,
       name: span.name,
       scope: null,
       spanType: span.type,
@@ -386,7 +386,7 @@ export class DefaultExporter implements AITracingExporter {
     };
   }
 
-  private buildUpdateRecord(span: AnyAISpan): Partial<InternalAISpanRecord> {
+  private buildUpdateRecord(span: AnyExportedAISpan): Partial<InternalAISpanRecord> {
     return {
       name: span.name,
       scope: null,
@@ -404,7 +404,7 @@ export class DefaultExporter implements AITracingExporter {
    * Handles realtime strategy - processes each event immediately
    */
   private async handleRealtimeEvent(event: AITracingEvent, storage: MastraStorage): Promise<void> {
-    const span = event.span;
+    const span = event.exportedSpan;
 
     // Event spans only have an end event
     if (span.isEvent) {

@@ -4,7 +4,7 @@ import { EntryListItem } from './entry-list-item';
 import { getColumnTemplate, type Column } from './shared';
 
 import { cn } from '@/lib/utils';
-import { isValidElement } from 'react';
+import React, { isValidElement } from 'react';
 
 export function EntryList({
   items: dataItems,
@@ -103,13 +103,14 @@ export function EntryList({
                   columns={columns}
                   isLoading={isLoading}
                 >
-                  {(columns || []).map(col => {
+                  {(columns || []).map((col, index) => {
                     const isValidReactElement = isValidElement(item?.[col.name]);
+                    const key = `${index}-${item.id}`;
 
                     return isValidReactElement ? (
-                      item?.[col.name]
+                      <React.Fragment key={key}>{item?.[col.name]}</React.Fragment>
                     ) : (
-                      <EntryListTextCell key={col.name} isLoading={isLoading}>
+                      <EntryListTextCell key={key} isLoading={isLoading}>
                         {item?.[col.name]}
                       </EntryListTextCell>
                     );
