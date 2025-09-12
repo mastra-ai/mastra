@@ -76,13 +76,15 @@ export async function generateSpeechHandler({
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-    const audioStream = await voice.speak(body!.text!, { speaker: body!.speakerId! }).catch(err => {
-      if (err instanceof MastraError) {
-        throw new HTTPException(400, { message: err.message });
-      }
+    const audioStream = await Promise.resolve()
+      .then(() => voice.speak(body!.text!, { speaker: body!.speakerId! }))
+      .catch((err) => {
+        if (err instanceof MastraError) {
+          throw new HTTPException(400, { message: err.message });
+        }
 
-      throw err;
-    });
+        throw err;
+      });
 
     if (!audioStream) {
       throw new HTTPException(500, { message: 'Failed to generate speech' });
