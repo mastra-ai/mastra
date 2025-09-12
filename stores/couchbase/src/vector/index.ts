@@ -13,7 +13,7 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
-import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
+import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch, SearchQuery } from 'couchbase';
 import type { CouchbaseVectorFilter } from './filters/filter';
 import { CouchbaseFilterTranslator } from './filters/filter';
 
@@ -835,11 +835,7 @@ class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
         },
       };
 
-      const results = await this.scope.search(
-        indexName,
-        SearchRequest.create(VectorSearch.fromVectorQuery(VectorQuery.create('embedding', queryVector))),
-        searchOptions,
-      );
+      const results = await this.scope.search(indexName, SearchRequest.create(SearchQuery.matchNone()), searchOptions);
 
       if (includeVector) {
         throw new Error('Including vectors in search results is not yet supported by the CouchbaseSearchStore');

@@ -118,6 +118,7 @@ const mockVectorQueryCreateFn = vi.hoisted(() =>
     numCandidates: mockNumCandidatesFn,
   }),
 );
+const mockSearchQueryMatchNoneFn = vi.hoisted(() => vi.fn().mockReturnValue('mockMatchNoneQuery'));
 
 const mockFilterTranslator = vi.hoisted(() => ({
   translate: vi.fn().mockImplementation(filter => {
@@ -151,6 +152,9 @@ vi.mock('couchbase', () => {
     },
     VectorQuery: {
       create: mockVectorQueryCreateFn,
+    },
+    SearchQuery: {
+      matchNone: mockSearchQueryMatchNoneFn,
     },
   };
 });
@@ -463,14 +467,9 @@ describe('Unit Testing CouchbaseSearchStore', () => {
       expect(mockGetIndexFn).toHaveBeenCalledWith(test_indexName);
       expect(mockGetIndexFn).toHaveResolved();
 
+      expect(mockSearchQueryMatchNoneFn).toHaveBeenCalledTimes(1);
       expect(mockSearchRequestCreateFn).toHaveBeenCalledTimes(1);
-      expect(mockSearchRequestCreateFn).toHaveBeenCalledWith('mockVectorSearch');
-
-      expect(mockVectorSearchFn).toHaveBeenCalledTimes(1);
-      expect(mockVectorSearchFn).toHaveBeenCalledWith({ numCandidates: expect.any(Function) });
-
-      expect(mockVectorQueryCreateFn).toHaveBeenCalledTimes(1);
-      expect(mockVectorQueryCreateFn).toHaveBeenCalledWith('embedding', queryVector);
+      expect(mockSearchRequestCreateFn).toHaveBeenCalledWith('mockMatchNoneQuery');
 
       expect(mockScopeSearchFn).toHaveBeenCalledTimes(1);
       expect(mockScopeSearchFn).toHaveBeenCalledWith(test_indexName, 'mockRequest', {
@@ -522,6 +521,10 @@ describe('Unit Testing CouchbaseSearchStore', () => {
         topK,
         filter,
       });
+
+      expect(mockSearchQueryMatchNoneFn).toHaveBeenCalledTimes(2);
+      expect(mockSearchRequestCreateFn).toHaveBeenCalledTimes(1);
+      expect(mockSearchRequestCreateFn).toHaveBeenCalledWith('mockMatchNoneQuery');
 
       expect(mockScopeSearchFn).toHaveBeenCalledTimes(1);
       expect(mockScopeSearchFn).toHaveBeenCalledWith(test_indexName, 'mockRequest', {
@@ -638,6 +641,9 @@ describe('Unit Testing CouchbaseSearchStore', () => {
     });
 
     it('should throw error when includeVector is true in query', async () => {
+      // Mock the SearchQuery.matchNone function to reset its call count
+      mockSearchQueryMatchNoneFn.mockClear();
+
       await expect(
         couchbase_client.query({
           indexName: test_indexName,
@@ -645,6 +651,9 @@ describe('Unit Testing CouchbaseSearchStore', () => {
           includeVector: true,
         }),
       ).rejects.toThrow('Including vectors in search results is not yet supported by the CouchbaseSearchStore');
+
+      // Verify SearchQuery.matchNone was called
+      expect(mockSearchQueryMatchNoneFn).toHaveBeenCalledTimes(1);
     });
 
     it('should throw error for empty vectors array in upsert', async () => {
