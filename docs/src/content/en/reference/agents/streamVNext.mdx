@@ -143,6 +143,12 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       description: "Array of active tool names that can be used during execution."
     },
     {
+      name: "prepareStep",
+      type: "PrepareStepFunction<any>",
+      isOptional: true,
+      description: "Callback function called before each step of multi-step execution.",
+    },
+    {
       name: "context",
       type: "ModelMessage[]",
       isOptional: true,
@@ -209,13 +215,6 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       description: "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
     },
     {
-      name: "experimental_output",
-      type: "Zod schema | JsonSchema7",
-      isOptional: true,
-      description:
-        "Note, the preferred route is to use the `structuredOutput` property. Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.",
-    },
-    {
       name: "instructions",
       type: "string",
       isOptional: true,
@@ -260,13 +259,6 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
           }]
         }
       ]
-    },
-    {
-      name: "memoryOptions",
-      type: "MemoryConfig",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.options` instead. Configuration options for memory management.",
     },
     {
       name: "onFinish",
@@ -517,12 +509,6 @@ const aiSdkStream = await agent.streamVNext("message for agent", {
       isOptional: true,
       description: "Condition(s) that determine when to stop the agent's execution. Can be a single condition or array of conditions.",
     },
-    {
-      name: "headers",
-      type: "Record<string, string | undefined>",
-      isOptional: true,
-      description: "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
-    }
   ]}
 />
 
