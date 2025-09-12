@@ -94,6 +94,7 @@ export class InngestRun<
     params: {
       workflowId: string;
       runId: string;
+      resourceId?: string;
       executionEngine: ExecutionEngine;
       executionGraph: ExecutionGraph;
       serializedStepGraph: SerializedStepFlowEntry[];
@@ -467,7 +468,10 @@ export class InngestWorkflow<
     return run;
   }
 
-  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+  async createRunAsync(options?: {
+    runId?: string;
+    resourceId?: string;
+  }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -477,6 +481,7 @@ export class InngestWorkflow<
         {
           workflowId: this.id,
           runId: runIdToUse,
+          resourceId: options?.resourceId,
           executionEngine: this.executionEngine,
           executionGraph: this.executionGraph,
           serializedStepGraph: this.serializedStepGraph,
@@ -866,6 +871,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async execute<TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
