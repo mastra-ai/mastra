@@ -57,7 +57,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   toUIMessageStreamResponse<UI_MESSAGE extends UIMessage>({
-    // @ts-ignore
     generateMessageId,
     originalMessages,
     sendFinish,
@@ -71,7 +70,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }: UIMessageStreamOptions<UI_MESSAGE> & ResponseInit = {}) {
     return createUIMessageStreamResponse({
       stream: this.toUIMessageStream({
-        // @ts-ignore
         generateMessageId,
         originalMessages,
         sendFinish,
@@ -87,7 +85,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   }
 
   toUIMessageStream<UI_MESSAGE extends UIMessage>({
-    // @ts-ignore
     generateMessageId,
     originalMessages,
     sendFinish = true,
@@ -98,7 +95,7 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
     messageMetadata,
     onFinish,
   }: UIMessageStreamOptions<UI_MESSAGE> = {}) {
-    const responseMessageId =
+    let responseMessageId =
       generateMessageId != null
         ? getResponseUIMessageId({
             originalMessages,
@@ -111,10 +108,20 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       onFinish,
       generateId: () => responseMessageId ?? generateMessageId?.(),
       execute: async ({ writer }) => {
+        // The messageId is in the step-start chunk from the original stream
+        let extractedMessageId: string | undefined;
+
         for await (const part of this.fullStream) {
           const messageMetadataValue = messageMetadata?.({ part: part as TextStreamPart<ToolSet> });
 
           const partType = part.type;
+
+          if (partType === 'start-step' && 'messageId' in part) {
+            extractedMessageId = (part as any).messageId;
+            if (extractedMessageId && !responseMessageId) {
+              responseMessageId = extractedMessageId;
+            }
+          }
 
           const transformedChunk = convertFullStreamChunkToUIMessageStream<UI_MESSAGE>({
             part: part as TextStreamPart<ToolSet>,

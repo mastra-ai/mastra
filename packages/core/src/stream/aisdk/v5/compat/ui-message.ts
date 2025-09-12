@@ -47,7 +47,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'text-start': {
       return {
         type: 'text-start',
-        id: part.id,
+        id: responseMessageId || part.id,
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
       };
     }
@@ -64,7 +64,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'text-end': {
       return {
         type: 'text-end',
-        id: part.id,
+        id: responseMessageId || part.id,
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
       };
     }
@@ -72,7 +72,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'reasoning-start': {
       return {
         type: 'reasoning-start',
-        id: part.id,
+        id: responseMessageId || part.id,
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
       };
     }
@@ -92,7 +92,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'reasoning-end': {
       return {
         type: 'reasoning-end',
-        id: part.id,
+        id: responseMessageId || part.id,
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
       };
     }

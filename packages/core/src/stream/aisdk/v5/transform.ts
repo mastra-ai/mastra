@@ -326,11 +326,13 @@ export function convertMastraChunkToAISDKv5({
         type: 'start',
       };
     case 'step-start':
-      const { messageId: _messageId, ...rest } = chunk.payload;
+      const { messageId, ...rest } = chunk.payload;
       return {
         type: 'start-step',
         request: rest.request,
         warnings: rest.warnings || [],
+        // Preserve the messageId so it can be used in toUIMessageStream
+        ...(messageId ? { messageId } : {}),
       };
     case 'raw':
       return {
