@@ -1,11 +1,12 @@
 import type { ContextWithMastra } from '@mastra/core/server';
 import type { Next } from 'hono';
 import { defaultAuthConfig } from './defaults';
-import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest } from './helpers';
+import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest, isCustomRoutePublic } from './helpers';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
   const authConfig = mastra.getServer()?.experimental_auth;
+  const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
     // No auth config, skip authentication
@@ -14,6 +15,11 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
   if (isDevPlaygroundRequest(c.req)) {
     // Skip authentication for dev playground requests
+    return next();
+  }
+
+  // Check if this is a custom route that doesn't require auth
+  if (isCustomRoutePublic(c.req.path, c.req.method, customRouteAuthConfig)) {
     return next();
   }
 
@@ -67,6 +73,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
   const authConfig = mastra.getServer()?.experimental_auth;
+  const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
     // No auth config, skip authorization
@@ -78,6 +85,11 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
 
   if (isDevPlaygroundRequest(c.req)) {
     // Skip authorization for dev playground requests
+    return next();
+  }
+
+  // Check if this is a custom route that doesn't require auth
+  if (isCustomRoutePublic(path, method, customRouteAuthConfig)) {
     return next();
   }
 

@@ -9,3 +9,10 @@ export function parseClientRuntimeContext(runtimeContext?: RuntimeContext | Reco
   }
   return undefined;
 }
+
+export function base64RuntimeContext(runtimeContext?: Record<string, any>): string | undefined {
+  if (runtimeContext) {
+    return btoa(JSON.stringify(runtimeContext));
+  }
+  return undefined;
+}

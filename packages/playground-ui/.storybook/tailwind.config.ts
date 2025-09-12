@@ -11,7 +11,6 @@ import {
   Spacings,
   Sizes,
 } from '../src/ds/tokens';
-
 export default {
   darkMode: ['class'],
   content: [
@@ -39,6 +38,7 @@ export default {
       lineHeight: {
         ...LineHeights,
       },
+
       borderRadius: {
         ...BorderRadius,
       },
@@ -61,13 +61,6 @@ export default {
         ...Sizes,
       },
       colors: {
-        ui: {
-          mainBg: 'red',
-          dialogBg: 'blue',
-          primaryBtnBg: 'rgba(255,255,255,0.80)',
-          primaryBtnText: '#000',
-          mainText: 'green',
-        },
         ...Colors,
         ...IconColors,
         ...BorderColors,
@@ -102,7 +95,6 @@ export default {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
-        // Add the missing border class that was causing the error
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -209,9 +201,5 @@ export default {
       },
     },
   },
-  plugins: [
-    require('tailwindcss-animate'),
-    require('@assistant-ui/react/tailwindcss'),
-    require('@assistant-ui/react-markdown/tailwindcss'),
-  ],
+  plugins: [require('tailwindcss-animate')],
 } satisfies Config;

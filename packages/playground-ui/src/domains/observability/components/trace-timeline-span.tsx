@@ -23,6 +23,7 @@ type TraceTimelineSpanProps = {
   isLastChild?: boolean;
   overallLatency?: number;
   overallStartTime?: string;
+  overallEndTime?: string;
 };
 
 export function TraceTimelineSpan({
@@ -33,6 +34,7 @@ export function TraceTimelineSpan({
   isLastChild,
   overallLatency,
   overallStartTime,
+  overallEndTime,
 }: TraceTimelineSpanProps) {
   const { Link } = useLinkComponent();
   const [isHovered, setIsHovered] = useState(false);
@@ -91,7 +93,7 @@ export function TraceTimelineSpan({
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          <div className="text-left text-[0.75rem] relative w-full h-[1.4rem] ">
+          <div className="text-left text-[0.75rem] relative w-full h-[1.4rem] min-w-[6rem]">
             <span
               className={cn(
                 'absolute flex pt-[0.1rem] items-center gap-[0.5rem] text-icon5',

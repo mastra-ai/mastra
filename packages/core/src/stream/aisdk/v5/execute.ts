@@ -127,5 +127,5 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
     },
   });
 
-  return { stream, model };
+  return stream;
 }

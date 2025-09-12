@@ -1,0 +1,35 @@
+---
+title: "Reference: Mastra.setTelemetry() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components."
+---
+
+# Mastra.setTelemetry()
+
+The `.setTelemetry()` method is used to set the telemetry configuration for all components in the Mastra instance. This method accepts a single telemetry configuration object.
+
+## Usage example
+
+```typescript copy
+mastra.setTelemetry({ export: { type: "console" } });
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "telemetry",
+      type: "OtelConfig",
+      description: "The telemetry configuration object to set for all components.",
+    },
+  ]}
+/>
+
+## Returns
+
+This method does not return a value.
+
+## Related
+
+- [Telemetry overview](../../docs/observability/telemetry.mdx)
+- [Telemetry reference](../../reference/observability/telemetry.mdx)

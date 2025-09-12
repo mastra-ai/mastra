@@ -46,6 +46,7 @@ type Variables = {
   taskStore: InMemoryTaskStore;
   playground: boolean;
   isDev: boolean;
+  customRouteAuthConfig?: Map<string, boolean>;
 };
 
 export function getToolExports(tools: Record<string, Function>[]) {
@@ -79,6 +80,19 @@ export async function createHonoServer(
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
   const a2aTaskStore = new InMemoryTaskStore();
+  const routes = server?.apiRoutes;
+
+  // Store custom route auth configurations
+  const customRouteAuthConfig = new Map<string, boolean>();
+
+  if (routes) {
+    for (const route of routes) {
+      // By default, routes require authentication unless explicitly set to false
+      const requiresAuth = route.requiresAuth !== false;
+      const routeKey = `${route.method}:${route.path}`;
+      customRouteAuthConfig.set(routeKey, requiresAuth);
+    }
+  }
 
   // Middleware
   app.use('*', async function setTelemetryInfo(c, next) {
@@ -105,9 +119,10 @@ export async function createHonoServer(
 
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
-  // Add Mastra to context
+  // Configure hono context
   app.use('*', async function setContext(c, next) {
     let runtimeContext = new RuntimeContext();
+    // Parse runtime context from request body and add to context
     if (c.req.method === 'POST' || c.req.method === 'PUT') {
       const contentType = c.req.header('content-type');
       if (contentType?.includes('application/json')) {
@@ -123,12 +138,43 @@ export async function createHonoServer(
       }
     }
 
+    // Parse runtime context from query params and add to context
+    if (c.req.method === 'GET') {
+      try {
+        const encodedRuntimeContext = c.req.query('runtimeContext');
+        if (encodedRuntimeContext) {
+          let parsedRuntimeContext: Record<string, any> | undefined;
+          // Try JSON first
+          try {
+            parsedRuntimeContext = JSON.parse(encodedRuntimeContext);
+          } catch {
+            // Fallback to base64(JSON)
+            try {
+              const json = Buffer.from(encodedRuntimeContext, 'base64').toString('utf-8');
+              parsedRuntimeContext = JSON.parse(json);
+            } catch {
+              // ignore if still invalid
+            }
+          }
+
+          if (parsedRuntimeContext && typeof parsedRuntimeContext === 'object') {
+            runtimeContext = new RuntimeContext([...runtimeContext.entries(), ...Object.entries(parsedRuntimeContext)]);
+          }
+        }
+      } catch {
+        // ignore query parsing errors
+      }
+    }
+
+    // Add relevant contexts to hono context
+
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', options.tools);
     c.set('taskStore', a2aTaskStore);
     c.set('playground', options.playground === true);
     c.set('isDev', options.isDev === true);
+    c.set('customRouteAuthConfig', customRouteAuthConfig);
     return next();
   });
 
@@ -165,8 +211,6 @@ export async function createHonoServer(
     maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
-
-  const routes = server?.apiRoutes;
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
