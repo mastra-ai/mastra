@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import virtual from '@rollup/plugin-virtual';
+import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
-import { globby } from 'globby';
 import type { InputOptions, OutputOptions } from 'rollup';
+import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
@@ -16,7 +17,11 @@ import { writeTelemetryConfig } from '../build/telemetry';
 import { getPackageRootPath } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './workspaceDependencies';
+import {
+  collectTransitiveWorkspaceDependencies,
+  getWorkspaceInformation,
+  packWorkspaceDependencies,
+} from './workspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -114,8 +119,11 @@ export abstract class Bundler extends MastraBundler {
     return await analyzeBundle(
       ([] as string[]).concat(entry),
       mastraFile,
-      join(outputDirectory, this.analyzeOutputDir),
-      'node',
+      {
+        outputDir: join(outputDirectory, this.analyzeOutputDir),
+        projectRoot: outputDirectory,
+        platform: 'node',
+      },
       this.logger,
     );
   }
@@ -162,8 +170,12 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap = false, enableEsmShim = true }: { enableSourcemap?: boolean; enableEsmShim?: boolean } = {},
+    { enableSourcemap = false }: { enableSourcemap?: boolean } = {},
   ) {
+    const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
+    const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
+    const projectRoot = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
+
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
       analyzedBundleInfo,
@@ -171,7 +183,7 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, enableEsmShim },
+      { sourcemap: enableSourcemap, workspaceRoot, projectRoot },
     );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
@@ -196,7 +208,10 @@ export abstract class Bundler extends MastraBundler {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
-      const expandedPaths = await globby(toolPath, {});
+      const expandedPaths = await glob(toolPath, {
+        absolute: true,
+        expandDirectories: false,
+      });
 
       for (const path of expandedPaths) {
         if (await fsExtra.pathExists(path)) {
@@ -227,16 +242,15 @@ export abstract class Bundler extends MastraBundler {
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
-    outputDirectory: string,
+    { projectRoot, outputDirectory }: { projectRoot: string; outputDirectory: string },
     toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
-    this.logger.info('Start bundling Mastra');
-
+    const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
     let sourcemap = false;
 
     try {
-      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+      const bundlerOptions = await getBundlerOptions(mastraEntryFile, analyzeDir);
       sourcemap = !!bundlerOptions?.sourcemap;
     } catch (error) {
       this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
@@ -248,10 +262,12 @@ export abstract class Bundler extends MastraBundler {
       analyzedBundleInfo = await analyzeBundle(
         [serverFile, ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
-        join(outputDirectory, this.analyzeOutputDir),
-        'node',
+        {
+          outputDir: analyzeDir,
+          projectRoot,
+          platform: 'node',
+        },
         this.logger,
-        sourcemap,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

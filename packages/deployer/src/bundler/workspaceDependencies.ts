@@ -1,7 +1,8 @@
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import type { IMastraLogger } from '@mastra/core/logger';
 import slugify from '@sindresorhus/slugify';
-import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
+import * as pkg from 'empathic/package';
+import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
 import { DepsService } from '../services';
 
@@ -17,13 +18,35 @@ type TransitiveDependencyResult = {
 };
 
 /**
- * Creates a map of workspace packages with their metadata for dependency resolution
- * @returns Map of package names to their location, dependencies and version
+ * Create a shared cache for find-workspaces
  */
-export const createWorkspacePackageMap = async () => {
-  // TODO move to our own implementation - pkg is 4 years old
-  const workspaces = await findWorkspaces();
-  const workspaceMap = new Map(
+const workspacesCache = createWorkspacesCache();
+
+/**
+ * A utility function around find-workspaces to get information about:
+ * - Which workspace packages are available in the project
+ * - What is the workspace root location
+ * - Is the current package a workspace package
+ *
+ * Because `findWorkspacesRoot` only traverses up until it finds workspace information, but doesn't check if the current package is even part of the workspace. We rather want to return `null` for these cases because in other code paths we use `workspaceRoot || projectRoot` to determine the root of the project.
+ *
+ * @params dir - The directory to start searching from (default: `process.cwd()`)
+ * @params location - The location of the current package (usually the directory containing the package.json)
+ */
+export async function getWorkspaceInformation({
+  dir = process.cwd(),
+  mastraEntryFile,
+}: {
+  dir?: string;
+  mastraEntryFile: string;
+}) {
+  // 1) Get the location of the current package and its package.json
+  const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
+  const location = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
+
+  // 2) Get all workspaces
+  const workspaces = await findWorkspaces(dir, { cache: workspacesCache });
+  const _workspaceMap = new Map(
     workspaces?.map(workspace => [
       workspace.package.name,
       {
@@ -34,8 +57,19 @@ export const createWorkspacePackageMap = async () => {
     ]) ?? [],
   );
 
-  return workspaceMap;
-};
+  // 3) Check if the current package is part of the workspace
+  const isWorkspacePackage = (workspaces ?? []).some(ws => ws.location === location);
+
+  // 4) Get the workspace root only if the current package is part of the workspace
+  const workspaceRoot = isWorkspacePackage ? findWorkspacesRoot(dir, { cache: workspacesCache })?.location : undefined;
+
+  return {
+    // If the current package is not part of the workspace, the bundling down the line shouldn't look at any workspace packages
+    workspaceMap: isWorkspacePackage ? _workspaceMap : new Map<string, WorkspacePackageInfo>(),
+    workspaceRoot,
+    isWorkspacePackage,
+  };
+}
 
 /**
  * Collects all transitive workspace dependencies and their TGZ paths

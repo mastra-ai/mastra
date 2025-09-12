@@ -42,7 +42,15 @@ export class CloudDeployer extends Deployer {
 
     const defaultToolsPath = join(mastraDir, MASTRA_DIRECTORY, 'tools');
 
-    await this._bundle(this.getEntry(), mastraEntryFile, outputDirectory, [defaultToolsPath]);
+    await this._bundle(
+      this.getEntry(),
+      mastraEntryFile,
+      {
+        outputDirectory,
+        projectRoot: mastraDir,
+      },
+      [defaultToolsPath],
+    );
     process.chdir(currentCwd);
   }
 

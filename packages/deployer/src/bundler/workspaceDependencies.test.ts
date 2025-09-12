@@ -1,12 +1,23 @@
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as pkg from 'empathic/package';
 import type { WorkspacesRoot } from 'find-workspaces';
-import { findWorkspacesRoot } from 'find-workspaces';
+import { findWorkspacesRoot, findWorkspaces } from 'find-workspaces';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DepsService } from '../services';
-import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './workspaceDependencies';
+import {
+  collectTransitiveWorkspaceDependencies,
+  packWorkspaceDependencies,
+  getWorkspaceInformation,
+} from './workspaceDependencies';
 
 vi.mock('find-workspaces', () => ({
   findWorkspacesRoot: vi.fn().mockReturnValue({ location: '/mock-root' }),
+  findWorkspaces: vi.fn(),
+  createWorkspacesCache: vi.fn(),
+}));
+
+vi.mock('empathic/package', () => ({
+  up: vi.fn().mockReturnValue('/workspace/packages/pkg-a/package.json'),
 }));
 
 vi.mock('fs-extra', () => ({
@@ -170,6 +181,102 @@ describe('workspaceDependencies', () => {
           logger: mockLogger,
         }),
       ).rejects.toThrow('Could not find workspace root');
+    });
+  });
+
+  describe('getWorkspaceInformation', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should return workspace information when package is in workspace', async () => {
+      vi.mocked(pkg.up).mockReturnValue('/workspace/packages/pkg-a/package.json');
+      vi.mocked(findWorkspaces).mockResolvedValue([
+        {
+          location: '/workspace/packages/pkg-a',
+          package: { name: 'pkg-a', dependencies: { lodash: '^4.0.0' }, version: '1.0.0' },
+        },
+        {
+          location: '/workspace/packages/pkg-b',
+          package: { name: 'pkg-b', dependencies: {}, version: '2.0.0' },
+        },
+      ]);
+      vi.mocked(findWorkspacesRoot).mockReturnValue({
+        location: '/workspace',
+        globs: ['packages/*'],
+      } as WorkspacesRoot);
+
+      const result = await getWorkspaceInformation({ mastraEntryFile: '/workspace/packages/pkg-a/src/index.ts' });
+
+      expect(result.isWorkspacePackage).toBe(true);
+      expect(result.workspaceRoot).toBe('/workspace');
+      expect(result.workspaceMap.size).toBe(2);
+      expect(result.workspaceMap.get('pkg-a')).toEqual({
+        location: '/workspace/packages/pkg-a',
+        dependencies: { lodash: '^4.0.0' },
+        version: '1.0.0',
+      });
+    });
+
+    it('should return correct info when package is not in workspace', async () => {
+      vi.mocked(pkg.up).mockReturnValue('/external/project/package.json');
+      vi.mocked(findWorkspaces).mockResolvedValue([
+        {
+          location: '/workspace/packages/pkg-a',
+          package: { name: 'pkg-a', dependencies: {}, version: '1.0.0' },
+        },
+      ]);
+
+      const result = await getWorkspaceInformation({ mastraEntryFile: '/external/project/src/index.ts' });
+
+      expect(result.isWorkspacePackage).toBe(false);
+      expect(result.workspaceRoot).toBeUndefined();
+      expect(result.workspaceMap.size).toBe(0);
+    });
+
+    it('should handle no workspaces found', async () => {
+      vi.mocked(pkg.up).mockReturnValue('/project/package.json');
+      vi.mocked(findWorkspaces).mockResolvedValue(null);
+
+      const result = await getWorkspaceInformation({ mastraEntryFile: '/project/src/index.ts' });
+
+      expect(result.workspaceMap.size).toBe(0);
+      expect(result.isWorkspacePackage).toBe(false);
+      expect(result.workspaceRoot).toBeUndefined();
+    });
+
+    it('should handle empty workspaces array', async () => {
+      vi.mocked(pkg.up).mockReturnValue('/project/package.json');
+      vi.mocked(findWorkspaces).mockResolvedValue([]);
+
+      const result = await getWorkspaceInformation({ mastraEntryFile: '/project/src/index.ts' });
+
+      expect(result.workspaceMap.size).toBe(0);
+      expect(result.isWorkspacePackage).toBe(false);
+      expect(result.workspaceRoot).toBeUndefined();
+    });
+
+    it('should handle workspace packages without dependencies', async () => {
+      vi.mocked(pkg.up).mockReturnValue('/workspace/minimal/package.json');
+      vi.mocked(findWorkspaces).mockResolvedValue([
+        {
+          location: '/workspace/minimal',
+          package: { name: 'minimal-pkg', dependencies: undefined, version: undefined },
+        },
+      ]);
+      vi.mocked(findWorkspacesRoot).mockReturnValue({
+        location: '/workspace',
+        globs: ['packages/*'],
+      } as WorkspacesRoot);
+
+      const result = await getWorkspaceInformation({ mastraEntryFile: '/workspace/minimal/index.ts' });
+
+      expect(result.workspaceMap.get('minimal-pkg')).toEqual({
+        location: '/workspace/minimal',
+        dependencies: undefined,
+        version: undefined,
+      });
+      expect(result.isWorkspacePackage).toBe(true);
     });
   });
 });

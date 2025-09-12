@@ -92,11 +92,15 @@ export const HEAD = handle(app);
     );
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
+  async bundle(
+    entryFile: string,
+    outputDirectory: string,
+    { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void> {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      outputDirectory,
+      { outputDirectory, projectRoot },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
