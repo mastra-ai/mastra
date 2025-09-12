@@ -1,6 +1,5 @@
 ---
 "@mastra/core": patch
-"@internal/storage-test-utils": patch
 "@mastra/clickhouse": patch
 "@mastra/cloudflare-d1": patch
 "@mastra/cloudflare": patch
