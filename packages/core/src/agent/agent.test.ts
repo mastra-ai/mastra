@@ -8197,6 +8197,8 @@ describe('Stream ID Consistency', () => {
 });
 
 describe('Agent structuredOutput to output deprecation mapping', () => {
+  const structuredOutputPrompt = 'Extract and structure the key information';
+
   it('should map structuredOutput to output when maxSteps is 1', async () => {
     let structuredOutputProcessorGotCalled = false;
     const mockModel = new MockLanguageModelV2({
@@ -8213,7 +8215,16 @@ describe('Agent structuredOutput to output deprecation mapping', () => {
           warnings: [],
         };
       },
-      doStream: async _options => {
+      doStream: async options => {
+        if (
+          options.prompt.some(
+            p =>
+              Array.isArray(p.content) &&
+              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
+          )
+        ) {
+          structuredOutputProcessorGotCalled = true;
+        }
         return {
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
@@ -8268,7 +8279,7 @@ describe('Agent structuredOutput to output deprecation mapping', () => {
           options.prompt.some(
             p =>
               Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes('Extract and structure the key information')),
+              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
           )
         ) {
           structuredOutputProcessorGotCalled = true;
@@ -8290,7 +8301,7 @@ describe('Agent structuredOutput to output deprecation mapping', () => {
           options.prompt.some(
             p =>
               Array.isArray(p.content) &&
-              p.content.some(c => c.type === 'text' && c.text.includes('Extract and structure the key information')),
+              p.content.some(c => c.type === 'text' && c.text.includes(structuredOutputPrompt)),
           )
         ) {
           structuredOutputProcessorGotCalled = true;
@@ -8390,8 +8401,7 @@ describe('Agent structuredOutput to output deprecation mapping', () => {
         warnings: [],
       }),
 
-      doStream: async options => {
-        console.log(`defaultModel.doStream:`, JSON.stringify(options, null, 2));
+      doStream: async () => {
         defaultModelGotCalled = true;
         return {
           stream: convertArrayToReadableStream([

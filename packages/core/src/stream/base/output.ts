@@ -431,6 +431,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                   if (
                     messagesWithStructuredData[0] &&
+                    // this is to make typescript happy
                     messagesWithStructuredData[0].content.metadata?.structuredOutput
                   ) {
                     const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
