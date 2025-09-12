@@ -42,10 +42,12 @@
   --tag-blue: 211, 69%, 49%;
   --tag-green: 143, 97%, 54%;
   --tag-purple: 286, 38%, 52%;
+  --tag-red: 357, 66%, 64%;
 
   --tag-green-light: 130, 74%, 32%;
   --tag-blue-light: 212, 76%, 46%;
   --tag-purple-light: 282, 66%, 47%;
+  --tag-red-light: 357, 66%, 64%;
 
   --light-color-surface-1: #f0f0f0;
   --light-color-surface-15: #fafafa;
