@@ -42,7 +42,7 @@ export const PROVIDER_REGISTRY = {
       "grok-vision-beta"
     ]
   },
-  "fireworks_ai": {
+  "fireworks-ai": {
     "url": "https://api.fireworks.ai/inference/v1/chat/completions",
     "apiKeyEnvVar": "FIREWORKS_API_KEY",
     "apiKeyHeader": "Authorization",
@@ -196,7 +196,7 @@ export const PROVIDER_REGISTRY = {
       "venice-uncensored"
     ]
   },
-  "github_copilot": {
+  "github-copilot": {
     "url": "https://api.githubcopilot.com/chat/completions",
     "apiKeyEnvVar": "GITHUB_TOKEN",
     "apiKeyHeader": "Authorization",
@@ -347,7 +347,7 @@ export const PROVIDER_REGISTRY = {
       "llama-4-scout-17b-16e-instruct-fp8"
     ]
   },
-  "moonshotai_cn": {
+  "moonshotai-cn": {
     "url": "https://api.moonshot.cn/v1/chat/completions",
     "apiKeyEnvVar": "MOONSHOT_API_KEY",
     "apiKeyHeader": "Authorization",
@@ -570,7 +570,7 @@ export const PROVIDER_REGISTRY = {
       "qwen/qwen3-embedding-4b"
     ]
   },
-  "github_models": {
+  "github-models": {
     "url": "https://models.github.ai/inference/chat/completions",
     "apiKeyEnvVar": "GITHUB_TOKEN",
     "apiKeyHeader": "Authorization",
@@ -847,7 +847,7 @@ export const PROVIDER_MODELS = {
     "grok-beta",
     "grok-vision-beta"
   ],
-  "fireworks_ai": [
+  "fireworks-ai": [
     "accounts/fireworks/gpt-oss-120b",
     "accounts/fireworks/gpt-oss-20b",
     "accounts/fireworks/models/deepseek-r1-0528",
@@ -977,7 +977,7 @@ export const PROVIDER_MODELS = {
     "qwen3-4b",
     "venice-uncensored"
   ],
-  "github_copilot": [
+  "github-copilot": [
     "claude-3.5-sonnet",
     "claude-3.7-sonnet",
     "claude-3.7-sonnet-thought",
@@ -1080,7 +1080,7 @@ export const PROVIDER_MODELS = {
     "llama-4-maverick-17b-128e-instruct-fp8",
     "llama-4-scout-17b-16e-instruct-fp8"
   ],
-  "moonshotai_cn": [
+  "moonshotai-cn": [
     "kimi-k2-0711-preview",
     "kimi-k2-0905-preview",
     "kimi-k2-turbo-preview"
@@ -1237,7 +1237,7 @@ export const PROVIDER_MODELS = {
     "qwen/qwen-2.5-7b-vision-instruct",
     "qwen/qwen3-embedding-4b"
   ],
-  "github_models": [
+  "github-models": [
     "ai21-labs/ai21-jamba-1.5-large",
     "ai21-labs/ai21-jamba-1.5-mini",
     "cohere/cohere-command-a",

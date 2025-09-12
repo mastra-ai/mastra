@@ -95,7 +95,7 @@ describe('ModelsDevGateway', () => {
 
       // cerebras and fireworks-ai use @ai-sdk/openai-compatible
       expect(providers.cerebras).toBeDefined();
-      expect(providers.fireworks_ai).toBeDefined(); // Note: hyphens converted to underscores
+      expect(providers['fireworks-ai']).toBeDefined(); // Provider IDs keep hyphens
       expect(providers.cerebras.url).toBe('https://api.cerebras.ai/v1/chat/completions');
     });
 
@@ -116,7 +116,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.anthropic.apiKeyHeader).toBe('x-api-key');
     });
 
-    it('should normalize provider IDs (convert hyphens to underscores)', async () => {
+    it('should keep hyphens in provider IDs', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockApiResponse,
@@ -124,10 +124,11 @@ describe('ModelsDevGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // fireworks-ai should become fireworks_ai
-      expect(providers['fireworks-ai']).toBeUndefined();
-      expect(providers.fireworks_ai).toBeDefined();
-      expect(providers.fireworks_ai.name).toBe('Fireworks AI');
+      // fireworks-ai should keep its hyphen
+      expect(providers['fireworks-ai']).toBeDefined();
+      expect(providers['fireworks-ai'].name).toBe('Fireworks AI');
+      // But env var should use underscores
+      expect(providers['fireworks-ai'].apiKeyEnvVar).toBe('FIREWORKS_API_KEY');
     });
 
     it('should extract model IDs from each provider', async () => {
@@ -175,7 +176,7 @@ describe('ModelsDevGateway', () => {
       // All URLs should end with /chat/completions
       expect(providers.openai.url).toMatch(/\/chat\/completions$/);
       expect(providers.anthropic.url).toMatch(/\/chat\/completions$/);
-      expect(providers.fireworks_ai.url).toMatch(/\/chat\/completions$/);
+      expect(providers['fireworks-ai'].url).toMatch(/\/chat\/completions$/);
     });
   });
 
