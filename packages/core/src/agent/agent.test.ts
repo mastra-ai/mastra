@@ -8232,7 +8232,6 @@ describe('Stream ID Consistency', () => {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        console.log('DEBUG: Value from UI stream:', value);
         chunks.push(value);
       }
     } finally {
@@ -8240,11 +8239,9 @@ describe('Stream ID Consistency', () => {
     }
 
     const messages = await mockMemory.getMessages({ threadId });
-    console.log('DEBUG: Messages from memory:', messages);
 
     const assistantMessage = messages.find((m: MastraMessageV1) => m.role === 'assistant');
     const startEvent = chunks.find(chunk => chunk.type === 'text-start');
-    console.log('DEBUG: Start event from UI stream:', startEvent);
 
     expect(assistantMessage?.id).toBe(startEvent?.id);
   });
