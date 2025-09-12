@@ -21,3 +21,4 @@ export type ScoringProperties = {
 };
 
 export type MastraLanguageModel = LanguageModelV1 | LanguageModelV2;
+export type MastraLanguageModelV2 = LanguageModelV2;
