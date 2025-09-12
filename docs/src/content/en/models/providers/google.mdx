@@ -1,0 +1,86 @@
+---
+title: "Google | Models | Mastra"
+description: "Use Google models with Mastra. 12 models available."
+---
+
+# <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
+
+Access 12 Google models through Mastra's model router. Authentication is handled automatically using the `GOOGLE_GENERATIVE_AI_API_KEY` environment variable.
+
+Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/pricing).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "google/gemini-1.5-flash"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://generativelanguage.googleapis.com/v1beta/chat/completions",
+    modelId: "gemini-1.5-flash",
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "google/gemini-1.5-flash"
+      : "google/gemini-1.5-flash-8b";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `google/gemini-1.5-flash` |
+| `google/gemini-1.5-flash-8b` |
+| `google/gemini-1.5-pro` |
+| `google/gemini-2.0-flash` |
+| `google/gemini-2.0-flash-lite` |
+| `google/gemini-2.5-flash` |
+| `google/gemini-2.5-flash-lite-preview-06-17` |
+| `google/gemini-2.5-flash-preview-04-17` |
+| `google/gemini-2.5-flash-preview-05-20` |
+| `google/gemini-2.5-pro` |
+| `google/gemini-2.5-pro-preview-05-06` |
+| `google/gemini-2.5-pro-preview-06-05` |

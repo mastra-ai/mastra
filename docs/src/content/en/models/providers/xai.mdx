@@ -1,0 +1,91 @@
+---
+title: "xAI | Models | Mastra"
+description: "Use xAI models with Mastra. 17 models available."
+---
+
+# <img src="https://models.dev/logos/xai.svg" alt="xAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />xAI
+
+Access 17 xAI models through Mastra's model router. Authentication is handled automatically using the `XAI_API_KEY` environment variable.
+
+Learn more in the [xAI documentation](https://docs.x.ai/docs/models).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "xai/grok-2"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+XAI_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.x.ai/v1/chat/completions",
+    modelId: "grok-2",
+    apiKey: process.env.XAI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "xai/grok-2"
+      : "xai/grok-2-1212";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `xai/grok-2` |
+| `xai/grok-2-1212` |
+| `xai/grok-2-latest` |
+| `xai/grok-2-vision` |
+| `xai/grok-2-vision-1212` |
+| `xai/grok-2-vision-latest` |
+| `xai/grok-3` |
+| `xai/grok-3-fast` |
+| `xai/grok-3-fast-latest` |
+| `xai/grok-3-latest` |
+| `xai/grok-3-mini` |
+| `xai/grok-3-mini-fast` |
+| `xai/grok-3-mini-fast-latest` |
+| `xai/grok-3-mini-latest` |
+| `xai/grok-4` |
+| `xai/grok-beta` |
+| `xai/grok-vision-beta` |

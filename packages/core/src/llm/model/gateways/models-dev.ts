@@ -8,6 +8,7 @@ interface ModelsDevProviderInfo {
   env?: string[]; // Array of env var names
   api?: string; // Base API URL
   npm?: string; // NPM package name
+  doc?: string; // Documentation URL
 }
 
 interface ModelsDevResponse {
@@ -122,6 +123,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
           models: modelIds,
+          docUrl: providerInfo.doc, // Include documentation URL if available
         };
       } else {
         console.info(`Skipped provider ${providerInfo.name}`);

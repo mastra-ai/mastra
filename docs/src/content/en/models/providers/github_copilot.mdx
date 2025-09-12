@@ -1,0 +1,90 @@
+---
+title: "GitHub Copilot | Models | Mastra"
+description: "Use GitHub Copilot models with Mastra. 16 models available."
+---
+
+# <img src="https://models.dev/logos/github_copilot.svg" alt="GitHub Copilot logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GitHub Copilot
+
+Access 16 GitHub Copilot models through Mastra's model router. Authentication is handled automatically using the `GITHUB_TOKEN` environment variable.
+
+Learn more in the [GitHub Copilot documentation](https://docs.github.com/en/copilot).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "github_copilot/claude-3.5-sonnet"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+GITHUB_TOKEN=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.githubcopilot.com/chat/completions",
+    modelId: "claude-3.5-sonnet",
+    apiKey: process.env.GITHUB_TOKEN,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "github_copilot/claude-3.5-sonnet"
+      : "github_copilot/claude-3.7-sonnet";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `github_copilot/claude-3.5-sonnet` |
+| `github_copilot/claude-3.7-sonnet` |
+| `github_copilot/claude-3.7-sonnet-thought` |
+| `github_copilot/claude-opus-4` |
+| `github_copilot/claude-opus-41` |
+| `github_copilot/claude-sonnet-4` |
+| `github_copilot/gemini-2.0-flash-001` |
+| `github_copilot/gemini-2.5-pro` |
+| `github_copilot/gpt-4.1` |
+| `github_copilot/gpt-4o` |
+| `github_copilot/gpt-5` |
+| `github_copilot/gpt-5-mini` |
+| `github_copilot/grok-code-fast-1` |
+| `github_copilot/o3` |
+| `github_copilot/o3-mini` |
+| `github_copilot/o4-mini` |

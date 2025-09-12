@@ -1,0 +1,83 @@
+---
+title: "submodel | Models | Mastra"
+description: "Use submodel models with Mastra. 9 models available."
+---
+
+# <img src="https://models.dev/logos/submodel.svg" alt="submodel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />submodel
+
+Access 9 submodel models through Mastra's model router. Authentication is handled automatically using the `SUBMODEL_INSTAGEN_ACCESS_KEY` environment variable.
+
+Learn more in the [submodel documentation](https://submodel.gitbook.io).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://llm.submodel.ai/v1/chat/completions",
+    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    apiKey: process.env.SUBMODEL_INSTAGEN_ACCESS_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507"
+      : "submodel/Qwen/Qwen3-235B-A22B-Thinking-2507";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `submodel/Qwen/Qwen3-235B-A22B-Instruct-2507` |
+| `submodel/Qwen/Qwen3-235B-A22B-Thinking-2507` |
+| `submodel/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` |
+| `submodel/deepseek-ai/DeepSeek-R1-0528` |
+| `submodel/deepseek-ai/DeepSeek-V3-0324` |
+| `submodel/deepseek-ai/DeepSeek-V3.1` |
+| `submodel/openai/gpt-oss-120b` |
+| `submodel/zai-org/GLM-4.5-Air` |
+| `submodel/zai-org/GLM-4.5-FP8` |

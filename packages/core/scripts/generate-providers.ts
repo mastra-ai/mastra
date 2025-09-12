@@ -89,6 +89,7 @@ export interface ProviderConfig {
   apiKeyHeader?: string;
   name: string;
   models: readonly string[];
+  docUrl?: string;
 }
 
 /**

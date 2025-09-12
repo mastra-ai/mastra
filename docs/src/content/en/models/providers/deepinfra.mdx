@@ -1,0 +1,78 @@
+---
+title: "Deep Infra | Models | Mastra"
+description: "Use Deep Infra models with Mastra. 4 models available."
+---
+
+# <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
+
+Access 4 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+
+Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+DEEPINFRA_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.deepinfra.com/v1/openai/chat/completions",
+    modelId: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    apiKey: process.env.DEEPINFRA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
+      : "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct` |
+| `deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` |
+| `deepinfra/moonshotai/Kimi-K2-Instruct` |
+| `deepinfra/zai-org/GLM-4.5` |

@@ -1,0 +1,93 @@
+---
+title: "Synthetic | Models | Mastra"
+description: "Use Synthetic models with Mastra. 19 models available."
+---
+
+# <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
+
+Access 19 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+
+Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Configuration
+
+```bash
+SYNTHETIC_API_KEY=your-api-key
+```
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.synthetic.new/v1/chat/completions",
+    modelId: "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
+    apiKey: process.env.SYNTHETIC_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct"
+      : "synthetic/hf:Qwen/Qwen3-235B-A22B-Instruct-2507";
+  }
+});
+```
+
+## Available Models
+
+| Model |
+|-------|
+| `synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct` |
+| `synthetic/hf:Qwen/Qwen3-235B-A22B-Instruct-2507` |
+| `synthetic/hf:Qwen/Qwen3-235B-A22B-Thinking-2507` |
+| `synthetic/hf:Qwen/Qwen3-Coder-480B-A35B-Instruct` |
+| `synthetic/hf:deepseek-ai/DeepSeek-R1` |
+| `synthetic/hf:deepseek-ai/DeepSeek-R1-0528` |
+| `synthetic/hf:deepseek-ai/DeepSeek-V3` |
+| `synthetic/hf:deepseek-ai/DeepSeek-V3-0324` |
+| `synthetic/hf:deepseek-ai/DeepSeek-V3.1` |
+| `synthetic/hf:meta-llama/Llama-3.1-405B-Instruct` |
+| `synthetic/hf:meta-llama/Llama-3.1-70B-Instruct` |
+| `synthetic/hf:meta-llama/Llama-3.1-8B-Instruct` |
+| `synthetic/hf:meta-llama/Llama-3.3-70B-Instruct` |
+| `synthetic/hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8` |
+| `synthetic/hf:meta-llama/Llama-4-Scout-17B-16E-Instruct` |
+| `synthetic/hf:moonshotai/Kimi-K2-Instruct` |
+| `synthetic/hf:moonshotai/Kimi-K2-Instruct-0905` |
+| `synthetic/hf:openai/gpt-oss-120b` |
+| `synthetic/hf:zai-org/GLM-4.5` |

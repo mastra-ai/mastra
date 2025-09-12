@@ -15,7 +15,8 @@ export const PROVIDER_REGISTRY = {
     "models": [
       "deepseek-chat",
       "deepseek-reasoner"
-    ]
+    ],
+    "docUrl": "https://platform.deepseek.com/api-docs/pricing"
   },
   "xai": {
     "url": "https://api.x.ai/v1/chat/completions",
@@ -40,7 +41,8 @@ export const PROVIDER_REGISTRY = {
       "grok-4",
       "grok-beta",
       "grok-vision-beta"
-    ]
+    ],
+    "docUrl": "https://docs.x.ai/docs/models"
   },
   "fireworks_ai": {
     "url": "https://api.fireworks.ai/inference/v1/chat/completions",
@@ -58,7 +60,8 @@ export const PROVIDER_REGISTRY = {
       "accounts/fireworks/models/kimi-k2-instruct",
       "accounts/fireworks/models/qwen3-235b-a22b",
       "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
-    ]
+    ],
+    "docUrl": "https://fireworks.ai/docs/"
   },
   "openrouter": {
     "url": "https://openrouter.ai/api/v1/chat/completions",
@@ -162,7 +165,8 @@ export const PROVIDER_REGISTRY = {
       "z-ai/glm-4.5-air",
       "z-ai/glm-4.5-air:free",
       "z-ai/glm-4.5v"
-    ]
+    ],
+    "docUrl": "https://openrouter.ai/models"
   },
   "cerebras": {
     "url": "https://api.cerebras.ai/v1/chat/completions",
@@ -173,7 +177,8 @@ export const PROVIDER_REGISTRY = {
       "gpt-oss-120b",
       "qwen-3-235b-a22b-instruct-2507",
       "qwen-3-coder-480b"
-    ]
+    ],
+    "docUrl": "https://inference-docs.cerebras.ai/models/overview"
   },
   "venice": {
     "url": "https://api.venice.ai/api/v1/chat/completions",
@@ -194,7 +199,8 @@ export const PROVIDER_REGISTRY = {
       "qwen3-235b",
       "qwen3-4b",
       "venice-uncensored"
-    ]
+    ],
+    "docUrl": "https://docs.venice.ai"
   },
   "github_copilot": {
     "url": "https://api.githubcopilot.com/chat/completions",
@@ -218,7 +224,8 @@ export const PROVIDER_REGISTRY = {
       "o3",
       "o3-mini",
       "o4-mini"
-    ]
+    ],
+    "docUrl": "https://docs.github.com/en/copilot"
   },
   "submodel": {
     "url": "https://llm.submodel.ai/v1/chat/completions",
@@ -235,7 +242,8 @@ export const PROVIDER_REGISTRY = {
       "openai/gpt-oss-120b",
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
-    ]
+    ],
+    "docUrl": "https://submodel.gitbook.io"
   },
   "anthropic": {
     "url": "https://api.anthropic.com/v1/chat/completions",
@@ -253,7 +261,8 @@ export const PROVIDER_REGISTRY = {
       "claude-opus-4-1-20250805",
       "claude-opus-4-20250514",
       "claude-sonnet-4-20250514"
-    ]
+    ],
+    "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models"
   },
   "alibaba": {
     "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
@@ -262,7 +271,8 @@ export const PROVIDER_REGISTRY = {
     "name": "Alibaba",
     "models": [
       "qwen3-coder-plus"
-    ]
+    ],
+    "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models"
   },
   "openai": {
     "url": "https://api.openai.com/v1/chat/completions",
@@ -293,7 +303,8 @@ export const PROVIDER_REGISTRY = {
       "o3-pro",
       "o4-mini",
       "o4-mini-deep-research"
-    ]
+    ],
+    "docUrl": "https://platform.openai.com/docs/models"
   },
   "mistral": {
     "url": "https://api.mistral.ai/v1/chat/completions",
@@ -320,7 +331,8 @@ export const PROVIDER_REGISTRY = {
       "open-mixtral-8x7b",
       "pixtral-12b",
       "pixtral-large-latest"
-    ]
+    ],
+    "docUrl": "https://docs.mistral.ai/getting-started/models/"
   },
   "upstage": {
     "url": "https://api.upstage.ai/chat/completions",
@@ -330,7 +342,8 @@ export const PROVIDER_REGISTRY = {
     "models": [
       "solar-mini",
       "solar-pro2"
-    ]
+    ],
+    "docUrl": "https://developers.upstage.ai/docs/apis/chat"
   },
   "llama": {
     "url": "https://api.llama.com/compat/v1/chat/completions",
@@ -345,7 +358,8 @@ export const PROVIDER_REGISTRY = {
       "llama-3.3-8b-instruct",
       "llama-4-maverick-17b-128e-instruct-fp8",
       "llama-4-scout-17b-16e-instruct-fp8"
-    ]
+    ],
+    "docUrl": "https://llama.developer.meta.com/docs/models"
   },
   "moonshotai_cn": {
     "url": "https://api.moonshot.cn/v1/chat/completions",
@@ -356,7 +370,8 @@ export const PROVIDER_REGISTRY = {
       "kimi-k2-0711-preview",
       "kimi-k2-0905-preview",
       "kimi-k2-turbo-preview"
-    ]
+    ],
+    "docUrl": "https://platform.moonshot.cn/docs/api/chat"
   },
   "deepinfra": {
     "url": "https://api.deepinfra.com/v1/openai/chat/completions",
@@ -368,7 +383,8 @@ export const PROVIDER_REGISTRY = {
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
       "moonshotai/Kimi-K2-Instruct",
       "zai-org/GLM-4.5"
-    ]
+    ],
+    "docUrl": "https://deepinfra.com/models"
   },
   "zhipuai": {
     "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
@@ -380,7 +396,8 @@ export const PROVIDER_REGISTRY = {
       "glm-4.5-air",
       "glm-4.5-flash",
       "glm-4.5v"
-    ]
+    ],
+    "docUrl": "https://docs.z.ai/guides/overview/pricing"
   },
   "synthetic": {
     "url": "https://api.synthetic.new/v1/chat/completions",
@@ -407,7 +424,8 @@ export const PROVIDER_REGISTRY = {
       "hf:moonshotai/Kimi-K2-Instruct-0905",
       "hf:openai/gpt-oss-120b",
       "hf:zai-org/GLM-4.5"
-    ]
+    ],
+    "docUrl": "https://synthetic.new/pricing"
   },
   "modelscope": {
     "url": "https://api-inference.modelscope.cn/v1/chat/completions",
@@ -423,7 +441,8 @@ export const PROVIDER_REGISTRY = {
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
       "ZhipuAI/GLM-4.5",
       "moonshotai/Kimi-K2-Instruct"
-    ]
+    ],
+    "docUrl": "https://modelscope.cn/docs/model-service/API-Inference/intro"
   },
   "baseten": {
     "url": "https://inference.baseten.co/v1/chat/completions",
@@ -433,7 +452,8 @@ export const PROVIDER_REGISTRY = {
     "models": [
       "Moonshotai-Kimi-K2-Instruct-0905",
       "Qwen-Qwen3-Coder-480B-A35B-Instruct"
-    ]
+    ],
+    "docUrl": "https://docs.baseten.co/development/model-apis/overview"
   },
   "vercel": {
     "url": "https://ai-gateway.vercel.sh/v1/chat/completions",
@@ -499,7 +519,8 @@ export const PROVIDER_REGISTRY = {
       "xai/grok-3-mini",
       "xai/grok-3-mini-fast",
       "xai/grok-4"
-    ]
+    ],
+    "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway"
   },
   "google": {
     "url": "https://generativelanguage.googleapis.com/v1beta/chat/completions",
@@ -519,7 +540,8 @@ export const PROVIDER_REGISTRY = {
       "gemini-2.5-pro",
       "gemini-2.5-pro-preview-05-06",
       "gemini-2.5-pro-preview-06-05"
-    ]
+    ],
+    "docUrl": "https://ai.google.dev/gemini-api/docs/pricing"
   },
   "togetherai": {
     "url": "https://api.together.xyz/v1/chat/completions",
@@ -533,7 +555,8 @@ export const PROVIDER_REGISTRY = {
       "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       "moonshotai/Kimi-K2-Instruct",
       "openai/gpt-oss-120b"
-    ]
+    ],
+    "docUrl": "https://docs.together.ai/docs/serverless-models"
   },
   "wandb": {
     "url": "https://api.inference.wandb.ai/v1/chat/completions",
@@ -551,7 +574,8 @@ export const PROVIDER_REGISTRY = {
       "meta-llama/Llama-4-Scout-17B-16E-Instruct",
       "microsoft/Phi-4-mini-instruct",
       "moonshotai/Kimi-K2-Instruct"
-    ]
+    ],
+    "docUrl": "https://weave-docs.wandb.ai/guides/integrations/inference/"
   },
   "inference": {
     "url": "https://inference.net/v1/chat/completions",
@@ -568,7 +592,8 @@ export const PROVIDER_REGISTRY = {
       "osmosis/osmosis-structure-0.6b",
       "qwen/qwen-2.5-7b-vision-instruct",
       "qwen/qwen3-embedding-4b"
-    ]
+    ],
+    "docUrl": "https://inference.net/models"
   },
   "github_models": {
     "url": "https://models.github.ai/inference/chat/completions",
@@ -631,7 +656,8 @@ export const PROVIDER_REGISTRY = {
       "openai/o4-mini",
       "xai/grok-3",
       "xai/grok-3-mini"
-    ]
+    ],
+    "docUrl": "https://docs.github.com/en/github-models"
   },
   "opencode": {
     "url": "https://opencode.ai/zen/v1/chat/completions",
@@ -646,7 +672,8 @@ export const PROVIDER_REGISTRY = {
       "grok-code",
       "kimi-k2",
       "qwen3-coder"
-    ]
+    ],
+    "docUrl": "https://opencode.ai/docs"
   },
   "nvidia": {
     "url": "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -668,7 +695,8 @@ export const PROVIDER_REGISTRY = {
       "qwen3-235b-a22b",
       "qwen3-coder-480b-a35b-instruct",
       "whisper-large-v3"
-    ]
+    ],
+    "docUrl": "https://docs.api.nvidia.com/nim/"
   },
   "huggingface": {
     "url": "https://router.huggingface.co/v1/chat/completions",
@@ -683,7 +711,8 @@ export const PROVIDER_REGISTRY = {
       "moonshotai/Kimi-K2-Instruct",
       "zai-org/GLM-4.5",
       "zai-org/GLM-4.5-Air"
-    ]
+    ],
+    "docUrl": "https://huggingface.co/docs/inference-providers"
   },
   "inception": {
     "url": "https://api.inceptionlabs.ai/v1/chat/completions",
@@ -693,7 +722,8 @@ export const PROVIDER_REGISTRY = {
     "models": [
       "mercury",
       "mercury-coder"
-    ]
+    ],
+    "docUrl": "https://platform.inceptionlabs.ai/docs"
   },
   "groq": {
     "url": "https://api.groq.com/openai/v1/chat/completions",
@@ -718,7 +748,8 @@ export const PROVIDER_REGISTRY = {
       "openai/gpt-oss-20b",
       "qwen-qwq-32b",
       "qwen/qwen3-32b"
-    ]
+    ],
+    "docUrl": "https://console.groq.com/docs/models"
   },
   "chutes": {
     "url": "https://llm.chutes.ai/v1/chat/completions",
@@ -749,7 +780,8 @@ export const PROVIDER_REGISTRY = {
       "tngtech/DeepSeek-TNG-R1T2-Chimera",
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
-    ]
+    ],
+    "docUrl": "https://llm.chutes.ai/v1/models"
   },
   "lmstudio": {
     "url": "http://127.0.0.1:1234/v1/chat/completions",
@@ -760,7 +792,8 @@ export const PROVIDER_REGISTRY = {
       "openai/gpt-oss-20b",
       "qwen/qwen3-30b-a3b-2507",
       "qwen/qwen3-coder-30b"
-    ]
+    ],
+    "docUrl": "https://lmstudio.ai/models"
   },
   "zai": {
     "url": "https://api.z.ai/api/paas/v4/chat/completions",
@@ -772,7 +805,8 @@ export const PROVIDER_REGISTRY = {
       "glm-4.5-air",
       "glm-4.5-flash",
       "glm-4.5v"
-    ]
+    ],
+    "docUrl": "https://docs.z.ai/guides/overview/pricing"
   },
   "fastrouter": {
     "url": "https://go.fastrouter.ai/api/v1/chat/completions",
@@ -794,7 +828,8 @@ export const PROVIDER_REGISTRY = {
       "openai/gpt-oss-20b",
       "qwen/qwen3-coder",
       "x-ai/grok-4"
-    ]
+    ],
+    "docUrl": "https://fastrouter.ai/models"
   },
   "morph": {
     "url": "https://api.morphllm.com/v1/chat/completions",
@@ -805,7 +840,8 @@ export const PROVIDER_REGISTRY = {
       "auto",
       "morph-v3-fast",
       "morph-v3-large"
-    ]
+    ],
+    "docUrl": "https://docs.morphllm.com/api-reference/introduction"
   },
   "moonshotai": {
     "url": "https://api.moonshot.ai/v1/chat/completions",
@@ -816,7 +852,8 @@ export const PROVIDER_REGISTRY = {
       "kimi-k2-0711-preview",
       "kimi-k2-0905-preview",
       "kimi-k2-turbo-preview"
-    ]
+    ],
+    "docUrl": "https://platform.moonshot.ai/docs/api/chat"
   },
   "netlify/anthropic": {
     "url": "https://api.netlify.com/api/v1/ai-gateway/anthropic/chat/completions",
@@ -1541,6 +1578,7 @@ export interface ProviderConfig {
   apiKeyHeader?: string;
   name: string;
   models: readonly string[];
+  docUrl?: string;
 }
 
 /**
