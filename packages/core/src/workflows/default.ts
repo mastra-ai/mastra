@@ -831,6 +831,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
+        const inputSchema = step.inputSchema;
+
+        const validatedInput = await inputSchema.safeParseAsync(prevOutput);
+
+        if (!validatedInput.success) {
+          throw validatedInput.error;
+        }
+
         const result = await runStep({
           runId,
           workflowId,
