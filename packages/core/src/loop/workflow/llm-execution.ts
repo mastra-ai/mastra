@@ -323,9 +323,6 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
         await options?.onError?.({ error: e });
 
         break;
-      case 'start':
-        controller.enqueue(chunk);
-        break;
       default:
         controller.enqueue(chunk);
     }

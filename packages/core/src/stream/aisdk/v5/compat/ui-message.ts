@@ -202,7 +202,6 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'start': {
-      console.log('start-part', { part, responseMessageId });
       if (sendStart) {
         return {
           type: 'start',

@@ -478,7 +478,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "start",
             },
             {
-              "messageId": "id-0",
               "request": {},
               "type": "start-step",
               "warnings": [],
@@ -540,7 +539,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
             },
             {
-              "messageId": "id-0",
               "request": {},
               "type": "start-step",
               "warnings": [],
@@ -3872,7 +3870,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           type: 'start-step',
           request: {},
           warnings: [],
-          messageId: 'id-0',
         },
         {
           type: 'error',
@@ -6218,7 +6215,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "start",
             },
             {
-              "messageId": "id-0",
               "request": {},
               "type": "start-step",
               "warnings": [],
@@ -6559,7 +6555,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "start",
             },
             {
-              "messageId": "id-0",
               "request": {},
               "type": "start-step",
               "warnings": [],
@@ -6806,7 +6801,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "type": "start",
             },
             {
-              "messageId": "msg-0",
               "request": {},
               "type": "start-step",
               "warnings": [],
@@ -6850,7 +6844,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
             },
             {
-              "messageId": "msg-0",
               "request": {},
               "type": "start-step",
               "warnings": [],

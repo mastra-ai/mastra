@@ -97,7 +97,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "id-0",
             "request": {},
             "type": "start-step",
             "warnings": [],
@@ -219,7 +218,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "id-0",
             "request": {},
             "type": "start-step",
             "warnings": [],
@@ -301,7 +299,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "msg-0",
             "request": {},
             "type": "start-step",
             "warnings": [],
@@ -515,7 +512,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "msg-0",
             "request": {},
             "type": "start-step",
             "warnings": [],
@@ -615,7 +611,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "msg-0",
             "request": {},
             "type": "start-step",
             "warnings": [],
@@ -738,7 +733,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "id-2000",
             "request": {},
             "type": "start-step",
             "warnings": [],
@@ -986,7 +980,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "id-0",
             "request": {},
             "type": "start-step",
             "warnings": [],
@@ -1255,7 +1248,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
             "type": "start",
           },
           {
-            "messageId": "id-0",
             "request": {},
             "type": "start-step",
             "warnings": [],

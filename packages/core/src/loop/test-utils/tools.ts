@@ -950,7 +950,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             "type": "start",
           },
           {
-            "messageId": "msg-0",
             "request": {},
             "type": "start-step",
             "warnings": [],

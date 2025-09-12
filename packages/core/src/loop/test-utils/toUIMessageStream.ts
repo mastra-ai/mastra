@@ -1451,7 +1451,6 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
               "type": "start",
             },
             {
-              "messageId": "id-0",
               "request": {},
               "type": "start-step",
               "warnings": [],

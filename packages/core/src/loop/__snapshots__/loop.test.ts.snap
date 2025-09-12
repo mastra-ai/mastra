@@ -1137,7 +1137,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
     "type": "start",
   },
   {
-    "messageId": "id-0",
     "request": {},
     "type": "start-step",
     "warnings": [],
@@ -1200,7 +1199,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
     "type": "start",
   },
   {
-    "messageId": "id-0",
     "request": {},
     "type": "start-step",
     "warnings": [],
@@ -1257,7 +1255,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
     "type": "start",
   },
   {
-    "messageId": "id-0",
     "request": {},
     "type": "start-step",
     "warnings": [],
@@ -1823,7 +1820,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
     "type": "start",
   },
   {
-    "messageId": "id-0",
     "request": {},
     "type": "start-step",
     "warnings": [],
