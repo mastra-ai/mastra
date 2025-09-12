@@ -16,6 +16,8 @@ import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
 import type { MastraScorer } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
+import { InMemoryServerCache } from '../server-cache';
+import type { MastraServerCache } from '../server-cache';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -57,6 +59,7 @@ export interface Config<
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
   pubsub?: PubSub;
+  serverCache?: MastraServerCache;
   scorers?: TScorers;
 
   /**
@@ -117,6 +120,7 @@ export class Mastra<
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
+  #serverCache?: MastraServerCache;
   #pubsub: PubSub;
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -215,6 +219,14 @@ export class Mastra<
       } else {
         this.#events[topic] = config?.events?.[topic] ?? [];
       }
+    }
+
+    if (config?.serverCache) {
+      this.#serverCache = config.serverCache;
+    } else {
+      this.#serverCache = new InMemoryServerCache({
+        name: 'inmemory',
+      });
     }
 
     const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
@@ -907,6 +919,10 @@ do:
 
   public getServerMiddleware() {
     return this.#serverMiddleware;
+  }
+
+  public getServerCache() {
+    return this.#serverCache;
   }
 
   public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {

@@ -88,6 +88,8 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
             updateUsageCount(chunk.payload.usage);
           } else if (chunk.type === 'workflow-canceled') {
             workflowStatus = 'canceled';
+          } else if (chunk.type === 'workflow-step-suspended') {
+            workflowStatus = 'suspended';
           } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
             workflowStatus = 'failed';
           }
