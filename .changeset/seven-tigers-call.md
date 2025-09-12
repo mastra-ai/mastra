@@ -9,6 +9,7 @@
 "@mastra/mongodb": patch
 "@mastra/mssql": patch
 "@mastra/pg": patch
+"@mastra/upstash": patch
 ---
 
 Add resource id to workflow run snapshots
