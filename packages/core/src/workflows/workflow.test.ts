@@ -511,6 +511,13 @@ describe('Workflow', () => {
           type: 'tool-call-delta',
         },
         {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-finish',
+        },
+        {
           payload: {
             id: 'test-agent-1',
             output: {
@@ -586,6 +593,13 @@ describe('Workflow', () => {
           argsTextDelta: 'London',
           name: 'test-agent-2',
           type: 'tool-call-delta',
+        },
+        {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-finish',
         },
         {
           payload: {
@@ -1541,10 +1555,10 @@ describe('Workflow', () => {
       for await (const value of streamResult) {
         values.push(value);
       }
-      const workflowEvents = values.filter(value => value.from === 'WORKFLOW');
-      const agentEvents = values.filter(value => value.from === 'AGENT');
+      const workflowEvents = values.filter(value => value.type !== 'workflow-step-output');
+      const agentEvents = values.filter(value => value.type === 'workflow-step-output');
 
-      expect(agentEvents.map(event => event.type)).toEqual([
+      expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
         'start',
         'step-start',
         'text-start',
@@ -1647,28 +1661,6 @@ describe('Workflow', () => {
           },
         },
         {
-          type: 'workflow-agent-call-start',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-1',
-            args: {
-              prompt: 'Capital of France, just the name',
-            },
-          },
-        },
-        {
-          type: 'workflow-agent-call-finish',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-1',
-            args: {
-              prompt: 'Capital of France, just the name',
-            },
-          },
-        },
-        {
           type: 'workflow-step-result',
           runId: 'test-run-id',
           from: 'WORKFLOW',
@@ -1722,28 +1714,6 @@ describe('Workflow', () => {
             },
             startedAt: expect.any(Number),
             status: 'running',
-          },
-        },
-        {
-          type: 'workflow-agent-call-start',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-2',
-            args: {
-              prompt: 'Capital of UK, just the name',
-            },
-          },
-        },
-        {
-          type: 'workflow-agent-call-finish',
-          runId: 'test-run-id',
-          from: 'WORKFLOW',
-          payload: {
-            name: 'test-agent-2',
-            args: {
-              prompt: 'Capital of UK, just the name',
-            },
           },
         },
         {

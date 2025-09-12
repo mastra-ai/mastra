@@ -319,37 +319,9 @@ export class InngestRun<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
       try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -743,10 +715,7 @@ export function createStep<
           name: params.name,
           args: inputData,
         };
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-start',
-          payload: toolData,
-        });
+
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
@@ -762,13 +731,24 @@ export function createStep<
           return abort();
         }
 
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...(toolData ?? {}),
+        });
+
         for await (const chunk of fullStream) {
-          await emitter.emit('watch-v2', chunk);
+          if (chunk.type === 'text-delta') {
+            await emitter.emit('watch-v2', {
+              type: 'tool-call-delta',
+              ...(toolData ?? {}),
+              argsTextDelta: chunk.textDelta,
+            });
+          }
         }
 
         await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-finish',
-          payload: toolData,
+          type: 'tool-call-streaming-finish',
+          ...(toolData ?? {}),
         });
 
         return {

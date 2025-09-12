@@ -203,21 +203,6 @@ export type WorkflowStreamEvent =
         resumePayload?: Record<string, any>;
         suspendPayload?: Record<string, any>;
       };
-    }
-  | {
-      type: 'workflow-agent-call-start';
-      payload: {
-        name: string;
-        args: any;
-      };
-    }
-  | {
-      type: 'workflow-agent-call-finish';
-      payload: {
-        name: string;
-        args: any;
-      };
-      args: any;
     };
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
