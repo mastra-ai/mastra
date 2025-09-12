@@ -8239,10 +8239,13 @@ describe('Stream ID Consistency', () => {
     }
 
     const messages = await mockMemory.getMessages({ threadId });
+    console.log('messages', messages);
 
     const assistantMessage = messages.find((m: MastraMessageV1) => m.role === 'assistant');
-    const startEvent = chunks.find(chunk => chunk.type === 'text-start');
+    console.log('assistantMessage', assistantMessage);
+    const startEvent = chunks.find(chunk => chunk.type === 'start');
+    console.log('startEvent', startEvent);
 
-    expect(assistantMessage?.id).toBe(startEvent?.id);
+    expect(assistantMessage?.id).toBe(startEvent?.messageId);
   });
 });

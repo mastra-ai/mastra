@@ -108,20 +108,12 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
       onFinish,
       generateId: () => responseMessageId ?? generateMessageId?.(),
       execute: async ({ writer }) => {
-        // The messageId is in the step-start chunk from the original stream
-        let extractedMessageId: string | undefined;
-
         for await (const part of this.fullStream) {
           const messageMetadataValue = messageMetadata?.({ part: part as TextStreamPart<ToolSet> });
 
           const partType = part.type;
 
-          if (partType === 'start-step' && 'messageId' in part) {
-            extractedMessageId = (part as any).messageId;
-            if (extractedMessageId && !responseMessageId) {
-              responseMessageId = extractedMessageId;
-            }
-          }
+          responseMessageId = this.#modelOutput.messageId;
 
           const transformedChunk = convertFullStreamChunkToUIMessageStream<UI_MESSAGE>({
             part: part as TextStreamPart<ToolSet>,

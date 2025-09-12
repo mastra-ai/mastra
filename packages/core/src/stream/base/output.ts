@@ -136,12 +136,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Trace ID used on the execution (if the execution was traced).
    */
   public traceId?: string;
+  public messageId: string;
 
   constructor({
     model: _model,
     stream,
     messageList,
     options,
+    messageId,
   }: {
     model: {
       modelId: string | undefined;
@@ -151,13 +153,14 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     stream: ReadableStream<ChunkType<OUTPUT>>;
     messageList: MessageList;
     options: MastraModelOutputOptions<OUTPUT>;
+    messageId: string;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
-
+    this.messageId = messageId;
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({

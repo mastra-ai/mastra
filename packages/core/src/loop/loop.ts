@@ -91,7 +91,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     ...rest,
   };
 
-  const streamFn = workflowLoopStream(workflowLoopProps);
+  const loopStreamResults = workflowLoopStream(workflowLoopProps);
 
   return new MastraModelOutput({
     model: {
@@ -99,8 +99,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       provider: model.provider,
       version: model.specificationVersion,
     },
-    stream: streamFn,
+    stream: loopStreamResults.stream,
     messageList,
+    messageId: loopStreamResults.messageId!,
     options: {
       runId: runIdToUse!,
       telemetry_settings,

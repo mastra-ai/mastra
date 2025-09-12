@@ -323,6 +323,9 @@ async function processOutputStream<OUTPUT extends OutputSchema | undefined = und
         await options?.onError?.({ error: e });
 
         break;
+      case 'start':
+        controller.enqueue(chunk);
+        break;
       default:
         controller.enqueue(chunk);
     }
@@ -503,6 +506,7 @@ export function createLLMExecutionStep<
         },
         stream: modelResult as ReadableStream<ChunkType>,
         messageList,
+        messageId,
         options: {
           runId,
           rootSpan: modelStreamSpan,
