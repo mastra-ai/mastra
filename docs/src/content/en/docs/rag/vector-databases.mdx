@@ -259,11 +259,41 @@ await store.upsert({
 });
 ```
 
+<<<<<<< HEAD
   </TabItem>
   <TabItem value="couchbase" label="Couchbase">
 
 ```ts title="vector-store.ts" showLineNumbers copy
 import { CouchbaseVector } from "@mastra/couchbase";
+=======
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { CouchbaseSearchStore } from '@mastra/couchbase'
+
+  const store = new CouchbaseSearchStore({
+    connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+    username: process.env.COUCHBASE_USERNAME,
+    password: process.env.COUCHBASE_PASSWORD,
+    bucketName: process.env.COUCHBASE_BUCKET,
+    scopeName: process.env.COUCHBASE_SCOPE,
+    collectionName: process.env.COUCHBASE_COLLECTION,
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { LanceVectorStore } from '@mastra/lance'
+>>>>>>> e6cfe63fe (updated: documentation to reflect the new CouchbaseSearchStore)
 
 const store = new CouchbaseVector({
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,

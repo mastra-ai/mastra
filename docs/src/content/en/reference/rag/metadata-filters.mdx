@@ -38,37 +38,37 @@ const results = await store.query({
       name: "$eq",
       description: "Matches values equal to specified value",
       example: "{ age: { $eq: 25 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$ne",
       description: "Matches values not equal",
       example: "{ status: { $ne: 'inactive' } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$gt",
       description: "Greater than",
       example: "{ price: { $gt: 100 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$gte",
       description: "Greater than or equal",
       example: "{ rating: { $gte: 4.5 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$lt",
       description: "Less than",
       example: "{ stock: { $lt: 20 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
     {
       name: "$lte",
       description: "Less than or equal",
       example: "{ priority: { $lte: 3 } }",
-      supportedBy: ["All except Couchbase"],
+      supportedBy: ["All"],
     },
   ]}
 />
@@ -110,13 +110,13 @@ const results = await store.query({
       name: "$and",
       description: "Logical AND",
       example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
-      supportedBy: ["All except Vectorize, Couchbase"],
+      supportedBy: ["All except Vectorize"],
     },
     {
       name: "$or",
       description: "Logical OR",
       example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
-      supportedBy: ["All except Vectorize, Couchbase"],
+      supportedBy: ["All except Vectorize"],
     },
     {
       name: "$not",
@@ -129,13 +129,14 @@ const results = await store.query({
         "PgVector",
         "LibSQL",
         "MongoDB",
+        "Couchbase",
       ],
     },
     {
       name: "$nor",
       description: "Logical NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB", "Couchbase"],
     },
   ]}
 />
@@ -147,7 +148,7 @@ const results = await store.query({
       name: "$exists",
       description: "Matches documents with field",
       example: "{ rating: { $exists: true } }",
-      supportedBy: ["All except Vectorize, Chroma, Couchbase"],
+      supportedBy: ["All except Vectorize, Chroma"],
     },
   ]}
 />
@@ -316,8 +317,16 @@ const results = await store.query({
 - Indexing metadata fields is recommended for optimal performance
 
 ### Couchbase
+<<<<<<< HEAD
 
 - Currently does not have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
+=======
+- Supports metadata filtering for fields that were indexed during index creation using the `fields_to_index` parameter
+- Metadata fields must be prefixed with `metadata.` in filter expressions (e.g., `'metadata.category': { $eq: 'tech' }`)
+- Supports basic comparison operators: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
+- Supports logical operators: `$and`, `$or`, `$not`, `$nor`
+- Only indexed metadata fields can be filtered - fields not specified in `fields_to_index` during index creation cannot be used for filtering
+>>>>>>> e6cfe63fe (updated: documentation to reflect the new CouchbaseSearchStore)
 
 ### Amazon S3 Vectors
 
