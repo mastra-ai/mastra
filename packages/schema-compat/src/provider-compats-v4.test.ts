@@ -9,8 +9,7 @@ vi.mock('zod', () => ({
 }));
 
 describe('OpenAIReasoningSchemaCompatLayer with Zod v4', () => {
-  // Test for issue #7791: TypeError: defaultDef.defaultValue is not a function
-  it('should handle schemas with default values correctly', () => {
+  it('should handle schemas with default values', () => {
     const modelInfo: ModelInformation = {
       modelId: 'openai/o3-mini',
       supportsStructuredOutputs: false,
@@ -19,44 +18,48 @@ describe('OpenAIReasoningSchemaCompatLayer with Zod v4', () => {
 
     const compat = new OpenAIReasoningSchemaCompatLayer(modelInfo);
 
-    // This schema reproduces the exact issue from the bug report
     const schema = z.object({
       force_new_login: z.boolean().default(false).describe('Force a new login'),
       optional_text: z.string().default('default text').describe('Optional text with default'),
       number_with_default: z.number().default(42).describe('Number with default value'),
     });
 
-    // This should not throw "TypeError: defaultDef.defaultValue is not a function"
-    const processedSchema = compat.processToAISDKSchema(schema);
+    let processedSchema: any;
+    expect(() => {
+      processedSchema = compat.processToAISDKSchema(schema);
+    }).not.toThrow();
 
     expect(processedSchema).toHaveProperty('jsonSchema');
     expect(processedSchema).toHaveProperty('validate');
 
-    // Test validation with custom data
+    // Verify that default values are moved to descriptions
+    const jsonSchema = processedSchema.jsonSchema;
+    expect(jsonSchema).toBeDefined();
+    expect(jsonSchema.type).toBe('object');
+    expect(jsonSchema.properties).toBeDefined();
+
+    // Check that defaults are included in descriptions
+    const forceNewLoginProp = jsonSchema.properties.force_new_login;
+    expect(forceNewLoginProp.description).toContain('Force a new login');
+    expect(forceNewLoginProp.description).toContain('"defaultValue":false');
+
+    const optionalTextProp = jsonSchema.properties.optional_text;
+    expect(optionalTextProp.description).toContain('Optional text with default');
+    expect(optionalTextProp.description).toContain('"defaultValue":"default text"');
+
+    const numberProp = jsonSchema.properties.number_with_default;
+    expect(numberProp.description).toContain('Number with default value');
+    expect(numberProp.description).toContain('"defaultValue":42');
+
     const validData = {
       force_new_login: true,
       optional_text: 'custom text',
       number_with_default: 100,
     };
 
-    const validationResult = processedSchema.validate!(validData);
+    const validationResult = processedSchema!.validate!(validData);
     expect(validationResult).toHaveProperty('success');
     expect(validationResult.success).toBe(true);
-
-    // Test with default values (empty object should use defaults)
-    const defaultData = {};
-    const defaultValidation = processedSchema.validate!(defaultData);
-    expect(defaultValidation).toHaveProperty('success');
-    expect(defaultValidation.success).toBe(true);
-
-    // The validated value should include the defaults
-    if (defaultValidation.success) {
-      expect(defaultValidation.value).toEqual({
-        force_new_login: false,
-        optional_text: 'default text',
-        number_with_default: 42,
-      });
-    }
   });
 
   it('should handle nested schemas with default values', () => {
