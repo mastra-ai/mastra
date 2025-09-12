@@ -49,10 +49,19 @@ export class MockMemory extends MastraMemory {
     threadId,
     resourceId,
     format = 'v1',
+    selectBy,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     let results = Array.from(this.messages.values());
     if (threadId) results = results.filter(m => m.threadId === threadId);
     if (resourceId) results = results.filter(m => m.resourceId === resourceId);
+    if (selectBy) {
+      if (selectBy.include) {
+        results = results.filter(m => selectBy.include?.some(i => i.id === m.id));
+      }
+      if (selectBy.last) {
+        results = results.slice(-selectBy.last);
+      }
+    }
     if (format === 'v2') return results as MastraMessageV2[];
     return results as MastraMessageV1[];
   }
@@ -176,6 +185,10 @@ export class MockMemory extends MastraMemory {
   }) {
     // Mock implementation for abstract method
     return { success: true, reason: 'Mock implementation' };
+  }
+
+  async updateMessages({ messages }: { messages: MastraMessageV2[] }) {
+    return this.saveMessages({ messages, format: 'v2' });
   }
 }
 

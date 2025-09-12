@@ -40,3 +40,11 @@ export async function getPackageRootPath(packageName: string): Promise<string | 
 
   return rootPath;
 }
+
+/**
+ * During `mastra dev` we are compiling TS files to JS (inside workspaces) so that users can just their workspace packages.
+ * We store these compiled files inside `node_modules/.cache` for each workspace package.
+ */
+export function getCompiledDepCachePath(rootPath: string, packageName: string) {
+  return join(rootPath, 'node_modules', '.cache', packageName);
+}

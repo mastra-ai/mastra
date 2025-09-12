@@ -47,7 +47,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "dependencies": {
-    "mem0ai": "^2.1.36"
+    "mem0ai": "^2.1.38"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.15.3-0 <0.17.0-0",

@@ -2,13 +2,14 @@ import { delay } from '@ai-sdk/provider-utils';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
 import { tool } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2, mockValues } from 'ai-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
   createTestModel,
   defaultSettings,
+  mockDate,
   modelWithFiles,
   modelWithReasoning,
   modelWithSources,
@@ -1127,6 +1128,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     });
 
     it('should send delayed asynchronous tool results', async () => {
+      vi.useRealTimers();
       const messageList = new MessageList();
       messageList.add(
         {
@@ -1174,6 +1176,8 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
       expect(fullStream).toMatchSnapshot();
+      vi.useFakeTimers();
+      vi.setSystemTime(mockDate);
     });
 
     it('should filter out empty text deltas', async () => {

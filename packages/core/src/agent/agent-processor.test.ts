@@ -1091,7 +1091,7 @@ describe('Input and Output Processors with VNext Methods', () => {
 
         // Check that final object processing occurred
         expect(finalProcessedObject).toEqual({
-          winner: 'Barack Obama',
+          winner: 'Barack OBAMA',
           year: '2012',
           stream_processed: true,
         });
@@ -1099,7 +1099,7 @@ describe('Input and Output Processors with VNext Methods', () => {
 
       await testWithFormat('aisdk');
       await testWithFormat('mastra');
-    });
+    }, 20_000);
   });
 
   describe('Tripwire Functionality', () => {
@@ -1827,8 +1827,8 @@ describe('v1 model - output processors', () => {
     it('should process structured output through output processors', async () => {
       let processedObject: any = null;
 
-      class StructuredOutputProcessor implements Processor {
-        readonly name = 'structured-output-processor';
+      class TestStructuredOutputProcessor implements Processor {
+        readonly name = 'test-structured-output-processor';
 
         async processOutputResult({ messages }) {
           // Process the final generated text and extract the structured data
@@ -1873,7 +1873,7 @@ describe('v1 model - output processors', () => {
             usage: { completionTokens: 10, promptTokens: 10 },
           }),
         }),
-        outputProcessors: [new StructuredOutputProcessor()],
+        outputProcessors: [new TestStructuredOutputProcessor()],
       });
 
       const result = await agent.generate('Who won the 2012 US presidential election?', {

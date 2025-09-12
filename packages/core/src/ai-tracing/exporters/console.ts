@@ -17,7 +17,7 @@ export class ConsoleExporter implements AITracingExporter {
   }
 
   async exportEvent(event: AITracingEvent): Promise<void> {
-    const span = event.span;
+    const span = event.exportedSpan;
 
     // Helper to safely stringify attributes (filtering already done by processor)
     const formatAttributes = (attributes: any) => {

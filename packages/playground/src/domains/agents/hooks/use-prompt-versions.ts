@@ -1,29 +1,21 @@
 import { useState, useEffect } from 'react';
 
 import type { EvalResult, PromptVersion } from '../types';
+import { useMastraClient, usePlaygroundStore } from '@mastra/playground-ui';
 
 export function usePromptVersions(agentId: string, instructions?: string) {
   const [versions, setVersions] = useState<PromptVersion[]>([]);
   const [copiedVersions, setCopiedVersions] = useState<Record<number, boolean>>({});
   const [isUpdating, setIsUpdating] = useState(false);
   const [versionToDelete, setVersionToDelete] = useState<number | null>(null);
+  const client = useMastraClient();
+  const { runtimeContext } = usePlaygroundStore();
 
   // Fetch eval results for a version
   const fetchEvalResults = async (): Promise<EvalResult[]> => {
     try {
-      const response = await fetch(`/api/agents/${agentId}/evals/live`, {
-        method: 'GET',
-        headers: {
-          'x-mastra-dev-playground': 'true',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch eval results');
-      }
-
-      const data = await response.json();
-      return data?.evals;
+      const response = await client.getAgent(agentId).liveEvals(runtimeContext);
+      return response?.evals;
     } catch (error) {
       console.error('Failed to fetch eval results:', error);
       return [];

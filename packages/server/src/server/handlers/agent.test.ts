@@ -106,6 +106,7 @@ describe('Agent Handlers', () => {
           name: 'test-agent',
           instructions: 'test instructions',
           tools: {},
+          agents: {},
           workflows: {},
           provider: 'openai.chat',
           modelId: 'gpt-4o',
@@ -155,6 +156,7 @@ describe('Agent Handlers', () => {
         name: 'test-agent',
         instructions: 'test instructions',
         tools: {},
+        agents: {},
         workflows: {
           hello: {
             name: 'hello-world',
@@ -328,7 +330,7 @@ describe('Agent Handlers', () => {
         toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
-      const updateResult = updateAgentModelHandler({
+      const updateResult = await updateAgentModelHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
         body: {

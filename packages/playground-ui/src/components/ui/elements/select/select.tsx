@@ -20,7 +20,7 @@ export function Select({ name, onChange, defaultValue, value, options, placehold
   return (
     <BaseSelect name={name} onValueChange={onChange} value={value}>
       <SelectTrigger>
-        <SelectValue defaultValue="0" />
+        <SelectValue placeholder={placeholder || 'Select...'} />
       </SelectTrigger>
       <SelectContent>
         {(options || []).map((option, idx) => (

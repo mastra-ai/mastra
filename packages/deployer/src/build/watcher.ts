@@ -1,5 +1,6 @@
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
+import { findWorkspacesRoot } from 'find-workspaces';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
@@ -7,6 +8,8 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { bundleExternals } from './analyze';
 import { noopLogger } from '@mastra/core/logger';
 import { createWorkspacePackageMap } from '../bundler/workspaceDependencies';
+import type { DependencyMetadata } from './types';
+import { getPackageName, getPackageRootPath } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
@@ -16,18 +19,33 @@ export async function getInputOptions(
 ) {
   const dependencies = new Map<string, string>();
   const workspaceMap = await createWorkspacePackageMap();
+  const workspaceRoot = findWorkspacesRoot()?.location;
+  const depsToOptimize = new Map<string, DependencyMetadata>();
 
   if (transpilePackages.length) {
+    for (const pkg of transpilePackages) {
+      const isWorkspace = workspaceMap.has(pkg);
+      const exports = ['*'];
+
+      const pkgName = getPackageName(pkg);
+      let rootPath: string | null = null;
+
+      if (pkgName && pkgName !== '#tools') {
+        rootPath = await getPackageRootPath(pkgName);
+      }
+
+      depsToOptimize.set(pkg, { exports, isWorkspace, rootPath });
+    }
+
     const { output, reverseVirtualReferenceMap } = await bundleExternals(
-      new Map(
-        transpilePackages.map(pkg => [pkg, { exports: ['*'], rootPath: null, isWorkspace: workspaceMap.has(pkg) }]),
-      ),
+      depsToOptimize,
       '.mastra/.build',
       noopLogger,
       {
         transpilePackages,
         isDev: true,
       },
+      { workspaceRoot, workspaceMap },
     );
 
     for (const file of output) {
@@ -51,7 +69,7 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap },
+    { sourcemap, isDev: true, workspaceRoot },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

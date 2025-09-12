@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
-import type { Agent, ToolsInput } from '@mastra/core/agent';
+import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
+  MCPServerConfig,
   ServerInfo,
   ServerDetailInfo,
   ConvertedTool,
@@ -13,7 +14,7 @@ import type {
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { createTool } from '@mastra/core/tools';
-import type { InternalCoreTool, ToolAction } from '@mastra/core/tools';
+import type { InternalCoreTool } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -51,14 +52,7 @@ import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type {
-  MCPServerPrompts,
-  MCPServerResources,
-  ElicitationActions,
-  MCPServerConfig,
-  MCPToolsInput,
-  MCPTool,
-} from './types';
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MCPTool } from './types';
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
@@ -112,7 +106,7 @@ export class MCPServer extends MCPServerBase {
    * @param opts - Configuration options for the server, including registry metadata.
    */
   constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: MCPServerPrompts }) {
-    super(opts as any);
+    super(opts);
     this.resourceOptions = opts.resources;
     this.promptOptions = opts.prompts;
 
@@ -746,13 +740,13 @@ export class MCPServer extends MCPServerBase {
   /**
    * Convert and validate all provided tools, logging registration status.
    * Also converts agents and workflows into tools.
-   * @param tools Tool definitions (supports ToolsInput, MCPToolsInput)
+   * @param tools Tool definitions
    * @param agentsConfig Agent definitions to be converted to tools, expected from MCPServerConfig
    * @param workflowsConfig Workflow definitions to be converted to tools, expected from MCPServerConfig
    * @returns Converted tools registry
    */
   convertTools(
-    tools: ToolsInput | MCPToolsInput,
+    tools: ToolsInput,
     agentsConfig?: Record<string, Agent>,
     workflowsConfig?: Record<string, Workflow>,
   ): Record<string, ConvertedTool> {
@@ -779,7 +773,7 @@ export class MCPServer extends MCPServerBase {
         description: toolInstance?.description,
       };
 
-      const coreTool = makeCoreTool(toolInstance as ToolAction<any, any, any>, options) as InternalCoreTool;
+      const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
 
       definedConvertedTools[toolName] = {
         name: toolName,
@@ -788,7 +782,7 @@ export class MCPServer extends MCPServerBase {
         outputSchema: coreTool.outputSchema,
         execute: coreTool.execute!,
       };
-      this.logger.info(`Registered tool: '${toolName}'`);
+      this.logger.info(`Registered explicit tool: '${toolName}'`);
     }
     this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
 

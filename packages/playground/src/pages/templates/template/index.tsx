@@ -46,7 +46,7 @@ export default function Template() {
   });
 
   const { data: templateEnvVars, isLoading: isLoadingEnvVars } = useTemplateRepoEnvVars({
-    repo: `template-${templateSlug}`,
+    repo: template?.githubUrl ? new URL(template.githubUrl).pathname.split('/')[2] : `template-${templateSlug}`,
     owner: 'mastra-ai',
     branch: selectedProvider,
   });

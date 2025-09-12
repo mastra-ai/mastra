@@ -151,7 +151,7 @@ export function WorkflowTrigger({
   useEffect(() => {
     if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
 
-    const suspended = Object.entries(streamResultToUse.payload.workflowState.steps)
+    const suspended = Object.entries(streamResultToUse?.payload?.workflowState?.steps || {})
       .filter(([_, { status }]) => status === 'suspended')
       .map(([stepId, { payload }]) => ({
         stepId,
