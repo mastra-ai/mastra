@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.16.4-alpha.1
+
+### Patch Changes
+
+- Add resource id to workflow run snapshots ([#7740](https://github.com/mastra-ai/mastra/pull/7740))
+
 ## 0.16.4-alpha.0
 
 ### Patch Changes

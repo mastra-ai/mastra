@@ -1,5 +1,14 @@
 # @mastra/dane
 
+## 0.0.54-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`547c621`](https://github.com/mastra-ai/mastra/commit/547c62104af3f7a551b3754e9cbdf0a3fbba15e4)]:
+  - @mastra/core@0.16.4-alpha.1
+  - @mastra/libsql@0.14.2-alpha.1
+  - @mastra/upstash@0.15.1-alpha.0
+
 ## 0.0.54-alpha.0
 
 ### Patch Changes
