@@ -169,6 +169,7 @@ export function createStep<
         runtimeContext,
         abortSignal,
         abort,
+        writer,
       }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -184,11 +185,7 @@ export function createStep<
           name: params.name,
           args: inputData,
         };
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-start',
-          from: 'WORKFLOW',
-          payload: toolData,
-        });
+
         // TODO: add support for format, if format is undefined use stream, else streamVNext
         let stream: ReadableStream<any>;
 
@@ -204,6 +201,24 @@ export function createStep<
           });
 
           stream = fullStream as any;
+
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-start',
+            ...(toolData ?? {}),
+          });
+          for await (const chunk of stream) {
+            if (chunk.type === 'text-delta') {
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...(toolData ?? {}),
+                argsTextDelta: chunk.textDelta,
+              });
+            }
+          }
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-finish',
+            ...(toolData ?? {}),
+          });
         } else {
           const modelOutput = await params.streamVNext(inputData.prompt, {
             runtimeContext,
@@ -214,21 +229,15 @@ export function createStep<
           });
 
           stream = modelOutput.fullStream;
+
+          for await (const chunk of stream) {
+            await writer.write(chunk as any);
+          }
         }
 
         if (abortSignal.aborted) {
           return abort();
         }
-
-        for await (const chunk of stream) {
-          await emitter.emit('watch-v2', chunk);
-        }
-
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-finish',
-          from: 'WORKFLOW',
-          payload: toolData,
-        });
 
         return {
           text: await streamPromise.promise,
@@ -1427,37 +1436,9 @@ export class Run<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
       try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),

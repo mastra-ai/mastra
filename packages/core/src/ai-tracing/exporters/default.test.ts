@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AISpanType, AITracingEventType } from '../types';
-import type { LLMGenerationAttributes, WorkflowStepAttributes, AITracingEvent, AnyAISpan } from '../types';
+import type { LLMGenerationAttributes, WorkflowStepAttributes, AITracingEvent, AnyExportedAISpan } from '../types';
 import { DefaultExporter } from './default';
 
 // Mock Mastra and logger
@@ -607,7 +607,7 @@ describe('DefaultExporter', () => {
     ): AITracingEvent {
       return {
         type,
-        span: {
+        exportedSpan: {
           id: spanId,
           traceId,
           type: AISpanType.GENERIC,
@@ -619,7 +619,7 @@ describe('DefaultExporter', () => {
           metadata: undefined,
           input: 'test input',
           output: type === AITracingEventType.SPAN_ENDED ? 'test output' : undefined,
-        } as any as AnyAISpan,
+        } as any as AnyExportedAISpan,
       };
     }
   });

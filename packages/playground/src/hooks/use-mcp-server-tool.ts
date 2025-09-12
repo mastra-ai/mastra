@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { client } from '@/lib/client';
 import type { McpToolInfo as SdkMcpToolInfo } from '@mastra/client-js';
+import { usePlaygroundStore } from '@mastra/playground-ui';
 
 // Structure for the hook to return
 export interface PlaygroundMCPToolInstance {
@@ -13,6 +14,7 @@ export const useMCPServerTool = (serverId: string | undefined, toolId: string | 
   const [tool, setTool] = useState<PlaygroundMCPToolInstance | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const { runtimeContext } = usePlaygroundStore();
 
   useEffect(() => {
     let mounted = true;
@@ -30,7 +32,7 @@ export const useMCPServerTool = (serverId: string | undefined, toolId: string | 
         // toolId here is expected to be the namespaced ID, e.g., "actualServerId_toolName"
         const mcpToolInstance = client.getMcpServerTool(serverId, toolId);
         // Fetch its details (schema, description)
-        const toolDetails = await mcpToolInstance.details();
+        const toolDetails = await mcpToolInstance.details(runtimeContext);
         if (mounted) {
           setTool({
             instance: mcpToolInstance,
