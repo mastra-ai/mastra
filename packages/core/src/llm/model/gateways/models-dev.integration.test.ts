@@ -69,7 +69,7 @@ describe('ModelsDevGateway - Real API Integration', () => {
     }
 
     if (providers.vercel) {
-      expect(providers.vercel.url).toBe('https://gateway.vercel.sh/v1/chat/completions');
+      expect(providers.vercel.url).toBe('https://ai-gateway.vercel.sh/v1/chat/completions');
       expect(providers.vercel.apiKeyEnvVar).toBe('AI_GATEWAY_API_KEY');
       expect(providers.vercel.apiKeyHeader).toBe('Authorization');
       // Vercel should have models like deepseek/deepseek-r1
