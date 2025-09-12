@@ -73,7 +73,9 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
           type: 'workflow-start',
           runId: run.runId,
           from: ChunkFrom.WORKFLOW,
-          payload: {},
+          payload: {
+            workflowId: run.workflowId,
+          },
         });
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);

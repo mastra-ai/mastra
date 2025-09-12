@@ -142,7 +142,9 @@ export type StreamEvent =
 export type WorkflowStreamEvent =
   | {
       type: 'workflow-start';
-      payload: {};
+      payload: {
+        workflowId: string;
+      };
     }
   | {
       type: 'workflow-finish';
