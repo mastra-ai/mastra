@@ -28,6 +28,7 @@ export const useWorkflow = (workflowId: string) => {
     queryKey: ['workflow', workflowId],
     queryFn: () => client.getWorkflow(workflowId).details(),
     retry: false,
+    refetchOnWindowFocus: false,
   });
 };
 
