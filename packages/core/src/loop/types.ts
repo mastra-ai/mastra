@@ -10,6 +10,7 @@ import type {
   StepResult,
   ModelMessage,
 } from 'ai-v5';
+import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { AISpan, AISpanType } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
@@ -83,6 +84,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   Tools,
   OUTPUT
 > & {
+  messageId: string;
   runId: string;
   startTimestamp: number;
   modelStreamSpan: Span;
@@ -94,3 +96,5 @@ export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   controller: ReadableStreamDefaultController<ChunkType>;
   writer: WritableStream<ChunkType>;
 } & LoopRun<Tools, OUTPUT>;
+
+export const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

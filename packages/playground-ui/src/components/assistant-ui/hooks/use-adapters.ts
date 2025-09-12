@@ -10,18 +10,20 @@ import {
   WebSpeechSynthesisAdapter,
 } from '@assistant-ui/react';
 import { PDFAttachmentAdapter } from '../attachments/pdfs-adapter';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useAdapters = (agentId: string) => {
   const [isReady, setIsReady] = useState(false);
   const [speechAdapter, setSpeechAdapter] = useState<SpeechSynthesisAdapter | undefined>(undefined);
   const baseClient = useMastraClient();
+  const { runtimeContext } = usePlaygroundStore();
 
   useEffect(() => {
     const check = async () => {
       const agent = baseClient.getAgent(agentId);
 
       try {
-        await agent.voice.getSpeakers();
+        await agent.voice.getSpeakers(runtimeContext);
         setSpeechAdapter(new VoiceAttachmentAdapter(agent as unknown as Agent));
         setIsReady(true);
       } catch {

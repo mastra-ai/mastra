@@ -20,7 +20,11 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
   let radioValue;
 
   if (modelVersion === 'v2') {
-    radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generateVNext' : 'streamVNext';
+    if (settings?.modelSettings?.chatWithNetwork) {
+      radioValue = 'network';
+    } else {
+      radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generateVNext' : 'streamVNext';
+    }
   } else {
     radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
   }
@@ -39,6 +43,7 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
                   chatWithGenerate: value === 'generate',
                   chatWithGenerateVNext: value === 'generateVNext',
                   chatWithStreamVNext: value === 'streamVNext',
+                  chatWithNetwork: value === 'network',
                 },
               })
             }
@@ -73,6 +78,14 @@ export const AgentSettings = ({ modelVersion }: { modelVersion: string }) => {
                 <RadioGroupItem value="streamVNext" id="streamVNext" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="streamVNext">
                   Stream vNext
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && (
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="network" id="network" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="network">
+                  Network
                 </Label>
               </div>
             )}

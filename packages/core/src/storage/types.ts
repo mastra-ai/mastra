@@ -41,6 +41,7 @@ export interface WorkflowRuns {
 export interface StorageWorkflowRun {
   workflow_name: string;
   run_id: string;
+  resourceId?: string;
   snapshot: WorkflowRunState | string;
   createdAt: Date;
   updatedAt: Date;
@@ -194,4 +195,35 @@ export interface AITracesPaginatedArg {
     entityType?: 'agent' | 'workflow';
   };
   pagination?: PaginationArgs;
+}
+
+// Basic Index Management Types
+export interface CreateIndexOptions {
+  name: string;
+  table: string;
+  columns: string[];
+  unique?: boolean;
+  concurrent?: boolean;
+  where?: string;
+  method?: 'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin';
+  opclass?: string; // Operator class for GIN/GIST indexes
+  storage?: Record<string, any>; // Storage parameters
+  tablespace?: string; // Tablespace name
+}
+
+export interface IndexInfo {
+  name: string;
+  table: string;
+  columns: string[];
+  unique: boolean;
+  size: string;
+  definition: string;
+}
+
+export interface StorageIndexStats extends IndexInfo {
+  scans: number; // Number of index scans
+  tuples_read: number; // Number of tuples read
+  tuples_fetched: number; // Number of tuples fetched
+  last_used?: Date; // Last time index was used
+  method?: string; // Index method (btree, hash, etc)
 }

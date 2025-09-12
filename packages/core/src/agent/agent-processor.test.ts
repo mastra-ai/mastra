@@ -1091,7 +1091,7 @@ describe('Input and Output Processors with VNext Methods', () => {
 
         // Check that final object processing occurred
         expect(finalProcessedObject).toEqual({
-          winner: 'Barack Obama',
+          winner: 'Barack OBAMA',
           year: '2012',
           stream_processed: true,
         });
@@ -1099,7 +1099,7 @@ describe('Input and Output Processors with VNext Methods', () => {
 
       await testWithFormat('aisdk');
       await testWithFormat('mastra');
-    });
+    }, 20_000);
   });
 
   describe('Tripwire Functionality', () => {

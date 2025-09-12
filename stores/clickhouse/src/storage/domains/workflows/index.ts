@@ -55,10 +55,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
@@ -71,12 +73,14 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       const persisting = currentSnapshot
         ? {
             ...currentSnapshot,
+            resourceId,
             snapshot: JSON.stringify(snapshot),
             updatedAt: now.toISOString(),
           }
         : {
             workflow_name: workflowName,
             run_id: runId,
+            resourceId,
             snapshot: JSON.stringify(snapshot),
             createdAt: now.toISOString(),
             updatedAt: now.toISOString(),

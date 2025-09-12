@@ -1,8 +1,10 @@
 import { processDataStream } from '@ai-sdk/ui-utils';
 import type { GenerateReturn } from '@mastra/core/llm';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { GenerateParams, ClientOptions, StreamParams, GetNetworkResponse } from '../types';
+import { runtimeContextQueryString } from '../utils';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 
 import { BaseResource } from './base';
@@ -17,10 +19,11 @@ export class Network extends BaseResource {
 
   /**
    * Retrieves details about the network
+   * @param runtimeContext - Optional runtime context to pass as query parameter
    * @returns Promise containing network details
    */
-  details(): Promise<GetNetworkResponse> {
-    return this.request(`/api/networks/${this.networkId}`);
+  details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetNetworkResponse> {
+    return this.request(`/api/networks/${this.networkId}${runtimeContextQueryString(runtimeContext)}`);
   }
 
   /**

@@ -17,7 +17,7 @@ import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 import { AgentPromptEnhancer } from './agent-instructions-enhancer';
 
-export function AgentInformation({ agentId, chatInputValue }: { agentId: string; chatInputValue?: string }) {
+export function AgentInformation({ agentId }: { agentId: string }) {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: modelProviders } = useModelProviders();
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
@@ -75,6 +75,7 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
                 updateModel={updateModel}
                 modelProviders={modelProviders || []}
                 hasMemoryEnabled={Boolean(memory?.result)}
+                computeAgentLink={() => `/agents/${agentId}`}
                 computeToolLink={tool => `/tools/${agentId}/${tool.id}`}
                 computeWorkflowLink={workflowId => `/workflows/${workflowId}/graph`}
                 promptSlot={<AgentPromptEnhancer agentId={agentId} />}
@@ -86,11 +87,7 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
             {agent && <AgentSettings modelVersion={agent.modelVersion} />}
           </TabContent>
           <TabContent value="memory">
-            {isLoading ? (
-              <Skeleton className="h-full" />
-            ) : (
-              <AgentMemory agentId={agentId} chatInputValue={selectedTab === 'memory' ? chatInputValue : undefined} />
-            )}
+            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
           </TabContent>
           <TabContent value="logs">
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}

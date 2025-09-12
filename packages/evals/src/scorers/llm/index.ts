@@ -1,4 +1,5 @@
 export * from './answer-relevancy';
+export * from './answer-similarity';
 export * from './faithfulness';
 export * from './bias';
 export * from './hallucination';

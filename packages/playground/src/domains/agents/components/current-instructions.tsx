@@ -4,7 +4,6 @@ import { Icon } from '@mastra/playground-ui';
 import { CodeDisplay } from '@/components/ui/code-display';
 
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { Txt } from '@mastra/playground-ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import clsx from 'clsx';
 

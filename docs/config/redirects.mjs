@@ -798,4 +798,9 @@ export const redirectList = [
     destination: "/:locale/reference/workflows/workflow-methods/waitForEvent",
     permanent: true,
   },
+  {
+    source: "/:locale/reference/templates",
+    destination: "/:locale/reference/templates/overview",
+    permanent: true,
+  },
 ];

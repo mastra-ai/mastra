@@ -55,10 +55,12 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
@@ -72,12 +74,14 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     const persisting = currentSnapshot
       ? {
           ...currentSnapshot,
+          resourceId,
           snapshot: JSON.stringify(snapshot),
           updatedAt: now,
         }
       : {
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot: snapshot as Record<string, any>,
           createdAt: now,
           updatedAt: now,

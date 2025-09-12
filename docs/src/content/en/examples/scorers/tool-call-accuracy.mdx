@@ -27,7 +27,7 @@ The code-based scorer provides deterministic, binary scoring (0 or 1) based on e
 
 ```typescript
 import { createToolCallAccuracyScorerCode } from "@mastra/evals/scorers/code";
-import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/utils";
+import { createAgentTestRun, createUIMessage, createToolInvocation } from "@mastra/evals/scorers/utils";
 ```
 
 ### Correct tool selection
@@ -482,8 +482,3 @@ const customModelScorer = createLLMScorer({
 - User intent alignment
 - Context-aware evaluation
 - Handling edge cases
-
-<GithubLink
-  marginTop='mt-16'
-  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/tool-call-accuracy"
-/>

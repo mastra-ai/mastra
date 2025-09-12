@@ -6,7 +6,8 @@ import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
-import type { TracingContext } from '../ai-tracing';
+import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
+import type { TracingContext, TracingOptions } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -168,6 +169,7 @@ export function createStep<
         runtimeContext,
         abortSignal,
         abort,
+        writer,
       }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -183,11 +185,7 @@ export function createStep<
           name: params.name,
           args: inputData,
         };
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-start',
-          from: 'WORKFLOW',
-          payload: toolData,
-        });
+
         // TODO: add support for format, if format is undefined use stream, else streamVNext
         let stream: ReadableStream<any>;
 
@@ -203,6 +201,24 @@ export function createStep<
           });
 
           stream = fullStream as any;
+
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-start',
+            ...(toolData ?? {}),
+          });
+          for await (const chunk of stream) {
+            if (chunk.type === 'text-delta') {
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...(toolData ?? {}),
+                argsTextDelta: chunk.textDelta,
+              });
+            }
+          }
+          await emitter.emit('watch-v2', {
+            type: 'tool-call-streaming-finish',
+            ...(toolData ?? {}),
+          });
         } else {
           const modelOutput = await params.streamVNext(inputData.prompt, {
             runtimeContext,
@@ -213,21 +229,15 @@ export function createStep<
           });
 
           stream = modelOutput.fullStream;
+
+          for await (const chunk of stream) {
+            await writer.write(chunk as any);
+          }
         }
 
         if (abortSignal.aborted) {
           return abort();
         }
-
-        for await (const chunk of stream) {
-          await emitter.emit('watch-v2', chunk);
-        }
-
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-finish',
-          from: 'WORKFLOW',
-          payload: toolData,
-        });
 
         return {
           text: await streamPromise.promise,
@@ -859,9 +869,16 @@ export class Workflow<
   /**
    * Creates a new workflow run instance
    * @param options Optional configuration for the run
+   * @param options.runId Optional custom run ID, defaults to a random UUID
+   * @param options.resourceId Optional resource ID to associate with this run
+   * @param options.disableScorers Optional flag to disable scorers for this run
    * @returns A Run instance that can be used to execute the workflow
    */
-  createRun(options?: { runId?: string; disableScorers?: boolean }): Run<TEngineType, TSteps, TInput, TOutput> {
+  createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Run<TEngineType, TSteps, TInput, TOutput> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -878,6 +895,7 @@ export class Workflow<
       new Run({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
@@ -889,7 +907,7 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    this.mastra?.getLogger().warn('createRun() will be removed on September 16th. Use createRunAsync() instead.');
+    this.mastra?.getLogger().warn('createRun() will be removed on September 16th, 2025. Use createRunAsync() instead.');
 
     return run;
   }
@@ -897,10 +915,14 @@ export class Workflow<
   /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
+   * @param options.runId Optional custom run ID, defaults to a random UUID
+   * @param options.resourceId Optional resource ID to associate with this run
+   * @param options.disableScorers Optional flag to disable scorers for this run
    * @returns A Run instance that can be used to execute the workflow
    */
   async createRunAsync(options?: {
     runId?: string;
+    resourceId?: string;
     disableScorers?: boolean;
   }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     if (this.stepFlow.length === 0) {
@@ -919,6 +941,7 @@ export class Workflow<
       new Run({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
@@ -936,6 +959,7 @@ export class Workflow<
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -999,6 +1023,7 @@ export class Workflow<
     abortSignal,
     runCount,
     tracingContext,
+    writer,
   }: {
     runId?: string;
     inputData: z.infer<TInput>;
@@ -1021,6 +1046,7 @@ export class Workflow<
     abort: () => any;
     runCount?: number;
     tracingContext?: TracingContext;
+    writer?: WritableStream<ChunkType>;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1048,7 +1074,7 @@ export class Workflow<
 
     const res = isResume
       ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, tracingContext })
-      : await run.start({ inputData, runtimeContext, tracingContext });
+      : await run.start({ inputData, runtimeContext, tracingContext, writableStream: writer });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1222,6 +1248,11 @@ export class Run<
   readonly runId: string;
 
   /**
+   * Unique identifier for the resource this run is associated with
+   */
+  readonly resourceId?: string;
+
+  /**
    * Whether to disable scorers for this run
    */
   readonly disableScorers?: boolean;
@@ -1268,6 +1299,7 @@ export class Run<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -1281,6 +1313,7 @@ export class Run<
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
+    this.resourceId = params.resourceId;
     this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
@@ -1315,17 +1348,35 @@ export class Run<
     runtimeContext,
     writableStream,
     tracingContext,
+    tracingOptions,
     format,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
     format?: 'aisdk' | 'mastra' | undefined;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: inputData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingContext,
+      tracingOptions,
+      runtimeContext,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
@@ -1348,7 +1399,7 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
       writableStream,
-      tracingContext,
+      workflowAISpan,
       format,
     });
 
@@ -1356,6 +1407,7 @@ export class Run<
       this.cleanup?.();
     }
 
+    result.traceId = traceId;
     return result;
   }
 
@@ -1369,17 +1421,20 @@ export class Run<
     runtimeContext,
     writableStream,
     tracingContext,
+    tracingOptions,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     return this._start({
       inputData,
       runtimeContext,
       writableStream,
       tracingContext,
+      tracingOptions,
       format: 'aisdk',
     });
   }
@@ -1403,37 +1458,9 @@ export class Run<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
       try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -1667,6 +1694,7 @@ export class Run<
     runtimeContext?: RuntimeContext;
     runCount?: number;
     tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1753,6 +1781,21 @@ export class Run<
       }
     });
 
+    // note: this span is ended inside this.executionEngine.execute()
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      input: params.resumeData,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      tracingContext: params.tracingContext,
+      tracingOptions: params.tracingOptions,
+      runtimeContext: runtimeContextToUse,
+    });
+
+    const traceId = getValidTraceId(workflowAISpan);
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -1784,13 +1827,13 @@ export class Run<
         },
         runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
-        tracingContext: params.tracingContext,
+        workflowAISpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
-
+        result.traceId = traceId;
         return result;
       });
 

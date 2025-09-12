@@ -2011,6 +2011,138 @@ describe('MessageList', () => {
         expect(list.get.all.ui().length).toBe(2); // user and assistant
       });
     });
+
+    describe('system message deduplication', () => {
+      it('should prevent duplicate system messages added via addSystem method', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemContent = 'You are a helpful assistant.';
+
+        // Add same system message multiple times using addSystem
+        list.addSystem(systemContent);
+        list.addSystem(systemContent);
+        list.addSystem({ role: 'system', content: systemContent });
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1);
+        expect(systemMessages[0]?.content).toBe(systemContent);
+      });
+
+      it('should prevent duplicate system messages added via different methods', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemContent = 'You are a helpful assistant.';
+
+        // Add via addSystem
+        list.addSystem(systemContent);
+        // Add via add method
+        list.add({ role: 'system', content: systemContent }, 'system');
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1);
+        expect(systemMessages[0]?.content).toBe(systemContent);
+      });
+
+      it('should prevent duplicates when adding system messages multiple ways', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemContent = 'You are a helpful assistant with specific guidelines.';
+
+        // Add same message via different methods
+        list.addSystem(systemContent); // string method
+        list.addSystem({ role: 'system', content: systemContent }); // object method
+        list.add({ role: 'system', content: systemContent }, 'system'); // add method
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1);
+        expect(systemMessages[0]?.content).toBe(systemContent);
+      });
+
+      it('should handle edge case: different text content but same length', () => {
+        const list = new MessageList({ threadId, resourceId });
+
+        // These have the same length but different content
+        // The cache key uses text.length, so this tests that edge case
+        const message1 = 'You are helpful.'; // 15 chars
+        const message2 = 'Be very precise.'; // 15 chars
+
+        expect(message1.length).toBe(message2.length); // Verify same length
+
+        list.addSystem(message1);
+        list.addSystem(message2);
+
+        const systemMessages = list.getSystemMessages();
+        // These should be treated as different messages despite same length
+        // because the full content comparison should catch this
+        expect(systemMessages.length).toBe(2);
+        expect(systemMessages.find(m => m.content === message1)).toBeDefined();
+        expect(systemMessages.find(m => m.content === message2)).toBeDefined();
+      });
+
+      it('should prevent duplicates in tagged system messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const memorySystemContent = 'Memory context: Previous conversation about weather.';
+
+        // Add same tagged system message multiple times via addSystem with tag
+        list.addSystem(memorySystemContent, 'memory');
+        list.addSystem(memorySystemContent, 'memory'); // This duplicate should now be ignored entirely
+        list.addSystem({ role: 'system', content: memorySystemContent }, 'memory'); // This too!
+
+        const memorySystemMessages = list.getSystemMessages('memory');
+        expect(memorySystemMessages.length).toBe(1);
+        expect(memorySystemMessages[0]?.content).toBe(memorySystemContent);
+
+        const regularSystemMessages = list.getSystemMessages();
+        expect(regularSystemMessages.length).toBe(0); // Should be empty since we only added tagged messages
+      });
+
+      it('should handle mixed tagged and untagged system messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const agentInstructions = 'You are a helpful assistant.';
+        const memoryContext = 'Previous conversation context.';
+
+        // Add both tagged and untagged
+        list.addSystem(agentInstructions); // untagged - goes to systemMessages
+        list.addSystem(memoryContext, 'memory'); // tagged - goes to taggedSystemMessages['memory']
+        list.addSystem(agentInstructions); // duplicate untagged - should be deduplicated
+        list.addSystem(memoryContext, 'memory'); // duplicate tagged - should now be ignored
+
+        const regularSystemMessages = list.getSystemMessages();
+        const memorySystemMessages = list.getSystemMessages('memory');
+
+        // Only the original untagged message should be in regularSystemMessages
+        expect(regularSystemMessages.length).toBe(1);
+        expect(regularSystemMessages[0]?.content).toBe(agentInstructions);
+
+        expect(memorySystemMessages.length).toBe(1);
+        expect(memorySystemMessages[0]?.content).toBe(memoryContext);
+      });
+
+      it('should handle agent-like scenario: instructions + context + user messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const agentInstructions = 'You are a weather assistant.';
+
+        // Simulate agent setup
+        list.addSystem({ role: 'system', content: agentInstructions });
+
+        // Add context (might include system messages)
+        list.add(
+          [
+            { role: 'system', content: agentInstructions }, // duplicate
+            { role: 'user', content: 'What is the weather?' },
+          ],
+          'context',
+        );
+
+        // Add user messages
+        list.add({ role: 'user', content: 'Is it raining?' }, 'input');
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1); // No duplicates
+        expect(systemMessages[0]?.content).toBe(agentInstructions);
+
+        // Should have user messages
+        const userMessages = list.get.all.v2().filter(m => m.role === 'user');
+        expect(userMessages.length).toBe(2);
+      });
+    });
     it('handles upgrading from tool-invocation (call) to [step-start, tool-invocation (result)]', () => {
       const latestMessage = {
         id: 'msg-toolcall',

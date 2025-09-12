@@ -1,10 +1,25 @@
 import { format } from 'date-fns';
 import { AISpanRecord } from '@mastra/core';
 
-export function getTraceInfo(trace: AISpanRecord | undefined) {
+export function getTraceInfo(
+  trace: AISpanRecord | undefined,
+  computeAgentsLink?: () => string,
+  computeWorkflowsLink?: () => string,
+) {
   if (!trace) {
     return [];
   }
+
+  const agentsLink = computeAgentsLink ? computeAgentsLink() : '/agents';
+  const workflowsLink = computeWorkflowsLink ? computeWorkflowsLink() : '/workflows';
+
+  const agentLink = computeAgentsLink
+    ? `${agentsLink}/${trace?.metadata?.resourceId}`
+    : `/agents/${trace?.metadata?.resourceId}`;
+
+  const workflowLink = computeWorkflowsLink
+    ? `${workflowsLink}/${trace?.metadata?.resourceId}`
+    : `/workflows/${trace?.metadata?.resourceId}`;
 
   return [
     {
@@ -14,11 +29,7 @@ export function getTraceInfo(trace: AISpanRecord | undefined) {
         {
           id: trace?.metadata?.resourceId,
           name: trace?.attributes?.agentId || trace?.attributes?.workflowId || '-',
-          path: trace?.attributes?.agentId
-            ? `/agents/${trace?.metadata?.resourceId}`
-            : trace?.attributes?.workflowId
-              ? `/workflows/${trace?.metadata?.resourceId}`
-              : undefined,
+          path: trace?.attributes?.agentId ? agentLink : trace?.attributes?.workflowId ? workflowLink : undefined,
         },
       ],
     },
@@ -29,7 +40,7 @@ export function getTraceInfo(trace: AISpanRecord | undefined) {
         {
           id: trace?.attributes?.agentId || trace?.attributes?.workflowId,
           name: trace?.attributes?.agentId ? 'Agent' : trace?.attributes?.workflowId ? 'Workflow' : '-',
-          path: trace?.attributes?.agentId ? `/agents` : trace?.attributes?.workflowId ? `/workflows` : undefined,
+          path: trace?.attributes?.agentId ? agentsLink : trace?.attributes?.workflowId ? workflowsLink : undefined,
         },
       ],
     },

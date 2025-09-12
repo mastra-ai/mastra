@@ -1,5 +1,46 @@
 # create-mastra
 
+## 0.12.4-alpha.0
+
+### Patch Changes
+
+- fix minor playground stuff for observability ([#7765](https://github.com/mastra-ai/mastra/pull/7765))
+
+- Handle zod intersections in dynamic form ([#7768](https://github.com/mastra-ai/mastra/pull/7768))
+
+- Playground ui -pass runtimeContext to client SDK get methods ([#7767](https://github.com/mastra-ai/mastra/pull/7767))
+
+## 0.12.3
+
+### Patch Changes
+
+- Client SDK Agents, Mastra server - support runtimeContext with GET requests ([#7734](https://github.com/mastra-ai/mastra/pull/7734))
+
+## 0.12.3-alpha.1
+
+### Patch Changes
+
+- Client SDK Agents, Mastra server - support runtimeContext with GET requests ([#7734](https://github.com/mastra-ai/mastra/pull/7734))
+
+## 0.12.3-alpha.0
+
+## 0.12.2
+
+## 0.12.2-alpha.0
+
+## 0.12.1
+
+### Patch Changes
+
+- dependencies updates: ([#7544](https://github.com/mastra-ai/mastra/pull/7544))
+  - Updated dependency [`fs-extra@^11.3.1` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.1) (from `^11.3.0`, in `dependencies`)
+
+- add workflow streaming in agent thread ([#7506](https://github.com/mastra-ai/mastra/pull/7506))
+
+- Fix template slug when getting template environment variables ([#7650](https://github.com/mastra-ai/mastra/pull/7650))
+
+- Update cli dev copy from "Local" - ([#7579](https://github.com/mastra-ai/mastra/pull/7579))
+
 ## 0.12.1-alpha.2
 
 ### Patch Changes

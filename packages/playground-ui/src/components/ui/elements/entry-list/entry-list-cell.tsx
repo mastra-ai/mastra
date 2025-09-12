@@ -1,12 +1,16 @@
 import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 
 export function EntryListTextCell({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
+  const [randomWidth, setRandomWidth] = useState<number | undefined>(undefined);
+
   // Generate random width once per component render
-  const randomWidth = useMemo(() => {
-    return Math.floor(Math.random() * (90 - 50 + 1)) + 50;
+  useEffect(() => {
+    setRandomWidth(Math.floor(Math.random() * (90 - 50 + 1)) + 50);
   }, []);
+
+  if (!randomWidth) return null;
 
   return (
     <div className="text-icon4 text-[0.875rem] truncate ">

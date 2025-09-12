@@ -13,6 +13,7 @@ import {
   streamVNextUIMessageHandler as getOriginalStreamVNextUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
+  streamNetworkHandler as getOriginalStreamNetworkHandler,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
@@ -20,39 +21,20 @@ import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
 import { AllowedProviderKeys } from '../../utils';
 
-// @TODO: TYPED OPTIONS
-export const vNextBodyOptions: any = {
+export const sharedBodyOptions: any = {
   messages: {
     type: 'array',
     items: { type: 'object' },
   },
-  threadId: { type: 'string' },
-  resourceId: { type: 'string', description: 'The resource ID for the conversation' },
   runId: { type: 'string' },
-  output: { type: 'object' },
-  instructions: { type: 'string', description: "Optional instructions to override the agent's default instructions" },
-  context: {
-    type: 'array',
-    items: { type: 'object' },
-    description: 'Additional context messages to include',
-  },
   memory: {
     type: 'object',
     properties: {
-      threadId: { type: 'string' },
-      resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+      thread: { type: 'string' },
+      resource: { type: 'string', description: 'The resource ID for the conversation' },
       options: { type: 'object', description: 'Memory configuration options' },
     },
     description: 'Memory options for the conversation',
-  },
-  savePerStep: { type: 'boolean', description: 'Whether to save messages incrementally on step finish' },
-  format: { type: 'string', enum: ['mastra', 'aisdk'], description: 'Response format' },
-  toolChoice: {
-    oneOf: [
-      { type: 'string', enum: ['auto', 'none', 'required'] },
-      { type: 'object', properties: { type: { type: 'string' }, toolName: { type: 'string' } } },
-    ],
-    description: 'Controls how tools are selected during generation',
   },
   modelSettings: {
     type: 'object',
@@ -70,6 +52,29 @@ export const vNextBodyOptions: any = {
     },
     description: 'Model settings for generation',
   },
+};
+
+// @TODO: TYPED OPTIONS
+export const vNextBodyOptions: any = {
+  threadId: { type: 'string' },
+  resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+  output: { type: 'object' },
+  instructions: { type: 'string', description: "Optional instructions to override the agent's default instructions" },
+  context: {
+    type: 'array',
+    items: { type: 'object' },
+    description: 'Additional context messages to include',
+  },
+  savePerStep: { type: 'boolean', description: 'Whether to save messages incrementally on step finish' },
+  toolChoice: {
+    oneOf: [
+      { type: 'string', enum: ['auto', 'none', 'required'] },
+      { type: 'object', properties: { type: { type: 'string' }, toolName: { type: 'string' } } },
+    ],
+    description: 'Controls how tools are selected during generation',
+  },
+  format: { type: 'string', enum: ['mastra', 'aisdk'], description: 'Response format' },
+  ...sharedBodyOptions,
 };
 
 // Agent handlers
@@ -277,6 +282,55 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
     );
   } catch (error) {
     return handleError(error, 'Error streaming from agent');
+  }
+}
+
+export async function streamNetworkHandler(c: Context) {
+  try {
+    const mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+    const logger = mastra.getLogger();
+
+    c.header('Transfer-Encoding', 'chunked');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const streamResponse = await getOriginalStreamNetworkHandler({
+            mastra,
+            agentId,
+            runtimeContext,
+            body,
+            // abortSignal: c.req.raw.signal,
+          });
+
+          const reader = streamResponse.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
+          }
+
+          await stream.write('data: [DONE]\n\n');
+        } catch (err) {
+          logger.error('Error in streamNetwork generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+        }
+
+        await stream.close();
+      },
+      async err => {
+        logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error streaming from agent in network mode');
   }
 }
 

@@ -375,6 +375,7 @@ export function createLLMExecutionStep<
   toolCallStreaming,
   controller,
   output,
+  outputProcessors,
   headers,
   downloadRetries,
   downloadConcurrency,
@@ -383,7 +384,7 @@ export function createLLMExecutionStep<
     id: 'llm-execution',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, bail }) => {
+    execute: async ({ inputData, bail, tracingContext }) => {
       const runState = new AgenticRunState({
         _internal: _internal!,
         model,
@@ -502,6 +503,7 @@ export function createLLMExecutionStep<
         },
         stream: modelResult as ReadableStream<ChunkType>,
         messageList,
+        messageId,
         options: {
           runId,
           rootSpan: modelStreamSpan,
@@ -509,6 +511,9 @@ export function createLLMExecutionStep<
           telemetry_settings,
           includeRawChunks,
           output,
+          outputProcessors,
+          outputProcessorRunnerMode: 'stream',
+          tracingContext,
         },
       });
 
@@ -585,6 +590,26 @@ export function createLLMExecutionStep<
         });
       }
 
+      // Check if the inner stream encountered a tripwire and propagate it
+      if (outputStream.tripwire) {
+        controller.enqueue({
+          type: 'tripwire',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            tripwireReason: outputStream.tripwireReason || 'Content blocked by output processor',
+          },
+        });
+
+        // Set the step result to indicate abort
+        runState.setState({
+          stepResult: {
+            isContinued: false,
+            reason: 'abort',
+          },
+        });
+      }
+
       /**
        * Add tool calls to the message list
        */
@@ -621,6 +646,9 @@ export function createLLMExecutionStep<
       const responseMetadata = runState.state.responseMetadata;
       const text = outputStream._getImmediateText();
 
+      // Check if tripwire was triggered
+      const tripwireTriggered = outputStream.tripwire;
+
       const steps = inputData.output?.steps || [];
 
       steps.push(
@@ -645,9 +673,9 @@ export function createLLMExecutionStep<
       return {
         messageId,
         stepResult: {
-          reason: hasErrored ? 'error' : finishReason,
+          reason: tripwireTriggered ? 'abort' : hasErrored ? 'error' : finishReason,
           warnings,
-          isContinued: !['stop', 'error'].includes(finishReason),
+          isContinued: tripwireTriggered ? false : !['stop', 'error'].includes(finishReason),
         },
         metadata: {
           providerMetadata: runState.state.providerOptions,

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { GetNetworkResponse, GetVNextNetworkResponse } from '@mastra/client-js';
 import { client } from '@/lib/client';
+import { usePlaygroundStore } from '@mastra/playground-ui';
 
 export const useNetworks = () => {
   const [networks, setNetworks] = useState<GetNetworkResponse[]>([]);
@@ -29,6 +30,7 @@ export const useNetworks = () => {
 };
 
 export const useNetwork = (networkId: string, enabled = true) => {
+  const { runtimeContext } = usePlaygroundStore();
   const [network, setNetwork] = useState<GetNetworkResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -37,7 +39,7 @@ export const useNetwork = (networkId: string, enabled = true) => {
       setIsLoading(true);
       try {
         const network = client.getNetwork(networkId);
-        setNetwork(await network.details());
+        setNetwork(await network.details(runtimeContext));
       } catch (error) {
         setNetwork(null);
         console.error('Error fetching network', error);
@@ -50,7 +52,7 @@ export const useNetwork = (networkId: string, enabled = true) => {
     if (networkId && enabled) {
       fetchNetwork();
     }
-  }, [networkId, enabled]);
+  }, [networkId, enabled, runtimeContext]);
 
   return { network, isLoading };
 };
@@ -81,6 +83,7 @@ export const useVNextNetworks = () => {
 };
 
 export const useVNextNetwork = (networkId: string, enabled = true) => {
+  const { runtimeContext } = usePlaygroundStore();
   const [network, setNetwork] = useState<GetVNextNetworkResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -89,7 +92,7 @@ export const useVNextNetwork = (networkId: string, enabled = true) => {
       setIsLoading(true);
       try {
         const network = client.getVNextNetwork(networkId);
-        setNetwork(await network.details());
+        setNetwork(await network.details(runtimeContext));
       } catch (error) {
         setNetwork(null);
         console.error('Error fetching network', error);
@@ -102,7 +105,7 @@ export const useVNextNetwork = (networkId: string, enabled = true) => {
     if (networkId && enabled) {
       fetchNetwork();
     }
-  }, [networkId, enabled]);
+  }, [networkId, enabled, runtimeContext]);
 
   return { vNextNetwork: network, isLoading };
 };

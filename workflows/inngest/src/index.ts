@@ -319,37 +319,9 @@ export class InngestRun<
   } {
     const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
-    let currentToolData: { name: string; args: any } | undefined = undefined;
-
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
-      if ((event as any).type === 'workflow-agent-call-start') {
-        currentToolData = {
-          name: (event as any).payload.name,
-          args: (event as any).payload.args,
-        };
-        await writer.write({
-          ...event.payload,
-          type: 'tool-call-streaming-start',
-        } as any);
-
-        return;
-      }
-
       try {
-        if ((event as any).type === 'workflow-agent-call-finish') {
-          return;
-        } else if (!(event as any).type.startsWith('workflow-')) {
-          if ((event as any).type === 'text-delta') {
-            await writer.write({
-              type: 'tool-call-delta',
-              ...(currentToolData ?? {}),
-              argsTextDelta: (event as any).textDelta,
-            } as any);
-          }
-          return;
-        }
-
         const e: any = {
           ...event,
           type: event.type.replace('workflow-', ''),
@@ -743,10 +715,7 @@ export function createStep<
           name: params.name,
           args: inputData,
         };
-        await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-start',
-          payload: toolData,
-        });
+
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
@@ -762,13 +731,24 @@ export function createStep<
           return abort();
         }
 
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...(toolData ?? {}),
+        });
+
         for await (const chunk of fullStream) {
-          await emitter.emit('watch-v2', chunk);
+          if (chunk.type === 'text-delta') {
+            await emitter.emit('watch-v2', {
+              type: 'tool-call-delta',
+              ...(toolData ?? {}),
+              argsTextDelta: chunk.textDelta,
+            });
+          }
         }
 
         await emitter.emit('watch-v2', {
-          type: 'workflow-agent-call-finish',
-          payload: toolData,
+          type: 'tool-call-streaming-finish',
+          ...(toolData ?? {}),
         });
 
         return {
@@ -1045,6 +1025,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     if (fn) {
@@ -1059,6 +1040,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepSpan,
+            isInternal: sleepSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1162,6 +1144,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     if (fn) {
@@ -1176,6 +1159,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runCount: -1,
           tracingContext: {
             currentSpan: sleepUntilSpan,
+            isInternal: sleepUntilSpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1285,6 +1269,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       attributes: {
         stepId: step.id,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     const startedAt = await this.inngestStep.run(
@@ -1545,6 +1530,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: {
             currentSpan: stepAISpan,
+            isInternal: stepAISpan?.isInternal,
           },
           getInitData: () => stepResults?.input as any,
           getStepResult: (step: any) => {
@@ -1679,7 +1665,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             runtimeContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan },
+            tracingContext: { currentSpan: stepAISpan, isInternal: true },
           });
         }
       });
@@ -1783,11 +1769,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext?.currentSpan?.createChildSpan({
       type: AISpanType.WORKFLOW_CONDITIONAL,
-      name: `conditional: ${entry.conditions.length} conditions`,
+      name: `conditional: '${entry.conditions.length} conditions'`,
       input: prevOutput,
       attributes: {
         conditionCount: entry.conditions.length,
       },
+      isInternal: tracingContext?.isInternal,
     });
 
     let execResults: any;
@@ -1797,11 +1784,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
             const evalSpan = conditionalSpan?.createChildSpan({
               type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
-              name: `condition ${index}`,
+              name: `condition: '${index}'`,
               input: prevOutput,
               attributes: {
                 conditionIndex: index,
               },
+              isInternal: tracingContext?.isInternal,
             });
 
             try {
@@ -1814,6 +1802,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 inputData: prevOutput,
                 tracingContext: {
                   currentSpan: evalSpan,
+                  isInternal: evalSpan?.isInternal,
                 },
                 getInitData: () => stepResults?.input as any,
                 getStepResult: (step: any) => {
@@ -1910,6 +1899,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           disableScorers,
           tracingContext: {
             currentSpan: conditionalSpan,
+            isInternal: conditionalSpan?.isInternal,
           },
         }),
       ),

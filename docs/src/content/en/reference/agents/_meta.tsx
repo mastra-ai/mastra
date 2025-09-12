@@ -3,8 +3,12 @@ import { Tag } from "@/components/tag";
 const meta = {
   agent: "Agent",
   generate: ".generate()",
+  generateVNext: <Tag text="experimental">.generateVNext()</Tag>,
   stream: ".stream()",
   streamVNext: <Tag text="experimental">.streamVNext()</Tag>,
+  MastraModelOutput: "MastraModelOutput",
+  ChunkType: "ChunkType",
+  listAgents: ".listAgents()",
   getWorkflows: ".getWorkflows()",
   getTools: ".getTools()",
   getScorers: ".getScorers()",

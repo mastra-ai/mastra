@@ -12,7 +12,7 @@ The AI Tracing system enables detailed observability for AI-driven applications 
 - **Event-Driven Architecture**: Real-time tracing events for immediate observability
 - **OpenTelemetry Compatible**: Uses standard trace and span ID formats for integration
 - **Flexible Sampling**: Multiple sampling strategies with custom sampler support
-- **Configurable Security**: Customizable sensitive field filtering with case-insensitive matching
+- **Pluggable Processors**: Modify or filter span fields before export
 - **Pluggable Exporters**: Multiple export formats and destinations
 - **Automatic Lifecycle Management**: Spans automatically emit events without manual intervention
 
@@ -58,40 +58,6 @@ llmSpan.end({
 agentSpan.end();
 ```
 
-### Automatic Workflow Integration
-
-The AI tracing system automatically creates span hierarchies for workflow executions:
-
-```typescript
-import { createStep } from '@mastra/core/workflows';
-
-// Workflow step with automatic tracing
-const step = createStep({
-  id: 'customer-response',
-  execute: async ({ inputData, mastra, aiTracingContext }) => {
-    // aiTracingContext is automatically provided by the workflow engine
-    const agent = mastra.getAgent('support-agent');
-
-    // Agent calls automatically create child spans under the step span
-    const response = await agent.generate(inputData.query, {
-      aiTracingContext, // Pass context for automatic span threading
-    });
-
-    return { response: response.text };
-  },
-});
-```
-
-This creates the span hierarchy:
-
-```
-Workflow Run
-├── Step: customer-response
-    ├── Agent Run: support-agent
-        ├── LLM Generation: model-call-1
-        └── LLM Generation: model-call-2
-```
-
 ### Span Types
 
 - **`WORKFLOW_RUN`**: Root span for entire workflow execution
@@ -102,21 +68,20 @@ Workflow Run
 - **`MCP_TOOL_CALL`**: Model Context Protocol tool execution
 - **`GENERIC`**: Custom spans for other operations
 
-### Configuration
+### Basic Configuration
 
-Register AI tracing with your Mastra instance:
+Enable AI Observability in your Mastra instance:
 
 ```typescript
-import { registerAITracing, DefaultAITracing } from '@mastra/core';
-
-// Register a tracing instance
-const tracing = new DefaultAITracing({
-  serviceName: 'my-app',
-  sampling: { type: 'always' },
+export const mastra = new Mastra({
+  // ... other config
+  observability: {
+    default: { enabled: true },
+  },
 });
-
-registerAITracing('default', tracing, true); // true = set as default
 ```
+
+This enables the Default and Cloud exporters, with the SensitiveDataFilter, and 'Always' Sampling.
 
 ## Performance Considerations
 
@@ -126,12 +91,11 @@ The current implementation prioritizes correctness and ease of use:
 
 - **Automatic Lifecycle Management**: All spans automatically emit events through method wrapping
 - **Real-time Export**: Events are exported immediately when they occur
-- **Memory Overhead**: Each span maintains references to tracing instance and root trace span
+- **Memory Overhead**: Each span maintains references to tracing instance
 
 ### Future Optimization Opportunities
 
 When performance becomes a concern, consider these optimizations:
 
-1. **Batched Exports**: Implement export queues for high-throughput scenarios
-2. **Sampling at Creation**: Move sampling decision earlier to avoid creating unnecessary spans
-3. **Async Export Queues**: Buffer events and export in batches to reduce I/O overhead
+1. **Sampling at Creation**: Move sampling decision earlier to avoid creating unnecessary spans
+2. **Async Export Queues**: Buffer events and export in batches to reduce I/O overhead

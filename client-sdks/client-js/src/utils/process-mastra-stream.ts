@@ -1,17 +1,16 @@
 import type { ReadableStream } from 'stream/web';
-import type { ChunkType } from '@mastra/core/stream';
+import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 
-export async function processMastraStream({
+async function sharedProcessMastraStream({
   stream,
   onChunk,
 }: {
   stream: ReadableStream<Uint8Array>;
-  onChunk: (chunk: ChunkType) => Promise<void>;
+  onChunk: (chunk: any) => Promise<void>;
 }) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -46,4 +45,30 @@ export async function processMastraStream({
   } finally {
     reader.releaseLock();
   }
+}
+
+export async function processMastraNetworkStream({
+  stream,
+  onChunk,
+}: {
+  stream: ReadableStream<Uint8Array>;
+  onChunk: (chunk: NetworkChunkType) => Promise<void>;
+}) {
+  return sharedProcessMastraStream({
+    stream,
+    onChunk,
+  });
+}
+
+export async function processMastraStream({
+  stream,
+  onChunk,
+}: {
+  stream: ReadableStream<Uint8Array>;
+  onChunk: (chunk: ChunkType) => Promise<void>;
+}) {
+  return sharedProcessMastraStream({
+    stream,
+    onChunk,
+  });
 }

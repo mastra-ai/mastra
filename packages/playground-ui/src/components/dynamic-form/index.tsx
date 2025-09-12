@@ -5,7 +5,7 @@ import { Button } from '../../ds/components/Button';
 import { ScrollArea } from '../ui/scroll-area';
 import { AutoForm } from '@/components/ui/autoform';
 import type { ExtendableAutoFormProps } from '@autoform/react';
-import z, { ZodObject } from 'zod';
+import z, { ZodObject, ZodIntersection } from 'zod';
 import { Label } from '../ui/label';
 import { Icon } from '@/ds/icons';
 import { ZodProvider, fieldConfig } from '@autoform/zod/v4';
@@ -25,6 +25,11 @@ function isEmptyZodObject(schema: unknown): boolean {
   if (schema instanceof ZodObject) {
     return Object.keys(schema.shape).length === 0;
   }
+
+  if (schema instanceof ZodIntersection) {
+    return isEmptyZodObject(schema._def.left) || isEmptyZodObject(schema._def.right);
+  }
+
   return false;
 }
 

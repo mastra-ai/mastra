@@ -513,6 +513,13 @@ describe('Workflow', () => {
           type: 'tool-call-delta',
         },
         {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-finish',
+        },
+        {
           payload: {
             id: 'test-agent-1',
             output: {
@@ -582,6 +589,13 @@ describe('Workflow', () => {
           argsTextDelta: 'London',
           name: 'test-agent-2',
           type: 'tool-call-delta',
+        },
+        {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-finish',
         },
         {
           payload: {

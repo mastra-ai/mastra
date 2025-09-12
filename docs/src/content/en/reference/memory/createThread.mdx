@@ -1,23 +1,16 @@
-# createThread
+---
+title: "Reference: Memory.createThread() | Memory | Mastra Docs"
+description: "Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system."
+---
 
-Creates a new conversation thread in the memory system. Each thread represents a distinct conversation or context and can contain multiple messages.
+# Memory.createThread()
+
+The `.createThread()` method creates a new conversation thread in the memory system. Each thread represents a distinct conversation or context and can contain multiple messages.
 
 ## Usage Example
 
-```typescript
-import { Memory } from "@mastra/memory";
-
-const memory = new Memory({
-  /* config */
-});
-const thread = await memory.createThread({
-  resourceId: "user-123",
-  title: "Support Conversation",
-  metadata: {
-    category: "support",
-    priority: "high",
-  },
-});
+```typescript copy
+await memory?.createThread({ resourceId: "user-123" });
 ```
 
 ## Parameters
@@ -89,6 +82,33 @@ const thread = await memory.createThread({
     },
   ]}
 />
+
+## Extended usage example
+
+```typescript filename="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const thread = await memory?.createThread({
+  resourceId: "user-123",
+  title: "Memory Test Thread",
+  metadata: {
+    source: "test-script",
+    purpose: "memory-testing"
+  }
+});
+
+const response = await agent.generate("message for agent", {
+  memory: {
+    thread: thread!.id,
+    resource: thread!.resourceId
+  }
+});
+
+console.log(response.text);
+```
 
 ### Related
 

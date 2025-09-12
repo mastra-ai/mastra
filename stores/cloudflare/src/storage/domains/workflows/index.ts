@@ -59,10 +59,11 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
   async persistWorkflowSnapshot(params: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
-      const { workflowName, runId, snapshot } = params;
+      const { workflowName, runId, resourceId, snapshot } = params;
 
       await this.operations.putKV({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -70,6 +71,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         value: {
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot: typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot),
           createdAt: new Date(),
           updatedAt: new Date(),

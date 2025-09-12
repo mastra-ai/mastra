@@ -1,5 +1,14 @@
 # @mastra/clickhouse
 
+## 0.15.1-alpha.0
+
+### Patch Changes
+
+- Add resource id to workflow run snapshots ([#7740](https://github.com/mastra-ai/mastra/pull/7740))
+
+- Updated dependencies [[`547c621`](https://github.com/mastra-ai/mastra/commit/547c62104af3f7a551b3754e9cbdf0a3fbba15e4)]:
+  - @mastra/core@0.16.4-alpha.1
+
 ## 0.15.0
 
 ### Minor Changes

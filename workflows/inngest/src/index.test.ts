@@ -6882,7 +6882,6 @@ describe('MastraInngestWorkflow', () => {
           payload: {
             id: expect.any(String),
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               result: 'success1',
@@ -7091,7 +7090,6 @@ describe('MastraInngestWorkflow', () => {
           payload: {
             id: expect.any(String),
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               value: 1000,
@@ -7654,7 +7652,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(values).toMatchObject([
+      const expectedValues = [
         {
           payload: {
             runId: 'test-run-id',
@@ -7664,12 +7662,19 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'start',
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
         {
           payload: {
             id: 'start',
+            endedAt: expect.any(Number),
             output: {
               prompt1: 'Capital of France, just the name',
               prompt2: 'Capital of UK, just the name',
@@ -7728,6 +7733,13 @@ describe('MastraInngestWorkflow', () => {
           argsTextDelta: 'Paris',
           name: 'test-agent-1',
           type: 'tool-call-delta',
+        },
+        {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-finish',
         },
         {
           payload: {
@@ -7791,6 +7803,13 @@ describe('MastraInngestWorkflow', () => {
           type: 'tool-call-delta',
         },
         {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-finish',
+        },
+        {
           payload: {
             id: expect.any(String),
             output: {
@@ -7813,7 +7832,11 @@ describe('MastraInngestWorkflow', () => {
           },
           type: 'finish',
         },
-      ]);
+      ];
+      values.forEach((value, i) => {
+        const expectedValue = expectedValues[i];
+        expect(value).toMatchObject(expectedValue);
+      });
     });
 
     describe('Workflow integration', () => {

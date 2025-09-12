@@ -55,6 +55,12 @@ export const agent = new Agent({
       description: "The language model used by the agent. Can be provided statically or resolved at runtime.",
     },
     {
+      name: "agents",
+      type: "Record<string, Agent> | ({ runtimeContext: RuntimeContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+      isOptional: true,
+      description: "Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.",
+    },
+    {
       name: "tools",
       type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,

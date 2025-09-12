@@ -2,6 +2,7 @@ import type { GetToolResponse } from '@mastra/client-js';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { client } from '@/lib/client';
+import { usePlaygroundStore } from '@mastra/playground-ui';
 
 export const useTools = () => {
   const [tools, setTools] = useState<Record<string, GetToolResponse>>({});
@@ -31,6 +32,7 @@ export const useTools = () => {
 export const useTool = (toolId: string) => {
   const [tool, setTool] = useState<GetToolResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { runtimeContext } = usePlaygroundStore();
 
   useEffect(() => {
     const fetchTool = async () => {
@@ -42,7 +44,7 @@ export const useTool = (toolId: string) => {
           return;
         }
         const tool = client.getTool(toolId);
-        const toolResponse = await tool.details();
+        const toolResponse = await tool.details(runtimeContext);
         setTool(toolResponse);
       } catch (error) {
         setTool(null);

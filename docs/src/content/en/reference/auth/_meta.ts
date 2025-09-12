@@ -1,5 +1,6 @@
 const meta = {
   jwt: "JSON Web Token",
+  clerk: "Clerk",
   supabase: "Supabase",
 };
 

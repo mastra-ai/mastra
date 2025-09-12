@@ -9,6 +9,7 @@ export default defineConfig({
     'src/metrics/nlp/index.ts',
     'src/scorers/llm/index.ts',
     'src/scorers/code/index.ts',
+    'src/scorers/utils.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,

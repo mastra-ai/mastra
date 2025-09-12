@@ -85,20 +85,22 @@ export class WorkflowsPG extends WorkflowsStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
       const now = new Date().toISOString();
       await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
-                 VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET snapshot = $3, "updatedAt" = $5`,
-        [workflowName, runId, JSON.stringify(snapshot), now, now],
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
+        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
       throw new MastraError(

@@ -12,6 +12,7 @@ import type { Workflow } from './workflow';
 
 export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
+  resourceId?: string;
   workflowId: string;
   mastra: Mastra;
   runtimeContext: RuntimeContext;

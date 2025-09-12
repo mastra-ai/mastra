@@ -17,7 +17,7 @@ import { LangfuseExporter } from '@mastra/langfuse';
 const mastra = new Mastra({
   ...,
   observability: {
-    instances: {
+    configs: {
       langfuse: {
         serviceName: 'service',
         exporters: [

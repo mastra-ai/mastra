@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AISpanType, AITracingEventType } from '../types';
-import type { LLMGenerationAttributes, WorkflowStepAttributes, AITracingEvent, AnyAISpan } from '../types';
+import type { LLMGenerationAttributes, WorkflowStepAttributes, AITracingEvent, AnyExportedAISpan } from '../types';
 import { DefaultExporter } from './default';
 
 // Mock Mastra and logger
@@ -240,7 +240,7 @@ describe('DefaultExporter', () => {
         expect(() => exporter.init()).toThrow('DefaultExporter: init() called before __registerMastra()');
       });
 
-      it('should throw error if storage not available during init()', () => {
+      it('should log error if storage not available during init()', () => {
         const mockMastraWithoutStorage = {
           getStorage: vi.fn().mockReturnValue(null),
         } as any;
@@ -248,7 +248,12 @@ describe('DefaultExporter', () => {
         const exporter = new DefaultExporter({}, mockLogger);
         exporter.__registerMastra(mockMastraWithoutStorage);
 
-        expect(() => exporter.init()).toThrow('DefaultExporter: Storage not available during initialization');
+        // Should not throw, but log error instead
+        expect(() => exporter.init()).not.toThrow();
+
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          'DefaultExporter disabled: Storage not available. Traces will not be persisted.',
+        );
       });
     });
 
@@ -602,7 +607,7 @@ describe('DefaultExporter', () => {
     ): AITracingEvent {
       return {
         type,
-        span: {
+        exportedSpan: {
           id: spanId,
           traceId,
           type: AISpanType.GENERIC,
@@ -614,7 +619,7 @@ describe('DefaultExporter', () => {
           metadata: undefined,
           input: 'test input',
           output: type === AITracingEventType.SPAN_ENDED ? 'test output' : undefined,
-        } as any as AnyAISpan,
+        } as any as AnyExportedAISpan,
       };
     }
   });
