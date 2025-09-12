@@ -74,6 +74,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     telemetry_settings,
   });
 
+  const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     model,
     runId: runIdToUse,
@@ -88,10 +90,11 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     modelSettings,
     outputProcessors,
     llmAISpan,
+    messageId: messageId!,
     ...rest,
   };
 
-  const loopStreamResults = workflowLoopStream(workflowLoopProps);
+  const streamFn = workflowLoopStream(workflowLoopProps);
 
   return new MastraModelOutput({
     model: {
@@ -99,9 +102,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       provider: model.provider,
       version: model.specificationVersion,
     },
-    stream: loopStreamResults.stream,
+    stream: streamFn,
     messageList,
-    messageId: loopStreamResults.messageId!,
+    messageId: messageId!,
     options: {
       runId: runIdToUse!,
       telemetry_settings,

@@ -20,173 +20,169 @@ export function workflowLoopStream<
   _internal,
   modelStreamSpan,
   llmAISpan,
+  messageId,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
-  const messageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+  return new ReadableStream<ChunkType>({
+    start: async controller => {
+      const writer = new WritableStream<ChunkType>({
+        write: chunk => {
+          controller.enqueue(chunk);
+        },
+      });
 
-  return {
-    stream: new ReadableStream<ChunkType>({
-      start: async controller => {
-        const writer = new WritableStream<ChunkType>({
-          write: chunk => {
-            controller.enqueue(chunk);
-          },
-        });
-
-        modelStreamSpan.setAttributes({
-          ...(telemetry_settings?.recordInputs !== false
-            ? {
-                'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
-              }
-            : {}),
-        });
-
-        const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
-          messageId: messageId!,
-          model,
-          telemetry_settings,
-          _internal,
-          modelSettings,
-          toolChoice,
-          modelStreamSpan,
-          controller,
-          writer,
-          ...rest,
-        });
-
-        const mainWorkflow = createWorkflow({
-          id: 'agentic-loop',
-          inputSchema: llmIterationOutputSchema,
-          outputSchema: z.any(),
-        })
-          .dowhile(outerLLMWorkflow, async ({ inputData }) => {
-            let hasFinishedSteps = false;
-
-            if (rest.stopWhen) {
-              // console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
-              const conditions = await Promise.all(
-                (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
-                  return condition({
-                    steps: inputData.output.steps,
-                  });
-                }),
-              );
-
-              const hasStopped = conditions.some(condition => condition);
-              hasFinishedSteps = hasStopped;
+      modelStreamSpan.setAttributes({
+        ...(telemetry_settings?.recordInputs !== false
+          ? {
+              'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
             }
+          : {}),
+      });
 
-            inputData.stepResult.isContinued = hasFinishedSteps ? false : inputData.stepResult.isContinued;
+      const outerLLMWorkflow = createOuterLLMWorkflow<Tools, OUTPUT>({
+        messageId: messageId!,
+        model,
+        telemetry_settings,
+        _internal,
+        modelSettings,
+        toolChoice,
+        modelStreamSpan,
+        controller,
+        writer,
+        ...rest,
+      });
 
-            if (inputData.stepResult.reason !== 'abort') {
-              controller.enqueue({
-                type: 'step-finish',
-                runId: rest.runId,
-                from: ChunkFrom.AGENT,
-                payload: inputData,
-              });
-            }
+      const mainWorkflow = createWorkflow({
+        id: 'agentic-loop',
+        inputSchema: llmIterationOutputSchema,
+        outputSchema: z.any(),
+      })
+        .dowhile(outerLLMWorkflow, async ({ inputData }) => {
+          let hasFinishedSteps = false;
 
-            modelStreamSpan.setAttributes({
-              'stream.response.id': inputData.metadata.id,
-              'stream.response.model': model.modelId,
-              ...(inputData.metadata.providerMetadata
-                ? { 'stream.response.providerMetadata': JSON.stringify(inputData.metadata.providerMetadata) }
-                : {}),
-              'stream.response.finishReason': inputData.stepResult.reason,
-              'stream.usage.inputTokens': inputData.output.usage?.inputTokens,
-              'stream.usage.outputTokens': inputData.output.usage?.outputTokens,
-              'stream.usage.totalTokens': inputData.output.usage?.totalTokens,
-              ...(telemetry_settings?.recordOutputs !== false
-                ? {
-                    'stream.response.text': inputData.output.text,
-                    'stream.prompt.messages': JSON.stringify(rest.messageList.get.input.aiV5.model()),
-                  }
-                : {}),
+          if (rest.stopWhen) {
+            // console.log('stop_when', JSON.stringify(inputData.output.steps, null, 2));
+            const conditions = await Promise.all(
+              (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
+                return condition({
+                  steps: inputData.output.steps,
+                });
+              }),
+            );
+
+            const hasStopped = conditions.some(condition => condition);
+            hasFinishedSteps = hasStopped;
+          }
+
+          inputData.stepResult.isContinued = hasFinishedSteps ? false : inputData.stepResult.isContinued;
+
+          if (inputData.stepResult.reason !== 'abort') {
+            controller.enqueue({
+              type: 'step-finish',
+              runId: rest.runId,
+              from: ChunkFrom.AGENT,
+              payload: inputData,
             });
+          }
 
-            modelStreamSpan.end();
+          modelStreamSpan.setAttributes({
+            'stream.response.id': inputData.metadata.id,
+            'stream.response.model': model.modelId,
+            ...(inputData.metadata.providerMetadata
+              ? { 'stream.response.providerMetadata': JSON.stringify(inputData.metadata.providerMetadata) }
+              : {}),
+            'stream.response.finishReason': inputData.stepResult.reason,
+            'stream.usage.inputTokens': inputData.output.usage?.inputTokens,
+            'stream.usage.outputTokens': inputData.output.usage?.outputTokens,
+            'stream.usage.totalTokens': inputData.output.usage?.totalTokens,
+            ...(telemetry_settings?.recordOutputs !== false
+              ? {
+                  'stream.response.text': inputData.output.text,
+                  'stream.prompt.messages': JSON.stringify(rest.messageList.get.input.aiV5.model()),
+                }
+              : {}),
+          });
 
-            const reason = inputData.stepResult.reason;
+          modelStreamSpan.end();
 
-            if (reason === undefined) {
-              return false;
-            }
+          const reason = inputData.stepResult.reason;
 
-            return inputData.stepResult.isContinued;
-          })
-          .map(({ inputData }) => {
-            const toolCalls = rest.messageList.get.response.aiV5
-              .model()
-              .filter((message: any) => message.role === 'tool');
-            inputData.output.toolCalls = toolCalls;
+          if (reason === undefined) {
+            return false;
+          }
 
-            return inputData;
-          })
-          .commit();
+          return inputData.stepResult.isContinued;
+        })
+        .map(({ inputData }) => {
+          const toolCalls = rest.messageList.get.response.aiV5
+            .model()
+            .filter((message: any) => message.role === 'tool');
+          inputData.output.toolCalls = toolCalls;
 
-        const msToFirstChunk = _internal?.now?.()! - rest.startTimestamp!;
+          return inputData;
+        })
+        .commit();
 
-        modelStreamSpan.addEvent('ai.stream.firstChunk', {
-          'ai.response.msToFirstChunk': msToFirstChunk,
-        });
+      const msToFirstChunk = _internal?.now?.()! - rest.startTimestamp!;
 
-        modelStreamSpan.setAttributes({
-          'stream.response.timestamp': new Date(rest.startTimestamp).toISOString(),
-          'stream.response.msToFirstChunk': msToFirstChunk,
-        });
+      modelStreamSpan.addEvent('ai.stream.firstChunk', {
+        'ai.response.msToFirstChunk': msToFirstChunk,
+      });
 
-        controller.enqueue({
-          type: 'start',
-          runId: rest.runId,
-          from: ChunkFrom.AGENT,
-          payload: {},
-        });
+      modelStreamSpan.setAttributes({
+        'stream.response.timestamp': new Date(rest.startTimestamp).toISOString(),
+        'stream.response.msToFirstChunk': msToFirstChunk,
+      });
 
-        const run = await mainWorkflow.createRunAsync({
-          runId: rest.runId,
-        });
+      controller.enqueue({
+        type: 'start',
+        runId: rest.runId,
+        from: ChunkFrom.AGENT,
+        payload: {},
+      });
 
-        const executionResult = await run.start({
-          inputData: {
-            messageId: messageId!,
-            messages: {
-              all: rest.messageList.get.all.aiV5.model(),
-              user: rest.messageList.get.input.aiV5.model(),
-              nonUser: [],
-            },
+      const run = await mainWorkflow.createRunAsync({
+        runId: rest.runId,
+      });
+
+      const executionResult = await run.start({
+        inputData: {
+          messageId: messageId!,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: [],
           },
-          tracingContext: { currentSpan: llmAISpan, isInternal: true },
-        });
+        },
+        tracingContext: { currentSpan: llmAISpan, isInternal: true },
+      });
 
-        if (executionResult.status !== 'success') {
-          controller.close();
-          return;
-        }
-
-        if (executionResult.result.stepResult.reason === 'abort') {
-          controller.close();
-          return;
-        }
-
-        controller.enqueue({
-          type: 'finish',
-          runId: rest.runId,
-          from: ChunkFrom.AGENT,
-          payload: executionResult.result,
-        });
-
-        const msToFinish = (_internal?.now?.() ?? Date.now()) - rest.startTimestamp;
-        modelStreamSpan.addEvent('ai.stream.finish');
-        modelStreamSpan.setAttributes({
-          'stream.response.msToFinish': msToFinish,
-          'stream.response.avgOutputTokensPerSecond':
-            (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,
-        });
-
+      if (executionResult.status !== 'success') {
         controller.close();
-      },
-    }),
-    messageId,
-  };
+        return;
+      }
+
+      if (executionResult.result.stepResult.reason === 'abort') {
+        controller.close();
+        return;
+      }
+
+      controller.enqueue({
+        type: 'finish',
+        runId: rest.runId,
+        from: ChunkFrom.AGENT,
+        payload: executionResult.result,
+      });
+
+      const msToFinish = (_internal?.now?.() ?? Date.now()) - rest.startTimestamp;
+      modelStreamSpan.addEvent('ai.stream.finish');
+      modelStreamSpan.setAttributes({
+        'stream.response.msToFinish': msToFinish,
+        'stream.response.avgOutputTokensPerSecond':
+          (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,
+      });
+
+      controller.close();
+    },
+  });
 }
