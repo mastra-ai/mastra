@@ -832,6 +832,104 @@ describe('BraintrustExporter', () => {
       await expect(disabledExporter.shutdown()).resolves.not.toThrow();
     });
   });
+
+  describe('Out-of-Order Events', () => {
+    it('keeps trace until last child ends when root ends first', async () => {
+      // Start root span
+      const rootSpan = createMockSpan({
+        id: 'root-span-oOO',
+        name: 'root-agent',
+        type: AISpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, span: rootSpan });
+
+      // Start child span
+      const childSpan = createMockSpan({
+        id: 'child-span-oOO',
+        name: 'child-step',
+        type: AISpanType.GENERIC,
+        isRoot: false,
+        attributes: { stepId: 'child-step' },
+      });
+      childSpan.traceId = rootSpan.traceId;
+      childSpan.parent = rootSpan;
+
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, span: childSpan });
+
+      // End root BEFORE child ends (out-of-order end sequence)
+      rootSpan.endTime = new Date();
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, span: rootSpan });
+
+      // Now end child
+      childSpan.endTime = new Date();
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, span: childSpan });
+
+      // Both Braintrust spans should be ended (root then child)
+      expect(mockSpan.end).toHaveBeenCalledTimes(2);
+
+      // Shutdown should not end anything further (cleanup already done)
+      await exporter.shutdown();
+      expect(mockSpan.end).toHaveBeenCalledTimes(2);
+    });
+
+    it('allows starting new child after root ended if another child is still active', async () => {
+      // Start root span
+      const rootSpan = createMockSpan({
+        id: 'root-span-keepalive',
+        name: 'root-agent',
+        type: AISpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, span: rootSpan });
+
+      // Start first child to keep the trace alive
+      const childA = createMockSpan({
+        id: 'child-A',
+        name: 'child-A',
+        type: AISpanType.GENERIC,
+        isRoot: false,
+        attributes: { stepId: 'A' },
+      });
+      childA.traceId = rootSpan.traceId;
+      childA.parent = rootSpan;
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, span: childA });
+
+      // End root while childA is still active
+      rootSpan.endTime = new Date();
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, span: rootSpan });
+
+      // Start another child AFTER root has ended
+      const childB = createMockSpan({
+        id: 'child-B',
+        name: 'child-B',
+        type: AISpanType.GENERIC,
+        isRoot: false,
+        attributes: { stepId: 'B' },
+      });
+      childB.traceId = rootSpan.traceId;
+      childB.parent = rootSpan;
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, span: childB });
+
+      // Finish both children
+      childA.endTime = new Date();
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, span: childA });
+
+      childB.endTime = new Date();
+      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, span: childB });
+
+      // Ends: root, childA, childB
+      expect(mockSpan.end).toHaveBeenCalledTimes(3);
+
+      // Shutdown should not end anything further
+      await exporter.shutdown();
+      expect(mockSpan.end).toHaveBeenCalledTimes(3);
+    });
+  });
 });
 
 // Helper function to create mock spans
