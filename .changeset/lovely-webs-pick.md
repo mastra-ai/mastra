@@ -3,4 +3,4 @@
 '@mastra/langfuse': patch
 ---
 
-"updated observability config"
+updated exporter to use a lightweight span for exporting

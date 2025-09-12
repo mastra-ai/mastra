@@ -8,6 +8,7 @@ export function inferFieldType(schema: z.ZodTypeAny, fieldConfig?: FieldConfig):
   }
 
   if (schema instanceof z.ZodObject) return 'object';
+  if (schema instanceof z.ZodIntersection) return 'object';
   if (schema instanceof z.ZodNumber) return 'number';
   if (schema instanceof z.ZodBoolean) return 'boolean';
   if (schema instanceof z.ZodString) {

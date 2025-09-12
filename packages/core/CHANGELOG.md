@@ -1,5 +1,55 @@
 # @mastra/core
 
+## 0.16.3
+
+### Patch Changes
+
+- dependencies updates: ([#7545](https://github.com/mastra-ai/mastra/pull/7545))
+  - Updated dependency [`hono@^4.9.6` ↗︎](https://www.npmjs.com/package/hono/v/4.9.6) (from `^4.8.12`, in `dependencies`)
+
+- Delayed deprecation notice for streamVNext() replacing stream() until Sept 23rd ([#7739](https://github.com/mastra-ai/mastra/pull/7739))
+
+- Fix onFinish callback in VNext functions to properly resolve the result ([#7733](https://github.com/mastra-ai/mastra/pull/7733))
+
+- support JSONSchema7 output option with generateVNext, streamVNext ([#7630](https://github.com/mastra-ai/mastra/pull/7630))
+
+- various improvements to input & output data on ai spans ([#7636](https://github.com/mastra-ai/mastra/pull/7636))
+
+- cleanup ([#7736](https://github.com/mastra-ai/mastra/pull/7736))
+
+- add network method ([#7704](https://github.com/mastra-ai/mastra/pull/7704))
+
+- Fix memory not being affected by agent output processors (#7087). Output processors now correctly modify messages before they are saved to memory storage. The fix ensures that any transformations applied by output processors (like redacting sensitive information) are properly propagated to the memory system. ([#7647](https://github.com/mastra-ai/mastra/pull/7647))
+
+- Fix agent structuredOutput option types ([#7668](https://github.com/mastra-ai/mastra/pull/7668))
+
+- "added output to agent spans in ai-tracing" ([#7717](https://github.com/mastra-ai/mastra/pull/7717))
+
+- Ensure system messages are persisted in processedList ([#7715](https://github.com/mastra-ai/mastra/pull/7715))
+
+- AN Merge pt 1 ([#7702](https://github.com/mastra-ai/mastra/pull/7702))
+
+- Custom metadata for traces can now be set when starting agents or workflows ([#7689](https://github.com/mastra-ai/mastra/pull/7689))
+
+- Workflow & Agent executions now return traceId. ([#7663](https://github.com/mastra-ai/mastra/pull/7663))
+
+- fixed bugs in observability config parsing ([#7669](https://github.com/mastra-ai/mastra/pull/7669))
+
+- fix playground UI issue about dynmic workflow exec in agent thread ([#7665](https://github.com/mastra-ai/mastra/pull/7665))
+
+- Updated dependencies [[`779d469`](https://github.com/mastra-ai/mastra/commit/779d469366bb9f7fcb6d1638fdabb9f3acc49218)]:
+  - @mastra/schema-compat@0.11.3
+
+## 0.16.3-alpha.1
+
+### Patch Changes
+
+- Delayed deprecation notice for streamVNext() replacing stream() until Sept 23rd ([#7739](https://github.com/mastra-ai/mastra/pull/7739))
+
+- Fix onFinish callback in VNext functions to properly resolve the result ([#7733](https://github.com/mastra-ai/mastra/pull/7733))
+
+- cleanup ([#7736](https://github.com/mastra-ai/mastra/pull/7736))
+
 ## 0.16.3-alpha.0
 
 ### Patch Changes
