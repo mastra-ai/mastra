@@ -48,21 +48,32 @@ function resolveDash0Config(config: Dash0Config): ResolvedProviderConfig | null 
     return null;
   }
 
-  const region = config.region || 'us';
-  const endpoint = `https://ingress.${region}.dash0.com`;
+  if (!config.endpoint) {
+    console.error('[OpenTelemetry Exporter] Dash0 configuration requires endpoint. Tracing will be disabled.');
+    return null;
+  }
+
+  // Dash0 uses gRPC by default
+  // Endpoint should be like: ingress.us-west-2.aws.dash0.com:4317
+  // gRPC endpoints also need /v1/traces suffix
+  // Requires: npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
+  let endpoint = config.endpoint;
+  if (!endpoint.includes('/v1/traces')) {
+    endpoint = `${endpoint}/v1/traces`;
+  }
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${config.apiKey}`,
+    authorization: `Bearer ${config.apiKey}`, // lowercase for gRPC metadata
   };
 
   if (config.dataset) {
-    headers['Dash0-Dataset'] = config.dataset;
+    headers['dash0-dataset'] = config.dataset; // lowercase for gRPC metadata
   }
 
   return {
     endpoint,
     headers,
-    protocol: 'http/protobuf',
+    protocol: 'grpc', // Use gRPC for Dash0
   };
 }
 
@@ -72,7 +83,8 @@ function resolveSignozConfig(config: SignozConfig): ResolvedProviderConfig | nul
     return null;
   }
 
-  const endpoint = config.endpoint || `https://ingest.${config.region || 'us'}.signoz.cloud:443`;
+  // SigNoz uses OTLP endpoint with /v1/traces suffix
+  const endpoint = config.endpoint || `https://ingest.${config.region || 'us'}.signoz.cloud:443/v1/traces`;
 
   return {
     endpoint,
@@ -92,7 +104,8 @@ function resolveNewRelicConfig(config: NewRelicConfig): ResolvedProviderConfig |
   }
 
   // New Relic recommends HTTP/protobuf over gRPC
-  const endpoint = config.endpoint || 'https://otlp.nr-data.net:443';
+  // New Relic uses OTLP endpoint with /v1/traces suffix
+  const endpoint = config.endpoint || 'https://otlp.nr-data.net:443/v1/traces';
 
   return {
     endpoint,
@@ -109,7 +122,8 @@ function resolveTraceloopConfig(config: TraceloopConfig): ResolvedProviderConfig
     return null;
   }
 
-  const endpoint = config.endpoint || 'https://api.traceloop.com';
+  // Traceloop uses OTLP endpoint with /v1/traces suffix
+  const endpoint = config.endpoint || 'https://api.traceloop.com/v1/traces';
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.apiKey}`,
@@ -132,20 +146,23 @@ function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | n
     return null;
   }
 
-  if (!config.teamId) {
-    console.error('[OpenTelemetry Exporter] Laminar configuration requires teamId. Tracing will be disabled.');
-    return null;
-  }
+  // Laminar uses OTLP endpoint with /v1/traces suffix for HTTP
+  // They support both gRPC and HTTP, but we'll use HTTP for consistency
+  const endpoint = config.endpoint || 'https://api.lmnr.ai/v1/traces';
 
-  const endpoint = config.endpoint || 'https://api.lmnr.ai:8443';
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${config.apiKey}`,
+  };
+
+  // Only add team ID header if provided (for backwards compatibility)
+  if (config.teamId) {
+    headers['x-laminar-team-id'] = config.teamId;
+  }
 
   return {
     endpoint,
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      'x-laminar-team-id': config.teamId,
-    },
-    protocol: 'grpc', // Laminar prefers gRPC
+    headers,
+    protocol: 'http/protobuf', // Use HTTP/protobuf instead of gRPC for better compatibility
   };
 }
 
@@ -160,22 +177,10 @@ function resolveLangSmithConfig(config: LangSmithConfig): ResolvedProviderConfig
   if (config.endpoint) {
     // Custom endpoint (e.g., self-hosted)
     endpoint = config.endpoint;
-    // For self-hosted, ensure /api/v1 is appended if not present
-    if (!endpoint.includes('api.smith.langchain.com') && !endpoint.endsWith('/api/v1')) {
-      endpoint = endpoint + '/api/v1';
-    }
   } else if (config.region === 'eu') {
     endpoint = 'https://eu.api.smith.langchain.com/otel';
   } else {
     endpoint = 'https://api.smith.langchain.com/otel';
-  }
-
-  // Add /v1/traces suffix if not present (for OTLP compatibility)
-  if (!endpoint.endsWith('/v1/traces') && !endpoint.endsWith('/otel')) {
-    endpoint = endpoint + '/v1/traces';
-  } else if (endpoint.endsWith('/otel')) {
-    // Replace /otel with /v1/traces for standard OTLP endpoint
-    endpoint = endpoint.replace('/otel', '/v1/traces');
   }
 
   const headers: Record<string, string> = {
@@ -190,7 +195,7 @@ function resolveLangSmithConfig(config: LangSmithConfig): ResolvedProviderConfig
   return {
     endpoint,
     headers,
-    protocol: 'http/json', // LangSmith uses HTTP/JSON by default
+    protocol: 'http/protobuf', // LangSmith supports both JSON and protobuf
   };
 }
 

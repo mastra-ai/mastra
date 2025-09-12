@@ -2,12 +2,12 @@
  * Custom OpenTelemetry span that preserves Mastra's trace and span IDs
  */
 
-import type { AnyAISpan } from '@mastra/core/ai-tracing';
+import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
 import { SpanStatusCode, TraceFlags } from '@opentelemetry/api';
 import type { SpanKind, SpanContext, SpanStatus, Attributes, Link } from '@opentelemetry/api';
 import type { InstrumentationScope } from '@opentelemetry/core';
 import type { Resource } from '@opentelemetry/resources';
-import type { ReadableSpan, type TimedEvent } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base';
 
 /**
  * A custom ReadableSpan implementation that preserves Mastra's IDs
@@ -33,7 +33,7 @@ export class MastraReadableSpan implements ReadableSpan {
   readonly droppedLinksCount: number = 0;
 
   constructor(
-    aiSpan: AnyAISpan,
+    aiSpan: AnyExportedAISpan,
     attributes: Attributes,
     kind: SpanKind,
     parentSpanId?: string,

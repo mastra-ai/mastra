@@ -3,7 +3,7 @@
  */
 
 import { AITracingEventType } from '@mastra/core/ai-tracing';
-import type { AITracingExporter, AnyAISpan, AITracingEvent } from '@mastra/core/ai-tracing';
+import type { AITracingExporter, AITracingEvent, AnyExportedAISpan } from '@mastra/core/ai-tracing';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { defaultResource } from '@opentelemetry/resources';
 import { SimpleSpanProcessor, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -81,7 +81,35 @@ export class OpenTelemetryExporter implements AITracingExporter {
           url: endpoint,
           headers,
         });
+      } else if (protocol === 'grpc') {
+        // gRPC uses Metadata object instead of headers
+        // Dynamically import @grpc/grpc-js to create metadata
+        let metadata: any;
+        try {
+          // @ts-ignore - Dynamic import for optional dependency
+          const grpcModule = await import('@grpc/grpc-js');
+          metadata = new grpcModule.Metadata();
+          Object.entries(headers).forEach(([key, value]) => {
+            metadata.set(key, value);
+          });
+        } catch (grpcError) {
+          console.error(
+            `[OpenTelemetry Exporter] Failed to load gRPC metadata. Install required packages:\n` +
+              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js\n`,
+            grpcError,
+          );
+          this.isDisabled = true;
+          this.isSetup = true;
+          return;
+        }
+
+        this.exporter = new ExporterClass({
+          url: endpoint,
+          metadata,
+          timeoutMillis: this.config.timeout,
+        });
       } else {
+        // HTTP/JSON and HTTP/Protobuf use headers
         this.exporter = new ExporterClass({
           url: endpoint,
           headers,
@@ -133,11 +161,11 @@ export class OpenTelemetryExporter implements AITracingExporter {
       return;
     }
 
-    const span = event.span;
+    const span = event.exportedSpan;
     await this.processSpan(span);
   }
 
-  private async processSpan(span: AnyAISpan): Promise<void> {
+  private async processSpan(span: AnyExportedAISpan): Promise<void> {
     // Ensure exporter is set up
     if (!this.isSetup) {
       await this.setupExporter();
@@ -212,7 +240,7 @@ export class OpenTelemetryExporter implements AITracingExporter {
       for (const [spanId, spanData] of traceData.spans) {
         if (spanId === traceData.rootSpanId) continue;
 
-        const parentId = (spanData.span.parent as any)?.id || traceData.rootSpanId;
+        const parentId = spanData.span.parentSpanId || traceData.rootSpanId;
         const readableSpan = this.spanConverter.convertSpan(spanData.span, parentId);
 
         readableSpans.push(readableSpan);

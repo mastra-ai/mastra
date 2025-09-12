@@ -39,6 +39,7 @@
     "@opentelemetry/semantic-conventions": "^1.37.0"
   },
   "optionalDependencies": {
+    "@grpc/grpc-js": "^1.13.4",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
@@ -56,13 +57,17 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
+    "@grpc/grpc-js": "^1.13.4",
+    "@mastra/core": ">=0.16.4-0 <0.17.0-0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
     "@opentelemetry/exporter-zipkin": "^2.1.0"
   },
   "peerDependenciesMeta": {
+    "@grpc/grpc-js": {
+      "optional": true
+    },
     "@opentelemetry/exporter-trace-otlp-http": {
       "optional": true
     },

@@ -1,5 +1,5 @@
 import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
-import type { AnyAISpan } from '@mastra/core/ai-tracing';
+import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenTelemetryExporter } from './ai-tracing';
 
@@ -65,10 +65,9 @@ describe('OpenTelemetryExporter', () => {
             dataset: 'test-dataset',
           },
         },
-        serviceName: 'test-service',
       });
 
-      const span = {
+      const exportedSpan = {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
@@ -78,11 +77,11 @@ describe('OpenTelemetryExporter', () => {
         endTime: new Date(),
         input: { test: 'input' },
         output: { test: 'output' },
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span,
+        exportedSpan,
       });
 
       // Verify configuration was applied
@@ -97,10 +96,9 @@ describe('OpenTelemetryExporter', () => {
             region: 'us',
           },
         },
-        serviceName: 'test-service',
       });
 
-      const span = {
+      const exportedSpan = {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
@@ -110,11 +108,11 @@ describe('OpenTelemetryExporter', () => {
         endTime: new Date(),
         input: { test: 'input' },
         output: { test: 'output' },
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span,
+        exportedSpan,
       });
 
       expect(exporter).toBeDefined();
@@ -127,10 +125,9 @@ describe('OpenTelemetryExporter', () => {
             apiKey: 'test-license-key',
           },
         },
-        serviceName: 'test-service',
       });
 
-      const span = {
+      const exportedSpan = {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
@@ -140,11 +137,11 @@ describe('OpenTelemetryExporter', () => {
         endTime: new Date(),
         input: { test: 'input' },
         output: { test: 'output' },
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span,
+        exportedSpan,
       });
 
       expect(exporter).toBeDefined();
@@ -159,7 +156,6 @@ describe('OpenTelemetryExporter', () => {
             endpoint: 'http://localhost:4318',
           },
         },
-        serviceName: 'test-service',
       });
 
       const rootSpan = {
@@ -169,7 +165,7 @@ describe('OpenTelemetryExporter', () => {
         type: AISpanType.AGENT_RUN,
         name: 'Root Span',
         startTime: new Date(),
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       const childSpan = {
         id: 'child-1',
@@ -179,25 +175,25 @@ describe('OpenTelemetryExporter', () => {
         name: 'Child Span',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       // Process child first (should buffer)
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: childSpan,
+        exportedSpan: childSpan,
       });
 
       // Process incomplete root (should buffer)
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_STARTED,
-        span: rootSpan,
+        exportedSpan: rootSpan,
       });
 
       // Complete root
       const completedRoot = { ...rootSpan, endTime: new Date() };
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: completedRoot,
+        exportedSpan: completedRoot,
       });
 
       // Should schedule export after delay
@@ -214,7 +210,6 @@ describe('OpenTelemetryExporter', () => {
             endpoint: 'http://localhost:4318',
           },
         },
-        serviceName: 'test-service',
       });
 
       const trace1Root = {
@@ -225,7 +220,7 @@ describe('OpenTelemetryExporter', () => {
         name: 'Workflow 1',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       const trace2Root = {
         id: 'root-2',
@@ -235,15 +230,15 @@ describe('OpenTelemetryExporter', () => {
         name: 'Workflow 2',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: trace1Root,
+        exportedSpan: trace1Root,
       });
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: trace2Root,
+        exportedSpan: trace2Root,
       });
 
       // Both traces should be scheduled for export
@@ -261,7 +256,6 @@ describe('OpenTelemetryExporter', () => {
             endpoint: 'http://localhost:4318',
           },
         },
-        serviceName: 'test-service',
       });
 
       const llmSpan = {
@@ -281,11 +275,11 @@ describe('OpenTelemetryExporter', () => {
           completionTokens: 5,
           totalTokens: 15,
         },
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: llmSpan,
+        exportedSpan: llmSpan,
       });
 
       vi.advanceTimersByTime(5000);
@@ -299,7 +293,6 @@ describe('OpenTelemetryExporter', () => {
             endpoint: 'http://localhost:4318',
           },
         },
-        serviceName: 'test-service',
       });
 
       const toolSpan = {
@@ -312,11 +305,11 @@ describe('OpenTelemetryExporter', () => {
         endTime: new Date(),
         input: { operation: 'add', a: 2, b: 3 },
         output: { result: 5 },
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: toolSpan,
+        exportedSpan: toolSpan,
       });
 
       vi.advanceTimersByTime(5000);
@@ -332,7 +325,6 @@ describe('OpenTelemetryExporter', () => {
             endpoint: 'http://localhost:4318',
           },
         },
-        serviceName: 'test-service',
       });
 
       const errorSpan = {
@@ -349,11 +341,11 @@ describe('OpenTelemetryExporter', () => {
             stack: 'Error: Invalid input\n  at validate()',
           },
         },
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span: errorSpan,
+        exportedSpan: errorSpan,
       });
       vi.advanceTimersByTime(5000);
 
@@ -369,10 +361,9 @@ describe('OpenTelemetryExporter', () => {
             endpoint: 'http://localhost:4318',
           },
         },
-        serviceName: 'test-service',
       });
 
-      const span: AnyAISpan = {
+      const exportedSpan: AnyExportedAISpan = {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
@@ -380,11 +371,11 @@ describe('OpenTelemetryExporter', () => {
         name: 'Test Span',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyAISpan;
+      } as unknown as AnyExportedAISpan;
 
       await exporter.exportEvent({
         type: AITracingEventType.SPAN_ENDED,
-        span,
+        exportedSpan,
       });
 
       // Close before timer expires

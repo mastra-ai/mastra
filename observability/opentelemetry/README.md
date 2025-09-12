@@ -11,13 +11,14 @@ Export Mastra AI traces to any OpenTelemetry-compatible observability platform.
 #### Installation
 
 ```bash
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-proto
+# Dash0 uses gRPC protocol, requires both packages
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -31,7 +32,7 @@ const mastra = new Mastra({
             provider: {
               dash0: {
                 apiKey: process.env.DASH0_API_KEY, // Required at runtime
-                region: 'us', // Optional: 'us' | 'eu', defaults to 'us'
+                endpoint: 'ingress.us-west-2.aws.dash0.com:4317', // Required at runtime
                 dataset: 'production', // Optional: dataset name
               }
             },
@@ -43,18 +44,20 @@ const mastra = new Mastra({
 });
 ```
 
+**Note:** Get your endpoint from your Dash0 dashboard. It should be in the format `ingress.{region}.aws.dash0.com:4317`.
+
 ### SigNoz
 
 #### Installation
 
 ```bash
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -85,13 +88,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -121,13 +124,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-http
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-http
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -158,13 +161,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-grpc
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -177,9 +180,9 @@ const mastra = new Mastra({
           new OpenTelemetryExporter({
             provider: {
               laminar: {
-                apiKey: process.env.LAMINAR_API_KEY, // Required at runtime
-                teamId: process.env.LAMINAR_TEAM_ID, // Required at runtime
-                // endpoint: 'https://custom.lmnr.ai:8443', // Optional
+                apiKey: process.env.LMNR_PROJECT_API_KEY, // Required at runtime
+                // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
+                // endpoint: 'https://api.lmnr.ai/v1/traces', // Optional
               }
             },
           })
@@ -190,18 +193,20 @@ const mastra = new Mastra({
 });
 ```
 
+**Note:** Laminar now only requires the `LMNR_PROJECT_API_KEY`. The `teamId` is optional.
+
 ### LangSmith
 
 #### Installation
 
 ```bash
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-http
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -233,13 +238,13 @@ const mastra = new Mastra({
 #### Installation
 
 ```bash
-npm install @mastra/otel @opentelemetry/exporter-zipkin
+npm install @mastra/opentelemetry @opentelemetry/exporter-zipkin
 ```
 
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -272,16 +277,16 @@ Choose the appropriate exporter based on your collector's protocol:
 
 ```bash
 # For HTTP/JSON: Human-readable, larger payload, good for debugging
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-http
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-http
 
 # For HTTP/Protobuf: Binary format, smaller payload, recommended for production
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-proto
 
 # For gRPC: Bidirectional streaming, lowest latency, requires gRPC support
-npm install @mastra/otel @opentelemetry/exporter-trace-otlp-grpc
+npm install @mastra/opentelemetry @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 
 # For Zipkin: Zipkin-specific format
-npm install @mastra/otel @opentelemetry/exporter-zipkin
+npm install @mastra/opentelemetry @opentelemetry/exporter-zipkin
 ```
 
 Most providers recommend HTTP/Protobuf for production use.
@@ -289,7 +294,7 @@ Most providers recommend HTTP/Protobuf for production use.
 #### Configuration
 
 ```typescript
-import { OpenTelemetryExporter } from '@mastra/otel';
+import { OpenTelemetryExporter } from '@mastra/opentelemetry';
 import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({
@@ -326,6 +331,27 @@ We've made exporter dependencies optional to:
 - **Avoid conflicts** - Some exporters have conflicting dependencies
 
 If you forget to install the required exporter, you'll get a helpful error message telling you exactly what to install.
+
+## Endpoint Configuration Notes
+
+### Protocol Requirements
+
+- **gRPC endpoints**: Automatically append `/v1/traces` to the base endpoint
+- **HTTP endpoints**: Most providers expect `/v1/traces` or provider-specific paths
+- **Authentication**:
+  - HTTP uses `headers` with standard HTTP headers
+  - gRPC uses lowercase metadata keys (e.g., `authorization` instead of `Authorization`)
+
+### Provider-Specific Endpoints
+
+| Provider  | Protocol      | Endpoint Format                                      | Notes              |
+| --------- | ------------- | ---------------------------------------------------- | ------------------ |
+| Dash0     | gRPC          | `ingress.{region}.aws.dash0.com:4317`                | Get from dashboard |
+| SigNoz    | HTTP/Protobuf | `https://ingest.{region}.signoz.cloud:443/v1/traces` | Cloud hosted       |
+| New Relic | HTTP/Protobuf | `https://otlp.nr-data.net:443/v1/traces`             | US region          |
+| Traceloop | HTTP/JSON     | `https://api.traceloop.com/v1/traces`                | Default endpoint   |
+| Laminar   | HTTP/Protobuf | `https://api.lmnr.ai/v1/traces`                      | Default endpoint   |
+| LangSmith | HTTP/Protobuf | `https://api.smith.langchain.com/otel`               | US region          |
 
 ## Additional configuration
 

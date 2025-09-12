@@ -2,7 +2,7 @@
  * OpenTelemetry Exporter Types
  */
 
-import type { AnyAISpan } from '@mastra/core/ai-tracing';
+import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
 
 export type ExportProtocol = 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin';
 
@@ -12,7 +12,7 @@ export type ExportProtocol = 'http/json' | 'http/protobuf' | 'grpc' | 'zipkin';
 
 export interface Dash0Config {
   apiKey?: string; // Required at runtime
-  region?: 'us' | 'eu';
+  endpoint?: string; // Required at runtime (e.g., 'ingress.us-west-2.aws.dash0.com:4317')
   dataset?: string;
 }
 
@@ -34,8 +34,8 @@ export interface TraceloopConfig {
 }
 
 export interface LaminarConfig {
-  apiKey?: string; // Required at runtime
-  teamId?: string; // Required at runtime
+  apiKey?: string; // Required at runtime (LMNR_PROJECT_API_KEY)
+  teamId?: string; // Optional, for backwards compatibility
   endpoint?: string;
 }
 
@@ -75,7 +75,7 @@ export interface OpenTelemetryExporterConfig {
 }
 
 export interface SpanData {
-  span: AnyAISpan;
+  span: AnyExportedAISpan;
   isComplete: boolean;
 }
 

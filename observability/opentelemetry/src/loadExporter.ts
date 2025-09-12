@@ -37,8 +37,8 @@ export async function loadExporter(protocol: ExportProtocol, provider?: string):
           const providerInfo = provider ? ` (required for ${provider})` : '';
           console.error(
             `[OpenTelemetry Exporter] gRPC exporter is not installed${providerInfo}.\n` +
-              `To use gRPC export, install the required package:\n` +
-              `  npm install @opentelemetry/exporter-trace-otlp-grpc`,
+              `To use gRPC export, install the required packages:\n` +
+              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js`,
           );
           return null;
         }

@@ -2,7 +2,7 @@
  * Convert Mastra AI spans to OpenTelemetry spans
  */
 
-import type { AnyAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
+import type { AnyExportedAISpan, LLMGenerationAttributes } from '@mastra/core/ai-tracing';
 import { AISpanType } from '@mastra/core/ai-tracing';
 import { SpanKind } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
@@ -44,7 +44,7 @@ export class SpanConverter {
    * Convert a Mastra AI span to an OpenTelemetry ReadableSpan
    * This preserves Mastra's trace and span IDs
    */
-  convertSpan(aiSpan: AnyAISpan, parentSpanId?: string): MastraReadableSpan {
+  convertSpan(aiSpan: AnyExportedAISpan, parentSpanId?: string): MastraReadableSpan {
     const spanKind = SPAN_KIND_MAPPING[aiSpan.type] || SpanKind.INTERNAL;
     const attributes = this.buildAttributes(aiSpan);
 
@@ -61,7 +61,7 @@ export class SpanConverter {
   /**
    * Build OpenTelemetry attributes from Mastra AI span
    */
-  private buildAttributes(aiSpan: AnyAISpan): Attributes {
+  private buildAttributes(aiSpan: AnyExportedAISpan): Attributes {
     const attributes: Attributes = {
       'mastra.span.type': aiSpan.type,
       // We don't need to duplicate the IDs as attributes since they're the actual span/trace IDs now
