@@ -149,7 +149,6 @@ If you think your configuration is valid, please open an issue.`);
       logger,
       sourcemapEnabled: bundlerOptions?.sourcemap ?? false,
       workspaceMap,
-      enableEsmShim,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -193,6 +192,7 @@ If you think your configuration is valid, please open an issue.`);
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
       ...bundlerOptions,
+      enableEsmShim,
       isDev,
     },
     projectRoot,

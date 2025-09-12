@@ -2,7 +2,6 @@ import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import esmShim from '@rollup/plugin-esm-shim';
 import { fileURLToPath } from 'node:url';
 import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
 import resolveFrom from 'resolve-from';
@@ -22,7 +21,7 @@ import { DEPS_TO_IGNORE } from './constants';
 function getInputPlugins(
   { entry, isVirtualFile }: { entry: string; isVirtualFile: boolean },
   mastraEntry: string,
-  { sourcemapEnabled, enableEsmShim }: { sourcemapEnabled: boolean; enableEsmShim: boolean },
+  { sourcemapEnabled }: { sourcemapEnabled: boolean },
 ): Plugin[] {
   const normalizedMastraEntry = mastraEntry.replaceAll('\\', '/');
   let virtualPlugin = null;
@@ -68,10 +67,6 @@ function getInputPlugins(
     ],
   );
 
-  if (enableEsmShim) {
-    plugins.push(esmShim());
-  }
-
   return plugins;
 }
 
@@ -85,10 +80,8 @@ async function captureDependenciesToOptimize(
   workspaceMap: Map<string, WorkspacePackageInfo>,
   {
     logger,
-    enableEsmShim,
   }: {
     logger: IMastraLogger;
-    enableEsmShim: boolean;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -148,7 +141,6 @@ async function captureDependenciesToOptimize(
           workspaceMap,
           logger: noopLogger,
           sourcemapEnabled: false,
-          enableEsmShim,
         });
 
         if (!analysis?.dependencies) {
@@ -220,12 +212,10 @@ export async function analyzeEntry(
     logger,
     sourcemapEnabled,
     workspaceMap,
-    enableEsmShim,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
-    enableEsmShim: boolean;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -239,7 +229,7 @@ export async function analyzeEntry(
     input: isVirtualFile ? '#entry' : entry,
     treeshake: 'smallest',
     preserveSymlinks: true,
-    plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled, enableEsmShim }),
+    plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
     external: DEPS_TO_IGNORE,
   });
 
@@ -250,10 +240,7 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, {
-    logger,
-    enableEsmShim,
-  });
+  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, { logger });
 
   return {
     dependencies: depsToOptimize,
