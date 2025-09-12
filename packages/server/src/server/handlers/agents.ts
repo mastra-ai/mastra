@@ -657,7 +657,7 @@ export async function updateAgentModelHandler({
   agentId: string;
   body: {
     modelId: string;
-    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+    provider: string; // Now accepts any provider
   };
 }): Promise<{ message: string }> {
   try {
@@ -667,33 +667,13 @@ export async function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const agentModel = await agent.getModel();
-    const modelVersion = agentModel.specificationVersion;
-
     const { modelId, provider } = body;
 
-    const providerMap = {
-      v1: {
-        openai: openai(modelId),
-        anthropic: anthropic(modelId),
-        groq: groq(modelId),
-        xai: xai(modelId),
-        google: google(modelId),
-      },
-      v2: {
-        openai: openaiV5(modelId),
-        anthropic: anthropicV5(modelId),
-        groq: groqV5(modelId),
-        xai: xaiV5(modelId),
-        google: googleV5(modelId),
-      },
-    };
+    // Use the universal OpenAI-compatible format: "provider/model"
+    // This will be handled by OpenAICompatibleModel in the agent
+    const modelString = `${provider}/${modelId}`;
 
-    const modelVersionKey = modelVersion === 'v2' ? 'v2' : 'v1';
-
-    let model = providerMap[modelVersionKey][provider];
-
-    agent.__updateModel({ model });
+    agent.__updateModel({ model: modelString });
 
     return { message: 'Agent model updated' };
   } catch (error) {

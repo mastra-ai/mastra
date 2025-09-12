@@ -26,11 +26,8 @@ export const AgentMetadataModelSwitcher = ({
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [showModelSuggestions, setShowModelSuggestions] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(() => {
-    if (defaultProvider) {
-      const providerOnly = defaultProvider.split('.')[0];
-      return providerOnly;
-    }
-    return '';
+    // Use the provided defaultProvider directly
+    return defaultProvider || '';
   });
   const [providerSearch, setProviderSearch] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -77,16 +74,16 @@ export const AgentMetadataModelSwitcher = ({
     }
   }, []);
 
-  // Find the current model's provider
-  const currentModelProvider = allModels.find(item => item.model === selectedModel)?.provider;
+  // Use the explicitly selected provider, don't search by model name since multiple providers can have the same model
+  const currentModelProvider = selectedProvider;
 
   // Filter models based on available providers and search input
   const filteredModels = allModels
     .filter(item => availableProviders.includes(item.provider))
     .filter(item => {
       // If a provider is selected, only show models from that provider
-      if (selectedProvider && !currentModelProvider) {
-        return item.provider === selectedProvider;
+      if (currentModelProvider) {
+        return item.provider === currentModelProvider;
       }
       return true;
     })
