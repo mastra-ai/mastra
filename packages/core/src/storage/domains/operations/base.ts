@@ -1,7 +1,7 @@
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { TABLE_NAMES } from '../../constants';
-import type { StorageColumn, CreateIndexOptions, IndexInfo } from '../../types';
+import type { StorageColumn, CreateIndexOptions, IndexInfo, StorageIndexStats } from '../../types';
 
 export abstract class StoreOperations extends MastraBase {
   constructor() {
@@ -113,6 +113,19 @@ export abstract class StoreOperations extends MastraBase {
   async listIndexes(tableName?: string): Promise<IndexInfo[]> {
     throw new MastraError({
       id: 'MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter`,
+    });
+  }
+
+  /**
+   * Gets detailed statistics for a specific index
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `Index management is not supported by this storage adapter`,

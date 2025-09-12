@@ -164,73 +164,167 @@ Example filter:
 
 The PostgreSQL store provides comprehensive index management capabilities to optimize query performance.
 
-### Automatic Indexes (Recommended)
+### Automatic Performance Indexes
 
-The simplest way to optimize performance is to create the recommended automatic indexes:
+PostgreSQL storage automatically creates composite indexes during initialization for common query patterns:
 
-```typescript
-// Create all recommended performance indexes
-await store.createAutomaticIndexes();
+- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
+- `mastra_traces_name_starttime_idx`: (name, startTime DESC)
+- `mastra_evals_agent_name_created_at_idx`: (agent_name, created_at DESC)
 
-// Later, if needed, remove all automatic indexes
-await store.dropAutomaticIndexes();
-```
+These indexes significantly improve performance for filtered queries with sorting.
 
-This creates optimized composite indexes for:
-
-- Thread queries by resourceId with ordering
-- Message queries by threadId with ordering
-- Trace queries by name with time ordering
-- Eval queries by agent name with time ordering
-
-### Manual Index Management
-
-For advanced users who need custom index configurations:
+### Creating Custom Indexes
 
 ```typescript
-const indexManager = store.getIndexManager();
-
-// Create a custom index
-await indexManager.createIndex({
-  name: 'my_custom_index',
+// Basic index
+await store.createIndex({
+  name: 'idx_threads_resource',
   table: 'mastra_threads',
-  columns: ['resourceId', 'status'],
-  unique: false,
-  concurrent: true, // Non-blocking index creation
-  where: 'status = "active"', // Partial index
-  method: 'btree', // Index type: btree, hash, gin, gist
+  columns: ['resourceId'],
 });
 
-// List all indexes
-const allIndexes = await indexManager.listIndexes();
+// Composite index with sort order
+await store.createIndex({
+  name: 'idx_messages_composite',
+  table: 'mastra_messages',
+  columns: ['thread_id', 'createdAt DESC'],
+});
 
-// List indexes for a specific table
-const threadIndexes = await indexManager.listIndexes('mastra_threads');
+// Unique index
+await store.createIndex({
+  name: 'idx_unique_email',
+  table: 'mastra_resources',
+  columns: ['email'],
+  unique: true,
+});
 
-// Get information about automatic indexes only
-const automaticIndexes = await indexManager.listAutomaticIndexes();
+// Partial index with WHERE clause
+await store.createIndex({
+  name: 'idx_active_threads',
+  table: 'mastra_threads',
+  columns: ['resourceId'],
+  where: '"status" = \'active\'',
+});
 
-// Drop a specific index
-await indexManager.dropIndex('my_custom_index');
+// GIN index for JSONB columns
+await store.createIndex({
+  name: 'idx_traces_attributes',
+  table: 'mastra_traces',
+  columns: ['attributes'],
+  method: 'gin',
+});
+
+// BRIN index for time-series data
+await store.createIndex({
+  name: 'idx_threads_created_brin',
+  table: 'mastra_threads',
+  columns: ['createdAt'],
+  method: 'brin',
+});
+
+// Index with storage parameters
+await store.createIndex({
+  name: 'idx_optimized',
+  table: 'mastra_messages',
+  columns: ['thread_id'],
+  storage: {
+    fillfactor: 90, // Leave 10% free space for updates
+  },
+});
 ```
 
-### Index Types and Options
+### Managing Indexes
 
-- **btree** (default): Best for equality and range queries
-- **hash**: Optimized for equality comparisons only
-- **gin**: For JSONB and array columns
-- **gist**: For geometric data and full-text search
+```typescript
+// List all indexes
+const allIndexes = await store.listIndexes();
 
-### Performance Improvements
+// List indexes for specific table
+const threadIndexes = await store.listIndexes('mastra_threads');
 
-With automatic indexes, you can expect:
+// Get detailed statistics for an index
+const stats = await store.describeIndex('idx_threads_resource');
+console.log(stats);
+// {
+//   name: 'idx_threads_resource',
+//   table: 'mastra_threads',
+//   columns: ['resourceId', 'createdAt'],
+//   unique: false,
+//   size: '128 KB',
+//   definition: 'CREATE INDEX idx_threads_resource...',
+//   method: 'btree',
+//   scans: 1542,           // Number of index scans
+//   tuples_read: 45230,    // Tuples read via index
+//   tuples_fetched: 12050  // Tuples fetched via index
+// }
 
-- **10x+ improvement** on thread queries by resourceId
-- **10x+ improvement** on message queries by threadId
-- **5x+ improvement** on trace queries by name
-- Consistent improvements on eval queries
+// Drop an index
+await store.dropIndex('idx_threads_status');
+```
 
-The actual improvement depends on your dataset size - larger datasets see greater benefits from indexing.
+### Index Types and Use Cases
+
+| Index Type          | Best For                                | Storage    | Speed                      |
+| ------------------- | --------------------------------------- | ---------- | -------------------------- |
+| **btree** (default) | Range queries, sorting, general purpose | Moderate   | Fast                       |
+| **hash**            | Equality comparisons only               | Small      | Very fast for `=`          |
+| **gin**             | JSONB, arrays, full-text search         | Large      | Fast for contains          |
+| **gist**            | Geometric data, full-text search        | Moderate   | Fast for nearest-neighbor  |
+| **spgist**          | Non-balanced data, text patterns        | Small      | Fast for specific patterns |
+| **brin**            | Large tables with natural ordering      | Very small | Fast for ranges            |
+
+### Index Options
+
+- `name` (required): Index name
+- `table` (required): Table name
+- `columns` (required): Array of column names (can include DESC/ASC)
+- `unique`: Create unique index (default: false)
+- `concurrent`: Non-blocking index creation (default: true)
+- `where`: Partial index condition
+- `method`: Index type ('btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin')
+- `opclass`: Operator class for GIN/GIST indexes
+- `storage`: Storage parameters (e.g., { fillfactor: 90 })
+- `tablespace`: Tablespace name for index placement
+
+### Monitoring Index Performance
+
+```typescript
+// Check index usage statistics
+const stats = await store.describeIndex('idx_threads_resource');
+
+// Identify unused indexes
+if (stats.scans === 0) {
+  console.log(`Index ${stats.name} is unused - consider removing`);
+  await store.dropIndex(stats.name);
+}
+
+// Monitor index efficiency
+const efficiency = stats.tuples_fetched / stats.tuples_read;
+if (efficiency < 0.5) {
+  console.log(`Index ${stats.name} has low efficiency: ${efficiency}`);
+}
+```
+
+### Performance Best Practices
+
+1. **Index Selection**:
+   - Use **btree** for most queries (supports `<`, `>`, `=`, `BETWEEN`)
+   - Use **hash** for simple equality checks on large tables
+   - Use **gin** for JSONB queries and array contains operations
+   - Use **brin** for time-series data with natural ordering
+
+2. **Monitoring**:
+   - Use `describeIndex()` to track index usage statistics
+   - Regularly review index scans to identify unused indexes
+   - Check index sizes to monitor storage overhead
+
+3. **Trade-offs**:
+   - Indexes speed up reads but slow down writes
+   - Each index requires additional storage
+   - Too many indexes can degrade overall performance
+   - CONCURRENT creation avoids table locks but takes longer
 
 ## Related Links
 

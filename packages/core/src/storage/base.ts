@@ -46,6 +46,7 @@ import type {
   AITracesPaginatedArg,
   CreateIndexOptions,
   IndexInfo,
+  StorageIndexStats,
 } from './types';
 
 export type StorageDomains = {
@@ -674,7 +675,15 @@ export abstract class MastraStorage extends MastraBase {
    * @throws {MastraError} if not supported by the storage adapter
    */
   async createIndex(options: CreateIndexOptions): Promise<void> {
-    return this.stores!.operations.createIndex(options);
+    if (this.stores?.operations) {
+      return this.stores.operations.createIndex(options);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_CREATE_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   /**
@@ -682,7 +691,15 @@ export abstract class MastraStorage extends MastraBase {
    * @throws {MastraError} if not supported by the storage adapter
    */
   async dropIndex(indexName: string): Promise<void> {
-    return this.stores!.operations.dropIndex(indexName);
+    if (this.stores?.operations) {
+      return this.stores.operations.dropIndex(indexName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DROP_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
   }
 
   /**
@@ -690,6 +707,30 @@ export abstract class MastraStorage extends MastraBase {
    * @throws {MastraError} if not supported by the storage adapter
    */
   async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    return this.stores!.operations.listIndexes(tableName);
+    if (this.stores?.operations) {
+      return this.stores.operations.listIndexes(tableName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Gets detailed statistics for a specific index
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+    if (this.stores?.operations) {
+      return this.stores.operations.describeIndex(indexName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
   }
 }

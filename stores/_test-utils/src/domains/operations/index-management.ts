@@ -126,6 +126,59 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
             expect(allIndexes.some(i => i.name === indexDef.name)).toBe(true);
           }
         });
+
+        it('should create index with advanced options', async () => {
+          // Test BRIN index (efficient for large tables with natural ordering)
+          const brinIndexName = `${testIndexPrefix}_brin`;
+          await storage.createIndex({
+            name: brinIndexName,
+            table: TABLE_THREADS,
+            columns: ['createdAt'],
+            method: 'brin',
+          });
+          createdIndexes.push(brinIndexName);
+
+          const indexes = await storage.listIndexes('mastra_threads');
+          const brinIndex = indexes.find(i => i.name === brinIndexName);
+          expect(brinIndex).toBeDefined();
+          expect(brinIndex?.definition.toLowerCase()).toContain('brin');
+
+          // Test SP-GiST index (space-partitioned GiST)
+          const spgistIndexName = `${testIndexPrefix}_spgist`;
+          await storage.createIndex({
+            name: spgistIndexName,
+            table: TABLE_THREADS,
+            columns: ['title'],
+            method: 'spgist',
+          });
+          createdIndexes.push(spgistIndexName);
+
+          const spgistIndexes = await storage.listIndexes('mastra_threads');
+          const spgistIndex = spgistIndexes.find(i => i.name === spgistIndexName);
+          expect(spgistIndex).toBeDefined();
+          expect(spgistIndex?.definition.toLowerCase()).toContain('spgist');
+        });
+
+        it('should create index with storage parameters', async () => {
+          const indexName = `${testIndexPrefix}_with_storage`;
+
+          // Create index with storage parameters
+          await storage.createIndex({
+            name: indexName,
+            table: TABLE_THREADS,
+            columns: ['resourceId'],
+            method: 'btree',
+            storage: {
+              fillfactor: 90, // Leave 10% free space for updates
+            },
+          });
+          createdIndexes.push(indexName);
+
+          const indexes = await storage.listIndexes('mastra_threads');
+          const createdIndex = indexes.find(i => i.name === indexName);
+          expect(createdIndex).toBeDefined();
+          expect(createdIndex?.definition).toContain('fillfactor');
+        });
       });
 
       describe('dropIndex', () => {
@@ -153,6 +206,134 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
         it('should handle dropping non-existent index gracefully', async () => {
           await expect(storage.dropIndex(`${testIndexPrefix}_non_existent`)).resolves.not.toThrow();
+        });
+      });
+
+      describe('describeIndex', () => {
+        it('should return detailed statistics for an index', async () => {
+          const indexName = `${testIndexPrefix}_describe`;
+
+          // Create an index to describe
+          await storage.createIndex({
+            name: indexName,
+            table: TABLE_THREADS,
+            columns: ['resourceId', 'createdAt'],
+            method: 'btree',
+          });
+          createdIndexes.push(indexName);
+
+          // Get index statistics
+          const stats = await storage.describeIndex(indexName);
+
+          // Verify the response structure
+          expect(stats).toBeDefined();
+          expect(stats.name).toBe(indexName);
+          expect(stats.table).toBe('mastra_threads');
+          expect(stats.columns).toEqual(['resourceId', 'createdAt']);
+          expect(stats.unique).toBe(false);
+          expect(stats.size).toBeDefined();
+          expect(stats.definition).toContain('CREATE');
+          expect(stats.method).toBe('btree');
+          expect(typeof stats.scans).toBe('number');
+          expect(typeof stats.tuples_read).toBe('number');
+          expect(typeof stats.tuples_fetched).toBe('number');
+        });
+
+        it('should return statistics for unique index', async () => {
+          const indexName = `${testIndexPrefix}_describe_unique`;
+
+          await storage.createIndex({
+            name: indexName,
+            table: TABLE_MESSAGES,
+            columns: ['id'],
+            unique: true,
+          });
+          createdIndexes.push(indexName);
+
+          const stats = await storage.describeIndex(indexName);
+
+          expect(stats.unique).toBe(true);
+          expect(stats.columns).toContain('id');
+        });
+
+        it('should return statistics for different index methods', async () => {
+          // Test GIN index on JSONB column (use TABLE_TRACES attributes column which is JSONB)
+          const ginIndexName = `${testIndexPrefix}_describe_gin`;
+          await storage.createIndex({
+            name: ginIndexName,
+            table: TABLE_TRACES,
+            columns: ['attributes'],
+            method: 'gin',
+          });
+          createdIndexes.push(ginIndexName);
+
+          const ginStats = await storage.describeIndex(ginIndexName);
+          expect(ginStats.method).toBe('gin');
+
+          // Test HASH index
+          const hashIndexName = `${testIndexPrefix}_describe_hash`;
+          await storage.createIndex({
+            name: hashIndexName,
+            table: TABLE_THREADS,
+            columns: ['id'],
+            method: 'hash',
+          });
+          createdIndexes.push(hashIndexName);
+
+          const hashStats = await storage.describeIndex(hashIndexName);
+          expect(hashStats.method).toBe('hash');
+
+          // Test GIST index (typically used for geometric types, but can work with text via extensions)
+          // Skip GIST for now as it requires special operator classes
+        });
+
+        it('should throw error for non-existent index', async () => {
+          await expect(storage.describeIndex(`${testIndexPrefix}_non_existent_describe`)).rejects.toThrow();
+        });
+
+        it('should track index usage statistics', async () => {
+          const indexName = `${testIndexPrefix}_describe_usage`;
+
+          // Create index
+          await storage.createIndex({
+            name: indexName,
+            table: TABLE_THREADS,
+            columns: ['resourceId'],
+          });
+          createdIndexes.push(indexName);
+
+          // Insert some test data to ensure statistics
+          const testThread = {
+            id: `thread-stats-${timestamp}`,
+            resourceId: `resource-stats-${timestamp}`,
+            title: 'Test Thread for Stats',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: {},
+          };
+
+          await storage.insert({
+            tableName: TABLE_THREADS,
+            record: testThread,
+          });
+
+          // Perform a query that should use the index
+          await storage.getThreadsByResourceId({
+            resourceId: testThread.resourceId,
+          });
+
+          // Get updated statistics
+          const stats = await storage.describeIndex(indexName);
+
+          // Verify statistics fields exist (values might be 0 initially)
+          expect(stats).toHaveProperty('scans');
+          expect(stats).toHaveProperty('tuples_read');
+          expect(stats).toHaveProperty('tuples_fetched');
+          expect(typeof stats.scans).toBe('number');
+          expect(stats.scans).toBeGreaterThanOrEqual(0);
+
+          // Clean up test data
+          await storage.deleteThread({ threadId: testThread.id });
         });
       });
 

@@ -112,3 +112,293 @@ This enables direct queries and custom transaction management. When using these 
 
 This approach is intended for advanced scenarios where low-level access is required.
 
+## Index Management
+
+PostgreSQL storage provides comprehensive index management capabilities to optimize query performance.
+
+### Automatic Performance Indexes
+
+PostgreSQL storage automatically creates composite indexes during initialization for common query patterns:
+
+- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)  
+- `mastra_traces_name_starttime_idx`: (name, startTime DESC)
+- `mastra_evals_agent_name_created_at_idx`: (agent_name, created_at DESC)
+
+These indexes significantly improve performance for filtered queries with sorting.
+
+### Creating Custom Indexes
+
+Create additional indexes to optimize specific query patterns:
+
+```typescript copy
+// Single column index
+await storage.createIndex({
+  name: 'idx_threads_status',
+  table: 'mastra_threads',
+  columns: ['status']
+});
+
+// Composite index with sort order
+await storage.createIndex({
+  name: 'idx_messages_composite',
+  table: 'mastra_messages',
+  columns: ['thread_id', 'createdAt DESC', 'id ASC']
+});
+
+// Unique index
+await storage.createIndex({
+  name: 'idx_unique_email',
+  table: 'mastra_resources',
+  columns: ['email'],
+  unique: true
+});
+
+// Hash index for equality comparisons
+await storage.createIndex({
+  name: 'idx_hash_userid',
+  table: 'mastra_messages',
+  columns: ['user_id'],
+  method: 'hash'
+});
+
+// Partial index with WHERE clause
+await storage.createIndex({
+  name: 'idx_active_threads',
+  table: 'mastra_threads',
+  columns: ['resourceId'],
+  where: '"status" = \'active\''
+});
+
+// GIN index for JSONB columns (fast JSON queries)
+await storage.createIndex({
+  name: 'idx_traces_attributes',
+  table: 'mastra_traces',
+  columns: ['attributes'],
+  method: 'gin'
+});
+
+// BRIN index for time-series data (very space-efficient)
+await storage.createIndex({
+  name: 'idx_threads_created_brin',
+  table: 'mastra_threads',
+  columns: ['createdAt'],
+  method: 'brin'
+});
+
+// SP-GiST index for text search
+await storage.createIndex({
+  name: 'idx_threads_title_spgist',
+  table: 'mastra_threads',
+  columns: ['title'],
+  method: 'spgist'
+});
+
+// Index with storage parameters
+await storage.createIndex({
+  name: 'idx_optimized',
+  table: 'mastra_messages',
+  columns: ['thread_id'],
+  method: 'btree',
+  storage: {
+    fillfactor: 90  // Leave 10% free space for updates
+  }
+});
+
+// Index with custom tablespace
+await storage.createIndex({
+  name: 'idx_fast_ssd',
+  table: 'mastra_traces',
+  columns: ['traceId'],
+  tablespace: 'fast_ssd'  // Place on SSD tablespace
+});
+```
+
+### Index Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Unique name for the index",
+      isOptional: false,
+    },
+    {
+      name: "table",
+      type: "string",
+      description: "Table name (e.g., 'mastra_threads')",
+      isOptional: false,
+    },
+    {
+      name: "columns",
+      type: "string[]",
+      description: "Array of column names with optional sort order (e.g., ['id', 'createdAt DESC'])",
+      isOptional: false,
+    },
+    {
+      name: "unique",
+      type: "boolean",
+      description: "Creates a unique constraint index",
+      isOptional: true,
+    },
+    {
+      name: "concurrent",
+      type: "boolean",
+      description: "Creates index without locking table (default: true)",
+      isOptional: true,
+    },
+    {
+      name: "where",
+      type: "string",
+      description: "Partial index condition (PostgreSQL specific)",
+      isOptional: true,
+    },
+    {
+      name: "method",
+      type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
+      description: "Index method (default: 'btree')",
+      isOptional: true,
+    },
+    {
+      name: "opclass",
+      type: "string",
+      description: "Operator class for GIN/GIST indexes",
+      isOptional: true,
+    },
+    {
+      name: "storage",
+      type: "Record<string, any>",
+      description: "Storage parameters (e.g., { fillfactor: 90 })",
+      isOptional: true,
+    },
+    {
+      name: "tablespace",
+      type: "string",
+      description: "Tablespace name for index placement",
+      isOptional: true,
+    }
+  ]}
+/>
+
+### Managing Indexes
+
+List and monitor existing indexes:
+
+```typescript copy
+// List all indexes
+const allIndexes = await storage.listIndexes();
+console.log(allIndexes);
+// [
+//   {
+//     name: 'mastra_threads_pkey',
+//     table: 'mastra_threads',
+//     columns: ['id'],
+//     unique: true,
+//     size: '16 KB',
+//     definition: 'CREATE UNIQUE INDEX...'
+//   },
+//   ...
+// ]
+
+// List indexes for specific table
+const threadIndexes = await storage.listIndexes('mastra_threads');
+
+// Get detailed statistics for an index
+const stats = await storage.describeIndex('idx_threads_resource');
+console.log(stats);
+// {
+//   name: 'idx_threads_resource',
+//   table: 'mastra_threads',
+//   columns: ['resourceId', 'createdAt'],
+//   unique: false,
+//   size: '128 KB',
+//   definition: 'CREATE INDEX idx_threads_resource...',
+//   method: 'btree',
+//   scans: 1542,           // Number of index scans
+//   tuples_read: 45230,    // Tuples read via index
+//   tuples_fetched: 12050  // Tuples fetched via index
+// }
+
+// Drop an index
+await storage.dropIndex('idx_threads_status');
+```
+
+### Schema-Specific Indexes
+
+When using custom schemas, indexes are created with schema prefixes:
+
+```typescript copy
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL,
+  schemaName: 'custom_schema'
+});
+
+// Creates index as: custom_schema_idx_threads_status
+await storage.createIndex({
+  name: 'idx_threads_status',
+  table: 'mastra_threads',
+  columns: ['status']
+});
+```
+
+### Index Types and Use Cases
+
+PostgreSQL offers different index types optimized for specific scenarios:
+
+| Index Type | Best For | Storage | Speed |
+|------------|----------|---------|-------|
+| **btree** (default) | Range queries, sorting, general purpose | Moderate | Fast |
+| **hash** | Equality comparisons only | Small | Very fast for `=` |
+| **gin** | JSONB, arrays, full-text search | Large | Fast for contains |
+| **gist** | Geometric data, full-text search | Moderate | Fast for nearest-neighbor |
+| **spgist** | Non-balanced data, text patterns | Small | Fast for specific patterns |
+| **brin** | Large tables with natural ordering | Very small | Fast for ranges |
+
+### Performance Best Practices
+
+1. **Index Selection**:
+   - Use **btree** for most queries (supports `<`, `>`, `=`, `BETWEEN`)
+   - Use **hash** for simple equality checks on large tables
+   - Use **gin** for JSONB queries and array contains operations
+   - Use **brin** for time-series data with natural ordering
+   - Add indexes for columns frequently used in WHERE clauses
+   - Create composite indexes for multi-column filters
+   - Use partial indexes for frequently filtered subsets
+
+2. **Monitoring**:
+   - Use `describeIndex()` to track index usage statistics
+   - Regularly review index scans to identify unused indexes
+   - Check index sizes to monitor storage overhead
+   - Remove unused indexes to improve write performance
+
+3. **Trade-offs**:
+   - Indexes speed up reads but slow down writes
+   - Each index requires additional storage
+   - Too many indexes can degrade overall performance
+   - CONCURRENT creation avoids table locks but takes longer
+
+### Monitoring Index Usage
+
+Use `describeIndex()` to identify underutilized indexes:
+
+```typescript copy
+// Check index performance metrics
+const stats = await storage.describeIndex('idx_threads_resource');
+
+// Identify unused indexes (no scans)
+if (stats.scans === 0) {
+  console.log(`Index ${stats.name} is unused - consider removing`);
+  await storage.dropIndex(stats.name);
+}
+
+// Monitor index efficiency
+const efficiency = stats.tuples_fetched / stats.tuples_read;
+if (efficiency < 0.5) {
+  console.log(`Index ${stats.name} has low efficiency: ${efficiency}`);
+}
+
+// Track index growth
+console.log(`Index size: ${stats.size}`);
+```
+
