@@ -83,6 +83,8 @@
     "@mastra/inngest": "0.13.2"
   },
   "changesets": [
+    "@mastra_deployer-6887-dependencies",
+    "@mastra_deployer-cloudflare-6887-dependencies",
     "@mastra_libsql-7742-dependencies",
     "@mastra_mem0-7752-dependencies",
     "@mastra_rag-7753-dependencies",
