@@ -10,15 +10,20 @@ import { Button } from '@/ds/components/Button';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 
 import { BadgeWrapper } from './badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 
 export interface WorkflowBadgeProps {
   workflow: GetWorkflowResponse;
   workflowId: string;
   runId?: string;
   isStreaming?: boolean;
+  networkMetadata?: {
+    input?: string | Record<string, unknown>;
+    selectionReason?: string;
+  };
 }
 
-export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming, networkMetadata }: WorkflowBadgeProps) => {
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
@@ -28,7 +33,19 @@ export const WorkflowBadge = ({ workflow, runId, workflowId, isStreaming }: Work
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
   return (
-    <BadgeWrapper icon={<WorkflowIcon className="text-accent3" />} title={workflow.name} initialCollapsed={false}>
+    <BadgeWrapper
+      icon={<WorkflowIcon className="text-accent3" />}
+      title={workflow.name}
+      initialCollapsed={false}
+      extraInfo={
+        networkMetadata && (
+          <NetworkChoiceMetadataDialogTrigger
+            selectionReason={networkMetadata?.selectionReason || ''}
+            input={networkMetadata?.input}
+          />
+        )
+      }
+    >
       {!isStreaming && !isLoading && (
         <WorkflowRunProvider snapshot={snapshot}>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
@@ -68,7 +85,7 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
 };
 
 export const useWorkflowStream = (workflowFullState?: WorkflowWatchResult) => {
-  const { setResult, result } = useContext(WorkflowRunContext);
+  const { setResult } = useContext(WorkflowRunContext);
 
   useEffect(() => {
     if (!workflowFullState) return;

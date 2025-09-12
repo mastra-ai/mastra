@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { AITracingEvent, AnyAISpan } from '..';
+import type { AITracingEvent, AnyAISpan, CreateSpanOptions } from '..';
 import { AISpanType, AITracingEventType } from '..';
 
 import { fetchWithRetry } from '../../utils';
@@ -22,6 +22,26 @@ function createTestJWT(payload: { teamId: string; projectId: string }): string {
   return `${headerB64}.${payloadB64}.${signature}`;
 }
 
+function getMockSpan<TType extends AISpanType>(
+  options: CreateSpanOptions<TType> & { id: string; traceId: string },
+): AnyAISpan {
+  return {
+    ...options,
+    startTime: new Date(),
+    endTime: new Date(),
+    isEvent: options.isEvent ?? false,
+    isValid: true,
+    isRootSpan: true,
+    parent: undefined,
+    aiTracing: {} as any,
+    end: vi.fn(),
+    error: vi.fn(),
+    update: vi.fn(),
+    createChildSpan: vi.fn(),
+    createEventSpan: vi.fn(),
+  };
+}
+
 describe('CloudExporter', () => {
   let exporter: CloudExporter;
   const testJWT = createTestJWT({ teamId: 'team-123', projectId: 'project-456' });
@@ -39,27 +59,15 @@ describe('CloudExporter', () => {
   });
 
   describe('Core Event Filtering', () => {
-    const mockSpan: AnyAISpan = {
+    const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
       type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
       isEvent: false,
       traceId: 'trace-456',
-      parent: undefined,
-      aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
+    });
 
     it('should process SPAN_ENDED events', async () => {
       const spanEndedEvent: AITracingEvent = {
@@ -120,27 +128,15 @@ describe('CloudExporter', () => {
   });
 
   describe('Buffer Management', () => {
-    const mockSpan: AnyAISpan = {
+    const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
       type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
       isEvent: false,
       traceId: 'trace-456',
-      parent: undefined,
-      aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
+    });
 
     it('should initialize buffer with empty state', () => {
       const buffer = (exporter as any).buffer;
@@ -278,27 +274,15 @@ describe('CloudExporter', () => {
   });
 
   describe('Flush Trigger Conditions', () => {
-    const mockSpan: AnyAISpan = {
+    const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
       type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
       isEvent: false,
       traceId: 'trace-456',
-      parent: undefined,
-      aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
+    });
 
     it('should trigger flush when maxBatchSize is reached', async () => {
       const smallBatchExporter = new CloudExporter({
@@ -396,27 +380,15 @@ describe('CloudExporter', () => {
   });
 
   describe('Timer Management', () => {
-    const mockSpan: AnyAISpan = {
+    const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
       type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
       isEvent: false,
       traceId: 'trace-456',
-      parent: undefined,
-      aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
+    });
 
     beforeEach(() => {
       vi.useFakeTimers();
@@ -572,27 +544,15 @@ describe('CloudExporter', () => {
   });
 
   describe('Cloud API Integration', () => {
-    const mockSpan: AnyAISpan = {
+    const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
       type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
       isEvent: false,
       traceId: 'trace-456',
-      parent: undefined,
-      aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
+    });
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -718,27 +678,15 @@ describe('CloudExporter', () => {
   });
 
   describe('Retry Logic and Error Handling', () => {
-    const mockSpan: AnyAISpan = {
+    const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
       type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
       isEvent: false,
       traceId: 'trace-456',
-      parent: undefined,
-      aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
+    });
 
     beforeEach(() => {
       vi.useFakeTimers();
@@ -854,27 +802,15 @@ describe('CloudExporter', () => {
   });
 
   describe('Shutdown Functionality', () => {
-    const mockSpan: AnyAISpan = {
+    const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
       type: AISpanType.LLM_GENERATION,
-      startTime: new Date(),
-      endTime: new Date(),
       isEvent: false,
       traceId: 'trace-456',
-      parent: undefined,
-      aiTracing: {} as any,
       input: { prompt: 'test' },
       output: { response: 'result' },
-      end: vi.fn(),
-      error: vi.fn(),
-      update: vi.fn(),
-      createChildSpan: vi.fn(),
-      createEventSpan: vi.fn(),
-      get isRootSpan() {
-        return true;
-      },
-    };
+    });
 
     beforeEach(() => {
       vi.useFakeTimers();

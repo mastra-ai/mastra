@@ -1,10 +1,11 @@
 import {
-  AgentChat as Chat,
+  AgentChat,
   MainContentContent,
   AgentSettingsProvider,
   WorkingMemoryProvider,
+  ThreadInputProvider,
 } from '@mastra/playground-ui';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
@@ -20,7 +21,6 @@ function Agent() {
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
   const navigate = useNavigate();
-  const [chatInputValue, setChatInputValue] = useState('');
   const { messages, isLoading: isMessagesLoading } = useMessages({
     agentId: agentId!,
     threadId: threadId!,
@@ -67,26 +67,27 @@ function Agent() {
   return (
     <AgentSettingsProvider agentId={agentId!}>
       <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
-        <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-          {withSidebar && (
-            <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-          )}
+        <ThreadInputProvider>
+          <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+            {withSidebar && (
+              <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+            )}
 
-          <div className="grid overflow-y-auto relative bg-surface1 py-4">
-            <Chat
-              agentId={agentId!}
-              agentName={agent?.name}
-              modelVersion={agent?.modelVersion}
-              threadId={threadId!}
-              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-              memory={memory?.result}
-              refreshThreadList={refreshThreads}
-              onInputChange={setChatInputValue}
-            />
-          </div>
+            <div className="grid overflow-y-auto relative bg-surface1 py-4">
+              <AgentChat
+                agentId={agentId!}
+                agentName={agent?.name}
+                modelVersion={agent?.modelVersion}
+                threadId={threadId!}
+                initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+                memory={memory?.result}
+                refreshThreadList={refreshThreads}
+              />
+            </div>
 
-          <AgentInformation agentId={agentId!} chatInputValue={chatInputValue} />
-        </MainContentContent>
+            <AgentInformation agentId={agentId!} />
+          </MainContentContent>
+        </ThreadInputProvider>
       </WorkingMemoryProvider>
     </AgentSettingsProvider>
   );

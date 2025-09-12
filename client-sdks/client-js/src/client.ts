@@ -1,5 +1,6 @@
 import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   Agent,
   MemoryThread,
@@ -49,6 +50,7 @@ import type {
   SaveScoreResponse,
   GetAITracesResponse,
 } from './types';
+import { base64RuntimeContext, parseClientRuntimeContext } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -59,10 +61,20 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available agents
+   * @param runtimeContext - Runtime context to use for the agents
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(): Promise<Record<string, GetAgentResponse>> {
-    return this.request('/api/agents');
+  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (runtimeContextParam) {
+      searchParams.set('runtimeContext', runtimeContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
