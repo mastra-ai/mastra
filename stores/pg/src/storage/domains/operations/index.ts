@@ -642,7 +642,7 @@ export class StoreOperationsPG extends StoreOperations {
           await this.createIndex(indexOptions);
         } catch (error) {
           // Log but continue with other indexes
-          console.warn(`Failed to create index ${indexOptions.name}:`, error);
+          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
         }
       }
     } catch (error) {
