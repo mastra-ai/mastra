@@ -82,5 +82,21 @@
     "@mastra/voice-speechify": "0.11.4",
     "@mastra/inngest": "0.13.2"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_libsql-7742-dependencies",
+    "@mastra_mem0-7752-dependencies",
+    "@mastra_rag-7753-dependencies",
+    "curly-years-scream",
+    "curvy-cycles-train",
+    "custom-route-auth",
+    "lovely-webs-pick",
+    "nasty-schools-return",
+    "poor-peas-wash",
+    "puny-socks-do",
+    "real-moments-shine",
+    "ripe-turkeys-sin",
+    "salty-candles-join",
+    "thick-dodos-try",
+    "whole-pumas-pump"
+  ]
 }
