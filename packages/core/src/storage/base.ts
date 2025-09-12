@@ -44,6 +44,9 @@ import type {
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from './types';
 
 export type StorageDomains = {
@@ -110,6 +113,7 @@ export abstract class MastraStorage extends MastraBase {
     createTable: boolean;
     deleteMessages: boolean;
     aiTracing?: boolean;
+    indexManagement?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -118,6 +122,7 @@ export abstract class MastraStorage extends MastraBase {
       createTable: false,
       deleteMessages: false,
       aiTracing: false,
+      indexManagement: false,
     };
   }
 
@@ -664,6 +669,76 @@ export abstract class MastraStorage extends MastraBase {
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `AI tracing is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * DATABASE INDEX MANAGEMENT
+   * These methods delegate to the operations store for index management.
+   * Storage adapters that support indexes should implement these in their operations class.
+   */
+
+  /**
+   * Creates a database index on specified columns
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async createIndex(options: CreateIndexOptions): Promise<void> {
+    if (this.stores?.operations) {
+      return this.stores.operations.createIndex(options);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_CREATE_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Drops a database index by name
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async dropIndex(indexName: string): Promise<void> {
+    if (this.stores?.operations) {
+      return this.stores.operations.dropIndex(indexName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DROP_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Lists database indexes for a table or all tables
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
+    if (this.stores?.operations) {
+      return this.stores.operations.listIndexes(tableName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Gets detailed statistics for a specific index
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async describeIndex(indexName: string): Promise<StorageIndexStats> {
+    if (this.stores?.operations) {
+      return this.stores.operations.describeIndex(indexName);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 }

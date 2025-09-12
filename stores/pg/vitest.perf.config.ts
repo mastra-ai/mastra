@@ -3,6 +3,6 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.performance.test.ts'],
+    include: ['src/**/*.performance.test.ts', 'src/**/performance-indexes/*.test.ts'],
   },
 });

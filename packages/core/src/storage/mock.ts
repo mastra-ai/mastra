@@ -99,6 +99,7 @@ export class InMemoryStore extends MastraStorage {
       createTable: false,
       deleteMessages: true,
       aiTracing: true,
+      indexManagement: false,
     };
   }
 
