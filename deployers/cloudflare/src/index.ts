@@ -166,6 +166,7 @@ export class CloudflareDeployer extends Deployer {
   ) {
     const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
       enableSourcemap,
+      enableEsmShim: false,
     });
 
     if (Array.isArray(inputOptions.plugins)) {
