@@ -113,7 +113,7 @@ export function TraceDialog({
         isOpen={isOpen}
         onClose={onClose}
         hasCloseButton={!dialogIsOpen || combinedView}
-        className={cn('w-[calc(100vw-20rem)] max-w-[75%]', '3xl:max-w-[60rem]', '4xl:max-w-[60%]')}
+        className={cn('w-[calc(100vw-20rem)] max-w-[80%]', '3xl:max-w-[65%]', '4xl:max-w-[55%]')}
       >
         <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
           <TextAndIcon>
@@ -136,7 +136,7 @@ export function TraceDialog({
             </TextAndIcon>
           </SideDialogHeader>
 
-          <div className="overflow-y-auto pb-[2.5rem]">
+          <div className={cn('overflow-y-auto pb-[2.5rem]')}>
             {traceDetails?.metadata?.usage && (
               <TraceSpanUsage
                 traceUsage={traceDetails?.metadata?.usage}
@@ -171,7 +171,7 @@ export function TraceDialog({
                     </TextAndIcon>
                     ›
                     <TextAndIcon>
-                      <EyeIcon /> {getShortId(selectedSpanId)}
+                      <ChevronsLeftRightEllipsisIcon /> {getShortId(selectedSpanId)}
                     </TextAndIcon>
                   </div>
                 </SideDialogTop>

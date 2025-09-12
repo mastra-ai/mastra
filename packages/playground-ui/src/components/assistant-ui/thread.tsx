@@ -20,17 +20,16 @@ import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
-import { AgentProvider } from './context/agent-provider';
+import { useThreadInput } from '@/domains/conversation';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallMessagePartComponent;
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
-  onInputChange?: (value: string) => void;
 }
 
-export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, onInputChange }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, agentId, hasMemory }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -39,29 +38,27 @@ export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, onInputCha
   };
 
   return (
-    <AgentProvider agentId={agentId}>
-      <ThreadWrapper>
-        <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
-          <ThreadWelcome agentName={agentName} />
+    <ThreadWrapper>
+      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+        <ThreadWelcome agentName={agentName} />
 
-          <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
-            <ThreadPrimitive.Messages
-              components={{
-                UserMessage: UserMessage,
-                EditComposer: EditComposer,
-                AssistantMessage: WrappedAssistantMessage,
-              }}
-            />
-          </div>
+        <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
+          <ThreadPrimitive.Messages
+            components={{
+              UserMessage: UserMessage,
+              EditComposer: EditComposer,
+              AssistantMessage: WrappedAssistantMessage,
+            }}
+          />
+        </div>
 
-          <ThreadPrimitive.If empty={false}>
-            <div />
-          </ThreadPrimitive.If>
-        </ThreadPrimitive.Viewport>
+        <ThreadPrimitive.If empty={false}>
+          <div />
+        </ThreadPrimitive.If>
+      </ThreadPrimitive.Viewport>
 
-        <Composer hasMemory={hasMemory} onInputChange={onInputChange} agentId={agentId} />
-      </ThreadWrapper>
-    </AgentProvider>
+      <Composer hasMemory={hasMemory} agentId={agentId} />
+    </ThreadWrapper>
   );
 };
 
@@ -103,11 +100,11 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   hasMemory?: boolean;
-  onInputChange?: (value: string) => void;
   agentId?: string;
 }
 
-const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
+const Composer = ({ hasMemory, agentId }: ComposerProps) => {
+  const { setThreadInput } = useThreadInput();
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -123,7 +120,7 @@ const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
               placeholder="Enter your message..."
               name=""
               id=""
-              onChange={e => onInputChange?.(e.target.value)}
+              onChange={e => setThreadInput?.(e.target.value)}
             ></textarea>
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">

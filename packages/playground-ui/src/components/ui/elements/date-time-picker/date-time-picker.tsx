@@ -270,7 +270,7 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
       <Button ref={ref} variant={'outline'} className={cn('justify-start', className)} {...props}>
         <CalendarIcon className="h-4 w-4" />
         {value ? (
-          <span className="text-white">{format(value, 'PPP p')}</span>
+          <span className="text-white">{format(value, 'PP p')}</span>
         ) : (
           <span className="text-gray">{placeholder ?? 'Pick a date'}</span>
         )}

@@ -1,0 +1,35 @@
+---
+title: "Reference: Mastra.getMCPServers() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.getMCPServers()` method in Mastra, which retrieves all registered MCP server instances."
+---
+
+# Mastra.getMCPServers()
+
+The `.getMCPServers()` method is used to retrieve all MCP server instances that have been registered in the Mastra instance.
+
+## Usage example
+
+```typescript copy
+mastra.getMCPServers();
+```
+
+## Parameters
+
+This method does not accept any parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "servers",
+      type: "Record<string, MCPServerBase> | undefined",
+      description: "A record of all registered MCP server instances, where keys are server IDs and values are MCPServerBase instances, or undefined if no servers are registered.",
+    },
+  ]}
+/>
+
+## Related
+
+- [MCP overview](../../docs/tools-mcp/mcp-overview.mdx)
+- [MCP server reference](../../reference/tools/mcp-server.mdx)

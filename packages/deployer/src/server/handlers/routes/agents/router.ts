@@ -22,6 +22,8 @@ import {
   generateLegacyHandler,
   reorderAgentModelListHandler,
   updateAgentModelInModelListHandler,
+  streamNetworkHandler,
+  sharedBodyOptions,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -213,6 +215,36 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     generateHandler,
+  );
+
+  router.post(
+    '/:agentId/network',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute an agent as a Network',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: sharedBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+    }),
+    streamNetworkHandler,
   );
 
   router.post(

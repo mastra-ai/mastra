@@ -6,6 +6,8 @@ import type {
 import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai-v5/test';
 import type { ModelManagerModelConfig } from '../../stream/types';
 
+export const mockDate = new Date('2024-01-01T00:00:00Z');
+
 export const defaultSettings = () =>
   ({
     prompt: 'prompt',
