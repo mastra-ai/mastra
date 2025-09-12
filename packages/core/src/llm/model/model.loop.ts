@@ -173,6 +173,7 @@ export class MastraLLMVNext extends MastraBase {
         threadId,
         resourceId,
       },
+      isInternal: false,
     });
 
     try {

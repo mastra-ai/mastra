@@ -3,7 +3,7 @@ import { ConsoleLogger, LogLevel } from '../../logger';
 import type { IMastraLogger } from '../../logger';
 import { fetchWithRetry } from '../../utils';
 import { AITracingEventType } from '../types';
-import type { AITracingEvent, AITracingExporter, AnyAISpan } from '../types';
+import type { AITracingEvent, AITracingExporter, AnyExportedAISpan } from '../types';
 
 export interface CloudExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -109,17 +109,17 @@ export class CloudExporter implements AITracingExporter {
       this.buffer.firstEventTime = new Date();
     }
 
-    const spanRecord = this.formatSpan(event.span);
+    const spanRecord = this.formatSpan(event.exportedSpan);
 
     this.buffer.spans.push(spanRecord);
     this.buffer.totalSize++;
   }
 
-  private formatSpan(span: AnyAISpan): MastraCloudSpanRecord {
+  private formatSpan(span: AnyExportedAISpan): MastraCloudSpanRecord {
     const spanRecord: MastraCloudSpanRecord = {
       traceId: span.traceId,
       spanId: span.id,
-      parentSpanId: span.parent?.id ?? null,
+      parentSpanId: span.parentSpanId ?? null,
       name: span.name,
       spanType: span.type,
       attributes: span.attributes ?? null,
