@@ -8,6 +8,7 @@ import type { CoreMessage, LanguageModelV1 } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { stepCountIs } from 'ai-v5';
+import type { UIMessageChunk } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +17,7 @@ import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
-import type { MastraMessageV2, StorageThreadType } from '../memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createScorer } from '../scores';
 import { runScorer } from '../scores/hooks';
@@ -8194,6 +8195,59 @@ describe('Stream ID Consistency', () => {
     expect(onFinishResult.object).toBeDefined();
     expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
   }, 10000); // Increase timeout to 10 seconds
+
+  it('should have messageIds when using toUIMessageStream', async () => {
+    const mockMemory = new MockMemory();
+    const threadId = randomUUID();
+    const resourceId = 'user-1';
+    const initialThread: StorageThreadType = {
+      id: threadId,
+      resourceId,
+      metadata: { client: 'initial' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await mockMemory.saveThread({ thread: initialThread });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model: openai_v5('gpt-4o'),
+      memory: mockMemory,
+    });
+
+    const mastra = new Mastra({ agents: { test: agent } });
+    agent.__registerMastra(mastra);
+
+    const stream = await agent.streamVNext('Hello!', { threadId, resourceId, format: 'aisdk' });
+
+    // Get the UI message stream
+    const uiStream = stream.toUIMessageStream();
+
+    // Collect all chunks from the UI stream to verify message ID is present
+    const chunks: UIMessageChunk[] = [];
+    const reader = uiStream.getReader();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const messages = await mockMemory.getMessages({ threadId });
+    console.log('messages', messages);
+
+    const assistantMessage = messages.find((m: MastraMessageV1) => m.role === 'assistant');
+    console.log('assistantMessage', assistantMessage);
+    const startEvent = chunks.find(chunk => chunk.type === 'start');
+    console.log('startEvent', startEvent);
+
+    expect(assistantMessage?.id).toBe(startEvent?.messageId);
+  });
 });
 
 describe('Agent structuredOutput to output deprecation mapping', () => {

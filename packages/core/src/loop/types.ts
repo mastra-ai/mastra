@@ -84,6 +84,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   Tools,
   OUTPUT
 > & {
+  messageId: string;
   runId: string;
   startTimestamp: number;
   modelStreamSpan: Span;

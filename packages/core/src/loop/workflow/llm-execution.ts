@@ -503,6 +503,7 @@ export function createLLMExecutionStep<
         },
         stream: modelResult as ReadableStream<ChunkType>,
         messageList,
+        messageId,
         options: {
           runId,
           rootSpan: modelStreamSpan,
