@@ -1516,7 +1516,6 @@ export class Run<
     this.closeStreamAction = async () => {};
 
     return new MastraWorkflowStream({
-      format,
       run: this,
       createStream: () => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
