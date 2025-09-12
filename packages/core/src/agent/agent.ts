@@ -2182,7 +2182,7 @@ export class Agent<
           overrideScorers,
           threadId,
           resourceId,
-          tracingContext: { currentSpan: agentAISpan },
+          tracingContext: { currentSpan: agentAISpan, isInternal: true },
         });
 
         const scoringData: {
@@ -3260,7 +3260,7 @@ export class Agent<
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
+    const result = await run.start({ tracingContext: { currentSpan: agentAISpan, isInternal: true } });
 
     return result;
   }
@@ -3458,7 +3458,7 @@ export class Agent<
       runtimeContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentAISpan },
+      tracingContext: { currentSpan: agentAISpan, isInternal: true },
     });
 
     agentAISpan?.end({
