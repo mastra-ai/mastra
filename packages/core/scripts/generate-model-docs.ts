@@ -275,6 +275,7 @@ const agent = new Agent({
 <ProviderModelsTable 
   models={${modelDataJson}}
   totalCount={${modelsWithCapabilities.length > 15 ? modelsWithCapabilities.length : undefined}}
+  apiKey="${provider.apiKeyEnvVar}"
 />
 `;
 }
