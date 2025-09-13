@@ -11,7 +11,9 @@ Access 2 Baseten models through Mastra's model router. Authentication is handled
 
 Learn more in the [Baseten documentation](https://docs.baseten.co/development/model-apis/overview).
 
-## Usage
+```bash
+BASETEN_API_KEY=your-api-key
+```
 
 ```typescript
 import { Agent } from "@mastra/core";
@@ -30,12 +32,6 @@ const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
-```
-
-## Configuration
-
-```bash
-BASETEN_API_KEY=your-api-key
 ```
 
 ## Models

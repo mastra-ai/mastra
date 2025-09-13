@@ -11,7 +11,9 @@ Access 7 Llama models through Mastra's model router. Authentication is handled a
 
 Learn more in the [Llama documentation](https://llama.developer.meta.com/docs/models).
 
-## Usage
+```bash
+LLAMA_API_KEY=your-api-key
+```
 
 ```typescript
 import { Agent } from "@mastra/core";
@@ -30,12 +32,6 @@ const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
-```
-
-## Configuration
-
-```bash
-LLAMA_API_KEY=your-api-key
 ```
 
 ## Models

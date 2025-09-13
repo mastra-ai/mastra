@@ -211,7 +211,9 @@ import { ProviderModelsTable } from "@/components/provider-models-table";
 
 ${introText}
 
-## Usage
+\`\`\`bash
+${provider.apiKeyEnvVar}=your-api-key
+\`\`\`
 
 \`\`\`typescript
 import { Agent } from "@mastra/core";
@@ -230,12 +232,6 @@ const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
-\`\`\`
-
-## Configuration
-
-\`\`\`bash
-${provider.apiKeyEnvVar}=your-api-key
 \`\`\`
 
 ## Models

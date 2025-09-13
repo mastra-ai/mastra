@@ -11,7 +11,9 @@ Access 1 Alibaba model through Mastra's model router. Authentication is handled 
 
 Learn more in the [Alibaba documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
-## Usage
+```bash
+DASHSCOPE_API_KEY=your-api-key
+```
 
 ```typescript
 import { Agent } from "@mastra/core";
@@ -30,12 +32,6 @@ const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
-```
-
-## Configuration
-
-```bash
-DASHSCOPE_API_KEY=your-api-key
 ```
 
 ## Models
