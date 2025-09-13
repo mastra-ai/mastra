@@ -3,6 +3,8 @@ title: "Synthetic | Models | Mastra"
 description: "Use Synthetic models with Mastra. 19 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 
 Access 19 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
@@ -67,6 +69,10 @@ const agent = new Agent({
   }
 });
 ```
+
+## Model Capabilities
+
+<ProviderCapabilitiesTable providerId="synthetic" limit={10} />
 
 ## Available Models
 

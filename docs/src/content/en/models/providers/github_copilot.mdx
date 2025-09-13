@@ -3,6 +3,8 @@ title: "GitHub Copilot | Models | Mastra"
 description: "Use GitHub Copilot models with Mastra. 16 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/github_copilot.svg" alt="GitHub Copilot logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GitHub Copilot
 
 Access 16 GitHub Copilot models through Mastra's model router. Authentication is handled automatically using the `GITHUB_TOKEN` environment variable.
@@ -69,8 +71,6 @@ const agent = new Agent({
 ```
 
 ## Model Capabilities
-
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
 
 <ProviderCapabilitiesTable providerId="github_copilot" limit={10} />
 

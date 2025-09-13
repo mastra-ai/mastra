@@ -3,6 +3,8 @@ title: "Cerebras | Models | Mastra"
 description: "Use Cerebras models with Mastra. 3 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 
 Access 3 Cerebras models through Mastra's model router. Authentication is handled automatically using the `CEREBRAS_API_KEY` environment variable.
@@ -69,8 +71,6 @@ const agent = new Agent({
 ```
 
 ## Model Capabilities
-
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
 
 <ProviderCapabilitiesTable providerId="cerebras" limit={10} />
 

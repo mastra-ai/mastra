@@ -3,6 +3,8 @@ title: "Nvidia | Models | Mastra"
 description: "Use Nvidia models with Mastra. 14 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 
 Access 14 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
@@ -67,6 +69,10 @@ const agent = new Agent({
   }
 });
 ```
+
+## Model Capabilities
+
+<ProviderCapabilitiesTable providerId="nvidia" limit={10} />
 
 ## Available Models
 

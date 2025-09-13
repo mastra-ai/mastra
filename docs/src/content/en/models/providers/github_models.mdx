@@ -3,6 +3,8 @@ title: "GitHub Models | Models | Mastra"
 description: "Use GitHub Models models with Mastra. 55 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/github_models.svg" alt="GitHub Models logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GitHub Models
 
 Access 55 GitHub Models models through Mastra's model router. Authentication is handled automatically using the `GITHUB_TOKEN` environment variable.
@@ -69,8 +71,6 @@ const agent = new Agent({
 ```
 
 ## Model Capabilities
-
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
 
 <ProviderCapabilitiesTable providerId="github_models" limit={10} />
 

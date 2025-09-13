@@ -3,6 +3,8 @@ title: "submodel | Models | Mastra"
 description: "Use submodel models with Mastra. 9 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/submodel.svg" alt="submodel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />submodel
 
 Access 9 submodel models through Mastra's model router. Authentication is handled automatically using the `SUBMODEL_INSTAGEN_ACCESS_KEY` environment variable.
@@ -67,6 +69,10 @@ const agent = new Agent({
   }
 });
 ```
+
+## Model Capabilities
+
+<ProviderCapabilitiesTable providerId="submodel" limit={10} />
 
 ## Available Models
 

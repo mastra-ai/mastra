@@ -3,6 +3,8 @@ title: "Weights & Biases | Models | Mastra"
 description: "Use Weights & Biases models with Mastra. 10 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/wandb.svg" alt="Weights & Biases logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Weights & Biases
 
 Access 10 Weights & Biases models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
@@ -67,6 +69,10 @@ const agent = new Agent({
   }
 });
 ```
+
+## Model Capabilities
+
+<ProviderCapabilitiesTable providerId="wandb" limit={10} />
 
 ## Available Models
 
