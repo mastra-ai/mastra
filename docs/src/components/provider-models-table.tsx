@@ -74,20 +74,9 @@ export function ProviderModelsTable({
         <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
           <TableHead className="w-[350px] font-bold pb-2">Model</TableHead>
           {hasExtendedData && (
-            <>
-              <TableHead className="w-[100px] font-bold pb-2 text-right">
-                Context
-              </TableHead>
-              <TableHead className="w-[100px] font-bold pb-2 text-right">
-                Output
-              </TableHead>
-              <TableHead className="w-[100px] font-bold pb-2 text-right">
-                Input $/1M
-              </TableHead>
-              <TableHead className="w-[100px] font-bold pb-2 text-right">
-                Output $/1M
-              </TableHead>
-            </>
+            <TableHead className="w-[100px] font-bold pb-2 text-right">
+              Context
+            </TableHead>
           )}
           <TableHead className="pb-2 font-bold text-center">JSON</TableHead>
           <TableHead className="pb-2 font-bold text-center">Tools</TableHead>
@@ -108,6 +97,12 @@ export function ProviderModelsTable({
               <TableHead className="pb-2 font-bold text-center">
                 Video
               </TableHead>
+              <TableHead className="w-[100px] font-bold pb-2 text-right">
+                Input $/1M
+              </TableHead>
+              <TableHead className="w-[100px] font-bold pb-2 text-right">
+                Output $/1M
+              </TableHead>
             </>
           )}
         </TableRow>
@@ -127,20 +122,9 @@ export function ProviderModelsTable({
               </Badge>
             </TableCell>
             {hasExtendedData && (
-              <>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatTokens(model.contextWindow)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatTokens(model.maxOutput)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatCost(model.inputCost)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatCost(model.outputCost)}
-                </TableCell>
-              </>
+              <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                {formatTokens(model.contextWindow)}
+              </TableCell>
             )}
             <TableCell className="text-center">
               {model.objectGeneration ? (
@@ -192,6 +176,12 @@ export function ProviderModelsTable({
                   ) : (
                     <Cross className="inline-block w-[18px] h-[18px]" />
                   )}
+                </TableCell>
+                <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                  {formatCost(model.inputCost)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                  {formatCost(model.outputCost)}
                 </TableCell>
               </>
             )}
