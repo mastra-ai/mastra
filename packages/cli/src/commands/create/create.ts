@@ -7,7 +7,6 @@ import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
 import { init } from '../init/init';
-import { interactivePrompt } from '../init/utils';
 import type { LLMProvider } from '../init/utils';
 import { getPackageManager } from '../utils.js';
 
@@ -31,7 +30,7 @@ export const create = async (args: {
     return;
   }
 
-  const { projectName } = await createMastraProject({
+  const { projectName, result } = await createMastraProject({
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
     timeout: args?.timeout,
@@ -43,7 +42,7 @@ export const create = async (args: {
   // to false (in this case, no example code) and we need to distinguish
   // between those and the case where the args were not passed at all.
   if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
-    const result = await interactivePrompt();
+    // const result = await interactivePrompt(); //Just avoid asking questions here to the user, all questions are asked in createMastraProject
 
     // Track model provider selection from interactive prompt
     const analytics = getAnalytics();
