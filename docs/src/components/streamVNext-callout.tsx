@@ -1,6 +1,6 @@
 import { Callout } from "nextra/components";
 
-export const StreamVNextCallout = () => {
+export const NetworkCallout = () => {
   return (
     <Callout type="important">
       <b>Experimental Feature</b>
