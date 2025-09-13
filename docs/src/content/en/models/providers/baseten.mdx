@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 BASETEN_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://inference.baseten.co/v1/chat/completions",
-    modelId: "Moonshotai-Kimi-K2-Instruct-0905",
-    apiKey: process.env.BASETEN_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "baseten/Moonshotai-Kimi-K2-Instruct-0905"
-      : "baseten/Qwen-Qwen3-Coder-480B-A35B-Instruct";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -103,6 +71,37 @@ const agent = new Agent({
     "outputCost": 1.53
   }
 ]}
-  totalCount={undefined}
   apiKey="BASETEN_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://inference.baseten.co/v1/chat/completions",
+    modelId: "Moonshotai-Kimi-K2-Instruct-0905",
+    apiKey: process.env.BASETEN_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "baseten/Moonshotai-Kimi-K2-Instruct-0905"
+      : "baseten/Qwen-Qwen3-Coder-480B-A35B-Instruct";
+  }
+});
+```

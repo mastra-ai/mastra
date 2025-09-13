@@ -197,8 +197,8 @@ async function generateProviderPage(provider: ProviderInfo): Promise<string> {
   // Fetch model capabilities from models.dev
   const modelsWithCapabilities = await fetchProviderModels(provider.id);
 
-  // Generate static model data as JSON for the component
-  const modelDataJson = JSON.stringify(modelsWithCapabilities.slice(0, 15), null, 2);
+  // Generate static model data as JSON for the component (show all models)
+  const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
 
   return `---
 title: "${provider.name} | Models | Mastra"
@@ -238,6 +238,13 @@ for await (const chunk of stream) {
 ${provider.apiKeyEnvVar}=your-api-key
 \`\`\`
 
+## Models
+
+<ProviderModelsTable 
+  models={${modelDataJson}}
+  apiKey="${provider.apiKeyEnvVar}"
+/>
+
 ## Advanced Configuration
 
 ### Custom Headers
@@ -269,14 +276,6 @@ const agent = new Agent({
   }
 });
 \`\`\`
-
-## Models
-
-<ProviderModelsTable 
-  models={${modelDataJson}}
-  totalCount={${modelsWithCapabilities.length > 15 ? modelsWithCapabilities.length : undefined}}
-  apiKey="${provider.apiKeyEnvVar}"
-/>
 `;
 }
 

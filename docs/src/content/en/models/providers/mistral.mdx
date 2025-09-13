@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 MISTRAL_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.mistral.ai/v1/chat/completions",
-    modelId: "codestral-latest",
-    apiKey: process.env.MISTRAL_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "mistral/codestral-latest"
-      : "mistral/devstral-medium-2507";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -283,8 +251,95 @@ const agent = new Agent({
     "maxOutput": 16384,
     "inputCost": 0.4,
     "outputCost": 2
+  },
+  {
+    "model": "mistral/mistral-small-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/mistral-large-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "mistral/mistral-nemo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "model": "mistral/ministral-3b-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.04,
+    "outputCost": 0.04
   }
 ]}
-  totalCount={19}
   apiKey="MISTRAL_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.mistral.ai/v1/chat/completions",
+    modelId: "codestral-latest",
+    apiKey: process.env.MISTRAL_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "mistral/codestral-latest"
+      : "mistral/devstral-medium-2507";
+  }
+});
+```

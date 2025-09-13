@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 XAI_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.x.ai/v1/chat/completions",
-    modelId: "grok-2",
-    apiKey: process.env.XAI_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "xai/grok-2"
-      : "xai/grok-2-1212";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -283,8 +251,67 @@ const agent = new Agent({
     "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "xai/grok-vision-beta",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 4096,
+    "inputCost": 5,
+    "outputCost": 15
+  },
+  {
+    "model": "xai/grok-3-mini-fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.6,
+    "outputCost": 4
   }
 ]}
-  totalCount={17}
   apiKey="XAI_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.x.ai/v1/chat/completions",
+    modelId: "grok-2",
+    apiKey: process.env.XAI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "xai/grok-2"
+      : "xai/grok-2-1212";
+  }
+});
+```

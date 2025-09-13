@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 DEEPINFRA_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.deepinfra.com/v1/openai/chat/completions",
-    modelId: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    apiKey: process.env.DEEPINFRA_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
-      : "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -131,6 +99,37 @@ const agent = new Agent({
     "outputCost": 2
   }
 ]}
-  totalCount={undefined}
   apiKey="DEEPINFRA_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.deepinfra.com/v1/openai/chat/completions",
+    modelId: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    apiKey: process.env.DEEPINFRA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
+      : "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo";
+  }
+});
+```

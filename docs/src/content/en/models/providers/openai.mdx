@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 OPENAI_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.openai.com/v1/chat/completions",
-    modelId: "codex-mini-latest",
-    apiKey: process.env.OPENAI_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "openai/codex-mini-latest"
-      : "openai/gpt-3.5-turbo";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -283,8 +251,151 @@ const agent = new Agent({
     "maxOutput": 16384,
     "inputCost": 0.15,
     "outputCost": 0.6
+  },
+  {
+    "model": "openai/gpt-4.1-nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "openai/gpt-4.1-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 0.4,
+    "outputCost": 1.6
+  },
+  {
+    "model": "openai/o1-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 65536,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  },
+  {
+    "model": "openai/gpt-4o",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2.5,
+    "outputCost": 10
+  },
+  {
+    "model": "openai/gpt-4",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 8192,
+    "inputCost": 30,
+    "outputCost": 60
+  },
+  {
+    "model": "openai/gpt-3.5-turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
+    "reasoning": false,
+    "contextWindow": 16385,
+    "maxOutput": 4096,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "openai/o4-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.1,
+    "outputCost": 4.4
+  },
+  {
+    "model": "openai/o3-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.1,
+    "outputCost": 4.4
   }
 ]}
-  totalCount={23}
   apiKey="OPENAI_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.openai.com/v1/chat/completions",
+    modelId: "codex-mini-latest",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "openai/codex-mini-latest"
+      : "openai/gpt-3.5-turbo";
+  }
+});
+```

@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 ZHIPU_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.z.ai/api/paas/v4/chat/completions",
-    modelId: "glm-4.5",
-    apiKey: process.env.ZHIPU_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "zai/glm-4.5"
-      : "zai/glm-4.5-air";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -131,6 +99,37 @@ const agent = new Agent({
     "outputCost": 2.2
   }
 ]}
-  totalCount={undefined}
   apiKey="ZHIPU_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.z.ai/api/paas/v4/chat/completions",
+    modelId: "glm-4.5",
+    apiKey: process.env.ZHIPU_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "zai/glm-4.5"
+      : "zai/glm-4.5-air";
+  }
+});
+```

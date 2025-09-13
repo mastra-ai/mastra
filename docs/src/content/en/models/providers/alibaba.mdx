@@ -38,6 +38,28 @@ for await (const chunk of stream) {
 DASHSCOPE_API_KEY=your-api-key
 ```
 
+## Models
+
+<ProviderModelsTable 
+  models={[
+  {
+    "model": "alibaba/qwen3-coder-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1,
+    "outputCost": 5
+  }
+]}
+  apiKey="DASHSCOPE_API_KEY"
+/>
+
 ## Advanced Configuration
 
 ### Custom Headers
@@ -69,26 +91,3 @@ const agent = new Agent({
   }
 });
 ```
-
-## Models
-
-<ProviderModelsTable 
-  models={[
-  {
-    "model": "alibaba/qwen3-coder-plus",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "objectGeneration": true,
-    "toolUsage": true,
-    "toolStreaming": true,
-    "reasoning": false,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1,
-    "outputCost": 5
-  }
-]}
-  totalCount={undefined}
-  apiKey="DASHSCOPE_API_KEY"
-/>

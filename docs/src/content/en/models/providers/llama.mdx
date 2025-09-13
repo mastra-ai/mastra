@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 LLAMA_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.llama.com/compat/v1/chat/completions",
-    modelId: "cerebras-llama-4-maverick-17b-128e-instruct",
-    apiKey: process.env.LLAMA_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "llama/cerebras-llama-4-maverick-17b-128e-instruct"
-      : "llama/cerebras-llama-4-scout-17b-16e-instruct";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -173,6 +141,37 @@ const agent = new Agent({
     "outputCost": null
   }
 ]}
-  totalCount={undefined}
   apiKey="LLAMA_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.llama.com/compat/v1/chat/completions",
+    modelId: "cerebras-llama-4-maverick-17b-128e-instruct",
+    apiKey: process.env.LLAMA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "llama/cerebras-llama-4-maverick-17b-128e-instruct"
+      : "llama/cerebras-llama-4-scout-17b-16e-instruct";
+  }
+});
+```

@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 NVIDIA_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://integrate.api.nvidia.com/v1/chat/completions",
-    modelId: "cosmos-nemotron-34b",
-    apiKey: process.env.NVIDIA_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "nvidia/cosmos-nemotron-34b"
-      : "nvidia/deepseek-r1";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -271,6 +239,37 @@ const agent = new Agent({
     "outputCost": null
   }
 ]}
-  totalCount={undefined}
   apiKey="NVIDIA_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://integrate.api.nvidia.com/v1/chat/completions",
+    modelId: "cosmos-nemotron-34b",
+    apiKey: process.env.NVIDIA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "nvidia/cosmos-nemotron-34b"
+      : "nvidia/deepseek-r1";
+  }
+});
+```

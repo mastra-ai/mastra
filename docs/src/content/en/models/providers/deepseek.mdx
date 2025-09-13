@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 DEEPSEEK_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.deepseek.com/chat/completions",
-    modelId: "deepseek-chat",
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "deepseek/deepseek-chat"
-      : "deepseek/deepseek-reasoner";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -103,6 +71,37 @@ const agent = new Agent({
     "outputCost": 1.68
   }
 ]}
-  totalCount={undefined}
   apiKey="DEEPSEEK_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.deepseek.com/chat/completions",
+    modelId: "deepseek-chat",
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "deepseek/deepseek-chat"
+      : "deepseek/deepseek-reasoner";
+  }
+});
+```
