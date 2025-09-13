@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="alibaba" 
   models={[
   {
-    "id": "qwen3-coder-plus",
-    "name": "Qwen3 Coder Plus",
+    "model": "alibaba/qwen3-coder-plus",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -89,5 +89,5 @@ const agent = new Agent({
     "outputCost": 5
   }
 ]}
-  totalCount={1}
+  totalCount={undefined}
 />

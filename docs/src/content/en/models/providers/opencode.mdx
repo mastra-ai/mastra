@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="opencode" 
   models={[
   {
-    "id": "claude-3-5-haiku",
-    "name": "Claude Haiku 3.5",
+    "model": "opencode/claude-3-5-haiku",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 200000,
     "maxOutput": 8192,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 4
   },
   {
-    "id": "claude-sonnet-4",
-    "name": "Claude Sonnet 4",
+    "model": "opencode/claude-sonnet-4",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 64000,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "grok-code",
-    "name": "Grok Code Fast 1",
+    "model": "opencode/grok-code",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 32000,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "claude-opus-4-1",
-    "name": "Claude Opus 4.1",
+    "model": "opencode/claude-opus-4-1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 32000,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": 75
   },
   {
-    "id": "gpt-5",
-    "name": "GPT-5",
+    "model": "opencode/gpt-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": 10
   },
   {
-    "id": "kimi-k2",
-    "name": "Kimi K2",
+    "model": "opencode/kimi-k2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": 2.5
   },
   {
-    "id": "qwen3-coder",
-    "name": "Qwen3 Coder",
+    "model": "opencode/qwen3-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 65536,
@@ -167,5 +173,5 @@ const agent = new Agent({
     "outputCost": 1.8
   }
 ]}
-  totalCount={7}
+  totalCount={undefined}
 />

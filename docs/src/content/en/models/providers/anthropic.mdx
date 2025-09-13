@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="anthropic" 
   models={[
   {
-    "id": "claude-3-7-sonnet-20250219",
-    "name": "Claude Sonnet 3.7",
+    "model": "anthropic/claude-3-7-sonnet-20250219",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 64000,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "claude-opus-4-1-20250805",
-    "name": "Claude Opus 4.1",
+    "model": "anthropic/claude-opus-4-1-20250805",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 32000,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 75
   },
   {
-    "id": "claude-3-haiku-20240307",
-    "name": "Claude Haiku 3",
+    "model": "anthropic/claude-3-haiku-20240307",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 200000,
     "maxOutput": 4096,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 1.25
   },
   {
-    "id": "claude-3-5-haiku-20241022",
-    "name": "Claude Haiku 3.5",
+    "model": "anthropic/claude-3-5-haiku-20241022",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 200000,
     "maxOutput": 8192,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": 4
   },
   {
-    "id": "claude-opus-4-20250514",
-    "name": "Claude Opus 4",
+    "model": "anthropic/claude-opus-4-20250514",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 32000,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": 75
   },
   {
-    "id": "claude-3-5-sonnet-20241022",
-    "name": "Claude Sonnet 3.5 v2",
+    "model": "anthropic/claude-3-5-sonnet-20241022",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 200000,
     "maxOutput": 8192,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "claude-3-5-sonnet-20240620",
-    "name": "Claude Sonnet 3.5",
+    "model": "anthropic/claude-3-5-sonnet-20240620",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 200000,
     "maxOutput": 8192,
@@ -167,12 +173,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "claude-3-sonnet-20240229",
-    "name": "Claude Sonnet 3",
+    "model": "anthropic/claude-3-sonnet-20240229",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 200000,
     "maxOutput": 4096,
@@ -180,12 +187,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "claude-sonnet-4-20250514",
-    "name": "Claude Sonnet 4",
+    "model": "anthropic/claude-sonnet-4-20250514",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 64000,
@@ -193,12 +201,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "claude-3-opus-20240229",
-    "name": "Claude Opus 3",
+    "model": "anthropic/claude-3-opus-20240229",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 200000,
     "maxOutput": 4096,
@@ -206,5 +215,5 @@ const agent = new Agent({
     "outputCost": 75
   }
 ]}
-  totalCount={10}
+  totalCount={undefined}
 />

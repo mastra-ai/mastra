@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="submodel" 
   models={[
   {
-    "id": "deepseek-ai/DeepSeek-V3.1",
-    "name": "DeepSeek V3.1",
+    "model": "submodel/deepseek-ai/DeepSeek-V3.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 75000,
     "maxOutput": 163840,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 0.8
   },
   {
-    "id": "deepseek-ai/DeepSeek-V3-0324",
-    "name": "DeepSeek V3 0324",
+    "model": "submodel/deepseek-ai/DeepSeek-V3-0324",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 75000,
     "maxOutput": 163840,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 0.8
   },
   {
-    "id": "deepseek-ai/DeepSeek-R1-0528",
-    "name": "DeepSeek R1 0528",
+    "model": "submodel/deepseek-ai/DeepSeek-R1-0528",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 75000,
     "maxOutput": 163840,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 2.15
   },
   {
-    "id": "openai/gpt-oss-120b",
-    "name": "GPT OSS 120B",
+    "model": "submodel/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 32768,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": 0.5
   },
   {
-    "id": "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "name": "Qwen3 235B A22B Thinking 2507",
+    "model": "submodel/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 131072,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": 0.6
   },
   {
-    "id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "name": "Qwen3 235B A22B Instruct 2507",
+    "model": "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 131072,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": 0.3
   },
   {
-    "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-    "name": "Qwen3 Coder 480B A35B Instruct",
+    "model": "submodel/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
@@ -167,12 +173,13 @@ const agent = new Agent({
     "outputCost": 0.8
   },
   {
-    "id": "zai-org/GLM-4.5-FP8",
-    "name": "GLM 4.5 FP8",
+    "model": "submodel/zai-org/GLM-4.5-FP8",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
@@ -180,12 +187,13 @@ const agent = new Agent({
     "outputCost": 0.8
   },
   {
-    "id": "zai-org/GLM-4.5-Air",
-    "name": "GLM 4.5 Air",
+    "model": "submodel/zai-org/GLM-4.5-Air",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
@@ -193,5 +201,5 @@ const agent = new Agent({
     "outputCost": 0.5
   }
 ]}
-  totalCount={9}
+  totalCount={undefined}
 />

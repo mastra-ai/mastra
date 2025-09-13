@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="google" 
   models={[
   {
-    "id": "gemini-2.5-flash-preview-05-20",
-    "name": "Gemini 2.5 Flash Preview 05-20",
+    "model": "google/gemini-2.5-flash-preview-05-20",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 0.6
   },
   {
-    "id": "gemini-2.5-pro",
-    "name": "Gemini 2.5 Pro",
+    "model": "google/gemini-2.5-pro",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 10
   },
   {
-    "id": "gemini-1.5-flash",
-    "name": "Gemini 1.5 Flash",
+    "model": "google/gemini-1.5-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 1000000,
     "maxOutput": 8192,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 0.3
   },
   {
-    "id": "gemini-2.0-flash-lite",
-    "name": "Gemini 2.0 Flash Lite",
+    "model": "google/gemini-2.0-flash-lite",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 1048576,
     "maxOutput": 8192,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": 0.3
   },
   {
-    "id": "gemini-1.5-pro",
-    "name": "Gemini 1.5 Pro",
+    "model": "google/gemini-1.5-pro",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 1000000,
     "maxOutput": 8192,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": 5
   },
   {
-    "id": "gemini-1.5-flash-8b",
-    "name": "Gemini 1.5 Flash-8B",
+    "model": "google/gemini-1.5-flash-8b",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 1000000,
     "maxOutput": 8192,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": 0.15
   },
   {
-    "id": "gemini-2.5-flash",
-    "name": "Gemini 2.5 Flash",
+    "model": "google/gemini-2.5-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -167,12 +173,13 @@ const agent = new Agent({
     "outputCost": 2.5
   },
   {
-    "id": "gemini-2.5-pro-preview-06-05",
-    "name": "Gemini 2.5 Pro Preview 06-05",
+    "model": "google/gemini-2.5-pro-preview-06-05",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -180,12 +187,13 @@ const agent = new Agent({
     "outputCost": 10
   },
   {
-    "id": "gemini-2.5-pro-preview-05-06",
-    "name": "Gemini 2.5 Pro Preview 05-06",
+    "model": "google/gemini-2.5-pro-preview-05-06",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -193,12 +201,13 @@ const agent = new Agent({
     "outputCost": 10
   },
   {
-    "id": "gemini-2.0-flash",
-    "name": "Gemini 2.0 Flash",
+    "model": "google/gemini-2.0-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 1048576,
     "maxOutput": 8192,
@@ -206,12 +215,13 @@ const agent = new Agent({
     "outputCost": 0.4
   },
   {
-    "id": "gemini-2.5-flash-lite-preview-06-17",
-    "name": "Gemini 2.5 Flash Lite Preview 06-17",
+    "model": "google/gemini-2.5-flash-lite-preview-06-17",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 65536,
     "maxOutput": 65536,
@@ -219,12 +229,13 @@ const agent = new Agent({
     "outputCost": 0.4
   },
   {
-    "id": "gemini-2.5-flash-preview-04-17",
-    "name": "Gemini 2.5 Flash Preview 04-17",
+    "model": "google/gemini-2.5-flash-preview-04-17",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -232,5 +243,5 @@ const agent = new Agent({
     "outputCost": 0.6
   }
 ]}
-  totalCount={12}
+  totalCount={undefined}
 />

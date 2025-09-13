@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="cerebras" 
   models={[
   {
-    "id": "qwen-3-235b-a22b-instruct-2507",
-    "name": "Qwen 3 235B Instruct",
+    "model": "cerebras/qwen-3-235b-a22b-instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131000,
     "maxOutput": 32000,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 1.2
   },
   {
-    "id": "gpt-oss-120b",
-    "name": "GPT OSS 120B",
+    "model": "cerebras/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 32768,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 0.69
   },
   {
-    "id": "qwen-3-coder-480b",
-    "name": "Qwen 3 Coder 480B",
+    "model": "cerebras/qwen-3-coder-480b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131000,
     "maxOutput": 32000,
@@ -115,5 +117,5 @@ const agent = new Agent({
     "outputCost": 2
   }
 ]}
-  totalCount={3}
+  totalCount={undefined}
 />

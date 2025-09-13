@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="wandb" 
   models={[
   {
-    "id": "deepseek-ai/DeepSeek-V3-0324",
-    "name": "DeepSeek-V3-0324",
+    "model": "wandb/deepseek-ai/DeepSeek-V3-0324",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 161000,
     "maxOutput": 8192,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 2.75
   },
   {
-    "id": "deepseek-ai/DeepSeek-R1-0528",
-    "name": "DeepSeek-R1-0528",
+    "model": "wandb/deepseek-ai/DeepSeek-R1-0528",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 161000,
     "maxOutput": 163840,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 5.4
   },
   {
-    "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "name": "Qwen3-Coder-480B-A35B-Instruct",
+    "model": "wandb/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 1.5
   },
   {
-    "id": "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "name": "Qwen3-235B-A22B-Thinking-2507",
+    "model": "wandb/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 131072,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": 0.1
   },
   {
-    "id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "name": "Qwen3 235B A22B Instruct 2507",
+    "model": "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 131072,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": 0.1
   },
   {
-    "id": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    "name": "Llama 4 Scout 17B 16E Instruct",
+    "model": "wandb/meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 64000,
     "maxOutput": 8192,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": 0.66
   },
   {
-    "id": "meta-llama/Llama-3.3-70B-Instruct",
-    "name": "Llama-3.3-70B-Instruct",
+    "model": "wandb/meta-llama/Llama-3.3-70B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 32768,
@@ -167,12 +173,13 @@ const agent = new Agent({
     "outputCost": 0.71
   },
   {
-    "id": "meta-llama/Llama-3.1-8B-Instruct",
-    "name": "Meta-Llama-3.1-8B-Instruct",
+    "model": "wandb/meta-llama/Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 32768,
@@ -180,12 +187,13 @@ const agent = new Agent({
     "outputCost": 0.22
   },
   {
-    "id": "microsoft/Phi-4-mini-instruct",
-    "name": "Phi-4-mini-instruct",
+    "model": "wandb/microsoft/Phi-4-mini-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -193,12 +201,13 @@ const agent = new Agent({
     "outputCost": 0.35
   },
   {
-    "id": "moonshotai/Kimi-K2-Instruct",
-    "name": "Kimi-K2-Instruct",
+    "model": "wandb/moonshotai/Kimi-K2-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
@@ -206,5 +215,5 @@ const agent = new Agent({
     "outputCost": 4
   }
 ]}
-  totalCount={10}
+  totalCount={undefined}
 />

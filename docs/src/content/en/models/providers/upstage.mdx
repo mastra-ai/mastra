@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="upstage" 
   models={[
   {
-    "id": "solar-pro2",
-    "name": "solar-pro2",
+    "model": "upstage/solar-pro2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 65536,
     "maxOutput": 8192,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 0.25
   },
   {
-    "id": "solar-mini",
-    "name": "solar-mini",
+    "model": "upstage/solar-mini",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 4096,
@@ -102,5 +103,5 @@ const agent = new Agent({
     "outputCost": 0.15
   }
 ]}
-  totalCount={2}
+  totalCount={undefined}
 />

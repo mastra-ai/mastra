@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="deepseek" 
   models={[
   {
-    "id": "deepseek-reasoner",
-    "name": "DeepSeek Reasoner",
+    "model": "deepseek/deepseek-reasoner",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 128000,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 1.68
   },
   {
-    "id": "deepseek-chat",
-    "name": "DeepSeek Chat",
+    "model": "deepseek/deepseek-chat",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 8192,
@@ -102,5 +103,5 @@ const agent = new Agent({
     "outputCost": 1.68
   }
 ]}
-  totalCount={2}
+  totalCount={undefined}
 />

@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="baseten" 
   models={[
   {
-    "id": "Moonshotai-Kimi-K2-Instruct-0905",
-    "name": "moonshotai/Kimi-K2-Instruct-0905",
+    "model": "baseten/Moonshotai-Kimi-K2-Instruct-0905",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 2.5
   },
   {
-    "id": "Qwen-Qwen3-Coder-480B-A35B-Instruct",
-    "name": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "model": "baseten/Qwen-Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -102,5 +103,5 @@ const agent = new Agent({
     "outputCost": 1.53
   }
 ]}
-  totalCount={2}
+  totalCount={undefined}
 />

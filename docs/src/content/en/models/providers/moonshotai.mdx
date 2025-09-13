@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="moonshotai" 
   models={[
   {
-    "id": "kimi-k2-turbo-preview",
-    "name": "Kimi K2 Turbo",
+    "model": "moonshotai/kimi-k2-turbo-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 16384,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 10
   },
   {
-    "id": "kimi-k2-0711-preview",
-    "name": "Kimi K2 0711",
+    "model": "moonshotai/kimi-k2-0711-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 16384,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 2.5
   },
   {
-    "id": "kimi-k2-0905-preview",
-    "name": "Kimi K2 0905",
+    "model": "moonshotai/kimi-k2-0905-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
@@ -115,5 +117,5 @@ const agent = new Agent({
     "outputCost": 2.5
   }
 ]}
-  totalCount={3}
+  totalCount={undefined}
 />
