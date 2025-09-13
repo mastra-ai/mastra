@@ -3,6 +3,8 @@ title: "Google | Models | Mastra"
 description: "Use Google models with Mastra. 12 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 
 Access 12 Google models through Mastra's model router. Authentication is handled automatically using the `GOOGLE_GENERATIVE_AI_API_KEY` environment variable.
@@ -69,8 +71,6 @@ const agent = new Agent({
 ```
 
 ## Model Capabilities
-
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
 
 <ProviderCapabilitiesTable providerId="google" limit={10} />
 

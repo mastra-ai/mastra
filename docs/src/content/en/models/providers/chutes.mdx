@@ -3,6 +3,8 @@ title: "Chutes | Models | Mastra"
 description: "Use Chutes models with Mastra. 23 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 
 Access 23 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
@@ -69,8 +71,6 @@ const agent = new Agent({
 ```
 
 ## Model Capabilities
-
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
 
 <ProviderCapabilitiesTable providerId="chutes" limit={10} />
 

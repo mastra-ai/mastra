@@ -3,6 +3,8 @@ title: "DeepSeek | Models | Mastra"
 description: "Use DeepSeek models with Mastra. 2 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
 
 Access 2 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
@@ -69,8 +71,6 @@ const agent = new Agent({
 ```
 
 ## Model Capabilities
-
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
 
 <ProviderCapabilitiesTable providerId="deepseek" limit={10} />
 

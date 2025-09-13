@@ -3,6 +3,8 @@ title: "Venice AI | Models | Mastra"
 description: "Use Venice AI models with Mastra. 13 models available."
 ---
 
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 
 Access 13 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
@@ -67,6 +69,10 @@ const agent = new Agent({
   }
 });
 ```
+
+## Model Capabilities
+
+<ProviderCapabilitiesTable providerId="venice" limit={10} />
 
 ## Available Models
 
