@@ -166,6 +166,13 @@ function generateProviderPage(provider: ProviderInfo): string {
     ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.\n\nLearn more in the [${provider.name} documentation](${docUrl}).`
     : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.`;
 
+  // Use React component for capabilities table
+  const capabilitiesComponent = `## Model Capabilities
+
+import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+
+<ProviderCapabilitiesTable providerId="${provider.id}" limit={10} />`;
+
   // Generate model table
   const modelTable = `| Model |
 |-------|
@@ -238,6 +245,8 @@ const agent = new Agent({
   }
 });
 \`\`\`
+
+${capabilitiesComponent}
 
 ## Available Models
 
