@@ -73,25 +73,24 @@ export function ProviderModelsTable({
       <TableHeader>
         <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
           <TableHead className="w-[350px] font-bold pb-2">Model</TableHead>
-          <TableHead className="pb-2 font-bold text-center">
-            Image Input
-          </TableHead>
           {hasExtendedData && (
             <>
-              <TableHead className="pb-2 font-bold text-center">
-                Audio Input
+              <TableHead className="w-[100px] font-bold pb-2 text-right">
+                Context
               </TableHead>
-              <TableHead className="pb-2 font-bold text-center">
-                Video Input
+              <TableHead className="w-[100px] font-bold pb-2 text-right">
+                Output
+              </TableHead>
+              <TableHead className="w-[100px] font-bold pb-2 text-right">
+                Input $/1M
+              </TableHead>
+              <TableHead className="w-[100px] font-bold pb-2 text-right">
+                Output $/1M
               </TableHead>
             </>
           )}
-          <TableHead className="pb-2 font-bold text-center">
-            Object Generation
-          </TableHead>
-          <TableHead className="pb-2 font-bold text-center">
-            Tool Usage
-          </TableHead>
+          <TableHead className="pb-2 font-bold text-center">JSON</TableHead>
+          <TableHead className="pb-2 font-bold text-center">Tools</TableHead>
           <TableHead className="pb-2 font-bold text-center">
             Tool Streaming
           </TableHead>
@@ -100,17 +99,14 @@ export function ProviderModelsTable({
               <TableHead className="pb-2 font-bold text-center">
                 Reasoning
               </TableHead>
-              <TableHead className="w-[100px] font-bold pb-2 text-right">
-                Context
+              <TableHead className="pb-2 font-bold text-center">
+                Image
               </TableHead>
-              <TableHead className="w-[100px] font-bold pb-2 text-right">
-                Max Output
+              <TableHead className="pb-2 font-bold text-center">
+                Audio
               </TableHead>
-              <TableHead className="w-[120px] font-bold pb-2 text-right">
-                Input $/1M
-              </TableHead>
-              <TableHead className="w-[120px] font-bold pb-2 text-right">
-                Output $/1M
+              <TableHead className="pb-2 font-bold text-center">
+                Video
               </TableHead>
             </>
           )}
@@ -130,28 +126,19 @@ export function ProviderModelsTable({
                 {model.model}
               </Badge>
             </TableCell>
-            <TableCell className="text-center">
-              {model.imageInput ? (
-                <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
-              ) : (
-                <Cross className="inline-block w-[18px] h-[18px]" />
-              )}
-            </TableCell>
             {hasExtendedData && (
               <>
-                <TableCell className="text-center">
-                  {model.audioInput ? (
-                    <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
-                  ) : (
-                    <Cross className="inline-block w-[18px] h-[18px]" />
-                  )}
+                <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                  {formatTokens(model.contextWindow)}
                 </TableCell>
-                <TableCell className="text-center">
-                  {model.videoInput ? (
-                    <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
-                  ) : (
-                    <Cross className="inline-block w-[18px] h-[18px]" />
-                  )}
+                <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                  {formatTokens(model.maxOutput)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                  {formatCost(model.inputCost)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                  {formatCost(model.outputCost)}
                 </TableCell>
               </>
             )}
@@ -185,17 +172,26 @@ export function ProviderModelsTable({
                     <Cross className="inline-block w-[18px] h-[18px]" />
                   )}
                 </TableCell>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatTokens(model.contextWindow)}
+                <TableCell className="text-center">
+                  {model.imageInput ? (
+                    <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
+                  ) : (
+                    <Cross className="inline-block w-[18px] h-[18px]" />
+                  )}
                 </TableCell>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatTokens(model.maxOutput)}
+                <TableCell className="text-center">
+                  {model.audioInput ? (
+                    <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
+                  ) : (
+                    <Cross className="inline-block w-[18px] h-[18px]" />
+                  )}
                 </TableCell>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatCost(model.inputCost)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                  {formatCost(model.outputCost)}
+                <TableCell className="text-center">
+                  {model.videoInput ? (
+                    <Check className="dark:text-green-400 text-[var(--light-green-accent-2)] inline-block w-[18px] h-[18px]" />
+                  ) : (
+                    <Cross className="inline-block w-[18px] h-[18px]" />
+                  )}
                 </TableCell>
               </>
             )}
