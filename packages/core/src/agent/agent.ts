@@ -2683,8 +2683,9 @@ export class Agent<
 
   async #execute<
     OUTPUT extends OutputSchema | undefined = undefined,
+    STRUCTURED_OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, format = 'mastra', ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  >({ methodType, format = 'mastra', ...options }: InnerAgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>) {
     const runtimeContext = options.runtimeContext || new RuntimeContext();
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: options.threadId, memory: options.memory });
 
@@ -3493,7 +3494,7 @@ export class Agent<
 
   async generateVNext<
     OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    STRUCTURED_OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'aisdk' | 'mastra' = 'mastra',
   >(
     messages: MessageListInput,
@@ -3526,7 +3527,7 @@ export class Agent<
 
   async streamVNext<
     OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    STRUCTURED_OUTPUT extends OutputSchema | undefined = undefined,
     FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
   >(
     messages: MessageListInput,
