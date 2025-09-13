@@ -3,7 +3,7 @@ title: "Z.AI | Models | Mastra"
 description: "Use Z.AI models with Mastra. 4 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/zai.svg" alt="Z.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI
 
@@ -70,15 +70,63 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="zai" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `zai/glm-4.5` |
-| `zai/glm-4.5-air` |
-| `zai/glm-4.5-flash` |
-| `zai/glm-4.5v` |
+<ProviderModelsTable 
+  providerId="zai" 
+  models={[
+  {
+    "id": "glm-4.5-air",
+    "name": "GLM-4.5-Air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.2,
+    "outputCost": 1.1
+  },
+  {
+    "id": "glm-4.5v",
+    "name": "GLM 4.5V",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 1.8
+  },
+  {
+    "id": "glm-4.5-flash",
+    "name": "GLM-4.5-Flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "glm-4.5",
+    "name": "GLM-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  }
+]}
+  totalCount={4}
+/>

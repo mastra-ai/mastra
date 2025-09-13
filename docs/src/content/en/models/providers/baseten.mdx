@@ -3,7 +3,7 @@ title: "Baseten | Models | Mastra"
 description: "Use Baseten models with Mastra. 2 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/baseten.svg" alt="Baseten logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Baseten
 
@@ -70,13 +70,37 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="baseten" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `baseten/Moonshotai-Kimi-K2-Instruct-0905` |
-| `baseten/Qwen-Qwen3-Coder-480B-A35B-Instruct` |
+<ProviderModelsTable 
+  providerId="baseten" 
+  models={[
+  {
+    "id": "Moonshotai-Kimi-K2-Instruct-0905",
+    "name": "moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "id": "Qwen-Qwen3-Coder-480B-A35B-Instruct",
+    "name": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.38,
+    "outputCost": 1.53
+  }
+]}
+  totalCount={2}
+/>

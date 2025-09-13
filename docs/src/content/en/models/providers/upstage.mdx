@@ -3,7 +3,7 @@ title: "Upstage | Models | Mastra"
 description: "Use Upstage models with Mastra. 2 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/upstage.svg" alt="Upstage logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Upstage
 
@@ -70,13 +70,37 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="upstage" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `upstage/solar-mini` |
-| `upstage/solar-pro2` |
+<ProviderModelsTable 
+  providerId="upstage" 
+  models={[
+  {
+    "id": "solar-pro2",
+    "name": "solar-pro2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.25
+  },
+  {
+    "id": "solar-mini",
+    "name": "solar-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  }
+]}
+  totalCount={2}
+/>

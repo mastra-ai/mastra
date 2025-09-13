@@ -3,7 +3,7 @@ title: "ModelScope | Models | Mastra"
 description: "Use ModelScope models with Mastra. 8 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/modelscope.svg" alt="ModelScope logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ModelScope
 
@@ -70,19 +70,115 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="modelscope" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507` |
-| `modelscope/Qwen/Qwen3-235B-A22B-Thinking-2507` |
-| `modelscope/Qwen/Qwen3-30B-A3B-Instruct-2507` |
-| `modelscope/Qwen/Qwen3-30B-A3B-Thinking-2507` |
-| `modelscope/Qwen/Qwen3-Coder-30B-A3B-Instruct` |
-| `modelscope/Qwen/Qwen3-Coder-480B-A35B-Instruct` |
-| `modelscope/ZhipuAI/GLM-4.5` |
-| `modelscope/moonshotai/Kimi-K2-Instruct` |
+<ProviderModelsTable 
+  providerId="modelscope" 
+  models={[
+  {
+    "id": "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    "name": "Qwen3 30B A3B Thinking 2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "name": "Qwen3-Coder-480B-A35B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "name": "Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "name": "Qwen3 30B A3B Instruct 2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "name": "Qwen3 235B A22B Instruct 2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "name": "Qwen3 Coder 30B A3B Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "ZhipuAI/GLM-4.5",
+    "name": "GLM-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "moonshotai/Kimi-K2-Instruct",
+    "name": "Kimi-K2-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+  totalCount={8}
+/>

@@ -3,7 +3,7 @@ title: "Nvidia | Models | Mastra"
 description: "Use Nvidia models with Mastra. 14 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 
@@ -70,25 +70,193 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="nvidia" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `nvidia/cosmos-nemotron-34b` |
-| `nvidia/deepseek-r1` |
-| `nvidia/deepseek-v3.1` |
-| `nvidia/flux_1-dev` |
-| `nvidia/gemma-3-27b-it` |
-| `nvidia/llama-3.1-nemotron-ultra-253b-v1` |
-| `nvidia/llama-3.3-nemotron-super-49b-v1.5` |
-| `nvidia/mistral-small-3.1-24b-instruct-2503` |
-| `nvidia/nemoretriever-ocr-v1` |
-| `nvidia/parakeet-tdt-0.6b-v2` |
-| `nvidia/phi-4-multimodal-instruct` |
-| `nvidia/qwen3-235b-a22b` |
-| `nvidia/qwen3-coder-480b-a35b-instruct` |
-| `nvidia/whisper-large-v3` |
+<ProviderModelsTable 
+  providerId="nvidia" 
+  models={[
+  {
+    "id": "mistral-small-3.1-24b-instruct-2503",
+    "name": "Mistral-Small-3.1-24B-Instruct-2503",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "llama-3.3-nemotron-super-49b-v1.5",
+    "name": "Llama-3.3-Nemotron-Super-49B-v1.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "qwen3-235b-a22b",
+    "name": "Qwen3-235B-A22B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "deepseek-v3.1",
+    "name": "DeepSeek V3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "flux_1-dev",
+    "name": "FLUX.1-dev",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": 4096,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "cosmos-nemotron-34b",
+    "name": "Cosmos Nemotron 34B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolCall": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "whisper-large-v3",
+    "name": "Whisper Large v3",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "qwen3-coder-480b-a35b-instruct",
+    "name": "Qwen3 Coder 480B A35B Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "phi-4-multimodal-instruct",
+    "name": "Phi-4-Multimodal-Instruct",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "parakeet-tdt-0.6b-v2",
+    "name": "Parakeet TDT 0.6B v2",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "llama-3.1-nemotron-ultra-253b-v1",
+    "name": "Llama-3.1-Nemotron-Ultra-253B-v1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "deepseek-r1",
+    "name": "DeepSeek R1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "nemoretriever-ocr-v1",
+    "name": "NeMo Retriever OCR v1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "gemma-3-27b-it",
+    "name": "Gemma-3-27B-IT",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+  totalCount={14}
+/>

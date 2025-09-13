@@ -3,7 +3,7 @@ title: "xAI | Models | Mastra"
 description: "Use xAI models with Mastra. 17 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/xai.svg" alt="xAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />xAI
 
@@ -70,28 +70,206 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="xai" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `xai/grok-2` |
-| `xai/grok-2-1212` |
-| `xai/grok-2-latest` |
-| `xai/grok-2-vision` |
-| `xai/grok-2-vision-1212` |
-| `xai/grok-2-vision-latest` |
-| `xai/grok-3` |
-| `xai/grok-3-fast` |
-| `xai/grok-3-fast-latest` |
-| `xai/grok-3-latest` |
-| `xai/grok-3-mini` |
-| `xai/grok-3-mini-fast` |
-| `xai/grok-3-mini-fast-latest` |
-| `xai/grok-3-mini-latest` |
-| `xai/grok-4` |
-| `xai/grok-beta` |
-| `xai/grok-vision-beta` |
+<ProviderModelsTable 
+  providerId="xai" 
+  models={[
+  {
+    "id": "grok-3-mini-fast-latest",
+    "name": "Grok 3 Mini Fast Latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.6,
+    "outputCost": 4
+  },
+  {
+    "id": "grok-3-mini-latest",
+    "name": "Grok 3 Mini Latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 0.5
+  },
+  {
+    "id": "grok-beta",
+    "name": "Grok Beta",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 5,
+    "outputCost": 15
+  },
+  {
+    "id": "grok-3-fast-latest",
+    "name": "Grok 3 Fast Latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "id": "grok-3",
+    "name": "Grok 3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "id": "grok-3-mini",
+    "name": "Grok 3 Mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 0.5
+  },
+  {
+    "id": "grok-2-vision-1212",
+    "name": "Grok 2 Vision (1212)",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "id": "grok-2",
+    "name": "Grok 2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "id": "grok-2-vision-latest",
+    "name": "Grok 2 Vision Latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "id": "grok-3-latest",
+    "name": "Grok 3 Latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "id": "grok-2-vision",
+    "name": "Grok 2 Vision",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "id": "grok-2-latest",
+    "name": "Grok 2 Latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "id": "grok-3-fast",
+    "name": "Grok 3 Fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "id": "grok-2-1212",
+    "name": "Grok 2 (1212)",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "id": "grok-4",
+    "name": "Grok 4",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  }
+]}
+  totalCount={17}
+/>

@@ -3,7 +3,7 @@ title: "Llama | Models | Mastra"
 description: "Use Llama models with Mastra. 7 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/llama.svg" alt="Llama logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Llama
 
@@ -70,18 +70,102 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="llama" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `llama/cerebras-llama-4-maverick-17b-128e-instruct` |
-| `llama/cerebras-llama-4-scout-17b-16e-instruct` |
-| `llama/groq-llama-4-maverick-17b-128e-instruct` |
-| `llama/llama-3.3-70b-instruct` |
-| `llama/llama-3.3-8b-instruct` |
-| `llama/llama-4-maverick-17b-128e-instruct-fp8` |
-| `llama/llama-4-scout-17b-16e-instruct-fp8` |
+<ProviderModelsTable 
+  providerId="llama" 
+  models={[
+  {
+    "id": "groq-llama-4-maverick-17b-128e-instruct",
+    "name": "Groq-Llama-4-Maverick-17B-128E-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "llama-3.3-70b-instruct",
+    "name": "Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "llama-4-maverick-17b-128e-instruct-fp8",
+    "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "llama-4-scout-17b-16e-instruct-fp8",
+    "name": "Llama-4-Scout-17B-16E-Instruct-FP8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "cerebras-llama-4-scout-17b-16e-instruct",
+    "name": "Cerebras-Llama-4-Scout-17B-16E-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "llama-3.3-8b-instruct",
+    "name": "Llama-3.3-8B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "cerebras-llama-4-maverick-17b-128e-instruct",
+    "name": "Cerebras-Llama-4-Maverick-17B-128E-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+  totalCount={7}
+/>

@@ -3,7 +3,7 @@ title: "DeepSeek | Models | Mastra"
 description: "Use DeepSeek models with Mastra. 2 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
 
@@ -70,13 +70,37 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="deepseek" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `deepseek/deepseek-chat` |
-| `deepseek/deepseek-reasoner` |
+<ProviderModelsTable 
+  providerId="deepseek" 
+  models={[
+  {
+    "id": "deepseek-reasoner",
+    "name": "DeepSeek Reasoner",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.57,
+    "outputCost": 1.68
+  },
+  {
+    "id": "deepseek-chat",
+    "name": "DeepSeek Chat",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.57,
+    "outputCost": 1.68
+  }
+]}
+  totalCount={2}
+/>
