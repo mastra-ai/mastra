@@ -24,7 +24,7 @@
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/loggers": "link:../../packages/loggers",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.6.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -42,5 +42,5 @@
       "@mastra/deployer": "link:../../packages/deployer"
     }
   },
-  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f"
+  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
 }

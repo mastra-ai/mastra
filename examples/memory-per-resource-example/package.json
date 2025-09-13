@@ -11,10 +11,10 @@
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
     "@mastra/libsql": "latest",
-    "chalk": "^5.3.0",
-    "dotenv": "^16.4.7",
-    "ora": "^8.1.1",
-    "tsx": "^4.19.2"
+    "chalk": "^5.6.2",
+    "dotenv": "^16.6.1",
+    "ora": "^8.2.0",
+    "tsx": "^4.20.5"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
