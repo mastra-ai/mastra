@@ -11,7 +11,9 @@ Access 9 submodel models through Mastra's model router. Authentication is handle
 
 Learn more in the [submodel documentation](https://submodel.gitbook.io).
 
-## Usage
+```bash
+SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
+```
 
 ```typescript
 import { Agent } from "@mastra/core";
@@ -30,12 +32,6 @@ const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
-```
-
-## Configuration
-
-```bash
-SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
 ```
 
 ## Models

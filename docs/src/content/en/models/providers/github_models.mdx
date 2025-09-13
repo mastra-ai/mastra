@@ -11,7 +11,9 @@ Access 55 GitHub Models models through Mastra's model router. Authentication is 
 
 Learn more in the [GitHub Models documentation](https://docs.github.com/en/github-models).
 
-## Usage
+```bash
+GITHUB_TOKEN=your-api-key
+```
 
 ```typescript
 import { Agent } from "@mastra/core";
@@ -30,12 +32,6 @@ const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
-```
-
-## Configuration
-
-```bash
-GITHUB_TOKEN=your-api-key
 ```
 
 ## Models

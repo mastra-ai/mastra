@@ -11,7 +11,9 @@ Access 17 xAI models through Mastra's model router. Authentication is handled au
 
 Learn more in the [xAI documentation](https://docs.x.ai/docs/models).
 
-## Usage
+```bash
+XAI_API_KEY=your-api-key
+```
 
 ```typescript
 import { Agent } from "@mastra/core";
@@ -30,12 +32,6 @@ const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
   console.log(chunk);
 }
-```
-
-## Configuration
-
-```bash
-XAI_API_KEY=your-api-key
 ```
 
 ## Models
