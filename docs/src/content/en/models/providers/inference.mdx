@@ -3,7 +3,7 @@ title: "Inference | Models | Mastra"
 description: "Use Inference models with Mastra. 9 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/inference.svg" alt="Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Inference
 
@@ -70,20 +70,128 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="inference" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `inference/google/gemma-3` |
-| `inference/meta/llama-3.1-8b-instruct` |
-| `inference/meta/llama-3.2-11b-vision-instruct` |
-| `inference/meta/llama-3.2-1b-instruct` |
-| `inference/meta/llama-3.2-3b-instruct` |
-| `inference/mistral/mistral-nemo-12b-instruct` |
-| `inference/osmosis/osmosis-structure-0.6b` |
-| `inference/qwen/qwen-2.5-7b-vision-instruct` |
-| `inference/qwen/qwen3-embedding-4b` |
+<ProviderModelsTable 
+  providerId="inference" 
+  models={[
+  {
+    "id": "meta/llama-3.2-3b-instruct",
+    "name": "Llama 3.2 3B Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.02,
+    "outputCost": 0.02
+  },
+  {
+    "id": "meta/llama-3.2-1b-instruct",
+    "name": "Llama 3.2 1B Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.01,
+    "outputCost": 0.01
+  },
+  {
+    "id": "meta/llama-3.1-8b-instruct",
+    "name": "Llama 3.1 8B Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.025,
+    "outputCost": 0.025
+  },
+  {
+    "id": "meta/llama-3.2-11b-vision-instruct",
+    "name": "Llama 3.2 11B Vision Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.055,
+    "outputCost": 0.055
+  },
+  {
+    "id": "mistral/mistral-nemo-12b-instruct",
+    "name": "Mistral Nemo 12B Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.038,
+    "outputCost": 0.1
+  },
+  {
+    "id": "google/gemma-3",
+    "name": "Google Gemma 3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 125000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.3
+  },
+  {
+    "id": "osmosis/osmosis-structure-0.6b",
+    "name": "Osmosis Structure 0.6B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 4000,
+    "maxOutput": 2048,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
+    "id": "qwen/qwen-2.5-7b-vision-instruct",
+    "name": "Qwen 2.5 7B Vision Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 125000,
+    "maxOutput": 4096,
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "id": "qwen/qwen3-embedding-4b",
+    "name": "Qwen 3 Embedding 4B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 2048,
+    "inputCost": 0.01,
+    "outputCost": null
+  }
+]}
+  totalCount={9}
+/>

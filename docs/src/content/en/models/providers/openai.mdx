@@ -3,7 +3,7 @@ title: "OpenAI | Models | Mastra"
 description: "Use OpenAI models with Mastra. 23 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 
@@ -70,34 +70,206 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="openai" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `openai/codex-mini-latest` |
-| `openai/gpt-3.5-turbo` |
-| `openai/gpt-4` |
-| `openai/gpt-4-turbo` |
-| `openai/gpt-4.1` |
-| `openai/gpt-4.1-mini` |
-| `openai/gpt-4.1-nano` |
-| `openai/gpt-4o` |
-| `openai/gpt-4o-mini` |
-| `openai/gpt-5` |
-| `openai/gpt-5-chat-latest` |
-| `openai/gpt-5-mini` |
-| `openai/gpt-5-nano` |
-| `openai/o1` |
-| `openai/o1-mini` |
-| `openai/o1-preview` |
-| `openai/o1-pro` |
-| `openai/o3` |
-| `openai/o3-deep-research` |
-| `openai/o3-mini` |
-| `openai/o3-pro` |
-| `openai/o4-mini` |
-| `openai/o4-mini-deep-research` |
+<ProviderModelsTable 
+  providerId="openai" 
+  models={[
+  {
+    "id": "gpt-5-nano",
+    "name": "GPT-5 Nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.05,
+    "outputCost": 0.4
+  },
+  {
+    "id": "o3-pro",
+    "name": "o3-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 20,
+    "outputCost": 80
+  },
+  {
+    "id": "codex-mini-latest",
+    "name": "Codex Mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 1.5,
+    "outputCost": 6
+  },
+  {
+    "id": "gpt-4.1",
+    "name": "GPT-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "id": "gpt-4-turbo",
+    "name": "GPT-4 Turbo",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 10,
+    "outputCost": 30
+  },
+  {
+    "id": "o1",
+    "name": "o1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 15,
+    "outputCost": 60
+  },
+  {
+    "id": "o3-deep-research",
+    "name": "o3-deep-research",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 10,
+    "outputCost": 40
+  },
+  {
+    "id": "gpt-5",
+    "name": "GPT-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "id": "o1-pro",
+    "name": "o1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 150,
+    "outputCost": 600
+  },
+  {
+    "id": "o3",
+    "name": "o3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "id": "gpt-5-chat-latest",
+    "name": "GPT-5 Chat (latest)",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "id": "gpt-5-mini",
+    "name": "GPT-5 Mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "id": "o1-preview",
+    "name": "o1-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 15,
+    "outputCost": 60
+  },
+  {
+    "id": "o4-mini-deep-research",
+    "name": "o4-mini-deep-research",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 100000,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "id": "gpt-4o-mini",
+    "name": "GPT-4o mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  }
+]}
+  totalCount={23}
+/>

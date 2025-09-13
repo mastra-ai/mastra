@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import {
   Table,
   TableBody,
@@ -28,75 +25,17 @@ interface ModelCapability {
   outputCost: number | null;
 }
 
-interface ProviderCapabilitiesTableProps {
+interface ProviderModelsTableProps {
   providerId: string;
-  limit?: number;
+  models: ModelCapability[];
+  totalCount: number;
 }
 
-export function ProviderCapabilitiesTable({
+export function ProviderModelsTable({
   providerId,
-  limit = 10,
-}: ProviderCapabilitiesTableProps) {
-  const [models, setModels] = useState<ModelCapability[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalModels, setTotalModels] = useState(0);
-
-  useEffect(() => {
-    async function fetchCapabilities() {
-      try {
-        const response = await fetch("https://models.dev/api.json");
-        const data = await response.json();
-        const provider = data[providerId];
-
-        if (!provider?.models) {
-          setModels([]);
-          setLoading(false);
-          return;
-        }
-
-        const allModels = Object.entries(provider.models);
-        setTotalModels(allModels.length);
-
-        const processedModels = allModels
-          .slice(0, limit)
-          .map(([modelId, model]: [string, any]) => ({
-            id: modelId,
-            name: model.name || modelId,
-            imageInput: model.modalities?.input?.includes("image") || false,
-            audioInput: model.modalities?.input?.includes("audio") || false,
-            videoInput: model.modalities?.input?.includes("video") || false,
-            toolCall: model.tool_call !== false,
-            reasoning: model.reasoning === true,
-            contextWindow: model.limit?.context || null,
-            maxOutput: model.limit?.output || null,
-            inputCost: model.cost?.input || null,
-            outputCost: model.cost?.output || null,
-          }));
-
-        setModels(processedModels);
-        setLoading(false);
-      } catch (error) {
-        console.error(`Failed to fetch capabilities for ${providerId}:`, error);
-        setModels([]);
-        setLoading(false);
-      }
-    }
-
-    fetchCapabilities();
-  }, [providerId, limit]);
-
-  if (loading) {
-    return (
-      <Table className="my-10">
-        <TableCaption>Loading model capabilities...</TableCaption>
-      </Table>
-    );
-  }
-
-  if (models.length === 0) {
-    return null;
-  }
-
+  models,
+  totalCount,
+}: ProviderModelsTableProps) {
   const formatTokens = (tokens: number | null) => {
     if (!tokens) return "—";
     if (tokens >= 1000000) {
@@ -110,16 +49,39 @@ export function ProviderCapabilitiesTable({
     return `$${cost}`;
   };
 
+  if (models.length === 0) {
+    // Fallback for providers without models.dev data
+    return (
+      <Table className="my-10">
+        <TableCaption>
+          {totalCount} available model{totalCount !== 1 ? "s" : ""}
+        </TableCaption>
+        <TableHeader>
+          <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
+            <TableHead className="font-bold pb-2">Model ID</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
+            <TableCell className="text-muted-foreground">
+              Model capability data not available from models.dev
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+  }
+
   return (
     <Table className="my-10">
       <TableCaption>
-        {models.length < totalModels
-          ? `Showing ${models.length} of ${totalModels} available models`
-          : `${totalModels} available model${totalModels !== 1 ? "s" : ""}`}
+        {models.length < totalCount
+          ? `Showing ${models.length} of ${totalCount} available models. All models can be used with \`${providerId}/model-id\` format.`
+          : `${totalCount} available model${totalCount !== 1 ? "s" : ""}`}
       </TableCaption>
       <TableHeader>
         <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
-          <TableHead className="w-[250px] font-bold pb-2">Model</TableHead>
+          <TableHead className="w-[250px] font-bold pb-2">Model ID</TableHead>
           <TableHead className="pb-2 font-bold text-center">
             <span className="inline-block" title="Image Input">
               🖼️
@@ -170,7 +132,7 @@ export function ProviderCapabilitiesTable({
                 className="dark:bg-neutral-900 font-mono font-normal max-w-[250px] bg-[var(--light-color-surface-1)]"
                 variant="secondary"
               >
-                {model.id}
+                {providerId}/{model.id}
               </Badge>
             </TableCell>
             <TableCell className="text-center">

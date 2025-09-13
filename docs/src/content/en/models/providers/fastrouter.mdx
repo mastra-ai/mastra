@@ -3,7 +3,7 @@ title: "FastRouter | Models | Mastra"
 description: "Use FastRouter models with Mastra. 14 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/fastrouter.svg" alt="FastRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />FastRouter
 
@@ -70,25 +70,193 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="fastrouter" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `fastrouter/anthropic/claude-opus-4.1` |
-| `fastrouter/anthropic/claude-sonnet-4` |
-| `fastrouter/deepseek-ai/deepseek-r1-distill-llama-70b` |
-| `fastrouter/google/gemini-2.5-flash` |
-| `fastrouter/google/gemini-2.5-pro` |
-| `fastrouter/moonshotai/kimi-k2` |
-| `fastrouter/openai/gpt-4.1` |
-| `fastrouter/openai/gpt-5` |
-| `fastrouter/openai/gpt-5-mini` |
-| `fastrouter/openai/gpt-5-nano` |
-| `fastrouter/openai/gpt-oss-120b` |
-| `fastrouter/openai/gpt-oss-20b` |
-| `fastrouter/qwen/qwen3-coder` |
-| `fastrouter/x-ai/grok-4` |
+<ProviderModelsTable 
+  providerId="fastrouter" 
+  models={[
+  {
+    "id": "deepseek-ai/deepseek-r1-distill-llama-70b",
+    "name": "DeepSeek R1 Distill Llama 70B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.14
+  },
+  {
+    "id": "anthropic/claude-sonnet-4",
+    "name": "Claude Sonnet 4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "id": "anthropic/claude-opus-4.1",
+    "name": "Claude Opus 4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "id": "openai/gpt-5-nano",
+    "name": "GPT-5 Nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.05,
+    "outputCost": 0.4
+  },
+  {
+    "id": "openai/gpt-4.1",
+    "name": "GPT-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 1047576,
+    "maxOutput": 32768,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "id": "openai/gpt-oss-20b",
+    "name": "GPT OSS 20B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.05,
+    "outputCost": 0.2
+  },
+  {
+    "id": "openai/gpt-5",
+    "name": "GPT-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "id": "openai/gpt-5-mini",
+    "name": "GPT-5 Mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "id": "openai/gpt-oss-120b",
+    "name": "GPT OSS 120B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "id": "x-ai/grok-4",
+    "name": "Grok 4",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "id": "google/gemini-2.5-pro",
+    "name": "Gemini 2.5 Pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "id": "google/gemini-2.5-flash",
+    "name": "Gemini 2.5 Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "id": "qwen/qwen3-coder",
+    "name": "Qwen3 Coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "id": "moonshotai/kimi-k2",
+    "name": "Kimi K2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.55,
+    "outputCost": 2.2
+  }
+]}
+  totalCount={14}
+/>

@@ -3,7 +3,7 @@ title: "LMStudio | Models | Mastra"
 description: "Use LMStudio models with Mastra. 3 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/lmstudio.svg" alt="LMStudio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LMStudio
 
@@ -70,14 +70,50 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="lmstudio" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `lmstudio/openai/gpt-oss-20b` |
-| `lmstudio/qwen/qwen3-30b-a3b-2507` |
-| `lmstudio/qwen/qwen3-coder-30b` |
+<ProviderModelsTable 
+  providerId="lmstudio" 
+  models={[
+  {
+    "id": "openai/gpt-oss-20b",
+    "name": "GPT OSS 20B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "qwen/qwen3-coder-30b",
+    "name": "Qwen3 Coder 30B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "id": "qwen/qwen3-30b-a3b-2507",
+    "name": "Qwen3 30B A3B 2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+  totalCount={3}
+/>

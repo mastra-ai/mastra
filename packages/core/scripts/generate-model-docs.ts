@@ -154,7 +154,34 @@ function parseProviders(): GroupedProviders {
   return { gateways, popular, other };
 }
 
-function generateProviderPage(provider: ProviderInfo): string {
+async function fetchProviderModels(providerId: string): Promise<any[]> {
+  try {
+    const response = await fetch('https://models.dev/api.json');
+    const data = await response.json();
+    const provider = data[providerId];
+
+    if (!provider?.models) return [];
+
+    return Object.entries(provider.models).map(([modelId, model]: [string, any]) => ({
+      id: modelId,
+      name: model.name || modelId,
+      imageInput: model.modalities?.input?.includes('image') || false,
+      audioInput: model.modalities?.input?.includes('audio') || false,
+      videoInput: model.modalities?.input?.includes('video') || false,
+      toolCall: model.tool_call !== false,
+      reasoning: model.reasoning === true,
+      contextWindow: model.limit?.context || null,
+      maxOutput: model.limit?.output || null,
+      inputCost: model.cost?.input || null,
+      outputCost: model.cost?.output || null,
+    }));
+  } catch (error) {
+    console.error(`Failed to fetch models for ${providerId}:`, error);
+    return [];
+  }
+}
+
+async function generateProviderPage(provider: ProviderInfo): Promise<string> {
   const modelCount = provider.models.length;
 
   // Get documentation URL if available
@@ -166,17 +193,18 @@ function generateProviderPage(provider: ProviderInfo): string {
     ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.\n\nLearn more in the [${provider.name} documentation](${docUrl}).`
     : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.`;
 
-  // Generate model table
-  const modelTable = `| Model |
-|-------|
-${provider.models.map(m => `| \`${provider.id}/${m}\` |`).join('\n')}`;
+  // Fetch model capabilities from models.dev
+  const modelsWithCapabilities = await fetchProviderModels(provider.id);
+
+  // Generate static model data as JSON for the component
+  const modelDataJson = JSON.stringify(modelsWithCapabilities.slice(0, 15), null, 2);
 
   return `---
 title: "${provider.name} | Models | Mastra"
 description: "Use ${provider.name} models with Mastra. ${modelCount} model${modelCount !== 1 ? 's' : ''} available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
 
@@ -241,13 +269,13 @@ const agent = new Agent({
 });
 \`\`\`
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="${provider.id}" limit={10} />
-
-## Available Models
-
-${modelTable}
+<ProviderModelsTable 
+  providerId="${provider.id}" 
+  models={${modelDataJson}}
+  totalCount={${modelCount}}
+/>
 `;
 }
 
@@ -597,7 +625,7 @@ async function generateDocs() {
 
   // Generate individual provider pages
   for (const provider of [...grouped.popular, ...grouped.other]) {
-    const content = generateProviderPage(provider);
+    const content = await generateProviderPage(provider);
     await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
     console.log(`✅ Generated providers/${provider.id}.mdx`);
   }

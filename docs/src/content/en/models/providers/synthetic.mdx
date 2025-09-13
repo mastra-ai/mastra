@@ -3,7 +3,7 @@ title: "Synthetic | Models | Mastra"
 description: "Use Synthetic models with Mastra. 19 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 
@@ -70,30 +70,206 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="synthetic" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct` |
-| `synthetic/hf:Qwen/Qwen3-235B-A22B-Instruct-2507` |
-| `synthetic/hf:Qwen/Qwen3-235B-A22B-Thinking-2507` |
-| `synthetic/hf:Qwen/Qwen3-Coder-480B-A35B-Instruct` |
-| `synthetic/hf:deepseek-ai/DeepSeek-R1` |
-| `synthetic/hf:deepseek-ai/DeepSeek-R1-0528` |
-| `synthetic/hf:deepseek-ai/DeepSeek-V3` |
-| `synthetic/hf:deepseek-ai/DeepSeek-V3-0324` |
-| `synthetic/hf:deepseek-ai/DeepSeek-V3.1` |
-| `synthetic/hf:meta-llama/Llama-3.1-405B-Instruct` |
-| `synthetic/hf:meta-llama/Llama-3.1-70B-Instruct` |
-| `synthetic/hf:meta-llama/Llama-3.1-8B-Instruct` |
-| `synthetic/hf:meta-llama/Llama-3.3-70B-Instruct` |
-| `synthetic/hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8` |
-| `synthetic/hf:meta-llama/Llama-4-Scout-17B-16E-Instruct` |
-| `synthetic/hf:moonshotai/Kimi-K2-Instruct` |
-| `synthetic/hf:moonshotai/Kimi-K2-Instruct-0905` |
-| `synthetic/hf:openai/gpt-oss-120b` |
-| `synthetic/hf:zai-org/GLM-4.5` |
+<ProviderModelsTable 
+  providerId="synthetic" 
+  models={[
+  {
+    "id": "hf:meta-llama/Llama-3.1-405B-Instruct",
+    "name": "Llama-3.1-405B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 3,
+    "outputCost": 3
+  },
+  {
+    "id": "hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 524000,
+    "maxOutput": 4096,
+    "inputCost": 0.22,
+    "outputCost": 0.88
+  },
+  {
+    "id": "hf:meta-llama/Llama-3.1-70B-Instruct",
+    "name": "Llama-3.1-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.9,
+    "outputCost": 0.9
+  },
+  {
+    "id": "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "name": "Llama-4-Scout-17B-16E-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 328000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "id": "hf:meta-llama/Llama-3.3-70B-Instruct",
+    "name": "Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.9,
+    "outputCost": 0.9
+  },
+  {
+    "id": "hf:meta-llama/Llama-3.1-8B-Instruct",
+    "name": "Llama-3.1-8B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "id": "hf:deepseek-ai/DeepSeek-V3.1",
+    "name": "DeepSeek V3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.56,
+    "outputCost": 1.68
+  },
+  {
+    "id": "hf:deepseek-ai/DeepSeek-V3",
+    "name": "DeepSeek V3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 1.25
+  },
+  {
+    "id": "hf:deepseek-ai/DeepSeek-V3-0324",
+    "name": "DeepSeek V3 (0324)",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 1.2,
+    "outputCost": 1.2
+  },
+  {
+    "id": "hf:deepseek-ai/DeepSeek-R1",
+    "name": "DeepSeek R1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.55,
+    "outputCost": 2.19
+  },
+  {
+    "id": "hf:deepseek-ai/DeepSeek-R1-0528",
+    "name": "DeepSeek R1 (0528)",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 3,
+    "outputCost": 8
+  },
+  {
+    "id": "hf:zai-org/GLM-4.5",
+    "name": "GLM 4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 96000,
+    "inputCost": 0.55,
+    "outputCost": 2.19
+  },
+  {
+    "id": "hf:moonshotai/Kimi-K2-Instruct",
+    "name": "Kimi K2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "id": "hf:moonshotai/Kimi-K2-Instruct-0905",
+    "name": "Kimi K2 0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 1.2,
+    "outputCost": 1.2
+  },
+  {
+    "id": "hf:Qwen/Qwen2.5-Coder-32B-Instruct",
+    "name": "Qwen2.5-Coder-32B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.8,
+    "outputCost": 0.8
+  }
+]}
+  totalCount={19}
+/>

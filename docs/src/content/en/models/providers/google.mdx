@@ -3,7 +3,7 @@ title: "Google | Models | Mastra"
 description: "Use Google models with Mastra. 12 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 
@@ -70,23 +70,167 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="google" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `google/gemini-1.5-flash` |
-| `google/gemini-1.5-flash-8b` |
-| `google/gemini-1.5-pro` |
-| `google/gemini-2.0-flash` |
-| `google/gemini-2.0-flash-lite` |
-| `google/gemini-2.5-flash` |
-| `google/gemini-2.5-flash-lite-preview-06-17` |
-| `google/gemini-2.5-flash-preview-04-17` |
-| `google/gemini-2.5-flash-preview-05-20` |
-| `google/gemini-2.5-pro` |
-| `google/gemini-2.5-pro-preview-05-06` |
-| `google/gemini-2.5-pro-preview-06-05` |
+<ProviderModelsTable 
+  providerId="google" 
+  models={[
+  {
+    "id": "gemini-2.5-flash-preview-05-20",
+    "name": "Gemini 2.5 Flash Preview 05-20",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "id": "gemini-2.5-pro",
+    "name": "Gemini 2.5 Pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "id": "gemini-1.5-flash",
+    "name": "Gemini 1.5 Flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 8192,
+    "inputCost": 0.075,
+    "outputCost": 0.3
+  },
+  {
+    "id": "gemini-2.0-flash-lite",
+    "name": "Gemini 2.0 Flash Lite",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
+    "inputCost": 0.075,
+    "outputCost": 0.3
+  },
+  {
+    "id": "gemini-1.5-pro",
+    "name": "Gemini 1.5 Pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 8192,
+    "inputCost": 1.25,
+    "outputCost": 5
+  },
+  {
+    "id": "gemini-1.5-flash-8b",
+    "name": "Gemini 1.5 Flash-8B",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 8192,
+    "inputCost": 0.0375,
+    "outputCost": 0.15
+  },
+  {
+    "id": "gemini-2.5-flash",
+    "name": "Gemini 2.5 Flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "id": "gemini-2.5-pro-preview-06-05",
+    "name": "Gemini 2.5 Pro Preview 06-05",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "id": "gemini-2.5-pro-preview-05-06",
+    "name": "Gemini 2.5 Pro Preview 05-06",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "id": "gemini-2.0-flash",
+    "name": "Gemini 2.0 Flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "id": "gemini-2.5-flash-lite-preview-06-17",
+    "name": "Gemini 2.5 Flash Lite Preview 06-17",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "id": "gemini-2.5-flash-preview-04-17",
+    "name": "Gemini 2.5 Flash Preview 04-17",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  }
+]}
+  totalCount={12}
+/>

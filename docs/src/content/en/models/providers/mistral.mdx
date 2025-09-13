@@ -3,7 +3,7 @@ title: "Mistral | Models | Mastra"
 description: "Use Mistral models with Mastra. 19 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 
@@ -70,30 +70,206 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="mistral" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `mistral/codestral-latest` |
-| `mistral/devstral-medium-2507` |
-| `mistral/devstral-small-2505` |
-| `mistral/devstral-small-2507` |
-| `mistral/magistral-medium-latest` |
-| `mistral/magistral-small` |
-| `mistral/ministral-3b-latest` |
-| `mistral/ministral-8b-latest` |
-| `mistral/mistral-large-latest` |
-| `mistral/mistral-medium-2505` |
-| `mistral/mistral-medium-2508` |
-| `mistral/mistral-medium-latest` |
-| `mistral/mistral-nemo` |
-| `mistral/mistral-small-latest` |
-| `mistral/open-mistral-7b` |
-| `mistral/open-mixtral-8x22b` |
-| `mistral/open-mixtral-8x7b` |
-| `mistral/pixtral-12b` |
-| `mistral/pixtral-large-latest` |
+<ProviderModelsTable 
+  providerId="mistral" 
+  models={[
+  {
+    "id": "pixtral-large-latest",
+    "name": "Pixtral Large",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "id": "open-mixtral-8x7b",
+    "name": "Mixtral 8x7B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.7,
+    "outputCost": 0.7
+  },
+  {
+    "id": "codestral-latest",
+    "name": "Codestral",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 4096,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "id": "devstral-small-2505",
+    "name": "Devstral Small 2505",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "id": "devstral-medium-2507",
+    "name": "Devstral Medium",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "id": "mistral-medium-2505",
+    "name": "Mistral Medium 3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "id": "devstral-small-2507",
+    "name": "Devstral Small",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "id": "ministral-8b-latest",
+    "name": "Ministral 8B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "id": "magistral-medium-latest",
+    "name": "Magistral Medium",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "id": "pixtral-12b",
+    "name": "Pixtral 12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "id": "open-mistral-7b",
+    "name": "Mistral 7B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 8000,
+    "maxOutput": 8000,
+    "inputCost": 0.25,
+    "outputCost": 0.25
+  },
+  {
+    "id": "magistral-small",
+    "name": "Magistral Small",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "id": "mistral-medium-2508",
+    "name": "Mistral Medium 3.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "id": "open-mixtral-8x22b",
+    "name": "Mixtral 8x22B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "id": "mistral-medium-latest",
+    "name": "Mistral Medium",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.4,
+    "outputCost": 2
+  }
+]}
+  totalCount={19}
+/>

@@ -3,7 +3,7 @@ title: "GitHub Copilot | Models | Mastra"
 description: "Use GitHub Copilot models with Mastra. 16 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/github_copilot.svg" alt="GitHub Copilot logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GitHub Copilot
 
@@ -70,27 +70,10 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="github_copilot" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `github_copilot/claude-3.5-sonnet` |
-| `github_copilot/claude-3.7-sonnet` |
-| `github_copilot/claude-3.7-sonnet-thought` |
-| `github_copilot/claude-opus-4` |
-| `github_copilot/claude-opus-41` |
-| `github_copilot/claude-sonnet-4` |
-| `github_copilot/gemini-2.0-flash-001` |
-| `github_copilot/gemini-2.5-pro` |
-| `github_copilot/gpt-4.1` |
-| `github_copilot/gpt-4o` |
-| `github_copilot/gpt-5` |
-| `github_copilot/gpt-5-mini` |
-| `github_copilot/grok-code-fast-1` |
-| `github_copilot/o3` |
-| `github_copilot/o3-mini` |
-| `github_copilot/o4-mini` |
+<ProviderModelsTable 
+  providerId="github_copilot" 
+  models={[]}
+  totalCount={16}
+/>

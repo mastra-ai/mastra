@@ -3,7 +3,7 @@ title: "Moonshot AI | Models | Mastra"
 description: "Use Moonshot AI models with Mastra. 3 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/moonshotai.svg" alt="Moonshot AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI
 
@@ -70,14 +70,50 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="moonshotai" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `moonshotai/kimi-k2-0711-preview` |
-| `moonshotai/kimi-k2-0905-preview` |
-| `moonshotai/kimi-k2-turbo-preview` |
+<ProviderModelsTable 
+  providerId="moonshotai" 
+  models={[
+  {
+    "id": "kimi-k2-turbo-preview",
+    "name": "Kimi K2 Turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 2.4,
+    "outputCost": 10
+  },
+  {
+    "id": "kimi-k2-0711-preview",
+    "name": "Kimi K2 0711",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "id": "kimi-k2-0905-preview",
+    "name": "Kimi K2 0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  }
+]}
+  totalCount={3}
+/>

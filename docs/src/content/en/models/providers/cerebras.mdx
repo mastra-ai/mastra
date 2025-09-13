@@ -3,7 +3,7 @@ title: "Cerebras | Models | Mastra"
 description: "Use Cerebras models with Mastra. 3 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
 
@@ -70,14 +70,50 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="cerebras" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `cerebras/gpt-oss-120b` |
-| `cerebras/qwen-3-235b-a22b-instruct-2507` |
-| `cerebras/qwen-3-coder-480b` |
+<ProviderModelsTable 
+  providerId="cerebras" 
+  models={[
+  {
+    "id": "qwen-3-235b-a22b-instruct-2507",
+    "name": "Qwen 3 235B Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 32000,
+    "inputCost": 0.6,
+    "outputCost": 1.2
+  },
+  {
+    "id": "gpt-oss-120b",
+    "name": "GPT OSS 120B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.25,
+    "outputCost": 0.69
+  },
+  {
+    "id": "qwen-3-coder-480b",
+    "name": "Qwen 3 Coder 480B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 32000,
+    "inputCost": 2,
+    "outputCost": 2
+  }
+]}
+  totalCount={3}
+/>

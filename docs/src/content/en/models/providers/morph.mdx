@@ -3,7 +3,7 @@ title: "Morph | Models | Mastra"
 description: "Use Morph models with Mastra. 3 models available."
 ---
 
-import { ProviderCapabilitiesTable } from "@/components/provider-capabilities-table";
+import { ProviderModelsTable } from "@/components/provider-models-table";
 
 # <img src="https://models.dev/logos/morph.svg" alt="Morph logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Morph
 
@@ -70,14 +70,50 @@ const agent = new Agent({
 });
 ```
 
-## Model Capabilities
+## Models
 
-<ProviderCapabilitiesTable providerId="morph" limit={10} />
-
-## Available Models
-
-| Model |
-|-------|
-| `morph/auto` |
-| `morph/morph-v3-fast` |
-| `morph/morph-v3-large` |
+<ProviderModelsTable 
+  providerId="morph" 
+  models={[
+  {
+    "id": "auto",
+    "name": "Auto",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.85,
+    "outputCost": 1.55
+  },
+  {
+    "id": "morph-v3-fast",
+    "name": "Morph v3 Fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 16000,
+    "inputCost": 0.8,
+    "outputCost": 1.2
+  },
+  {
+    "id": "morph-v3-large",
+    "name": "Morph v3 Large",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolCall": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.9,
+    "outputCost": 1.9
+  }
+]}
+  totalCount={3}
+/>
