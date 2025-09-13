@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://llm.submodel.ai/v1/chat/completions",
-    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    apiKey: process.env.SUBMODEL_INSTAGEN_ACCESS_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507"
-      : "submodel/Qwen/Qwen3-235B-A22B-Thinking-2507";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -201,6 +169,37 @@ const agent = new Agent({
     "outputCost": 0.5
   }
 ]}
-  totalCount={undefined}
   apiKey="SUBMODEL_INSTAGEN_ACCESS_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://llm.submodel.ai/v1/chat/completions",
+    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    apiKey: process.env.SUBMODEL_INSTAGEN_ACCESS_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507"
+      : "submodel/Qwen/Qwen3-235B-A22B-Thinking-2507";
+  }
+});
+```

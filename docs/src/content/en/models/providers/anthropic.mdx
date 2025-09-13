@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 ANTHROPIC_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.anthropic.com/v1/chat/completions",
-    modelId: "claude-3-5-haiku-20241022",
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "anthropic/claude-3-5-haiku-20241022"
-      : "anthropic/claude-3-5-sonnet-20240620";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -215,6 +183,37 @@ const agent = new Agent({
     "outputCost": 75
   }
 ]}
-  totalCount={undefined}
   apiKey="ANTHROPIC_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.anthropic.com/v1/chat/completions",
+    modelId: "claude-3-5-haiku-20241022",
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "anthropic/claude-3-5-haiku-20241022"
+      : "anthropic/claude-3-5-sonnet-20240620";
+  }
+});
+```

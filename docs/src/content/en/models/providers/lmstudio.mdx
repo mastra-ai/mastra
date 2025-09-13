@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 LMSTUDIO_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "http://127.0.0.1:1234/v1/chat/completions",
-    modelId: "openai/gpt-oss-20b",
-    apiKey: process.env.LMSTUDIO_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "lmstudio/openai/gpt-oss-20b"
-      : "lmstudio/qwen/qwen3-30b-a3b-2507";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -117,6 +85,37 @@ const agent = new Agent({
     "outputCost": null
   }
 ]}
-  totalCount={undefined}
   apiKey="LMSTUDIO_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "http://127.0.0.1:1234/v1/chat/completions",
+    modelId: "openai/gpt-oss-20b",
+    apiKey: process.env.LMSTUDIO_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "lmstudio/openai/gpt-oss-20b"
+      : "lmstudio/qwen/qwen3-30b-a3b-2507";
+  }
+});
+```

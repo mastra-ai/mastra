@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 INFERENCE_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://inference.net/v1/chat/completions",
-    modelId: "google/gemma-3",
-    apiKey: process.env.INFERENCE_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "inference/google/gemma-3"
-      : "inference/meta/llama-3.1-8b-instruct";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -201,6 +169,37 @@ const agent = new Agent({
     "outputCost": null
   }
 ]}
-  totalCount={undefined}
   apiKey="INFERENCE_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://inference.net/v1/chat/completions",
+    modelId: "google/gemma-3",
+    apiKey: process.env.INFERENCE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "inference/google/gemma-3"
+      : "inference/meta/llama-3.1-8b-instruct";
+  }
+});
+```

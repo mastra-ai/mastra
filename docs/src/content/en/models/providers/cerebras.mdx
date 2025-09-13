@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 CEREBRAS_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.cerebras.ai/v1/chat/completions",
-    modelId: "gpt-oss-120b",
-    apiKey: process.env.CEREBRAS_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "cerebras/gpt-oss-120b"
-      : "cerebras/qwen-3-235b-a22b-instruct-2507";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -117,6 +85,37 @@ const agent = new Agent({
     "outputCost": 2
   }
 ]}
-  totalCount={undefined}
   apiKey="CEREBRAS_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.cerebras.ai/v1/chat/completions",
+    modelId: "gpt-oss-120b",
+    apiKey: process.env.CEREBRAS_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "cerebras/gpt-oss-120b"
+      : "cerebras/qwen-3-235b-a22b-instruct-2507";
+  }
+});
+```

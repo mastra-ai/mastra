@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://generativelanguage.googleapis.com/v1beta/chat/completions",
-    modelId: "gemini-1.5-flash",
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "google/gemini-1.5-flash"
-      : "google/gemini-1.5-flash-8b";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -243,6 +211,37 @@ const agent = new Agent({
     "outputCost": 0.6
   }
 ]}
-  totalCount={undefined}
   apiKey="GOOGLE_GENERATIVE_AI_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://generativelanguage.googleapis.com/v1beta/chat/completions",
+    modelId: "gemini-1.5-flash",
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "google/gemini-1.5-flash"
+      : "google/gemini-1.5-flash-8b";
+  }
+});
+```

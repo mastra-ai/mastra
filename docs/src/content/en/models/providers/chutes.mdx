@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 CHUTES_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://llm.chutes.ai/v1/chat/completions",
-    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    apiKey: process.env.CHUTES_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507"
-      : "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -283,8 +251,151 @@ const agent = new Agent({
     "maxOutput": 262144,
     "inputCost": 0.2,
     "outputCost": 0.8
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.5-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.5-Air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 98304,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/tngtech/DeepSeek-TNG-R1T2-Chimera",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "chutes/tngtech/DeepSeek-R1T-Chimera",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.18,
+    "outputCost": 0.72
+  },
+  {
+    "model": "chutes/moonshotai/Kimi-K2-Instruct-75k",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 75000,
+    "maxOutput": 75000,
+    "inputCost": 0.15,
+    "outputCost": 0.59
+  },
+  {
+    "model": "chutes/moonshotai/Kimi-VL-A3B-Thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.02499,
+    "outputCost": 0.100008
+  },
+  {
+    "model": "chutes/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.296176,
+    "outputCost": 1.18528
+  },
+  {
+    "model": "chutes/moonshotai/Kimi-Dev-72B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.06664,
+    "outputCost": 0.266688
   }
 ]}
-  totalCount={23}
   apiKey="CHUTES_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://llm.chutes.ai/v1/chat/completions",
+    modelId: "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    apiKey: process.env.CHUTES_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507"
+      : "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507";
+  }
+});
+```

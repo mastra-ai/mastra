@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 VENICE_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://api.venice.ai/api/v1/chat/completions",
-    modelId: "deepseek-coder-v2-lite",
-    apiKey: process.env.VENICE_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "venice/deepseek-coder-v2-lite"
-      : "venice/deepseek-r1-671b";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -257,6 +225,37 @@ const agent = new Agent({
     "outputCost": 2
   }
 ]}
-  totalCount={undefined}
   apiKey="VENICE_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://api.venice.ai/api/v1/chat/completions",
+    modelId: "deepseek-coder-v2-lite",
+    apiKey: process.env.VENICE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "venice/deepseek-coder-v2-lite"
+      : "venice/deepseek-r1-671b";
+  }
+});
+```

@@ -38,38 +38,6 @@ for await (const chunk of stream) {
 OPENCODE_API_KEY=your-api-key
 ```
 
-## Advanced Configuration
-
-### Custom Headers
-
-```typescript
-const agent = new Agent({
-  name: "custom-agent",
-  model: {
-    url: "https://opencode.ai/zen/v1/chat/completions",
-    modelId: "claude-3-5-haiku",
-    apiKey: process.env.OPENCODE_API_KEY,
-    headers: {
-      "X-Custom-Header": "value"
-    }
-  }
-});
-```
-
-### Dynamic Model Selection
-
-```typescript
-const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
-      ? "opencode/claude-3-5-haiku"
-      : "opencode/claude-opus-4-1";
-  }
-});
-```
-
 ## Models
 
 <ProviderModelsTable 
@@ -173,6 +141,37 @@ const agent = new Agent({
     "outputCost": 1.8
   }
 ]}
-  totalCount={undefined}
   apiKey="OPENCODE_API_KEY"
 />
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  name: "custom-agent",
+  model: {
+    url: "https://opencode.ai/zen/v1/chat/completions",
+    modelId: "claude-3-5-haiku",
+    apiKey: process.env.OPENCODE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
+    return useAdvanced 
+      ? "opencode/claude-3-5-haiku"
+      : "opencode/claude-opus-4-1";
+  }
+});
+```
