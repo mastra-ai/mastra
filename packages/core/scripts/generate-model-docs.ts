@@ -238,7 +238,6 @@ for await (const chunk of stream) {
 
 <ProviderModelsTable 
   models={${modelDataJson}}
-  apiKey="${provider.apiKeyEnvVar}"
 />
 
 ## Advanced Configuration
