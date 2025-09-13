@@ -29,21 +29,12 @@ interface ModelData {
 interface ProviderModelsTableProps {
   models: ModelData[];
   totalCount?: number;
-  apiKey?: string;
 }
 
 export function ProviderModelsTable({
   models,
   totalCount,
-  apiKey,
 }: ProviderModelsTableProps) {
-  // Get the env var from the first model's provider ID
-  const envVar =
-    apiKey ||
-    (models[0]?.model.includes("/")
-      ? `${models[0].model.split("/")[0].toUpperCase().replace(/-/g, "_")}_API_KEY`
-      : "API_KEY");
-
   // Check if we have extended data
   const hasExtendedData = models.some(
     (m) =>
@@ -81,8 +72,7 @@ export function ProviderModelsTable({
       </TableCaption>
       <TableHeader>
         <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
-          <TableHead className="w-[300px] font-bold pb-2">Model</TableHead>
-          <TableHead className="w-[150px] font-bold pb-2">Env var</TableHead>
+          <TableHead className="w-[350px] font-bold pb-2">Model</TableHead>
           <TableHead className="pb-2 font-bold text-center">
             Image Input
           </TableHead>
@@ -134,18 +124,10 @@ export function ProviderModelsTable({
           >
             <TableCell className="font-medium">
               <Badge
-                className="dark:bg-neutral-900 font-mono font-normal max-w-[300px] bg-[var(--light-color-surface-1)]"
+                className="dark:bg-neutral-900 font-mono font-normal max-w-[350px] bg-[var(--light-color-surface-1)]"
                 variant="secondary"
               >
                 {model.model}
-              </Badge>
-            </TableCell>
-            <TableCell className="font-medium">
-              <Badge
-                className="dark:bg-neutral-900 font-normal bg-[var(--light-color-surface-1)]"
-                variant="secondary"
-              >
-                {envVar}
               </Badge>
             </TableCell>
             <TableCell className="text-center">
