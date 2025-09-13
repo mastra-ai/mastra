@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="inception" 
   models={[
   {
-    "id": "mercury-coder",
-    "name": "Mercury Coder",
+    "model": "inception/mercury-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 1
   },
   {
-    "id": "mercury",
-    "name": "Mercury",
+    "model": "inception/mercury",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
@@ -102,5 +103,5 @@ const agent = new Agent({
     "outputCost": 1
   }
 ]}
-  totalCount={2}
+  totalCount={undefined}
 />

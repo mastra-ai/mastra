@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="llama" 
   models={[
   {
-    "id": "groq-llama-4-maverick-17b-128e-instruct",
-    "name": "Groq-Llama-4-Maverick-17B-128E-Instruct",
+    "model": "llama/groq-llama-4-maverick-17b-128e-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "llama-3.3-70b-instruct",
-    "name": "Llama-3.3-70B-Instruct",
+    "model": "llama/llama-3.3-70b-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "llama-4-maverick-17b-128e-instruct-fp8",
-    "name": "Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "model": "llama/llama-4-maverick-17b-128e-instruct-fp8",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "llama-4-scout-17b-16e-instruct-fp8",
-    "name": "Llama-4-Scout-17B-16E-Instruct-FP8",
+    "model": "llama/llama-4-scout-17b-16e-instruct-fp8",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "cerebras-llama-4-scout-17b-16e-instruct",
-    "name": "Cerebras-Llama-4-Scout-17B-16E-Instruct",
+    "model": "llama/cerebras-llama-4-scout-17b-16e-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "llama-3.3-8b-instruct",
-    "name": "Llama-3.3-8B-Instruct",
+    "model": "llama/llama-3.3-8b-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "cerebras-llama-4-maverick-17b-128e-instruct",
-    "name": "Cerebras-Llama-4-Maverick-17B-128E-Instruct",
+    "model": "llama/cerebras-llama-4-maverick-17b-128e-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
@@ -167,5 +173,5 @@ const agent = new Agent({
     "outputCost": null
   }
 ]}
-  totalCount={7}
+  totalCount={undefined}
 />

@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="venice" 
   models={[
   {
-    "id": "qwen-2.5-coder-32b",
-    "name": "Qwen 2.5 Coder 32B",
+    "model": "venice/qwen-2.5-coder-32b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 8192,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 2
   },
   {
-    "id": "venice-uncensored",
-    "name": "Venice Uncensored 1.1",
+    "model": "venice/venice-uncensored",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 8192,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 2
   },
   {
-    "id": "deepseek-coder-v2-lite",
-    "name": "DeepSeek Coder V2 Lite",
+    "model": "venice/deepseek-coder-v2-lite",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 8192,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 2
   },
   {
-    "id": "dolphin-2.9.2-qwen2-72b",
-    "name": "Dolphin 72B",
+    "model": "venice/dolphin-2.9.2-qwen2-72b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 8192,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": 2.8
   },
   {
-    "id": "qwen3-4b",
-    "name": "Venice Small",
+    "model": "venice/qwen3-4b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 32768,
     "maxOutput": 8192,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": 0.6
   },
   {
-    "id": "qwen-2.5-vl",
-    "name": "Qwen 2.5 VL 72B",
+    "model": "venice/qwen-2.5-vl",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 8192,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": 2.8
   },
   {
-    "id": "llama-3.3-70b",
-    "name": "Llama 3.3 70B",
+    "model": "venice/llama-3.3-70b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 65536,
     "maxOutput": 8192,
@@ -167,12 +173,13 @@ const agent = new Agent({
     "outputCost": 2.8
   },
   {
-    "id": "llama-3.1-405b",
-    "name": "Llama 3.1 405B",
+    "model": "venice/llama-3.1-405b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 65536,
     "maxOutput": 8192,
@@ -180,12 +187,13 @@ const agent = new Agent({
     "outputCost": 6
   },
   {
-    "id": "llama-3.2-3b",
-    "name": "Llama 3.2 3B",
+    "model": "venice/llama-3.2-3b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 8192,
@@ -193,12 +201,13 @@ const agent = new Agent({
     "outputCost": 0.6
   },
   {
-    "id": "deepseek-r1-671b",
-    "name": "DeepSeek R1 671B",
+    "model": "venice/deepseek-r1-671b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 8192,
@@ -206,12 +215,13 @@ const agent = new Agent({
     "outputCost": 14
   },
   {
-    "id": "qwen-2.5-qwq-32b",
-    "name": "Venice Reasoning",
+    "model": "venice/qwen-2.5-qwq-32b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": true,
     "contextWindow": 32768,
     "maxOutput": 8192,
@@ -219,12 +229,13 @@ const agent = new Agent({
     "outputCost": 2
   },
   {
-    "id": "qwen3-235b",
-    "name": "Venice Large",
+    "model": "venice/qwen3-235b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 8192,
@@ -232,12 +243,13 @@ const agent = new Agent({
     "outputCost": 6
   },
   {
-    "id": "mistral-31-24b",
-    "name": "Venice Medium",
+    "model": "venice/mistral-31-24b",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 8192,
@@ -245,5 +257,5 @@ const agent = new Agent({
     "outputCost": 2
   }
 ]}
-  totalCount={13}
+  totalCount={undefined}
 />

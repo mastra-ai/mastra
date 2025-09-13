@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="deepinfra" 
   models={[
   {
-    "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
-    "name": "Qwen3 Coder 480B A35B Instruct Turbo",
+    "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 1.2
   },
   {
-    "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "name": "Qwen3 Coder 480B A35B Instruct",
+    "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 1.6
   },
   {
-    "id": "zai-org/GLM-4.5",
-    "name": "GLM-4.5",
+    "model": "deepinfra/zai-org/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 98304,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 2.2
   },
   {
-    "id": "moonshotai/Kimi-K2-Instruct",
-    "name": "Kimi K2",
+    "model": "deepinfra/moonshotai/Kimi-K2-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 32768,
@@ -128,5 +131,5 @@ const agent = new Agent({
     "outputCost": 2
   }
 ]}
-  totalCount={4}
+  totalCount={undefined}
 />

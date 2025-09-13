@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="fastrouter" 
   models={[
   {
-    "id": "deepseek-ai/deepseek-r1-distill-llama-70b",
-    "name": "DeepSeek R1 Distill Llama 70B",
+    "model": "fastrouter/deepseek-ai/deepseek-r1-distill-llama-70b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 0.14
   },
   {
-    "id": "anthropic/claude-sonnet-4",
-    "name": "Claude Sonnet 4",
+    "model": "fastrouter/anthropic/claude-sonnet-4",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 64000,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "anthropic/claude-opus-4.1",
-    "name": "Claude Opus 4.1",
+    "model": "fastrouter/anthropic/claude-opus-4.1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 32000,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 75
   },
   {
-    "id": "openai/gpt-5-nano",
-    "name": "GPT-5 Nano",
+    "model": "fastrouter/openai/gpt-5-nano",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": 0.4
   },
   {
-    "id": "openai/gpt-4.1",
-    "name": "GPT-4.1",
+    "model": "fastrouter/openai/gpt-4.1",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 1047576,
     "maxOutput": 32768,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": 8
   },
   {
-    "id": "openai/gpt-oss-20b",
-    "name": "GPT OSS 20B",
+    "model": "fastrouter/openai/gpt-oss-20b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 65536,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": 0.2
   },
   {
-    "id": "openai/gpt-5",
-    "name": "GPT-5",
+    "model": "fastrouter/openai/gpt-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
@@ -167,12 +173,13 @@ const agent = new Agent({
     "outputCost": 10
   },
   {
-    "id": "openai/gpt-5-mini",
-    "name": "GPT-5 Mini",
+    "model": "fastrouter/openai/gpt-5-mini",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
@@ -180,12 +187,13 @@ const agent = new Agent({
     "outputCost": 2
   },
   {
-    "id": "openai/gpt-oss-120b",
-    "name": "GPT OSS 120B",
+    "model": "fastrouter/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 32768,
@@ -193,12 +201,13 @@ const agent = new Agent({
     "outputCost": 0.6
   },
   {
-    "id": "x-ai/grok-4",
-    "name": "Grok 4",
+    "model": "fastrouter/x-ai/grok-4",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 64000,
@@ -206,12 +215,13 @@ const agent = new Agent({
     "outputCost": 15
   },
   {
-    "id": "google/gemini-2.5-pro",
-    "name": "Gemini 2.5 Pro",
+    "model": "fastrouter/google/gemini-2.5-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -219,12 +229,13 @@ const agent = new Agent({
     "outputCost": 10
   },
   {
-    "id": "google/gemini-2.5-flash",
-    "name": "Gemini 2.5 Flash",
+    "model": "fastrouter/google/gemini-2.5-flash",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -232,12 +243,13 @@ const agent = new Agent({
     "outputCost": 2.5
   },
   {
-    "id": "qwen/qwen3-coder",
-    "name": "Qwen3 Coder",
+    "model": "fastrouter/qwen/qwen3-coder",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -245,12 +257,13 @@ const agent = new Agent({
     "outputCost": 1.2
   },
   {
-    "id": "moonshotai/kimi-k2",
-    "name": "Kimi K2",
+    "model": "fastrouter/moonshotai/kimi-k2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 32768,
@@ -258,5 +271,5 @@ const agent = new Agent({
     "outputCost": 2.2
   }
 ]}
-  totalCount={14}
+  totalCount={undefined}
 />

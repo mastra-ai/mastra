@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="morph" 
   models={[
   {
-    "id": "auto",
-    "name": "Auto",
+    "model": "morph/auto",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 32000,
     "maxOutput": 32000,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 1.55
   },
   {
-    "id": "morph-v3-fast",
-    "name": "Morph v3 Fast",
+    "model": "morph/morph-v3-fast",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 16000,
     "maxOutput": 16000,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": 1.2
   },
   {
-    "id": "morph-v3-large",
-    "name": "Morph v3 Large",
+    "model": "morph/morph-v3-large",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": false,
+    "objectGeneration": false,
+    "toolUsage": false,
+    "toolStreaming": false,
     "reasoning": false,
     "contextWindow": 32000,
     "maxOutput": 32000,
@@ -115,5 +117,5 @@ const agent = new Agent({
     "outputCost": 1.9
   }
 ]}
-  totalCount={3}
+  totalCount={undefined}
 />

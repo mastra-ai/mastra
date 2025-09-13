@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="zhipuai" 
   models={[
   {
-    "id": "glm-4.5",
-    "name": "GLM-4.5",
+    "model": "zhipuai/glm-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 98304,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": 2.2
   },
   {
-    "id": "glm-4.5-flash",
-    "name": "GLM-4.5-Flash",
+    "model": "zhipuai/glm-4.5-flash",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 98304,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "glm-4.5v",
-    "name": "GLM 4.5V",
+    "model": "zhipuai/glm-4.5v",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 64000,
     "maxOutput": 16384,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": 1.8
   },
   {
-    "id": "glm-4.5-air",
-    "name": "GLM-4.5-Air",
+    "model": "zhipuai/glm-4.5-air",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 98304,
@@ -128,5 +131,5 @@ const agent = new Agent({
     "outputCost": 1.1
   }
 ]}
-  totalCount={4}
+  totalCount={undefined}
 />

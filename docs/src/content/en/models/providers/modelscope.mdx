@@ -73,15 +73,15 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="modelscope" 
   models={[
   {
-    "id": "Qwen/Qwen3-30B-A3B-Thinking-2507",
-    "name": "Qwen3 30B A3B Thinking 2507",
+    "model": "modelscope/Qwen/Qwen3-30B-A3B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
@@ -89,12 +89,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "name": "Qwen3-Coder-480B-A35B-Instruct",
+    "model": "modelscope/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 66536,
@@ -102,12 +103,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "Qwen/Qwen3-235B-A22B-Thinking-2507",
-    "name": "Qwen3-235B-A22B-Thinking-2507",
+    "model": "modelscope/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 131072,
@@ -115,12 +117,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "Qwen/Qwen3-30B-A3B-Instruct-2507",
-    "name": "Qwen3 30B A3B Instruct 2507",
+    "model": "modelscope/Qwen/Qwen3-30B-A3B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 16384,
@@ -128,12 +131,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "name": "Qwen3 235B A22B Instruct 2507",
+    "model": "modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 131072,
@@ -141,12 +145,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-    "name": "Qwen3 Coder 30B A3B Instruct",
+    "model": "modelscope/Qwen/Qwen3-Coder-30B-A3B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 65536,
@@ -154,12 +159,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "ZhipuAI/GLM-4.5",
-    "name": "GLM-4.5",
+    "model": "modelscope/ZhipuAI/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 98304,
@@ -167,12 +173,13 @@ const agent = new Agent({
     "outputCost": null
   },
   {
-    "id": "moonshotai/Kimi-K2-Instruct",
-    "name": "Kimi-K2-Instruct",
+    "model": "modelscope/moonshotai/Kimi-K2-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolCall": true,
+    "objectGeneration": true,
+    "toolUsage": true,
+    "toolStreaming": true,
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
@@ -180,5 +187,5 @@ const agent = new Agent({
     "outputCost": null
   }
 ]}
-  totalCount={8}
+  totalCount={undefined}
 />

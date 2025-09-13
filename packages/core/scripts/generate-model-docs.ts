@@ -163,12 +163,13 @@ async function fetchProviderModels(providerId: string): Promise<any[]> {
     if (!provider?.models) return [];
 
     return Object.entries(provider.models).map(([modelId, model]: [string, any]) => ({
-      id: modelId,
-      name: model.name || modelId,
+      model: `${providerId}/${modelId}`,
       imageInput: model.modalities?.input?.includes('image') || false,
       audioInput: model.modalities?.input?.includes('audio') || false,
       videoInput: model.modalities?.input?.includes('video') || false,
-      toolCall: model.tool_call !== false,
+      objectGeneration: model.tool_call !== false,
+      toolUsage: model.tool_call !== false,
+      toolStreaming: model.tool_call !== false,
       reasoning: model.reasoning === true,
       contextWindow: model.limit?.context || null,
       maxOutput: model.limit?.output || null,
@@ -272,9 +273,8 @@ const agent = new Agent({
 ## Models
 
 <ProviderModelsTable 
-  providerId="${provider.id}" 
   models={${modelDataJson}}
-  totalCount={${modelCount}}
+  totalCount={${modelsWithCapabilities.length > 15 ? modelsWithCapabilities.length : undefined}}
 />
 `;
 }
