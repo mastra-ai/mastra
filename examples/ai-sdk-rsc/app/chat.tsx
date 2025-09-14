@@ -69,17 +69,14 @@ export default function Chat({
 
             setInput("");
 
-            let response = "";
-            for await (const chunk of readStreamableValue(text)) {
-              if (!chunk) {
+            for await (const latest of readStreamableValue(text)) {
+              if (!latest) {
                 continue;
               }
 
-              response = response + chunk;
-
               setMessages((prev) => {
                 let lastMessage = prev[prev.length - 1];
-                lastMessage.content = response;
+                lastMessage.content = latest;
                 if (
                   lastMessage.parts[lastMessage.parts.length - 1].type ===
                   "text"
@@ -88,7 +85,7 @@ export default function Chat({
                     lastMessage.parts[lastMessage.parts.length - 1] as {
                       text: string;
                     }
-                  ).text = response;
+                  ).text = latest;
                 }
 
                 return [...prev.slice(0, -1), lastMessage];

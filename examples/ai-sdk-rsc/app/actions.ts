@@ -19,7 +19,7 @@ export async function chat(message: string) {
     });
 
     for await (const chunk of agentStream.textStream) {
-      responseStream.update(chunk);
+      responseStream.append(chunk);
     }
 
     responseStream.done();
