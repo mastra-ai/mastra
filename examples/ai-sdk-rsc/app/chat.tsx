@@ -14,6 +14,52 @@ export default function Chat({
   const [messages, setMessages] = useState(initialMessages);
   const [loading, setLoading] = useState(false);
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input.trim()) {
+      setLoading(true);
+
+      const { history, text } = await chat(input);
+
+      setMessages(() => [
+        ...history,
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          parts: [{ type: "text", text: input }],
+          metadata: {},
+          content: input,
+        },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          parts: [{ type: "text", text: "" }],
+          metadata: {},
+          content: "",
+        },
+      ]);
+
+      setInput("");
+
+      for await (const latest of readStreamableValue(text)) {
+        if (!latest) {
+          continue;
+        }
+
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          {
+            ...prev[prev.length - 1],
+            content: latest,
+            parts: [{ type: "text", text: latest }],
+          },
+        ]);
+      }
+
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
       {messages.map((m) => (
@@ -39,63 +85,7 @@ export default function Chat({
         </div>
       ))}
 
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (input.trim()) {
-            setLoading(true);
-
-            const { history, text } = await chat(input);
-
-            setMessages(() => {
-              return [
-                ...history,
-                {
-                  id: crypto.randomUUID(),
-                  role: "user",
-                  parts: [{ type: "text", text: input }],
-                  metadata: {},
-                  content: input,
-                },
-                {
-                  id: crypto.randomUUID(),
-                  role: "assistant",
-                  parts: [{ type: "text", text: "" }],
-                  metadata: {},
-                  content: "",
-                },
-              ];
-            });
-
-            setInput("");
-
-            for await (const latest of readStreamableValue(text)) {
-              if (!latest) {
-                continue;
-              }
-
-              setMessages((prev) => {
-                let lastMessage = prev[prev.length - 1];
-                lastMessage.content = latest;
-                if (
-                  lastMessage.parts[lastMessage.parts.length - 1].type ===
-                  "text"
-                ) {
-                  (
-                    lastMessage.parts[lastMessage.parts.length - 1] as {
-                      text: string;
-                    }
-                  ).text = latest;
-                }
-
-                return [...prev.slice(0, -1), lastMessage];
-              });
-            }
-
-            setLoading(false);
-          }
-        }}
-      >
+      <form onSubmit={handleSubmit}>
         <input
           className="fixed dark:bg-zinc-900 bottom-0 w-full max-w-md p-2 mb-8 border border-zinc-300 dark:border-zinc-800 rounded shadow-xl"
           value={input}
