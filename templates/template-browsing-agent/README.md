@@ -92,3 +92,18 @@ This project is built with:
 - [Mastra](https://mastra.ai) - AI Agent framework
 - [Stagehand by Browserbase](https:/stagehand.dev) - Browser automation
 - [OpenAI](https://openai.com/) - AI models
+
+---
+
+## Contribution Notice: Templates Are Managed in the Monorepo
+
+This template is maintained in the Mastra monorepo and mirrored to this standalone repository.
+- **Source of truth**: https://github.com/mastra-ai/mastra (see /templates/template-browsing-agent)
+- **Issues and pull requests**: Please open them in the monorepo only
+- **Why**: Changes here will be overwritten by the next sync and we don't actively monitor this mirrored repo for PRs
+
+If you're viewing this:
+- **In the monorepo**: you're in the right place—open your PR here.
+- **In the mirrored repo**: do not open a PR here. Instead, submit your PR against the matching path in the monorepo.
+
+Thank you for helping keep our templates consistent and maintainable.
