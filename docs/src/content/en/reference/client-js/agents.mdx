@@ -38,16 +38,20 @@ const details = await agent.details();
 Generate a response from the agent:
 
 ```typescript
+import { z } from "zod";
+
 const response = await agent.generate({
   messages: [
     {
       role: "user",
-      content: "Hello, how are you?",
-    },
+      content: "Hello, how are you?"
+    }
   ],
-  threadId: "thread-1", // Optional: Thread ID for conversation context
-  resourceid: "resource-1", // Optional: Resource ID
-  output: {}, // Optional: Output configuration
+  threadId: "thread-1",
+  resourceId: "resource-1",
+  output: z.object({
+    value: z.string()
+  })
 });
 ```
 
@@ -60,7 +64,7 @@ const stream = await agent.stream({
   messages: [
     {
       role: "user",
-      content: "Tell me a story",
+      content: "Tell me a short story",
     },
   ],
 });
@@ -68,7 +72,7 @@ const stream = await agent.stream({
 // Process data stream with the processDataStream util
 stream.processDataStream({
   onTextPart: (text) => {
-    process.stdout.write(text);
+    console.log(text);
   },
   onFilePart: (file) => {
     console.log(file);
@@ -81,18 +85,10 @@ stream.processDataStream({
   },
 });
 
-// Process text stream with the processTextStream util
-// (used with structured output)
- response.processTextStream({
-      onTextPart: text => {
-        process.stdout.write(text);
-      },
-});
-
 // You can also read from response body directly
-const reader = response.body.getReader();
+const reader = stream.body?.getReader();
 while (true) {
-  const { done, value } = await reader.read();
+  const { done, value } = await reader!.read();
   if (done) break;
   console.log(new TextDecoder().decode(value));
 }
@@ -105,7 +101,7 @@ Client-side tools allow you to execute custom functions on the client side when 
 #### Basic Usage
 
 ```typescript
-import { createTool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/client-js';
 import { z } from 'zod';
 
 const colorChangeTool = createTool({

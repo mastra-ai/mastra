@@ -19,7 +19,7 @@ To ensure smooth local development, make sure you have:
 
 ## Getting started
 
-To use the Client SDK, install the required dependencies:
+To use the Mastra Client SDK, install the required dependencies:
 
 {/*
 LLM CONTEXT:
@@ -52,7 +52,7 @@ All commands install the same @mastra/client-js package but use different packag
   </Tabs.Tab>
 </Tabs>
 
-## Initialize Mastra Client
+### Initialize the `MastraClient`
 
 Initialize the `MastraClient` with a `baseUrl`.
 
@@ -64,63 +64,9 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-### Configuration options
-
-`MastraClient` accepts optional parameters like `retries`, `backoffMs`, and `headers` to control request behavior. These are useful for tuning retries or passing custom metadata.
-
-```typescript filename="lib/mastra-client.ts" showLineNumbers copy
-import { MastraClient } from "@mastra/client-js";
-
-export const mastraClient = new MastraClient({
-  // ...
-  retries: 3,
-  backoffMs: 300,
-  maxBackoffMs: 5000,
-  headers: {
-    "X-Development": "true",
-  },
-});
-```
-> See [MastraClient](../../reference/client-js/mastra-client.mdx) for more configuration options.
-
 ## Usage example
 
 Once initialized, `MastraClient` exposes a type-safe interface for calling agents, tools, and workflows.
-
-```typescript showLineNumbers copy
-import { mastraClient } from "lib/mastra-client";
-
-const testAgent = async () => {
-  const agent = mastraClient.getAgent("testAgent");
-
-  const response = await agent.generate({
-    messages: [
-      {
-        role: "user",
-        content: "Hello"
-      }
-    ]
-  });
-
-  return response.text;
-};
-```
-
-## Available features
-
-`MastraClient` exposes all resources served by the Mastra Server
-
-- [**Agents**](/reference/client-js/agents): Create and manage AI agents, generate responses, and handle streaming interactions.
-- [**Memory**](/reference/client-js/memory): Manage conversation threads and message history.
-- [**Tools**](/reference/client-js/tools): Access and execute tools available to agents.
-- [**Workflows**](/reference/client-js/workflows): Create and manage automated workflows.
-- [**Vectors**](/reference/client-js/vectors): Handle vector operations for semantic search and similarity matching.
-
-## Best Practices
-
-1. **Error Handling**: Implement proper error handling for development scenarios.
-2. **Environment Variables**: Use environment variables for configuration.
-3. **Debugging**: Enable detailed logging when needed.
 
 ```typescript showLineNumbers copy
 import { mastraClient } from "lib/mastra-client";
@@ -145,6 +91,26 @@ const testAgent = async () => {
 };
 ```
 
+## Configuration options
+
+`MastraClient` accepts optional parameters like `retries`, `backoffMs`, and `headers` to control request behavior. These are useful for tuning retries or passing custom metadata.
+
+```typescript filename="lib/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  // ...
+  retries: 3,
+  backoffMs: 300,
+  maxBackoffMs: 5000,
+  headers: {
+    "X-Development": "true",
+  },
+});
+```
+
+  > See [MastraClient](../../reference/client-js/mastra-client.mdx) for more configuration options.
+
 ## Adding request cancelling
 
 `MastraClient` supports request cancellation using the standard Node.js `AbortSignal` API. This allows you to cancel in flight requests, useful for user-initiated aborts or cleaning up stale calls.
@@ -164,7 +130,7 @@ export const mastraClient = new MastraClient({
 
 ### Using the `AbortController`
 
-Use an `AbortController` to create and trigger an `AbortSignal`. Calling `abort()` will cancel any ongoing requests tied to that signal.
+Calling `.abort()` will cancel any ongoing requests tied to that signal.
 
 ```typescript {4} showLineNumbers copy
 import { mastraClient, controller } from "lib/mastra-client";
@@ -174,53 +140,86 @@ const handleAbort = () => {
 };
 ```
 
-
-## Client-side tools
+## Client tools
 
 The Mastra Client SDK provides comprehensive tools for interacting with your Mastra server from client-side applications. These tools are organized into several categories:
 
-### Core APIs
+### Using `createTool()`
 
-- **[Agents](/reference/client-js/agents)** - Interact with AI agents, generate responses, and stream conversations
-- **[Tools](/reference/client-js/tools)** - Execute server-side tools and manage tool configurations
-- **[Memory](/reference/client-js/memory)** - Manage conversation threads and message history
-- **[Workflows](/reference/client-js/workflows)** - Execute automated workflows and monitor their progress
-- **[Vectors](/reference/client-js/vectors)** - Work with vector embeddings for semantic search
+Use `clientTools` with `.generate()` or `.stream()` to pass tools defined in the frontend. Agents can trigger client-side actions such as DOM updates, local storage access, or browser API calls.
 
-### Advanced Features
-
-- **[Error Handling](/reference/client-js/error-handling)** - Built-in retry mechanisms and error management
-- **[Logs](/reference/client-js/logs)** - Access system logs and debugging information
-- **[Telemetry](/reference/client-js/telemetry)** - Monitor application performance and traces
-
-### Client-side Tool Execution
-
-The client SDK supports executing custom functions on the client side when agents request them:
-
-```typescript
+```typescript {27} showLineNumbers copy
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-const colorChangeTool = createTool({
-  id: 'changeColor',
-  description: 'Changes the background color',
-  inputSchema: z.object({
-    color: z.string(),
-  }),
-  execute: async ({ context }) => {
-    document.body.style.backgroundColor = context.color;
-    return { success: true };
-  }
-});
+const handleClientTool = async () => {
+  try {
+    const agent = mastraClient.getAgent("colorAgent");
 
-// Use with agent generation
-const response = await agent.generate({
-  messages: 'Change the background to blue',
-  clientTools: { colorChangeTool },
+    const colorChangeTool = createTool({
+      id: "color-change-tool",
+      description: "Changes the HTML background color",
+      inputSchema: z.object({
+        color: z.string()
+      }),
+      outputSchema: z.object({
+        success: z.boolean()
+      }),
+      execute: async ({ context }) => {
+        const { color } = context
+
+        document.body.style.backgroundColor = color;
+        return { success: true };
+      }
+    });
+
+    const response = await agent.generate({
+      messages: "Change the background to blue",
+      clientTools: { colorChangeTool }
+    });
+
+    console.log(response);
+  } catch (error) {
+    console.error(error);
+  }
+};
+```
+
+### Example agent
+
+This is a standard Mastra agent that returns hex color codes based on user input. It's intended to work with the client tool above, which runs in the browser.
+
+```typescript filename="src/mastra/agents/color-agent" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const colorAgent = new Agent({
+  name: "test-agent",
+  instructions: `You are a helpful CSS assistant.
+  You  can change the background color of web pages.
+  Respond with a hex reference for the color requested by the user`,
+  model: openai("gpt-4o-mini")
 });
 ```
 
-This allows you to create interactive experiences where agents can trigger client-side actions like DOM manipulation, local storage operations, or browser API calls.
+## Best practices
+
+1. **Error Handling**: Implement proper [error handling](/reference/client-js/error-handling) for development scenarios.
+2. **Environment Variables**: Use environment variables for configuration.
+3. **Debugging**: Enable detailed [logging](/reference/client-js/logs) when needed.
+4. **Performance**: Monitor application performance, [telemetry](/reference/client-js/telemetry) and traces.
+
+## Core APIs
+
+`MastraClient` exposes all resources served by the Mastra Server
+
+- **[Agents](/reference/client-js/agents.mdx)**: Generate responses and stream conversations.
+- **[Memory](/reference/client-js/memory.mdx)**: Manage conversation threads and message history.
+- **[Tools](/reference/client-js/tools.mdx)**: Executed and managed tools.
+- **[Workflows](/reference/client-js/workflows.mdx)**: Trigger workflows and track their execution.
+- **[Vectors](/reference/client-js/vectors.mdx)**: Use vector embeddings for semantic search.
+- **[Logs](/reference/client-js/logs.mdx)**: View logs and debug system behavior.
+- **[Telemetry](/reference/client-js/telemetry.mdx)**: Monitor app performance and trace activity.
 
 ## Debug
 
