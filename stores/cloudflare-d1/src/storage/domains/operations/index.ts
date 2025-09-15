@@ -2,9 +2,9 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
-import type Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '@mastra/core/storage/sql-builder';
 import type { SqlParam, SqlQueryOptions } from '@mastra/core/storage/sql-builder';
+import type Cloudflare from 'cloudflare';
 import { deserializeValue } from '../utils';
 
 export type D1QueryResult = Awaited<ReturnType<Cloudflare['d1']['database']['query']>>['result'];
@@ -473,6 +473,217 @@ export class StoreOperationsD1 extends StoreOperations {
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to batch upsert into ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
           details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Update multiple records in a batch operation
+   * @param tableName The table to update
+   * @param updates Array of update operations with keys (for WHERE clause) and data (for SET clause)
+   */
+  async batchUpdate({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>; // WHERE conditions (e.g., { id: '123', userId: 'abc' })
+      data: Record<string, any>; // SET values (e.g., { name: 'New Name', updatedAt: new Date() })
+    }>;
+  }): Promise<void> {
+    if (updates.length === 0) return;
+
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      // Process updates in batches for better performance
+      const batchSize = 50;
+
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+
+        // Execute each update individually (SQLite doesn't support multi-row updates easily)
+        for (const update of batch) {
+          const { keys, data } = update;
+
+          // Build the SET clause
+          const setColumns = Object.keys(data);
+          const setValues = Object.values(data).map(value => this.serializeValue(value));
+
+          // Build the WHERE clause
+          const whereConditions = Object.entries(keys);
+
+          if (setColumns.length === 0 || whereConditions.length === 0) {
+            this.logger.warn('Skipping update with empty SET or WHERE clause');
+            continue;
+          }
+
+          // Create the SQL query
+          const query = createSqlBuilder().update(fullTableName, setColumns, setValues);
+
+          // Add WHERE conditions
+          whereConditions.forEach(([key, value], index) => {
+            const serializedValue = this.serializeValue(value);
+            if (index === 0) {
+              query.where(`${key} = ?`, serializedValue);
+            } else {
+              query.andWhere(`${key} = ?`, serializedValue);
+            }
+          });
+
+          const { sql, params } = query.build();
+          console.log('sql', sql);
+          console.log('params', params);
+          await this.executeQuery({ sql, params });
+        }
+
+        this.logger.debug(
+          `Processed batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(updates.length / batchSize)}`,
+        );
+      }
+
+      this.logger.debug(`Successfully batch updated ${updates.length} records in ${tableName}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORAGE_BATCH_UPDATE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to batch update in ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Delete multiple records in a batch operation
+   * @param tableName The table to delete from
+   * @param conditions Array of WHERE conditions for each delete operation
+   */
+  async batchDelete({
+    tableName,
+    conditions,
+  }: {
+    tableName: TABLE_NAMES;
+    conditions: Array<Record<string, any>>; // Array of WHERE conditions (e.g., [{ id: '123' }, { userId: 'abc', status: 'inactive' }])
+  }): Promise<void> {
+    if (conditions.length === 0) return;
+
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      // Process deletes in batches for better performance
+      const batchSize = 50;
+
+      for (let i = 0; i < conditions.length; i += batchSize) {
+        const batch = conditions.slice(i, i + batchSize);
+
+        // Execute each delete individually for precise control
+        for (const condition of batch) {
+          const whereConditions = Object.entries(condition);
+
+          if (whereConditions.length === 0) {
+            this.logger.warn('Skipping delete with empty WHERE clause');
+            continue;
+          }
+
+          // Create the SQL query
+          const query = createSqlBuilder().delete(fullTableName);
+
+          // Add WHERE conditions
+          whereConditions.forEach(([key, value], index) => {
+            const serializedValue = this.serializeValue(value);
+            if (index === 0) {
+              query.where(`${key} = ?`, serializedValue);
+            } else {
+              query.andWhere(`${key} = ?`, serializedValue);
+            }
+          });
+
+          const { sql, params } = query.build();
+          console.log('sql', sql);
+          console.log('params', params);
+          await this.executeQuery({ sql, params });
+        }
+
+        this.logger.debug(
+          `Processed batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(conditions.length / batchSize)}`,
+        );
+      }
+
+      this.logger.debug(`Successfully batch deleted ${conditions.length} records from ${tableName}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORAGE_BATCH_DELETE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to batch delete from ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Delete multiple records by a single field with IN clause (more efficient for large sets)
+   * @param tableName The table to delete from
+   * @param field The field to match against
+   * @param values Array of values to match
+   */
+  async batchDeleteByField({
+    tableName,
+    field,
+    values,
+  }: {
+    tableName: TABLE_NAMES;
+    field: string;
+    values: any[];
+  }): Promise<void> {
+    if (values.length === 0) return;
+
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      // Process in chunks to avoid SQL parameter limits
+      const chunkSize = 100; // SQLite typically supports up to 999 parameters
+
+      for (let i = 0; i < values.length; i += chunkSize) {
+        const chunk = values.slice(i, i + chunkSize);
+        const serializedValues = chunk.map(value => this.serializeValue(value));
+
+        // Create placeholders for IN clause
+        const placeholders = serializedValues.map(() => '?').join(',');
+
+        const query = createSqlBuilder()
+          .delete(fullTableName)
+          .where(`${field} IN (${placeholders})`, ...serializedValues);
+
+        const { sql, params } = query.build();
+        console.log('sql', sql);
+        console.log('params', params);
+        await this.executeQuery({ sql, params });
+
+        this.logger.debug(
+          `Processed chunk ${Math.floor(i / chunkSize) + 1} of ${Math.ceil(values.length / chunkSize)}`,
+        );
+      }
+
+      this.logger.debug(`Successfully batch deleted ${values.length} records from ${tableName} by ${field}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORAGE_BATCH_DELETE_BY_FIELD_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to batch delete from ${tableName} by ${field}: ${error instanceof Error ? error.message : String(error)}`,
+          details: { tableName, field },
         },
         error,
       );

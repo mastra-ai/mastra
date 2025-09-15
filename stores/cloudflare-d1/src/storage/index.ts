@@ -19,17 +19,18 @@ import type {
   PaginationArgs,
   AISpanRecord,
   AITraceRecord,
+  AITracesPaginatedArg,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { LegacyEvalsStorageD1 } from './domains/legacy-evals';
 import { MemoryStorageD1 } from './domains/memory';
+import { ObservabilityStorageD1 } from './domains/observability';
 import { StoreOperationsD1 } from './domains/operations';
 import { ScoresStorageD1 } from './domains/scores';
 import { TracesStorageD1 } from './domains/traces';
 import { WorkflowsStorageD1 } from './domains/workflows';
-import { ObservabilityStorageD1 } from './domains/observability';
 
 /**
  * Configuration for D1 using the REST API
@@ -539,5 +540,33 @@ export class D1Store extends MastraStorage {
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
     return this.stores.observability!.getAITrace(traceId);
+  }
+
+  async updateAISpan(params: {
+    spanId: string;
+    traceId: string;
+    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+  }): Promise<void> {
+    return this.stores.observability!.updateAISpan(params);
+  }
+
+  async getAITracesPaginated(
+    args: AITracesPaginatedArg,
+  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+    return this.stores.observability!.getAITracesPaginated(args);
+  }
+
+  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+    return this.stores.observability!.batchCreateAISpans(args);
+  }
+
+  async batchUpdateAISpans(args: {
+    records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
+  }): Promise<void> {
+    return this.stores.observability!.batchUpdateAISpans(args);
+  }
+
+  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+    return this.stores.observability!.batchDeleteAITraces(args);
   }
 }
