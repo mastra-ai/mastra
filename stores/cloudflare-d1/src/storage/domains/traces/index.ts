@@ -1,8 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { PaginationInfo, StorageGetTracesArg, StorageGetTracesPaginatedArg } from '@mastra/core/storage';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
-import type { Trace } from '@mastra/core/telemetry';
 import { createSqlBuilder } from '@mastra/core/storage/sql-builder';
+import type { Trace } from '@mastra/core/telemetry';
 import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue } from '../utils';
 
@@ -98,8 +98,6 @@ export class TracesStorageD1 extends TracesStorage {
       const allDataResult = await this.operations.executeQuery(
         createSqlBuilder().select('*').from(fullTableName).where('1=1').build(),
       );
-
-      console.log('allDataResult', allDataResult);
 
       const countResult = (await this.operations.executeQuery(countQuery.build())) as {
         count: number;
