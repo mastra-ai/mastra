@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@mastra/core': link:../../core
-  '@mastra/mcp': link:../../mcp
+  '@mastra/mcp': link:../
   '@mastra/client-js': link:../../../client-sdks/client-js
   mastra: link:../../cli
 
