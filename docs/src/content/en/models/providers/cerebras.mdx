@@ -84,33 +84,6 @@ for await (const chunk of stream) {
 ]}
 />
 
-## Vercel AI SDK
-
-This provider also has an installable model provider which can be used instead of the Mastra model router string:
-
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab>
-    ```bash copy
-    npm install @ai-sdk/cerebras
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    yarn add @ai-sdk/cerebras
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    pnpm add @ai-sdk/cerebras
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    bun add @ai-sdk/cerebras
-    ```
-  </Tab>
-</Tabs>
-
 ## Advanced Configuration
 
 ### Custom Headers
@@ -142,3 +115,30 @@ const agent = new Agent({
   }
 });
 ```
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npm install @ai-sdk/cerebras
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @ai-sdk/cerebras
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @ai-sdk/cerebras
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @ai-sdk/cerebras
+    ```
+  </Tab>
+</Tabs>
