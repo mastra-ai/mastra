@@ -41,7 +41,7 @@ async function uploadImageToStorage(imageBuffer: Buffer, mimeType: string): Prom
   }
 }
 
-export const imageGeneratorTool = createTool({
+export const educationalImageTool = createTool({
   id: 'educational-image-generator',
   description:
     'Generates educational images for flash cards using DALL-E 3 and uploads them to cloud storage, returning the public URL',
@@ -70,19 +70,25 @@ export const imageGeneratorTool = createTool({
     console.log(`🎨 Generating educational image for concept: "${concept.substring(0, 50)}..."`);
 
     try {
-      const enhancedPrompt = `Create a ${style} educational image for ${subjectArea} at ${complexity} level.
+      const enhancedPrompt = `Create a ${style} educational image for ${subjectArea} at ${complexity} level that will enhance learning and memory retention.
 
-      Concept to visualize: ${concept}
+      Educational Concept: ${concept}
 
-      Style and requirements:
-      - ${style} visual style appropriate for educational materials
-      - Clear, informative, and pedagogically effective
-      - Suitable for flash card learning and study materials
-      - ${complexity} complexity level appropriate for the target audience
-      - Clean, uncluttered design that focuses on the core concept
-      - Professional educational quality
-      - Subject: ${subjectArea}
-      - Visual aids that enhance understanding and retention`;
+      Design Requirements:
+      - NO TEXT OR WORDS in the image - purely visual representation
+      - ${style} visual style appropriate for educational flash cards
+      - Clear, informative, and pedagogically sound design
+      - Optimized for ${complexity} level learners
+      - Clean, focused composition that highlights the core concept
+      - Professional educational illustration quality
+      - Subject area: ${subjectArea}
+      - Visual should immediately suggest the educational concept
+      - Use colors and design elements that enhance memory formation
+      - Create visual associations that support learning objectives
+      - Make the image memorable and distinctive for effective recall
+      - Ensure cultural sensitivity and universal accessibility
+      
+      The image should serve as a powerful visual mnemonic that helps students immediately recall and understand the concept when studying their flash cards.`;
 
       // Generate image using the AI package
       const { image } = await generateImage({
