@@ -1,5 +1,23 @@
 # @mastra/pg
 
+## 0.15.3-alpha.1
+
+### Patch Changes
+
+- Postgresql Storage Query Index Performance: Adds index operations and automatic indexing for Postgresql ([#7757](https://github.com/mastra-ai/mastra/pull/7757))
+
+- Updated dependencies [[`60c9cec`](https://github.com/mastra-ai/mastra/commit/60c9cec7048a79a87440f7840c383875bd710d93), [`897995e`](https://github.com/mastra-ai/mastra/commit/897995e630d572fe2891e7ede817938cabb43251)]:
+  - @mastra/core@0.16.4-alpha.2
+
+## 0.15.3-alpha.0
+
+### Patch Changes
+
+- Add resource id to workflow run snapshots ([#7740](https://github.com/mastra-ai/mastra/pull/7740))
+
+- Updated dependencies [[`547c621`](https://github.com/mastra-ai/mastra/commit/547c62104af3f7a551b3754e9cbdf0a3fbba15e4)]:
+  - @mastra/core@0.16.4-alpha.1
+
 ## 0.15.2
 
 ### Patch Changes

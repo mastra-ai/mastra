@@ -43,6 +43,7 @@ export abstract class WorkflowsStorage extends MastraBase {
   abstract persistWorkflowSnapshot(_: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void>;
 

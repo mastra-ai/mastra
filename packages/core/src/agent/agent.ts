@@ -2182,7 +2182,7 @@ export class Agent<
           overrideScorers,
           threadId,
           resourceId,
-          tracingContext: { currentSpan: agentAISpan },
+          tracingContext: { currentSpan: agentAISpan, isInternal: true },
         });
 
         const scoringData: {
@@ -2697,7 +2697,7 @@ export class Agent<
       );
     }
 
-    const llm = (await this.getLLM({ runtimeContext })) as MastraLLMVNext;
+    const llm = (await this.getLLM({ runtimeContext, model: options.model })) as MastraLLMVNext;
 
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ runtimeContext }));
@@ -3260,7 +3260,7 @@ export class Agent<
       .commit();
 
     const run = await executionWorkflow.createRunAsync();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
+    const result = await run.start({ tracingContext: { currentSpan: agentAISpan, isInternal: true } });
 
     return result;
   }
@@ -3458,7 +3458,7 @@ export class Agent<
       runtimeContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentAISpan },
+      tracingContext: { currentSpan: agentAISpan, isInternal: true },
     });
 
     agentAISpan?.end({
@@ -3536,13 +3536,32 @@ export class Agent<
       runtimeContext: streamOptions?.runtimeContext,
     });
 
-    const mergedStreamOptions = {
+    let mergedStreamOptions = {
       ...defaultStreamOptions,
       ...streamOptions,
       onFinish: this.#mergeOnFinishWithTelemetry(streamOptions, defaultStreamOptions),
     };
 
-    const llm = await this.getLLM({ runtimeContext: mergedStreamOptions.runtimeContext });
+    // Map structuredOutput to output when maxSteps is explicitly set to 1
+    // This allows the new structuredOutput API to use the existing output implementation
+    let modelOverride: MastraLanguageModel | undefined;
+    if (mergedStreamOptions.structuredOutput && mergedStreamOptions.maxSteps === 1) {
+      // If structuredOutput has a model, use it to override the agent's model
+      if (mergedStreamOptions.structuredOutput.model) {
+        modelOverride = mergedStreamOptions.structuredOutput.model;
+      }
+
+      mergedStreamOptions = {
+        ...mergedStreamOptions,
+        output: mergedStreamOptions.structuredOutput.schema as OUTPUT,
+        structuredOutput: undefined, // Remove structuredOutput to avoid confusion downstream
+      };
+    }
+
+    const llm = await this.getLLM({
+      runtimeContext: mergedStreamOptions.runtimeContext,
+      model: modelOverride,
+    });
 
     if (llm.getModel().specificationVersion !== 'v2') {
       throw new MastraError({
@@ -3557,6 +3576,7 @@ export class Agent<
       ...mergedStreamOptions,
       messages,
       methodType: 'streamVNext',
+      model: modelOverride,
     });
 
     if (result.status !== 'success') {

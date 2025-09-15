@@ -10,6 +10,7 @@ import type {
   UpdateSpanOptions,
   CreateSpanOptions,
   AITracing,
+  ExportedAISpan,
 } from '../types';
 
 export abstract class BaseAISpan<TType extends AISpanType = any> implements AISpan<TType> {
@@ -23,6 +24,7 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
   public startTime: Date;
   public endTime?: Date;
   public isEvent: boolean;
+  public isInternal: boolean;
   public aiTracing: AITracing;
   public input?: any;
   public output?: any;
@@ -44,6 +46,7 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
     this.startTime = new Date();
     this.aiTracing = aiTracing;
     this.isEvent = options.isEvent ?? false;
+    this.isInternal = options.isInternal ?? false;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -79,6 +82,35 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
 
   /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
   abstract get isValid(): boolean;
+
+  /** Get the closest parent spanId that isn't an internal span */
+  public getParentSpanId(includeInternalSpans?: boolean): string | undefined {
+    if (!this.parent) return undefined; // no parent at all
+    if (includeInternalSpans) return this.parent.id;
+    if (this.parent.isInternal) return this.parent.getParentSpanId(includeInternalSpans);
+
+    return this.parent.id;
+  }
+
+  /** Returns a lightweight span ready for export */
+  public exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> {
+    return {
+      id: this.id,
+      traceId: this.traceId,
+      name: this.name,
+      type: this.type,
+      attributes: this.attributes,
+      metadata: this.metadata,
+      startTime: this.startTime,
+      endTime: this.endTime,
+      input: this.input,
+      output: this.output,
+      errorInfo: this.errorInfo,
+      isEvent: this.isEvent,
+      isRootSpan: this.isRootSpan,
+      parentSpanId: this.getParentSpanId(includeInternalSpans),
+    };
+  }
 }
 
 const DEFAULT_KEYS_TO_STRIP = new Set([

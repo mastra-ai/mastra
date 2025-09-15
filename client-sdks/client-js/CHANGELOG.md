@@ -1,5 +1,32 @@
 # @mastra/client-js
 
+## 0.12.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`60c9cec`](https://github.com/mastra-ai/mastra/commit/60c9cec7048a79a87440f7840c383875bd710d93), [`897995e`](https://github.com/mastra-ai/mastra/commit/897995e630d572fe2891e7ede817938cabb43251)]:
+  - @mastra/core@0.16.4-alpha.2
+
+## 0.12.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`547c621`](https://github.com/mastra-ai/mastra/commit/547c62104af3f7a551b3754e9cbdf0a3fbba15e4)]:
+  - @mastra/core@0.16.4-alpha.1
+
+## 0.12.4-alpha.0
+
+### Patch Changes
+
+- Playground ui -pass runtimeContext to client SDK get methods ([#7767](https://github.com/mastra-ai/mastra/pull/7767))
+
+- Improve client-js SDK agent and workflow APIs ([#7592](https://github.com/mastra-ai/mastra/pull/7592))
+
+- Dedicated client-js SDK createTool without server dependencies ([#7781](https://github.com/mastra-ai/mastra/pull/7781))
+
+- Updated dependencies [[`5802bf5`](https://github.com/mastra-ai/mastra/commit/5802bf57f6182e4b67c28d7d91abed349a8d14f3), [`5bda53a`](https://github.com/mastra-ai/mastra/commit/5bda53a9747bfa7d876d754fc92c83a06e503f62), [`f26a8fd`](https://github.com/mastra-ai/mastra/commit/f26a8fd99fcb0497a5d86c28324430d7f6a5fb83), [`1a1fbe6`](https://github.com/mastra-ai/mastra/commit/1a1fbe66efb7d94abc373ed0dd9676adb8122454), [`36f39c0`](https://github.com/mastra-ai/mastra/commit/36f39c00dc794952dc3c11aab91c2fa8bca74b11)]:
+  - @mastra/core@0.16.4-alpha.0
+
 ## 0.12.3
 
 ### Patch Changes
