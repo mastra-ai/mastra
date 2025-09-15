@@ -1,9 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { createSqlBuilder } from '@mastra/core/storage/sql-builder';
+import type { SqlParam } from '@mastra/core/storage/sql-builder';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { createSqlBuilder } from '../../sql-builder';
-import type { SqlParam } from '../../sql-builder';
 import type { StoreOperationsD1 } from '../operations';
 import { isArrayOfRecords } from '../utils';
 

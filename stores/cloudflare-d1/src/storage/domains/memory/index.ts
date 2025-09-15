@@ -12,7 +12,7 @@ import {
   TABLE_RESOURCES,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
-import { createSqlBuilder } from '../../sql-builder';
+import { createSqlBuilder } from '@mastra/core/storage/sql-builder';
 import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 

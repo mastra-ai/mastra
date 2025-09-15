@@ -256,7 +256,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
     describe('getAITracesPaginated', () => {
       beforeEach(async () => {
         // Create test traces with different properties for filtering
-        const traces = [
+        const rootSpans = [
           // Trace 1: Workflow spans
           createRootSpan({
             name: 'workflow-trace-1',
@@ -287,10 +287,79 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           }),
         ];
 
-        await storage.batchCreateAISpans({ records: traces });
+        // Create child spans for some of the root spans to verify root-only filtering
+        const childSpans = [
+          // Child spans for workflow-trace-1
+          createChildSpan({
+            name: 'workflow-step-1',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[0]!.spanId,
+            traceId: rootSpans[0]!.traceId,
+            startedAt: new Date('2024-01-01T00:05:00Z'),
+          }),
+          createChildSpan({
+            name: 'workflow-step-2',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[0]!.spanId,
+            traceId: rootSpans[0]!.traceId,
+            startedAt: new Date('2024-01-01T00:10:00Z'),
+          }),
+
+          // Child spans for agent-trace-1
+          createChildSpan({
+            name: 'agent-reasoning',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[1]!.spanId,
+            traceId: rootSpans[1]!.traceId,
+            startedAt: new Date('2024-01-02T00:05:00Z'),
+          }),
+          createChildSpan({
+            name: 'agent-action',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[1]!.spanId,
+            traceId: rootSpans[1]!.traceId,
+            startedAt: new Date('2024-01-02T00:10:00Z'),
+          }),
+
+          // Child span for tool-trace-1
+          createChildSpan({
+            name: 'tool-execution',
+            scope: 'test-scope',
+            parentSpanId: rootSpans[2]!.spanId,
+            traceId: rootSpans[2]!.traceId,
+            startedAt: new Date('2024-01-03T00:05:00Z'),
+          }),
+        ];
+
+        // Combine all spans for storage
+        const allSpans = [...rootSpans, ...childSpans];
+
+        await storage.batchCreateAISpans({ records: allSpans });
       });
 
       describe('basic pagination', () => {
+        it('should return only root spans (no child spans)', async () => {
+          const result = await storage.getAITracesPaginated({
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(result).toHaveProperty('spans');
+          expect(result).toHaveProperty('pagination');
+          expect(Array.isArray(result.spans)).toBe(true);
+
+          // Verify all returned spans are root spans (parentSpanId is null)
+          result.spans.forEach(span => {
+            expect(span.parentSpanId).toBeNull();
+          });
+
+          // We should have exactly 4 root spans, not the 5 child spans
+          expect(result.spans.length).toBe(4);
+
+          // Verify we have the expected root span names
+          const spanNames = result.spans.map(span => span.name).sort();
+          expect(spanNames).toEqual(['agent-trace-1', 'tool-trace-1', 'workflow-trace-1', 'workflow-trace-2']);
+        });
+
         it('should return root spans with pagination info', async () => {
           const result = await storage.getAITracesPaginated({
             pagination: { page: 0, perPage: 10 },
@@ -362,6 +431,84 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
           expect(result.spans).toHaveLength(0);
           expect(result.pagination.total).toBe(0);
+        });
+
+        it('should filter by entity id and entity type', async () => {
+          // First, create some test spans with entity-specific names
+          const entitySpans = [
+            createRootSpan({
+              name: "workflow run: 'my-workflow-123'",
+              scope: 'test-scope',
+              spanType: AISpanType.WORKFLOW_RUN,
+              startedAt: new Date('2024-01-05T00:00:00Z'),
+            }),
+            createRootSpan({
+              name: "agent run: 'my-agent-456'",
+              scope: 'test-scope',
+              spanType: AISpanType.AGENT_RUN,
+              startedAt: new Date('2024-01-06T00:00:00Z'),
+            }),
+            createRootSpan({
+              name: "workflow run: 'another-workflow-789'",
+              scope: 'test-scope',
+              spanType: AISpanType.WORKFLOW_RUN,
+              startedAt: new Date('2024-01-07T00:00:00Z'),
+            }),
+          ];
+
+          await storage.batchCreateAISpans({ records: entitySpans });
+
+          // Test filtering by workflow entity
+          const workflowResult = await storage.getAITracesPaginated({
+            filters: {
+              entityId: 'my-workflow-123',
+              entityType: 'workflow',
+            },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(workflowResult.spans.length).toBeGreaterThan(0);
+          const foundWorkflowSpan = workflowResult.spans.find(span => span.name === "workflow run: 'my-workflow-123'");
+          expect(foundWorkflowSpan).toBeDefined();
+          expect(foundWorkflowSpan?.spanType).toBe(AISpanType.WORKFLOW_RUN);
+
+          // Test filtering by agent entity
+          const agentResult = await storage.getAITracesPaginated({
+            filters: {
+              entityId: 'my-agent-456',
+              entityType: 'agent',
+            },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(agentResult.spans.length).toBeGreaterThan(0);
+          const foundAgentSpan = agentResult.spans.find(span => span.name === "agent run: 'my-agent-456'");
+          expect(foundAgentSpan).toBeDefined();
+          expect(foundAgentSpan?.spanType).toBe(AISpanType.AGENT_RUN);
+
+          // Test filtering by non-existent entity
+          const emptyResult = await storage.getAITracesPaginated({
+            filters: {
+              entityId: 'non-existent-entity',
+              entityType: 'workflow',
+            },
+            pagination: { page: 0, perPage: 10 },
+          });
+
+          expect(emptyResult.spans).toHaveLength(0);
+          expect(emptyResult.pagination.total).toBe(0);
+        });
+
+        it('should throw error for unsupported entity type', async () => {
+          await expect(
+            storage.getAITracesPaginated({
+              filters: {
+                entityId: 'some-id',
+                entityType: 'unsupported-type' as any,
+              },
+              pagination: { page: 0, perPage: 10 },
+            }),
+          ).rejects.toThrow('Cannot filter by entity type: unsupported-type');
         });
       });
 

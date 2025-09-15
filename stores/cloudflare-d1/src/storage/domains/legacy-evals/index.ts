@@ -2,8 +2,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import { LegacyEvalsStorage, serializeDate, TABLE_EVALS } from '@mastra/core/storage';
 import type { EvalRow, PaginationArgs, PaginationInfo } from '@mastra/core/storage';
-import type { SqlParam } from '../../sql-builder';
-import { createSqlBuilder } from '../../sql-builder';
+import type { SqlParam } from '@mastra/core/storage/sql-builder';
+import { createSqlBuilder } from '@mastra/core/storage/sql-builder';
 import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 
