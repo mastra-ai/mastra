@@ -646,9 +646,15 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
         toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
       } else {
-        response = await agentOne.generateVNext('Find the user with name - Dero Israel', {
+        const stream = await agentOne.streamVNext('Find the user with name - Dero Israel', {
           requireToolApproval: true,
         });
+        for await (const chunk of stream.fullStream) {
+          if (chunk.type === 'tool-call-approval') {
+            console.log('tool-call-approval chunk', chunk);
+          }
+        }
+        response = stream.response;
         console.log('response', JSON.stringify(response.toolResults, null, 2));
         // TODO: send approval
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
