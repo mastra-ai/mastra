@@ -216,6 +216,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
+            case 'tool-call-suspended':
             case 'tool-call-approval':
               self.#status = 'suspended';
               break;

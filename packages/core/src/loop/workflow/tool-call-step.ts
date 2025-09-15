@@ -125,6 +125,16 @@ export function createToolCallStep<
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
           writableStream: writer,
+          suspend: async (suspendPayload: any) => {
+            controller.enqueue({
+              type: 'tool-call-suspended',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
+            });
+
+            await suspend({ toolCallSuspended: suspendPayload });
+          },
         } as ToolCallOptions);
 
         span.setAttributes({
