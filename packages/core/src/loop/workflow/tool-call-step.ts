@@ -133,7 +133,7 @@ export function createToolCallStep<
               payload: { toolCallId: inputData.toolCallId, toolName: inputData.toolName, suspendPayload },
             });
 
-            await suspend({ toolCallSuspended: suspendPayload });
+            return await suspend({ toolCallSuspended: suspendPayload });
           },
         } as ToolCallOptions);
 
