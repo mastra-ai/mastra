@@ -90,7 +90,7 @@ The project can be configured through the `.env` file and by modifying the agent
 This project is built with:
 
 - [Mastra](https://mastra.ai) - AI Agent framework
-- [Stagehand by Browserbase](https:/stagehand.dev) - Browser automation
+- [Stagehand by Browserbase](https://stagehand.dev) - Browser automation
 - [OpenAI](https://openai.com/) - AI models
 
 ---
