@@ -50,7 +50,7 @@ export const AgentBadge = ({ agentId, messages = [], networkMetadata }: AgentBad
     >
       {messages.map((message, index) => {
         if (message.type === 'text') {
-          return <React.Fragment key={index}>{message.content}</React.Fragment>;
+          return <Markdown key={index}>{message.content}</Markdown>;
         }
 
         const result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
