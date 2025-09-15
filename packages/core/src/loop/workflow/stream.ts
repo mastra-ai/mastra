@@ -21,7 +21,7 @@ export function workflowLoopStream<
   modelStreamSpan,
   llmAISpan,
   messageId,
-  requireToolArroval,
+  requireToolApproval,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType>({
@@ -50,7 +50,7 @@ export function workflowLoopStream<
         modelStreamSpan,
         controller,
         writer,
-        requireToolArroval,
+        requireToolApproval,
         ...rest,
       });
 
@@ -158,6 +158,13 @@ export function workflowLoopStream<
         },
         tracingContext: { currentSpan: llmAISpan, isInternal: true },
       });
+
+      if (executionResult.status === 'suspended') {
+        // TODO: need to be able to resume the stream without closing the MastraModelOutput stream
+        if (executionResult.suspendPayload?.requireToolApproval) {
+          console.log('tool approval required', executionResult.suspendPayload.requireToolApproval);
+        }
+      }
 
       if (executionResult.status !== 'success') {
         controller.close();

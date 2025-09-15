@@ -134,6 +134,7 @@ export class MastraLLMVNext extends MastraBase {
     providerOptions,
     tracingContext,
     messageList,
+    requireToolApproval,
     _internal,
     // ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT | undefined> {
@@ -194,6 +195,7 @@ export class MastraLLMVNext extends MastraBase {
         outputProcessors,
         returnScorerData,
         llmAISpan,
+        requireToolApproval,
         options: {
           ...options,
           onStepFinish: async props => {

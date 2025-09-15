@@ -23,7 +23,7 @@ export function createToolCallStep<
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend }) => {
+    execute: async ({ inputData, suspend, resumeData }) => {
       // If the tool was already executed by the provider, skip execution
       if (inputData.providerExecuted) {
         // Still emit telemetry for provider-executed tools
@@ -98,8 +98,9 @@ export function createToolCallStep<
         'stream.toolCall.args': JSON.stringify(inputData.args),
       });
 
+      console.log('calling tool', requireToolApproval, (tool as any).requireApproval, resumeData);
       try {
-        if (requireToolApproval || (tool as any).requireApproval) {
+        if ((requireToolApproval || (tool as any).requireApproval) && !resumeData) {
           controller.enqueue({
             type: 'tool-call-approval',
             runId,

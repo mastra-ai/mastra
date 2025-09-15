@@ -135,7 +135,7 @@ export type AgentExecutionOptions<
   prepareStep?: PrepareStepFunction<any>;
 
   /** Require approval for all tool calls */
-  requireToolArroval?: boolean;
+  requireToolApproval?: boolean;
 };
 
 export type InnerAgentExecutionOptions<

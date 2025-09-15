@@ -417,6 +417,7 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
+      suspendPayload: any;
       suspended: [string[], ...string[][]];
     } & TracingProperties);
 

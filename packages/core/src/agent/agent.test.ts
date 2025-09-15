@@ -611,6 +611,55 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(name).toBe('Dero Israel');
     }, 500000);
 
+    it.only('should call findUserTool with requireToolApproval', async () => {
+      const findUserTool = createTool({
+        id: 'Find user tool',
+        description: 'This is a test tool that returns the name and email',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        execute: ({ context }) => {
+          return mockFindUser(context) as Promise<Record<string, any>>;
+        },
+      });
+
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'You are an agent that can get list of users using findUserTool.',
+        model: openaiModel,
+        tools: { findUserTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { userAgent },
+        logger: false,
+      });
+
+      const agentOne = mastra.getAgent('userAgent');
+
+      let toolCall;
+      let response;
+      if (version === 'v1') {
+        response = await agentOne.generate('Find the user with name - Dero Israel', {
+          maxSteps: 2,
+          toolChoice: 'required',
+        });
+        toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
+      } else {
+        response = await agentOne.generateVNext('Find the user with name - Dero Israel', {
+          requireToolApproval: true,
+        });
+        console.log('response', JSON.stringify(response.toolResults, null, 2));
+        // TODO: send approval
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+      }
+
+      const name = toolCall?.result?.name;
+
+      expect(mockFindUser).toHaveBeenCalled();
+      expect(name).toBe('Dero Israel');
+    }, 500000);
+
     it('generate - should pass and call client side tools', async () => {
       const userAgent = new Agent({
         name: 'User agent',

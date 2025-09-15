@@ -3072,6 +3072,7 @@ export class Agent<
           threadId: inputData['prepare-memory-step'].thread?.id,
           resourceId,
           runtimeContext,
+          requireToolApproval: options.requireToolApproval,
           onStepFinish: async (props: any) => {
             if (options.savePerStep) {
               if (!inputData['prepare-memory-step'].threadExists && memory && inputData['prepare-memory-step'].thread) {
@@ -3186,6 +3187,7 @@ export class Agent<
           stopWhen: result.stopWhen,
           maxSteps: result.maxSteps,
           providerOptions: result.providerOptions,
+          requireToolApproval: result.requireToolApproval,
           options: {
             ...(options.prepareStep && { prepareStep: options.prepareStep }),
             onFinish: async (payload: any) => {

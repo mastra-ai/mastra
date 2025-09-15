@@ -22,7 +22,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   outputProcessors,
   returnScorerData,
   llmAISpan,
-  requireToolArroval,
+  requireToolApproval,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -92,7 +92,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     outputProcessors,
     llmAISpan,
     messageId: messageId!,
-    requireToolArroval,
+    requireToolApproval,
     ...rest,
   };
 
