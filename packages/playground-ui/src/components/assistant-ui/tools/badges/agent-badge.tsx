@@ -5,6 +5,7 @@ import { ToolFallback } from '../tool-fallback';
 import React from 'react';
 
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import Markdown from 'react-markdown';
 
 type TextMessage = {
   type: 'text';
