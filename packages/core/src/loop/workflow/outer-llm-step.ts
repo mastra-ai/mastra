@@ -7,7 +7,7 @@ import { ChunkFrom } from '../../stream/types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { OuterLLMRun } from '../types';
 import { createLLMExecutionStep } from './llm-execution';
-import { llmIterationOutputSchema, toolCallOutputSchema } from './schema';
+import { llmIterationOutputSchema, toolCallOutputSchema, type LLMIterationData } from './schema';
 import { createToolCallStep } from './tool-call-step';
 
 export function createOuterLLMWorkflow<
@@ -146,25 +146,26 @@ export function createOuterLLMWorkflow<
   return createWorkflow({
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
-    outputSchema: z.any(),
+    outputSchema: llmIterationOutputSchema,
   })
     .then(llmExecutionStep)
-    .map(({ inputData }) => {
-      if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && inputData.output.toolCalls?.length) {
+    .map(async ({ inputData }) => {
+      const typedInputData = inputData as LLMIterationData<Tools>;
+      if (modelStreamSpan && telemetry_settings?.recordOutputs !== false && typedInputData.output.toolCalls?.length) {
         modelStreamSpan.setAttribute(
           'stream.response.toolCalls',
           JSON.stringify(
-            inputData.output.toolCalls?.map((toolCall: any) => {
+            typedInputData.output.toolCalls?.map(toolCall => {
               return {
                 toolCallId: toolCall.toolCallId,
-                args: toolCall.args,
+                args: toolCall.input,
                 toolName: toolCall.toolName,
               };
             }),
           ),
         );
       }
-      return inputData.output.toolCalls || [];
+      return typedInputData.output.toolCalls || [];
     })
     .foreach(toolCallStep, { concurrency: 10 })
     .then(llmMappingStep)

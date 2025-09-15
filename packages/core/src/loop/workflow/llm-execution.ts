@@ -651,13 +651,20 @@ export function createLLMExecutionStep<
 
       const steps = inputData.output?.steps || [];
 
+      // Only include content from this iteration, not all accumulated content
+      // Get the number of existing response messages to know where this iteration starts
+      const existingResponseCount = inputData.messages?.nonUser?.length || 0;
+      const allResponseContent = messageList.get.response.aiV5.modelContent();
+
+      // Extract only the content added in this iteration
+      const currentIterationContent = allResponseContent.slice(existingResponseCount);
+
       steps.push(
         new DefaultStepResult({
           warnings: outputStream._getImmediateWarnings(),
           providerMetadata: providerOptions,
           finishReason: runState.state.stepResult?.reason,
-          content: messageList.get.response.aiV5.modelContent(),
-          // @ts-ignore this is how it worked internally for transformResponse which was removed TODO: how should this actually work?
+          content: currentIterationContent,
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
           request: request,
           usage: outputStream._getImmediateUsage() as LanguageModelV2Usage,
