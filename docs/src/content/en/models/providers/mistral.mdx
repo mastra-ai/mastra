@@ -4,6 +4,7 @@ description: "Use Mistral models with Mastra. 19 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { Tabs, Tab } from "@/components/tabs";
 
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 
@@ -33,6 +34,33 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+### Vercel AI SDK
+
+This provider also has a dedicated Vercel AI SDK model provider which can be installed with:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npm install @ai-sdk/mistral
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @ai-sdk/mistral
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @ai-sdk/mistral
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @ai-sdk/mistral
+    ```
+  </Tab>
+</Tabs>
 
 ## Models
 

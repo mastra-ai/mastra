@@ -86,6 +86,7 @@ interface ProviderInfo {
   isGateway: boolean;
   isPopular: boolean;
   baseProvider?: string; // For gateway providers like netlify/openai -> openai
+  packageName?: string; // Vercel AI SDK package name from models.dev
 }
 
 interface GroupedProviders {
@@ -154,15 +155,15 @@ function parseProviders(): GroupedProviders {
   return { gateways, popular, other };
 }
 
-async function fetchProviderModels(providerId: string): Promise<any[]> {
+async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; packageName?: string }> {
   try {
     const response = await fetch('https://models.dev/api.json');
     const data = await response.json();
     const provider = data[providerId];
 
-    if (!provider?.models) return [];
+    if (!provider?.models) return { models: [] };
 
-    return Object.entries(provider.models).map(([modelId, model]: [string, any]) => ({
+    const models = Object.entries(provider.models).map(([modelId, model]: [string, any]) => ({
       model: `${providerId}/${modelId}`,
       imageInput: model.modalities?.input?.includes('image') || false,
       audioInput: model.modalities?.input?.includes('audio') || false,
@@ -176,9 +177,14 @@ async function fetchProviderModels(providerId: string): Promise<any[]> {
       inputCost: model.cost?.input || null,
       outputCost: model.cost?.output || null,
     }));
+
+    return {
+      models,
+      packageName: provider.npm || undefined,
+    };
   } catch (error) {
     console.error(`Failed to fetch models for ${providerId}:`, error);
-    return [];
+    return { models: [] };
   }
 }
 
@@ -195,7 +201,8 @@ async function generateProviderPage(provider: ProviderInfo): Promise<string> {
     : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.`;
 
   // Fetch model capabilities from models.dev
-  const modelsWithCapabilities = await fetchProviderModels(provider.id);
+  const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
+  provider.packageName = packageName;
 
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
@@ -206,6 +213,7 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from "@/components/tabs";' : ''}
 
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
 
@@ -233,7 +241,38 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 \`\`\`
+${
+  provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
+    ? `
+### Vercel AI SDK
 
+This provider also has a dedicated Vercel AI SDK model provider which can be installed with:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    \`\`\`bash copy
+    npm install ${provider.packageName}
+    \`\`\`
+  </Tab>
+  <Tab>
+    \`\`\`bash copy
+    yarn add ${provider.packageName}
+    \`\`\`
+  </Tab>
+  <Tab>
+    \`\`\`bash copy
+    pnpm add ${provider.packageName}
+    \`\`\`
+  </Tab>
+  <Tab>
+    \`\`\`bash copy
+    bun add ${provider.packageName}
+    \`\`\`
+  </Tab>
+</Tabs>
+`
+    : ''
+}
 ## Models
 
 <ProviderModelsTable 
