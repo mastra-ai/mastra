@@ -1,13 +1,3 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { anthropic as anthropicV5 } from '@ai-sdk/anthropic-v5';
-import { google } from '@ai-sdk/google';
-import { google as googleV5 } from '@ai-sdk/google-v5';
-import { groq } from '@ai-sdk/groq';
-import { groq as groqV5 } from '@ai-sdk/groq-v5';
-import { openai } from '@ai-sdk/openai';
-import { openai as openaiV5 } from '@ai-sdk/openai-v5';
-import { xai } from '@ai-sdk/xai';
-import { xai as xaiV5 } from '@ai-sdk/xai-v5';
 import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -123,6 +113,12 @@ async function formatAgentList({
 
   const model = llm?.getModel();
 
+  // Normalize provider names by removing AI SDK suffixes like ".chat" and ".completion" so that the unified model router display in the UI works for openai() as well (showing the initially selected model as openai/x, and then using the model router if the user selects another model)
+  let provider = llm?.getProvider();
+  if (provider?.endsWith('.chat') || provider?.endsWith('.completion')) {
+    provider = provider.substring(0, provider.lastIndexOf('.'));
+  }
+
   return {
     id,
     name: agent.name,
@@ -130,7 +126,7 @@ async function formatAgentList({
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
     workflows: serializedAgentWorkflows,
-    provider: llm?.getProvider(),
+    provider,
     modelId: llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     defaultGenerateOptions: defaultGenerateOptions as any,
@@ -229,13 +225,19 @@ async function formatAgent({
 
     const serializedAgentAgents = await getSerializedAgentDefinition({ agent, runtimeContext: proxyRuntimeContext });
 
+    // Normalize provider names by removing AI SDK suffixes like ".chat" and ".completion"
+    let provider = llm?.getProvider();
+    if (provider?.endsWith('.chat') || provider?.endsWith('.completion')) {
+      provider = provider.substring(0, provider.lastIndexOf('.'));
+    }
+
     return {
       name: agent.name,
       instructions,
       tools: serializedAgentTools,
       agents: serializedAgentAgents,
       workflows: serializedAgentWorkflows,
-      provider: llm?.getProvider(),
+      provider,
       modelId: llm?.getModelId(),
       modelVersion: model?.specificationVersion,
       defaultGenerateOptions: defaultGenerateOptions as any,
@@ -657,7 +659,7 @@ export async function updateAgentModelHandler({
   agentId: string;
   body: {
     modelId: string;
-    provider: string; // Now accepts any provider
+    provider: string;
   };
 }): Promise<{ message: string }> {
   try {
@@ -667,13 +669,23 @@ export async function updateAgentModelHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { modelId, provider } = body;
+    const newModel = `${body.provider}/${body.modelId}`;
 
-    // Use the universal OpenAI-compatible format: "provider/model"
+    const llm = await agent.getLLM();
+    // Normalize the existing provider by removing AI SDK suffixes
+    let existingProvider = llm?.getProvider();
+    if (existingProvider?.endsWith('.chat') || existingProvider?.endsWith('.completion')) {
+      existingProvider = existingProvider.substring(0, existingProvider.lastIndexOf('.'));
+    }
+    const existingModelId = llm?.getModelId();
+
+    if (existingProvider && existingModelId && `${existingProvider}/${existingModelId}` === newModel) {
+      return { message: 'Agent model does not need updating, it already uses the requested model' };
+    }
+
+    // Use the universal mastra router format: "provider/model"
     // This will be handled by OpenAICompatibleModel in the agent
-    const modelString = `${provider}/${modelId}`;
-
-    agent.__updateModel({ model: modelString });
+    agent.__updateModel({ model: newModel });
 
     return { message: 'Agent model updated' };
   } catch (error) {
