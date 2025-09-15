@@ -4,6 +4,7 @@ description: "Use Deep Infra models with Mastra. 4 models available."
 ---
 
 import { ProviderModelsTable } from "@/components/provider-models-table";
+import { Tabs, Tab } from "@/components/tabs";
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
@@ -33,6 +34,33 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+### Vercel AI SDK
+
+This provider also has a dedicated Vercel AI SDK model provider which can be installed with:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab>
+    ```bash copy
+    npm install @ai-sdk/deepinfra
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @ai-sdk/deepinfra
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @ai-sdk/deepinfra
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @ai-sdk/deepinfra
+    ```
+  </Tab>
+</Tabs>
 
 ## Models
 
