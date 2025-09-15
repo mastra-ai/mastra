@@ -209,3 +209,24 @@ jobs:
             git diff --name-only -- ':!package.json'
             exit 1
           fi
+
+  validate-pkg-json:
+    name: Validate /packages package.json files
+    runs-on: ubuntu-latest
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          registry-url: 'https://registry.yarnpkg.com'
+
+      - name: Run package.json validator
+        run: node .github/scripts/validate-pkg-json.js
