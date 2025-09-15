@@ -31,6 +31,8 @@ import { ScoresPG } from './domains/scores';
 import { TracesPG } from './domains/traces';
 import { WorkflowsPG } from './domains/workflows';
 
+export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
+
 export type PostgresConfig = {
   schemaName?: string;
   max?: number;
@@ -185,6 +187,16 @@ export class PostgresStore extends MastraStorage {
       };
 
       await super.init();
+
+      // Create automatic performance indexes by default
+      // This is done after table creation and is safe to run multiple times
+      try {
+        await operations.createAutomaticIndexes();
+      } catch (indexError) {
+        // Log the error but don't fail initialization
+        // Indexes are performance optimizations, not critical for functionality
+        console.warn('Failed to create indexes:', indexError);
+      }
     } catch (error) {
       this.isConnected = false;
       throw new MastraError(
@@ -219,6 +231,8 @@ export class PostgresStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
+      aiTracing: false,
+      indexManagement: true,
     };
   }
 
@@ -457,13 +471,15 @@ export class PostgresStore extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
   }
 
   async loadWorkflowSnapshot({

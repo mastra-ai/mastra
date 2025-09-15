@@ -7674,6 +7674,67 @@ describe('Workflow', () => {
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
     });
+
+    it('should persist resourceId when creating workflow runs', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step1).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      // Create run with resourceId
+      const resourceId = 'user-123';
+      const run = await workflow.createRunAsync({ resourceId });
+      await run.start({ inputData: {} });
+
+      // Verify resourceId is persisted in storage
+      const { runs } = await workflow.getWorkflowRuns();
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.resourceId).toBe(resourceId);
+
+      // Verify getWorkflowRunById also returns resourceId
+      const runById = await workflow.getWorkflowRunById(run.runId);
+      expect(runById?.resourceId).toBe(resourceId);
+
+      // Create another run with different resourceId
+      const resourceId2 = 'user-456';
+      const run2 = await workflow.createRunAsync({ resourceId: resourceId2 });
+      await run2.start({ inputData: {} });
+
+      // Verify both runs have correct resourceIds
+      const { runs: allRuns } = await workflow.getWorkflowRuns();
+      expect(allRuns).toHaveLength(2);
+      const runWithResource123 = allRuns.find(r => r.resourceId === resourceId);
+      const runWithResource456 = allRuns.find(r => r.resourceId === resourceId2);
+      expect(runWithResource123).toBeDefined();
+      expect(runWithResource456).toBeDefined();
+      expect(runWithResource123?.runId).toBe(run.runId);
+      expect(runWithResource456?.runId).toBe(run2.runId);
+
+      // Create run without resourceId to ensure it's optional
+      const run3 = await workflow.createRunAsync();
+      await run3.start({ inputData: {} });
+
+      const { runs: finalRuns } = await workflow.getWorkflowRuns();
+      expect(finalRuns).toHaveLength(3);
+      const runWithoutResource = finalRuns.find(r => r.runId === run3.runId);
+      expect(runWithoutResource).toBeDefined();
+      expect(runWithoutResource?.resourceId).toBeUndefined();
+    });
   });
 
   describe('Accessing Mastra', () => {

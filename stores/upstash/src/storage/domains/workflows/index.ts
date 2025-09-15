@@ -76,9 +76,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     namespace: string;
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    const { namespace = 'workflows', workflowName, runId, snapshot } = params;
+    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot } = params;
     try {
       await this.operations.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -86,6 +87,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           namespace,
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot,
           createdAt: new Date(),
           updatedAt: new Date(),
