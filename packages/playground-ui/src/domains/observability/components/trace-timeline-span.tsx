@@ -110,7 +110,7 @@ export function TraceTimelineSpan({
                       : 'none',
                 }}
               >
-                {(span.latency / 1000).toFixed(2)}&nbsp;s
+                {(span.latency / 1000).toFixed(3)}&nbsp;s
               </span>
             </span>
           </div>
