@@ -1058,40 +1058,6 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
-  packages/agent-builder/integration-tests:
-    dependencies:
-      '@ai-sdk/openai':
-        specifier: ^1.3.0
-        version: 1.3.24(zod@3.25.76)
-      '@mastra/agent-builder':
-        specifier: workspace:*
-        version: link:..
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@mastra/libsql':
-        specifier: workspace:*
-        version: link:../../../stores/libsql
-      '@mastra/mcp':
-        specifier: workspace:*
-        version: link:../../mcp
-      mastra:
-        specifier: workspace:*
-        version: link:../../cli
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.13)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
-
   packages/auth:
     dependencies:
       jsonwebtoken:
@@ -2061,49 +2027,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.13)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
 
-  packages/mcp/integration-tests:
-    dependencies:
-      '@ai-sdk/openai':
-        specifier: ^1.3.24
-        version: 1.3.24(zod@3.25.76)
-      '@ai-sdk/react':
-        specifier: ^1.2.12
-        version: 1.2.12(react@19.1.1)(zod@3.25.76)
-      '@mastra/client-js':
-        specifier: workspace:*
-        version: link:../../../client-sdks/client-js
-      '@mastra/mcp':
-        specifier: workspace:*
-        version: link:..
-      dotenv:
-        specifier: ^16.6.1
-        version: 16.6.1
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@testing-library/react':
-        specifier: ^16.3.0
-        version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@types/node':
-        specifier: ^20.17.57
-        version: 20.19.13
-      get-port:
-        specifier: ^7.1.0
-        version: 7.1.0
-      mastra:
-        specifier: workspace:*
-        version: link:../../cli
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.13)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
-
   packages/memory:
     dependencies:
       '@mastra/schema-compat':
@@ -2185,152 +2108,6 @@ importers:
       typescript-eslint:
         specifier: ^8.38.0
         version: 8.38.0(eslint@9.34.0(jiti@2.4.2))(typescript@5.8.3)
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.13)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
-
-  packages/memory/integration-tests:
-    dependencies:
-      '@ai-sdk/google':
-        specifier: ^1.2.19
-        version: 1.2.22(zod@3.25.76)
-      '@ai-sdk/openai':
-        specifier: ^1.3.0
-        version: 1.3.24(zod@3.25.76)
-      '@ai-sdk/react':
-        specifier: ^1.2.1
-        version: 1.2.12(react@19.1.1)(zod@3.25.76)
-      '@mastra/fastembed':
-        specifier: workspace:*
-        version: link:../../fastembed
-      '@mastra/libsql':
-        specifier: workspace:*
-        version: link:../../../stores/libsql
-      '@mastra/memory':
-        specifier: workspace:*
-        version: link:..
-      '@mastra/pg':
-        specifier: workspace:*
-        version: link:../../../stores/pg
-      '@mastra/upstash':
-        specifier: workspace:*
-        version: link:../../../stores/upstash
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
-      json-schema:
-        specifier: ^0.4.0
-        version: 0.4.0
-      zod:
-        specifier: ^3.24.3
-        version: 3.25.76
-    devDependencies:
-      '@faker-js/faker':
-        specifier: ^9.6.0
-        version: 9.8.0
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@testing-library/react':
-        specifier: ^16.2.0
-        version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@types/json-schema':
-        specifier: ^7.0.15
-        version: 7.0.15
-      '@types/node':
-        specifier: ^20.17.57
-        version: 20.19.13
-      ai:
-        specifier: ^4.2.2
-        version: 4.3.19(react@19.1.1)(zod@3.25.76)
-      jsdom:
-        specifier: ^26.0.0
-        version: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
-      mastra:
-        specifier: workspace:*
-        version: link:../../cli
-      next:
-        specifier: ^15.2.4
-        version: 15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      react:
-        specifier: ^19.1.0
-        version: 19.1.1
-      react-dom:
-        specifier: ^19.1.0
-        version: 19.1.1(react@19.1.1)
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.13)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
-
-  packages/memory/integration-tests-v5:
-    dependencies:
-      '@mastra/fastembed':
-        specifier: workspace:*
-        version: link:../../fastembed
-      '@mastra/libsql':
-        specifier: workspace:*
-        version: link:../../../stores/libsql
-      '@mastra/memory':
-        specifier: workspace:*
-        version: link:..
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
-      json-schema:
-        specifier: ^0.4.0
-        version: 0.4.0
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@ai-sdk/google':
-        specifier: ^2.0.6
-        version: 2.0.7(zod@3.25.76)
-      '@ai-sdk/openai':
-        specifier: ^2.0.15
-        version: 2.0.23(zod@3.25.76)
-      '@ai-sdk/react':
-        specifier: ^2.0.15
-        version: 2.0.19(react@19.1.1)(zod@3.25.76)
-      '@faker-js/faker':
-        specifier: ^9.6.0
-        version: 9.8.0
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@testing-library/react':
-        specifier: ^16.3.0
-        version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@types/json-schema':
-        specifier: ^7.0.15
-        version: 7.0.15
-      '@types/node':
-        specifier: ^20.17.57
-        version: 20.19.13
-      ai:
-        specifier: ^5.0.15
-        version: 5.0.28(zod@3.25.76)
-      jsdom:
-        specifier: ^26.1.0
-        version: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
-      mastra:
-        specifier: workspace:*
-        version: link:../../cli
-      next:
-        specifier: ^15.2.4
-        version: 15.4.7(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      react:
-        specifier: ^19.1.0
-        version: 19.1.1
-      react-dom:
-        specifier: ^19.1.0
-        version: 19.1.1(react@19.1.1)
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.13)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.5)(yaml@2.8.1)
@@ -4409,12 +4186,6 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4
 
-  '@ai-sdk/gateway@1.0.9':
-    resolution: {integrity: sha512-kIfwunyUUwyBLg2KQcaRtjRQ1bDuJYPNIs4CNWaWPpMZ4SV5cRL1hLGMuX4bhfCJYDXHMGvJGLtUK6+iAJH2ZQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
-
   '@ai-sdk/google@1.2.22':
     resolution: {integrity: sha512-Ppxu3DIieF1G9pyQ5O1Z646GYR0gkC57YdBqXJ82qvCdhEhZHu0TWhmnOoeIWe2olSbuDeoOY+MfJrW8dzS3Hw==}
     engines: {node: '>=18'}
@@ -4423,12 +4194,6 @@ packages:
 
   '@ai-sdk/google@2.0.6':
     resolution: {integrity: sha512-8acuseWJI+RRH99JDWM/n7IJRuuGNa4YzLXB/leqE/ZByHyIiVWGADjJi/vfnJnmdM5fQnezJ6SRTF6feI5rSQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
-
-  '@ai-sdk/google@2.0.7':
-    resolution: {integrity: sha512-ly+dPu0t9IOzk7E7PC3W7JrFY3gEE2xLj5hNX/3Q78BQochcEfaOLaA+IhelS1yR5la8aE9BFgB4BhoNJMLAlA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4
@@ -4496,12 +4261,6 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4
 
-  '@ai-sdk/provider-utils@3.0.4':
-    resolution: {integrity: sha512-/3Z6lfUp8r+ewFd9yzHkCmPlMOJUXup2Sx3aoUyrdXLhOmAfHRl6Z4lDbIdV0uvw/QYoBcVLJnvXN7ncYeS3uQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
-
   '@ai-sdk/provider-utils@3.0.5':
     resolution: {integrity: sha512-HliwB/yzufw3iwczbFVE2Fiwf1XqROB/I6ng8EKUsPM5+2wnIa8f4VbljZcDx+grhFrPV+PnRZH7zBqi8WZM7Q==}
     engines: {node: '>=18'}
@@ -4532,16 +4291,6 @@ packages:
     peerDependencies:
       react: ^18 || ^19 || ^19.0.0-rc
       zod: ^3.23.8
-    peerDependenciesMeta:
-      zod:
-        optional: true
-
-  '@ai-sdk/react@2.0.19':
-    resolution: {integrity: sha512-g6WANTGVgL+lYuVDTkK/NKrcjyP65x/YdiQhKuEV5frT/XCguj1/jiX9ZCK4JCgEhlXsPvZsFQeDD43n5sUAJQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      react: ^18 || ^19 || ^19.0.0-rc
-      zod: ^3.25.76 || ^4
     peerDependenciesMeta:
       zod:
         optional: true
@@ -6688,10 +6437,6 @@ packages:
   '@eslint/plugin-kit@0.3.5':
     resolution: {integrity: sha512-Z5kJ+wU3oA7MMIqVR9tyZRtjYPr4OC004Q4Rw7pgOKUOKkJfZ3O24nz3WYfGRpMDNmcOi3TwQOmgm7B7Tpii0w==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@faker-js/faker@9.8.0':
-    resolution: {integrity: sha512-U9wpuSrJC93jZBxx/Qq2wPjCuYISBueyVUGK7qqdmj7r/nxaxwW8AQDCLeRO7wZnjj94sh3p246cAYjUKuqgfg==}
-    engines: {node: '>=18.0.0', npm: '>=9.0.0'}
 
   '@fastify/busboy@3.1.1':
     resolution: {integrity: sha512-5DGmA8FTdB2XbDeEwc/5ZXBl6UbBAyBOOLlPuBnZ/N1SwdH9Ii+cOX3tBROlDgcTXxjOYnLMVoKk9+FXAw0CJw==}
@@ -10121,21 +9866,6 @@ packages:
     resolution: {integrity: sha512-xDXgLjVunjHqczScfkCJ9iyjdNOVHvvCdqHSSxwM9L0l/wHkTRum67SDc020uAlCoqktJplgO2AAQeLP1wgqDQ==}
     engines: {node: '>=14', npm: '>=6', yarn: '>=1'}
 
-  '@testing-library/react@16.3.0':
-    resolution: {integrity: sha512-kFSyxiEDwv1WLl2fgsq6pPBbw5aWKrsY2/noi1Id0TK0UParSF62oFQFGHXIyaG4pp2tEub/Zlel+fjjZILDsw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@testing-library/dom': ^10.0.0
-      '@types/react': ^18.0.0 || ^19.0.0
-      '@types/react-dom': ^18.0.0 || ^19.0.0
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      '@types/react-dom':
-        optional: true
-
   '@testing-library/user-event@14.6.1':
     resolution: {integrity: sha512-vq7fv0rnt+QTXgPxr5Hjc210p6YKq2kmdziLgnsZGgLJ9e6VAShx1pACLuRjd/AS/sr7phAR58OIIpf0LlmQNw==}
     engines: {node: '>=12', npm: '>=6'}
@@ -10962,12 +10692,6 @@ packages:
     peerDependenciesMeta:
       react:
         optional: true
-
-  ai@5.0.19:
-    resolution: {integrity: sha512-I0yQO68Z1DdvjMc9be5scMYdsuBvpNneQDh6TUuUVlFXdCxAIm7yATnOaomfYTE2KaRDsrO+OSRPjJm4FSKioA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
 
   ai@5.0.28:
     resolution: {integrity: sha512-tnybAqoDFzuK6O1NOMHX1d/wH7Eug8y0H4l/Gl6swi8BYGtlTPDjniKnGYzgTpLTdpj7SI3qjZuomz7evph9+w==}
@@ -17845,12 +17569,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.7(zod@4.1.5)
       zod: 4.1.5
 
-  '@ai-sdk/gateway@1.0.9(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.4(zod@3.25.76)
-      zod: 3.25.76
-
   '@ai-sdk/google@1.2.22(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -17861,12 +17579,6 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.3(zod@3.25.76)
-      zod: 3.25.76
-
-  '@ai-sdk/google@2.0.7(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.4(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/groq@1.2.9(zod@3.25.76)':
@@ -17950,14 +17662,6 @@ snapshots:
       zod: 4.1.5
       zod-to-json-schema: 3.24.6(zod@4.1.5)
 
-  '@ai-sdk/provider-utils@3.0.4(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@standard-schema/spec': 1.0.0
-      eventsource-parser: 3.0.6
-      zod: 3.25.76
-      zod-to-json-schema: 3.24.6(zod@3.25.76)
-
   '@ai-sdk/provider-utils@3.0.5(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -18011,16 +17715,6 @@ snapshots:
       throttleit: 2.1.0
     optionalDependencies:
       zod: 4.1.5
-
-  '@ai-sdk/react@2.0.19(react@19.1.1)(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider-utils': 3.0.4(zod@3.25.76)
-      ai: 5.0.19(zod@3.25.76)
-      react: 19.1.1
-      swr: 2.3.4(react@19.1.1)
-      throttleit: 2.1.0
-    optionalDependencies:
-      zod: 3.25.76
 
   '@ai-sdk/ui-utils@1.2.11(zod@3.25.76)':
     dependencies:
@@ -21128,8 +20822,6 @@ snapshots:
       '@eslint/core': 0.15.2
       levn: 0.4.1
 
-  '@faker-js/faker@9.8.0': {}
-
   '@fastify/busboy@3.1.1': {}
 
   '@firebase/app-check-interop-types@0.3.3': {}
@@ -22326,7 +22018,8 @@ snapshots:
 
   '@next/env@14.2.32': {}
 
-  '@next/env@15.4.7': {}
+  '@next/env@15.4.7':
+    optional: true
 
   '@next/swc-darwin-arm64@15.4.7':
     optional: true
@@ -25249,6 +24942,7 @@ snapshots:
   '@swc/helpers@0.5.15':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@swc/helpers@0.5.17':
     dependencies:
@@ -25303,16 +24997,6 @@ snapshots:
       lodash: 4.17.21
       picocolors: 1.1.1
       redent: 3.0.0
-
-  '@testing-library/react@16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.7(@types/react@19.1.9))(@types/react@19.1.9)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
-    dependencies:
-      '@babel/runtime': 7.28.4
-      '@testing-library/dom': 10.4.0
-      react: 19.1.1
-      react-dom: 19.1.1(react@19.1.1)
-    optionalDependencies:
-      '@types/react': 19.1.9
-      '@types/react-dom': 19.1.7(@types/react@19.1.9)
 
   '@testing-library/user-event@14.6.1(@testing-library/dom@10.4.0)':
     dependencies:
@@ -26315,14 +25999,6 @@ snapshots:
     optionalDependencies:
       react: 19.1.1
 
-  ai@5.0.19(zod@3.25.76):
-    dependencies:
-      '@ai-sdk/gateway': 1.0.9(zod@3.25.76)
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.4(zod@3.25.76)
-      '@opentelemetry/api': 1.9.0
-      zod: 3.25.76
-
   ai@5.0.28(zod@3.25.76):
     dependencies:
       '@ai-sdk/gateway': 1.0.15(zod@3.25.76)
@@ -27129,7 +26805,8 @@ snapshots:
 
   cli-width@4.1.0: {}
 
-  client-only@0.0.1: {}
+  client-only@0.0.1:
+    optional: true
 
   cliui@8.0.1:
     dependencies:
@@ -31117,6 +30794,7 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
+    optional: true
 
   no-case@3.0.4:
     dependencies:
@@ -31796,6 +31474,7 @@ snapshots:
       nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
+    optional: true
 
   postcss@8.5.6:
     dependencies:
@@ -33111,6 +32790,7 @@ snapshots:
     dependencies:
       client-only: 0.0.1
       react: 19.1.1
+    optional: true
 
   sucrase@3.35.0:
     dependencies:
