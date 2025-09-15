@@ -1198,6 +1198,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
 
       // Update sleep until span with dynamic duration
+      // Ensure date is a Date object before calling getTime()
+      if (date && !(date instanceof Date)) {
+        date = new Date(date);
+      }
       const time = !date ? 0 : date.getTime() - Date.now();
       sleepUntilSpan?.update({
         attributes: {
