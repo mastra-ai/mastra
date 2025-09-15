@@ -1299,7 +1299,7 @@ importers:
         specifier: ^20.17.57
         version: 20.19.13
       esbuild:
-        specifier: ^0.25.8
+        specifier: ^0.25.9
         version: 0.25.9
       eslint:
         specifier: ^9.30.1
@@ -1371,7 +1371,7 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       esbuild:
-        specifier: ^0.25.8
+        specifier: ^0.25.9
         version: 0.25.9
       find-workspaces:
         specifier: ^0.3.1
