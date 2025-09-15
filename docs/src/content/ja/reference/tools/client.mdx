@@ -3,13 +3,19 @@ title: "リファレンス: MastraMCPClient | ツールディスカバリー | M
 description: MastraMCPClient の API リファレンス - Model Context Protocol 用のクライアント実装。
 ---
 
+
+
 # MastraMCPClient（非推奨）
 
 `MastraMCPClient` クラスは、Model Context Protocol（MCP）サーバーとやり取りするためのクライアント実装を提供します。このクラスは、MCPプロトコルを通じて接続管理、リソースの発見、およびツールの実行を行います。
 
+
+
 ## 非推奨のお知らせ
 
 `MastraMCPClient` は [`MCPClient`](./mcp-client) への移行に伴い非推奨となります。単一のMCPサーバーと複数のMCPサーバーを管理するために異なるインターフェースを用意するのではなく、たとえ単一のMCPサーバーを使用する場合でも複数サーバー管理用のインターフェースを推奨することにしました。
+
+
 
 ## コンストラクター
 
@@ -98,7 +104,8 @@ MCP サーバーはこの定義を使って設定できます。クライアン�
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
-      description: "Stdio サーバー用：コマンドに設定する環境変数。",
+      description:
+        "Stdio サーバー用：コマンドに設定する環境変数。",
     },
     {
       name: "url",
@@ -184,6 +191,8 @@ MCP サーバーはこの定義を使って設定できます。クライアン�
   ]}
 />
 
+
+
 ## メソッド
 
 ### connect()
@@ -219,6 +228,8 @@ async tools(): Promise<Record<string, Tool>>
 ```
 
 ツール名を対応するMastraツール実装にマッピングしたオブジェクトを返します。
+
+
 
 ## 例
 
@@ -328,6 +339,8 @@ SSE接続で認証やカスタムヘッダーを使用する場合、`requestIni
 
 `eventSourceInit`の設定により、SSE接続で使用される内部のfetchリクエストをカスタマイズでき、認証ヘッダーが正しく含まれるようになります。
 `eventSourceInit`がない場合、`requestInit`で指定した認証ヘッダーは接続リクエストに含まれず、401 Unauthorizedエラーが発生します。
+
+
 
 ## 関連情報
 

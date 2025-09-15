@@ -1,72 +1,79 @@
 ---
-title: "AI株式エージェントの構築 | Mastraエージェント | ガイド"
-description: 指定された銘柄の前日終値を取得するシンプルな株式エージェントをMastraで作成するガイド。
+title: "AI株式エージェントの構築 | Mastra Agents | ガイド"
+description: 指定したシンボルの前日の終値を取得する、Mastraでのシンプルな株式エージェントの作成ガイド。
 ---
 
 import { Steps } from "nextra/components";
 import YouTube from "@/components/youtube";
 
-# 株価エージェント
 
-私たちは、指定されたシンボルの前日の終値を取得するシンプルなエージェントを作成します。この例では、ツールを作成し、それをエージェントに追加して、株価を取得するためにエージェントを使用する方法を示します。
+
+# AI株式エージェントの作成
+
+このガイドでは、指定した銘柄の前日の終値を取得するシンプルなエージェントを作成します。ツールの作り方、それをエージェントに追加する方法、そしてエージェントを使って株価を取得する方法を学びます。
 
 <YouTube id="rIaZ4l7y9wo" />
 
-## プロジェクト構造
 
-```
-stock-price-agent/
-├── src/
-│   ├── agents/
-│   │   └── stockAgent.ts
-│   ├── tools/
-│   │   └── stockPrices.ts
-│   └── index.ts
-├── package.json
-└── .env
-```
 
----
+## 前提条件
+
+- Node.js `v20.0` 以降がインストールされていること
+- サポート対象の[モデルプロバイダー](/docs/getting-started/model-providers)から取得した API キー
+- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは[インストールガイド](/docs/getting-started/installation)を参照）
+
+
+
+## エージェントの作成
+
+Mastra でエージェントを作成するには、まず `Agent` クラスで定義し、その後 Mastra に登録します。
 
 <Steps>
-## プロジェクトの初期化と依存関係のインストール
 
-まず、プロジェクト用の新しいディレクトリを作成し、そこに移動します：
+### エージェントを定義する
 
-```bash
-mkdir stock-price-agent
-cd stock-price-agent
+新規ファイル `src/mastra/agents/stockAgent.ts` を作成し、次のようにエージェントを定義します:
+
+```ts copy filename="src/mastra/agents/stockAgent.ts"
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const stockAgent = new Agent({
+  name: "Stock Agent",
+  instructions:
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
+  model: openai("gpt-4o-mini"),
+});
 ```
 
-新しいNode.jsプロジェクトを初期化し、必要な依存関係をインストールします：
+### Mastra にエージェントを登録する
 
-```bash copy
-npm init -y
-npm install @mastra/core@latest zod @ai-sdk/openai
+`src/mastra/index.ts` ファイルで、エージェントを登録します:
+
+```ts copy filename="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { stockAgent } from "./agents/stockAgent";
+
+export const mastra = new Mastra({
+  agents: { stockAgent },
+});
 ```
 
-環境変数の設定
+</Steps>
 
-プロジェクトのルートに`.env`ファイルを作成して、OpenAI APIキーを保存します。
 
-```bash filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
-```
-
-必要なディレクトリとファイルを作成します：
-
-```bash
-mkdir -p src/agents src/tools
-touch src/agents/stockAgent.ts src/tools/stockPrices.ts src/index.ts
-```
-
----
 
 ## 株価ツールの作成
 
-次に、指定されたシンボルの前日終値を取得するツールを作成します。
+現時点では、Stock Agent は最新の株価を把握していません。これを解消するために、ツールを作成してエージェントに追加します。
 
-```ts filename="src/tools/stockPrices.ts"
+<Steps>
+
+### ツールを定義する
+
+新しいファイル `src/mastra/tools/stockPrices.ts` を作成します。ファイル内で、指定したシンボルの前営業日の終値を取得する `stockPrices` ツールを追加します:
+
+```ts filename="src/mastra/tools/stockPrices.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -82,9 +89,9 @@ export const stockPrices = createTool({
   inputSchema: z.object({
     symbol: z.string(),
   }),
-  description: `Fetches the last day's closing stock price for a given symbol`,
+  description: `指定したシンボルの前営業日の終値を取得します`,
   execute: async ({ context: { symbol } }) => {
-    console.log("Using tool to fetch stock price for", symbol);
+    console.log("株価取得ツールを使用中:", symbol);
     return {
       symbol,
       currentPrice: await getStockPrice(symbol),
@@ -93,70 +100,59 @@ export const stockPrices = createTool({
 });
 ```
 
----
+### ツールを Stock Agent に追加する
 
-## エージェントにツールを追加する
+`src/mastra/agents/stockAgent.ts` で、新しく作成した `stockPrices` ツールをインポートし、エージェントに追加します。
 
-エージェントを作成し、`stockPrices`ツールを追加します。
-
-```ts filename="src/agents/stockAgent.ts"
-import { Agent } from "@mastra/core/agent";
+```ts copy filename="src/mastra/agents/stockAgent.ts" {3, 10-12}
 import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { stockPrices } from "../tools/stockPrices";
 
-import * as tools from "../tools/stockPrices";
-
-export const stockAgent = new Agent<typeof tools>({
+export const stockAgent = new Agent({
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
   model: openai("gpt-4o-mini"),
   tools: {
-    stockPrices: tools.stockPrices,
+    stockPrices,
   },
 });
 ```
 
----
+</Steps>
 
-## Mastraインスタンスの設定
 
-エージェントとツールを使用してMastraインスタンスを初期化する必要があります。
 
-```ts filename="src/index.ts"
-import { Mastra } from "@mastra/core";
+## エージェントサーバーの実行
 
-import { stockAgent } from "./agents/stockAgent";
+Mastra の API を通じてエージェントとやり取りする方法を学びましょう。
 
-export const mastra = new Mastra({
-  agents: { stockAgent },
-});
+<Steps>
+
+### `mastra dev` を使う
+
+`mastra dev` コマンドで、エージェントをサービスとして起動できます:
+
+```bash copy
+mastra dev
 ```
 
-## アプリケーションの提供
+これにより、登録済みのエージェントとやり取りするためのエンドポイントを公開するサーバーが立ち上がります。[playground](../../docs/server-db/local-dev-playground.mdx) では、UI を通じて `stockAgent` と `stockPrices` ツールをテストできます。
 
-アプリケーションを直接実行する代わりに、`mastra dev`コマンドを使用してサーバーを起動します。これにより、エージェントがREST APIエンドポイントを通じて公開され、HTTPを介して対話できるようになります。
+### Stock Agent API へのアクセス
 
-ターミナルで、以下のコマンドを実行してMastraサーバーを起動します：
-
-```bash
-mastra dev --dir src
-```
-
-このコマンドにより、プレイグラウンド内でstockPricesツールとstockAgentをテストすることができます。
-
-これにより、サーバーが起動し、エージェントが以下のURLで利用可能になります：
+デフォルトでは `mastra dev` は `http://localhost:4111` で動作します。Stock エージェントには以下からアクセスできます:
 
 ```
-http://localhost:4111/api/agents/stockAgent/generate
+POST http://localhost:4111/api/agents/stockAgent/generate
 ```
 
----
+### `curl` でエージェントとやり取りする
 
-## cURLでエージェントをテストする
+コマンドラインから `curl` を使ってエージェントとやり取りできます:
 
-サーバーが実行されたら、`curl`を使用してエージェントのエンドポイントをテストできます：
-
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
@@ -166,9 +162,9 @@ curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
   }'
 ```
 
-**予想される応答：**
+**想定されるレスポンス:**
 
-以下のようなJSON応答が返ってくるはずです：
+次のような JSON レスポンスが返ってきます:
 
 ```json
 {
@@ -177,6 +173,6 @@ curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
 }
 ```
 
-これは、エージェントがリクエストを正常に処理し、`stockPrices`ツールを使用して株価を取得し、結果を返したことを示しています。
+これは、エージェントがリクエストを正常に処理し、`stockPrices` ツールで株価を取得して結果を返したことを示します。
 
 </Steps>

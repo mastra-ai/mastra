@@ -1,0 +1,636 @@
+---
+title: "リファレンス: Agent.streamVNext()（実験的） | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.streamVNext()` メソッドのドキュメント。拡張機能により、応答のリアルタイムストリーミングを可能にします。"
+---
+
+import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
+
+
+# Agent.streamVNext()（実験的）
+
+<StreamVNextCallout />
+
+`.streamVNext()` メソッドは、強化された機能と柔軟なフォーマットに対応したエージェントの応答を、リアルタイムでストリーミングします。メッセージと、任意のストリーミングオプションを受け取り、Mastra のネイティブ形式と AI SDK v5 との互換性を備えた次世代のストリーミング体験を提供します。
+
+## 使用例
+
+```typescript copy
+// デフォルトの Mastra 形式
+const mastraStream = await agent.streamVNext("message for agent");
+
+// AI SDK v5 互換形式
+const aiSdkStream = await agent.streamVNext("message for agent", {
+  format: 'aisdk'
+});
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description: "エージェントに送信するメッセージ。単一の文字列、文字列配列、または構造化メッセージオブジェクトを指定できます。",
+    },
+    {
+      name: "options",
+      type: "AgentExecutionOptions<Output, StructuredOutput, Format>",
+      isOptional: true,
+      description: "ストリーミング処理に関するオプション設定。",
+    },
+  ]}
+/>
+
+### オプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "format",
+      type: "'mastra' | 'aisdk'",
+      isOptional: true,
+      defaultValue: "'mastra'",
+      description: "Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of steps to run during execution.",
+    },
+    {
+      name: "scorers",
+      type: "MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>",
+      isOptional: true,
+      description: "Evaluation scorers to run on the execution results.",
+      properties: [
+        {
+          parameters: [{
+            name: "scorer",
+            type: "string",
+            isOptional: false,
+            description: "Name of the scorer to use."
+          }]
+        },
+        {
+          parameters: [{
+            name: "sampling",
+            type: "ScoringSamplingConfig",
+            isOptional: true,
+            description: "Sampling configuration for the scorer.",
+            properties: [
+              {
+                parameters: [{
+                  name: "type",
+                  type: "'none' | 'ratio'",
+                  isOptional: false,
+                  description: "Type of sampling strategy. Use 'none' to disable sampling or 'ratio' for percentage-based sampling."
+                }]
+              },
+              {
+                parameters: [{
+                  name: "rate",
+                  type: "number",
+                  isOptional: true,
+                  description: "Sampling rate (0-1). Required when type is 'ratio'."
+                }]
+              }
+            ]
+          }]
+        }
+      ]
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "AI tracing context for span hierarchy and metadata.",
+    },
+    {
+      name: "returnScorerData",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to return detailed scoring data in the response.",
+    },
+    {
+      name: "onChunk",
+      type: "(chunk: ChunkType) => Promise<void> | void",
+      isOptional: true,
+      description: "Callback function called for each chunk during streaming."
+    },
+    {
+      name: "onError",
+      type: "({ error }: { error: Error | string }) => Promise<void> | void",
+      isOptional: true,
+      description: "Callback function called when an error occurs during streaming."
+    },
+    {
+      name: "onAbort",
+      type: "(event: any) => Promise<void> | void",
+      isOptional: true,
+      description: "Callback function called when the stream is aborted."
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      isOptional: true,
+      description: "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated."
+    },
+    {
+      name: "activeTools",
+      type: "Array<keyof ToolSet> | undefined",
+      isOptional: true,
+      description: "Array of active tool names that can be used during execution."
+    },
+    {
+      name: "prepareStep",
+      type: "PrepareStepFunction<any>",
+      isOptional: true,
+      description: "Callback function called before each step of multi-step execution.",
+    },
+    {
+      name: "context",
+      type: "ModelMessage[]",
+      isOptional: true,
+      description: "Additional context messages to provide to the agent.",
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
+      isOptional: true,
+      description: "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
+      properties: [
+        {
+          parameters: [{
+            name: "schema",
+            type: "z.ZodSchema<S>",
+            isOptional: false,
+            description: "Zod schema to validate the output against."
+          }]
+        },
+        {
+          parameters: [{
+            name: "model",
+            type: "MastraLanguageModel",
+            isOptional: true,
+            description: "Model to use for the internal structuring agent. If not provided, falls back to the agent's model."
+          }]
+        },
+        {
+          parameters: [{
+            name: "errorStrategy",
+            type: "'strict' | 'warn' | 'fallback'",
+            isOptional: true,
+            description: "Strategy when parsing or validation fails. Defaults to 'strict'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "fallbackValue",
+            type: "<S extends ZodTypeAny>",
+            isOptional: true,
+            description: "Fallback value when errorStrategy is 'fallback'."
+          }]
+        },
+        {
+          parameters: [{
+            name: "instructions",
+            type: "string",
+            isOptional: true,
+            description: "Custom instructions for the structuring agent."
+          }]
+        },
+      ]
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+    },
+    {
+      name: "inputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description:
+        "Custom instructions that override the agent's default instructions for this specific generation. Useful for dynamically modifying agent behavior without creating a new agent instance.",
+    },
+    {
+      name: "output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description:
+        "**Deprecated.** Use structuredOutput with maxSteps:1 to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
+    },
+    {
+      name: "memory",
+      type: "object",
+      isOptional: true,
+      description: "Configuration for memory. This is the preferred way to manage memory.",
+      properties: [
+        {
+          parameters: [{
+              name: "thread",
+              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+              isOptional: false,
+              description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
+          }]
+        },
+        {
+          parameters: [{
+              name: "resource",
+              type: "string",
+              isOptional: false,
+              description: "Identifier for the user or resource associated with the thread."
+          }]
+        },
+        {
+          parameters: [{
+              name: "options",
+              type: "MemoryConfig",
+              isOptional: true,
+              description: "Configuration for memory behavior, like message history and semantic recall."
+          }]
+        }
+      ]
+    },
+    {
+      name: "onFinish",
+      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+      isOptional: true,
+      description:
+        "Callback function called when streaming completes. Receives the final result.",
+    },
+    {
+      name: "onStepFinish",
+      type: "StreamTextOnStepFinishCallback<any> | never",
+      isOptional: true,
+      description:
+        "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description:
+        "Settings for telemetry collection during streaming.",
+      properties: [
+        {
+          parameters: [{
+            name: "isEnabled",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable telemetry. Disabled by default while experimental."
+          }]
+        },
+        {
+          parameters: [{
+            name: "recordInputs",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
+          }]
+        },
+        {
+          parameters: [{
+            name: "recordOutputs",
+            type: "boolean",
+            isOptional: true,
+            description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
+          }]
+        },
+        {
+          parameters: [{
+            name: "functionId",
+            type: "string",
+            isOptional: true,
+            description: "Identifier for this function. Used to group telemetry data by function."
+          }]
+        }
+      ]
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      isOptional: true,
+      description:
+        "Model-specific settings like temperature, maxTokens, topP, etc. These are passed to the underlying language model.",
+      properties: [
+        {
+          parameters: [{
+            name: "temperature",
+            type: "number",
+            isOptional: true,
+            description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic."
+          }]
+        },
+        {
+          parameters: [{
+            name: "maxRetries",
+            type: "number",
+            isOptional: true,
+            description: "Maximum number of retries for failed requests."
+          }]
+        },
+        {
+          parameters: [{
+            name: "topP",
+            type: "number",
+            isOptional: true,
+            description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either temperature or topP, but not both."
+          }]
+        },
+        {
+          parameters: [{
+            name: "topK",
+            type: "number",
+            isOptional: true,
+            description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses."
+          }]
+        },
+        {
+          parameters: [{
+            name: "presencePenalty",
+            type: "number",
+            isOptional: true,
+            description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition)."
+          }]
+        },
+        {
+          parameters: [{
+            name: "frequencyPenalty",
+            type: "number",
+            isOptional: true,
+            description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition)."
+          }]
+        },
+        {
+          parameters: [{
+            name: "stopSequences",
+            type: "string[]",
+            isOptional: true,
+            description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated."
+          }]
+        },
+      ]
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description:
+        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "Controls how the agent uses tools during streaming.",
+      properties: [
+        {
+          parameters: [{
+            name: "'auto'",
+            type: "string",
+            description: "Let the model decide whether to use tools (default)."
+          }]
+        },
+        {
+          parameters: [{
+            name: "'none'",
+            type: "string",
+            description: "Do not use any tools."
+          }]
+        },
+        {
+          parameters: [{
+            name: "'required'",
+            type: "string",
+            description: "Require the model to use at least one tool."
+          }]
+        },
+        {
+          parameters: [{
+            name: "{ type: 'tool'; toolName: string }",
+            type: "object",
+            description: "Require the model to use a specific tool by name."
+          }]
+        }
+      ]
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description:
+        "Additional toolsets to make available to the agent during streaming.",
+    },
+    {
+      name: "clientTools",
+      type: "ToolsInput",
+      isOptional: true,
+      description:
+        "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
+    },
+    {
+      name: "savePerStep",
+      type: "boolean",
+      isOptional: true,
+      description: "Save messages incrementally after each stream step completes (default: false).",
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, JSONValue>>",
+      isOptional: true,
+      description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. For example: `{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`.",
+      properties: [
+        {
+          parameters: [{
+            name: "openai",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`"
+          }]
+        },
+        {
+          parameters: [{
+            name: "anthropic",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "Anthropic-specific options. Example: `{ maxTokens: 1000 }`"
+          }]
+        },
+        {
+          parameters: [{
+            name: "google",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "Google-specific options. Example: `{ safetySettings: [...] }`"
+          }]
+        },
+        {
+          parameters: [{
+            name: "[providerName]",
+            type: "Record<string, JSONValue>",
+            isOptional: true,
+            description: "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options."
+          }]
+        }
+      ]
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description: "Runtime context for dependency injection and contextual information.",
+    },
+    {
+      name: "stopWhen",
+      type: "StopCondition | StopCondition[]",
+      isOptional: true,
+      description: "Condition(s) that determine when to stop the agent's execution. Can be a single condition or array of conditions.",
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraModelOutput<Output> | AISDKV5OutputStream<Output>",
+      description: "format パラメータに応じたストリーミングインターフェースを返します。format が 'mastra'（既定）なら MastraModelOutput、'aisdk' なら AI SDK v5 互換の AISDKV5OutputStream を返します。",
+    },
+  ]}
+/>
+
+## 発展的な使用例
+
+### Mastra 形式（デフォルト）
+
+```typescript showLineNumbers copy
+import { stepCountIs } from 'ai-v5';
+
+const stream = await agent.streamVNext("Tell me a story", {
+  stopWhen: stepCountIs(3), // 3ステップで停止
+  modelSettings: {
+    temperature: 0.7,
+  },
+});
+
+// テキストストリームにアクセス
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
+
+// ストリーミング完了後に全文を取得
+const fullText = await stream.text;
+```
+
+### AI SDK v5 のフォーマット
+
+```typescript showLineNumbers copy
+import { stepCountIs } from 'ai-v5';
+
+const stream = await agent.streamVNext("Tell me a story", {
+  format: 'aisdk',
+  stopWhen: stepCountIs(3), // 3ステップ後に停止
+  modelSettings: {
+    temperature: 0.7,
+  },
+});
+
+// AI SDK v5 互換のインターフェースで使用
+for await (const part of stream.fullStream) {
+  if (part.type === 'text-delta') {
+    console.log(part.text);
+  }
+}
+
+// フロントエンド統合用の API ルート内で
+return stream.toUIMessageStreamResponse();
+```
+
+### コールバックの使用
+
+すべてのコールバック関数がトップレベルのプロパティとして利用できるようになり、よりシンプルで扱いやすいAPIになりました。
+
+```typescript showLineNumbers copy
+const stream = await agent.streamVNext("Tell me a story", {
+  onFinish: (result) => {
+    console.log('Streaming finished:', result);
+  },
+  onStepFinish: (step) => {
+    console.log('Step completed:', step);
+  },
+  onChunk: (chunk) => {
+    console.log('Received chunk:', chunk);
+  },
+  onError: ({ error }) => {
+    console.error('Streaming error:', error);
+  },
+  onAbort: (event) => {
+    console.log('Stream aborted:', event);
+  },
+});
+
+// ストリームを処理する
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
+```
+
+### オプション付きの高度な例
+
+```typescript showLineNumbers copy
+import { z } from "zod";
+import { stepCountIs } from 'ai-v5';
+
+await agent.streamVNext("message for agent", {
+  format: 'aisdk', // AI SDK v5 互換モードを有効化
+  stopWhen: stepCountIs(3), // 3 ステップで停止
+  modelSettings: {
+    temperature: 0.7,
+  },
+  memory: {
+    thread: "user-123",
+    resource: "test-app"
+  },
+  toolChoice: "auto",
+  // 開発体験（DX）を高めるための構造化出力
+  structuredOutput: {
+    schema: z.object({
+      sentiment: z.enum(['positive', 'negative', 'neutral']),
+      confidence: z.number(),
+    }),
+    model: openai("gpt-4o-mini"),
+    errorStrategy: 'warn',
+  },
+  // ストリーミング応答の検証用出力プロセッサ
+  outputProcessors: [
+    new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
+    new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
+  ],
+});
+```

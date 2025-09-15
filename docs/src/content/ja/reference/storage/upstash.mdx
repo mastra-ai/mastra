@@ -1,11 +1,20 @@
 ---
-title: "Upstash Storage | ストレージシステム | Mastra Core"
-description: MastraにおけるUpstashストレージ実装のドキュメント。
+title: "Upstash Storage | Storage System | Mastra Core"
+description: MastraのUpstashストレージ実装に関するドキュメント。
 ---
+import { Callout } from 'nextra/components'
 
-# Upstash Storage
 
-Upstashのストレージ実装は、UpstashのRedis互換のキー・バリュー・ストアを使用したサーバーレスに適したストレージソリューションを提供します。
+
+# Upstash ストレージ
+
+Upstash のストレージ実装は、Upstash の Redis 互換のキー・バリュー・ストアを利用し、サーバーレス環境に適したストレージソリューションを提供します。
+
+<Callout type="warning">
+  **重要:** Mastra を Upstash と組み合わせて使用する場合、エージェントの対話により大量の Redis コマンドが発行されるため、従量課金モデルでは予想外に高額な費用が発生する可能性があります。費用を予測可能にするため、**固定料金プラン**のご利用を強く推奨します。詳細は [Upstash pricing](https://upstash.com/pricing/redis) を、背景については [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) を参照してください。
+</Callout>
+
+
 
 ## インストール
 
@@ -13,7 +22,9 @@ Upstashのストレージ実装は、UpstashのRedis互換のキー・バリュ�
 npm install @mastra/upstash@latest
 ```
 
-## 使用法
+
+
+## 使い方
 
 ```typescript copy showLineNumbers
 import { UpstashStore } from "@mastra/upstash";
@@ -24,37 +35,41 @@ const storage = new UpstashStore({
 });
 ```
 
-## パラメーター
+
+
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "url",
       type: "string",
-      description: "Upstash Redis URL",
+      description: "Upstash Redis の URL",
       isOptional: false,
     },
     {
       name: "token",
       type: "string",
-      description: "Upstash Redis 認証トークン",
+      description: "Upstash Redis の認証トークン",
       isOptional: false,
     },
     {
       name: "prefix",
       type: "string",
-      description: "すべての保存されたアイテムのキー接頭辞",
+      description: "保存されるすべてのキーに付与するプレフィックス",
       isOptional: true,
       defaultValue: "mastra:",
     },
   ]}
 />
 
-## 追加の注意事項
+
+
+## 補足
 
 ### キー構造
 
-Upstash ストレージの実装はキーと値の構造を使用します：
+Upstash のストレージ実装はキー・バリュー型の構造を採用しています：
 
 - スレッドキー: `{prefix}thread:{threadId}`
 - メッセージキー: `{prefix}message:{messageId}`
@@ -62,25 +77,25 @@ Upstash ストレージの実装はキーと値の構造を使用します：
 
 ### サーバーレスの利点
 
-Upstash ストレージは特にサーバーレス展開に適しています：
+Upstash のストレージはサーバーレス環境でのデプロイに特に適しています：
 
 - 接続管理が不要
-- リクエストごとの料金
-- グローバルなレプリケーションオプション
-- エッジ互換
+- リクエストごとの課金
+- グローバルレプリケーションのオプション
+- エッジ対応
 
-### データの永続性
+### データの永続化
 
-Upstash は以下を提供します：
+Upstash では次の機能を提供します：
 
-- 自動データ永続性
-- 時点復旧
-- クロスリージョンレプリケーションオプション
+- データの自動永続化
+- ポイントインタイム・リカバリ
+- リージョン間レプリケーションのオプション
 
-### パフォーマンスの考慮事項
+### パフォーマンスに関する考慮事項
 
-最適なパフォーマンスのために：
+最適なパフォーマンスを得るために：
 
-- データを整理するために適切なキーのプレフィックスを使用する
+- 適切なキー・プレフィックスを用いてデータを整理する
 - Redis のメモリ使用量を監視する
-- 必要に応じてデータの有効期限ポリシーを検討する
+- 必要に応じてデータの有効期限の設定を検討する

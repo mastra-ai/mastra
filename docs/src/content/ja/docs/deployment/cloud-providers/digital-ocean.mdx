@@ -1,0 +1,214 @@
+---
+title: "Digital Ocean"
+description: "Mastra アプリケーションを DigitalOcean にデプロイする。"
+---
+
+import { Callout, Steps, Tabs } from "nextra/components";
+
+
+
+# Digital Ocean
+
+Digital Ocean の App Platform と Droplets に Mastra アプリケーションをデプロイします。
+
+<Callout>
+  このガイドは、デフォルトの
+  `npx create-mastra@latest` コマンドで Mastra アプリケーションを作成したことを前提としています。
+  新しく Mastra アプリケーションを作成する方法については、
+  [クイックスタートガイド](./../../getting-started/installation.mdx) を参照してください。
+</Callout>
+
+
+
+<Tabs items={["App Platform", "Droplets"]}>
+
+<Tabs.Tab>
+
+## App Platform
+
+### 前提条件 [#app-platform-prerequisites]
+
+- Mastra アプリケーションを含む Git リポジトリ。[GitHub](https://github.com/) リポジトリ、[GitLab](https://gitlab.com/) リポジトリ、またはその他の互換性のあるソースプロバイダーを使用できます。
+- [DigitalOcean アカウント](https://www.digitalocean.com/)
+
+### デプロイ手順
+
+<Steps>
+
+### 新しいアプリを作成
+
+- [DigitalOcean ダッシュボード](https://cloud.digitalocean.com/) にログインします。
+- [App Platform](https://docs.digitalocean.com/products/app-platform/) サービスに移動します。
+- ソースプロバイダーを選択し、新しいアプリを作成します。
+
+### デプロイ元の設定
+
+- リポジトリに接続して選択します。コンテナイメージやサンプルアプリを選ぶこともできます。
+- デプロイに使用するブランチを選択します。
+- 必要に応じてソースディレクトリを指定します。Mastra アプリがデフォルトのディレクトリ構成を使用している場合は、設定不要です。
+- 次のステップへ進みます。
+
+### リソース設定と環境変数の構成
+
+- Node.js のビルドは自動検出されます。
+- **ビルドコマンドの設定**: App Platform が Mastra プロジェクトを正しくビルドできるよう、カスタムビルドコマンドを追加してください。パッケージマネージャに応じて設定します:
+
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+    ```
+    npm run build
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```
+    pnpm build
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```
+    yarn build
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```
+    bun run build
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+- Mastra アプリに必要な環境変数を追加します。API キー、データベース URL、その他の設定値などが含まれます。
+- ここでリソースのサイズを調整できます。
+- オプションで、リソースのリージョン、一意のアプリ名、リソースの所属プロジェクトなども設定できます。
+- 設定と料金見積もりを確認し、問題なければアプリを作成します。
+
+### デプロイ
+
+- アプリは自動的にビルドおよびデプロイされます。
+- DigitalOcean からデプロイ済みアプリにアクセスできる URL が提供されます。
+
+</Steps>
+
+これで、DigitalOcean によって提供された URL からデプロイ済みアプリにアクセスできます。
+
+<Callout>
+DigitalOcean App Platform はエフェメラル（短期）なファイルシステムを使用しています。
+つまり、ファイルシステムに書き込まれたファイルは短期間で消失する可能性があります。
+ファイルシステムを使用する Mastra のストレージプロバイダーの利用は避けてください。
+例：ファイル URL を用いる `LibSQLStore`。
+</Callout>
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+## Droplets
+
+Mastra アプリケーションを DigitalOcean の Droplets にデプロイします。
+
+### 前提条件 [#droplets-prerequisites]
+
+- [DigitalOcean アカウント](https://www.digitalocean.com/)
+- Ubuntu 24+ が動作する [Droplet](https://docs.digitalocean.com/products/droplets/)
+- Droplet を指す A レコードを持つドメイン名
+- リバースプロキシの設定（例: [nginx](https://nginx.org/)）
+- SSL 証明書の設定（例: [Let's Encrypt](https://letsencrypt.org/)）
+- Droplet に Node.js 18+ がインストールされていること
+
+### デプロイ手順
+
+<Steps>
+
+### Mastra アプリケーションをクローン
+
+Droplet に接続し、リポジトリをクローンします:
+
+<Tabs items={["Public Repository", "Private Repository"]}>
+<Tabs.Tab>
+
+```bash copy
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+```bash copy
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+</Tabs>
+
+リポジトリのディレクトリに移動します:
+
+```bash copy
+cd "<your-repository>"
+```
+
+### 依存関係をインストール
+
+```bash copy
+npm install
+```
+
+### 環境変数を設定
+
+`.env` ファイルを作成し、環境変数を追加します:
+
+```bash copy
+touch .env
+```
+
+`.env` ファイルを編集し、環境変数を追加します:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key>
+# 必要な環境変数を追加
+```
+
+### アプリケーションをビルド
+
+```bash copy
+npm run build
+```
+
+### アプリケーションを実行
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+```
+
+<Callout>
+Mastra アプリケーションはデフォルトでポート 4111 で動作します。リバースプロキシがこのポートにリクエストを転送するよう設定されていることを確認してください。
+</Callout>
+
+</Steps>
+
+</Tabs.Tab>
+
+</Tabs>
+
+
+
+## Mastra サーバーへの接続
+
+`@mastra/client-js` パッケージの `MastraClient` を使うと、クライアントアプリケーションから Mastra サーバーに接続できます。
+
+詳しくは、[`MastraClient` のドキュメント](/docs/server-db/mastra-client)をご覧ください。
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-domain-name>",
+});
+```
+
+
+
+## 次のステップ
+
+- [Mastra クライアント SDK](/docs/client-js/overview)
+- [DigitalOcean App Platform のドキュメント](https://docs.digitalocean.com/products/app-platform/)
+- [DigitalOcean Droplets のドキュメント](https://docs.digitalocean.com/products/droplets/)

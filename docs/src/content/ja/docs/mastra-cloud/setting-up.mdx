@@ -3,126 +3,104 @@ title: プロジェクトのセットアップ
 description: Mastra Cloudプロジェクトの設定手順
 ---
 
-# Mastra Cloudプロジェクトの設定
+import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
+import { Steps } from "nextra/components";
 
-> **ベータ版のお知らせ**
-> Mastra Cloudは現在**ベータ版**です。
 
-このページでは、GitHub連携を使用してMastra Cloudでプロジェクトを設定する手順について説明します。
+
+# セットアップとデプロイ
+
+このページでは、GitHub統合を使用した自動デプロイメントで[Mastra Cloud](https://mastra.ai/cloud)にプロジェクトをセットアップする方法について説明します。
+
+<MastraCloudCallout />
+
+
 
 ## 前提条件
 
-- Mastra Cloudアカウント
-- GitHubアカウント
-- Mastraアプリケーションを含むGitHubリポジトリ
+- [Mastra Cloud](https://mastra.ai/cloud) アカウント
+- Mastraアプリケーションを含むGitHubアカウント/リポジトリ
 
-## プロジェクト作成プロセス
+> 適切なデフォルト設定で新しいMastraプロジェクトを構築するには、[はじめに](/docs/getting-started/installation)ガイドをご覧ください。
 
-1. **Mastra Cloudにサインイン**
 
-   - Mastra Cloudダッシュボード（https://cloud.mastra.ai）に移動します
-   - アカウント認証情報でサインインします
 
-2. **新しいプロジェクトを追加**
+## セットアップとデプロイプロセス
 
-   - 「すべてのプロジェクト」ビューから、右上の「新規追加」ボタンをクリックします
-   - GitHubリポジトリのインポートダイアログが開きます
+<Steps>
 
-   ![Mastra Cloudプロジェクトダッシュボード](/image/cloud-agents.png)
+### Mastra Cloudにサインイン
 
-3. **Gitリポジトリをインポート**
+[https://cloud.mastra.ai/](https://cloud.mastra.ai)にアクセスし、以下のいずれかでサインインしてください：
 
-   - リポジトリを検索するか、利用可能なGitHubリポジトリのリストから選択します
-   - デプロイしたいリポジトリの横にある「インポート」ボタンをクリックします
+- **GitHub**
+- **Google**
 
-4. **デプロイメント詳細の設定**
-   デプロイメント設定ページには以下が含まれます：
-   - **リポジトリ名**：GitHubリポジトリ名（読み取り専用）
-   - **プロジェクト名**：プロジェクト名をカスタマイズ（デフォルトはリポジトリ名）
-   - **ブランチ**：デプロイするブランチを選択（ドロップダウン、デフォルトは`main`）
-   - **プロジェクトルート**：プロジェクトのルートディレクトリを設定（デフォルトは`/`）
-   - **Mastraディレクトリ**：Mastraファイルの場所を指定（デフォルトは`src/mastra`）
-   - **ビルドコマンド**：ビルドプロセス中に実行するオプションコマンド
-   - **ストア設定**：データストレージオプションを設定
-   - **環境変数**：設定用のキーと値のペアを追加（例：APIキー）
+### Mastra GitHub appをインストール
 
-## プロジェクト構造の要件
+プロンプトが表示されたら、Mastra GitHub appをインストールしてください。
 
-Mastra CloudはGitHubリポジトリを以下の項目についてスキャンします：
+![Install GitHub](/image/mastra-cloud/mastra-cloud-install-github.jpg)
 
-- **エージェント**：モデルとツールを備えたエージェント定義（例：天気エージェント）
-- **ワークフロー**：ワークフローステップ定義（例：weather-workflow）
-- **環境変数**：必要なAPIキーと設定変数
+### 新しいプロジェクトを作成
 
-リポジトリは、適切な検出とデプロイメントのために標準的なMastraプロジェクト構造を含んでいる必要があります。
+**Create new project**ボタンをクリックして新しいプロジェクトを作成してください。
 
-## ダッシュボードの理解
+![Create new project](/image/mastra-cloud/mastra-cloud-create-new-project.jpg)
 
-プロジェクトを作成すると、ダッシュボードには以下が表示されます：
+### Gitリポジトリをインポート
 
-### プロジェクト概要
+リポジトリを検索し、**Import**をクリックしてください。
 
-- **作成日**: プロジェクトが作成された日時
-- **ドメイン**: デプロイされたアプリケーションにアクセスするためのURL
-  - 形式: `https://[project-name].mastra.cloud`
-  - 形式: `https://[random-id].mastra.cloud`
-- **ステータス**: 現在のデプロイメントステータス（成功またはアーカイブ済み）
-- **ブランチ**: デプロイされたブランチ（通常は`main`）
-- **環境変数**: 設定されたAPIキーと設定
-- **ワークフロー**: 検出されたワークフローとステップ数のリスト
-- **エージェント**: 検出されたエージェントとそのモデルおよびツールのリスト
-- **データベース使用状況**: 読み取り、書き込み、ストレージの統計情報
+![Import Git repository](/image/mastra-cloud/mastra-cloud-import-git-repository.jpg)
 
-### デプロイメントセクション
+### デプロイメントを設定
 
-- すべてのデプロイメントのリスト：
-  - デプロイメントID（コミットハッシュに基づく）
-  - ステータス（成功/アーカイブ済み）
-  - ブランチ
-  - コミットハッシュ
-  - タイムスタンプ
+Mastra Cloudは適切なビルド設定を自動的に検出しますが、以下で説明するオプションを使用してカスタマイズできます。
 
-### ログセクション
+![Deployment details](/image/mastra-cloud/mastra-cloud-deployment-details.jpg)
 
-ログビューには以下が表示されます：
+- **Importing from GitHub**: GitHubリポジトリ名
+- **Project name**: プロジェクト名をカスタマイズ
+- **Branch**: デプロイするブランチ
+- **Project root**: プロジェクトのルートディレクトリ
+- **Mastra directory**: Mastraファイルが配置されている場所
+- **Environment variables**: アプリケーションで使用される環境変数を追加
+- **Build and Store settings**:
+   - **Install command**: プロジェクトの依存関係をインストールするためのプリビルド実行
+   - **Project setup command**: 外部依存関係を準備するためのプリビルド実行
+   - **Port**: サーバーが使用するネットワークポート
+   - **Store settings**: Mastra Cloudの組み込み[LibSQLStore](/docs/storage/overview)ストレージを使用
+- **Deploy Project**: デプロイメントプロセスを開始
 
-- 各ログエントリのタイムスタンプ
-- ログレベル（info、debug）
-- ホスト名
-- 詳細なログメッセージ（以下を含む）：
-  - API起動情報
-  - ストレージ初期化
-  - エージェントとワークフローのアクティビティ
+### プロジェクトをデプロイ
 
-## ナビゲーション
+**Deploy Project**をクリックして、設定した構成を使用してアプリケーションを作成およびデプロイしてください。
 
-サイドバーから以下にアクセスできます：
+</Steps>
 
-- **概要**：プロジェクトの概要と統計
-- **デプロイメント**：デプロイ履歴と詳細
-- **ログ**：デバッグ用のアプリケーションログ
-- **エージェント**：すべてのエージェントのリストと設定
-- **ワークフロー**：すべてのワークフローのリストと構造
-- **設定**：プロジェクト構成オプション
 
-## 環境変数の設定
 
-ダッシュボードを通じて環境変数を設定します：
+## デプロイメント成功
 
-1. ダッシュボードでプロジェクトに移動します
-2. 「環境変数」セクションに進みます
-3. 変数を追加または編集します（例：`OPENAI_API_KEY`）
-4. 設定を保存します
+デプロイメントが成功すると、**Overview**画面が表示され、プロジェクトのステータス、ドメイン、最新のデプロイメント、接続されたエージェントとワークフローを確認できます。
 
-環境変数は暗号化され、デプロイメントと実行中にアプリケーションで利用可能になります。
+![Successful deployment](/image/mastra-cloud/mastra-cloud-successful-deployment.jpg)
 
-## デプロイメントのテスト
 
-デプロイメント後、以下の方法でエージェントとワークフローをテストできます：
 
-1. プロジェクトに割り当てられたカスタムドメイン：`https://[project-name].mastra.cloud`
-2. エージェントと直接対話するためのダッシュボードインターフェース
+## 継続的インテグレーション
+
+あなたのプロジェクトは、GitHubリポジトリの設定されたブランチにプッシュするたびに自動デプロイが実行されるように設定されました。
+
+
+
+## アプリケーションのテスト
+
+デプロイが成功した後、Mastra Cloudの[Playground](/docs/mastra-cloud/dashboard#playground)からエージェントとワークフローをテストしたり、[Client SDK](/docs/client-js/overview)を使用してそれらと対話したりできます。
+
+
 
 ## 次のステップ
 
-プロジェクトを設定した後、GitHubリポジトリの`main`ブランチにプッシュするたびに自動デプロイが行われます。詳細については、[デプロイメントのドキュメント](./deploying.mdx)を参照してください。
+- [ダッシュボードのナビゲーション](/docs/mastra-cloud/dashboard)

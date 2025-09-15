@@ -1,0 +1,84 @@
+---
+title: "リファレンス: Mastra.getLogsByRunId() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getLogsByRunId()` メソッドのドキュメント。特定のラン ID とトランスポート ID に対応するログを取得します。"
+---
+
+# Mastra.getLogsByRunId()
+
+`.getLogsByRunId()` メソッドは、特定の run ID と transport ID に対するログを取得するために使用します。このメソッドを利用するには、`getLogsByRunId` 操作をサポートするように設定されたロガーが必要です。
+
+## 使用例
+
+```typescript copy
+mastra.getLogsByRunId({ runId: "123", transportId: "456" });
+```
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "ログを取得する実行ID。",
+    },
+    {
+      name: "transportId",
+      type: "string",
+      description: "ログを取得するトランスポートID。",
+    },
+    {
+      name: "fromDate",
+      type: "Date",
+      description: "ログを絞り込むための任意の開始日。例: new Date('2024-01-01')。",
+      optional: true,
+    },
+    {
+      name: "toDate",
+      type: "Date",
+      description: "ログを絞り込むための任意の終了日。例: new Date('2024-01-31')。",
+      optional: true,
+    },
+    {
+      name: "logLevel",
+      type: "LogLevel",
+      description: "ログレベルによる任意のフィルタ。",
+      optional: true,
+    },
+    {
+      name: "filters",
+      type: "Record<string, any>",
+      description: "ログクエリに適用する任意の追加フィルタ。",
+      optional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "ページネーション用の任意のページ番号。",
+      optional: true,
+    },
+    {
+      name: "perPage",
+      type: "number",
+      description: "ページネーションにおける1ページあたりの任意のログ数。",
+      optional: true,
+    },
+  ]}
+/>
+
+## 返り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "logs",
+      type: "Promise<any>",
+      description: "指定された run ID と transport ID のログを返す Promise。",
+    },
+  ]}
+/>
+
+## 関連
+
+- [Logging の概要](../../docs/observability/logging.mdx)
+- [Logger リファレンス](../../reference/observability/logger.mdx)

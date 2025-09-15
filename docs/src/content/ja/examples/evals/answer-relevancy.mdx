@@ -1,146 +1,176 @@
 ---
-title: "例: 回答の関連性 | Evals | Mastra Docs"
-description: Answer Relevancyメトリクスを使用してクエリへの回答の関連性を評価する例。
+title: "例: Answer Relevancy | Evals | Mastra Docs"
+description: Answer Relevancy 指標を用いて、クエリに対する応答の妥当性（関連性）を評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
+
+
 
 # 回答の関連性評価
 
-この例では、Mastra の回答関連性指標を使用して、応答が入力クエリにどれだけ適切に対応しているかを評価する方法を示します。
+<ScorerCallout />
 
-## 概要
+`AnswerRelevancyMetric` を使用して、応答が元のクエリにどれだけ関連しているかを評価します。メトリクスは `query` と `response` を受け取り、スコアと理由を含む `info` オブジェクトを返します。
 
-この例では、以下の方法を示します。
 
-1. Answer Relevancyメトリクスの設定
-2. クエリに対する応答の関連性を評価する
-3. 関連性スコアを分析する
-4. 様々な関連性シナリオへの対応
 
-## セットアップ
+## インストール
 
-### 環境設定
-
-環境変数を必ず設定してください：
-
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### 依存関係
 
-必要な依存関係をインポートします：
 
-```typescript copy showLineNumbers filename="src/index.ts"
+## 関連性が高い例
+
+この例では、応答が入力クエリに対して、具体的で関連性の高い情報を用いて的確に回答しています。
+
+```typescript filename="src/example-high-answer-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+
+const query = "What are the health benefits of regular exercise?";
+const response = "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## メトリック設定
+### 関連性が高い出力
 
-カスタムパラメータでAnswer Relevancyメトリックを設定します：
+この出力は、無関係な情報を含めずにクエリに正確に答えているため、高いスコアを獲得しています。
 
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
-  uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
-  scale: 1, // Scale for the final score
-});
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because the output directly addresses the question by providing multiple explicit health benefits of regular exercise, including improvements in cardiovascular health, muscle strength, metabolism, and mental well-being. Each point is relevant and contributes to a comprehensive understanding of the health benefits.'
+  }
+}
 ```
 
-## 使用例
 
-### 高い関連性の例
 
-非常に関連性の高い回答を評価します：
+## 部分的な関連性の例
 
-```typescript copy showLineNumbers{11} filename="src/index.ts"
-const query1 = "What are the health benefits of regular exercise?";
-const response1 =
-  "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.";
+この例では、応答が質問の一部には答えているものの、直接的に関連しない追加情報が含まれています。
 
-console.log("Example 1 - High Relevancy:");
-console.log("Query:", query1);
-console.log("Response:", response1);
+```typescript filename="src/example-partial-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
-const result1 = await metric.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'The response is highly relevant to the query. It provides a comprehensive overview of the health benefits of regular exercise.' }
-```
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
 
-### 部分的な関連性の例
-
-部分的に関連性のある回答を評価します：
-
-```typescript copy showLineNumbers{26} filename="src/index.ts"
-const query2 = "What should a healthy breakfast include?";
-const response2 =
+const query = "What should a healthy breakfast include?";
+const response =
   "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.";
 
-console.log("Example 2 - Partial Relevancy:");
-console.log("Query:", query2);
-console.log("Response:", response2);
+const result = await metric.measure(query, response);
 
-const result2 = await metric.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.7, reason: 'The response is partially relevant to the query. It provides some information about healthy breakfast choices but misses the timing aspect.' }
+console.log(result);
 ```
 
-### 低い関連性の例
+### 部分的な関連性の出力
 
-関連性の低い回答を評価します：
+この出力は、質問に部分的にしか答えていないため、スコアが低くなります。関連する情報は含まれている一方で、無関係な詳細が全体の関連性を下げています。
 
-```typescript copy showLineNumbers{41} filename="src/index.ts"
-const query3 = "What are the benefits of meditation?";
-const response3 =
-  "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.";
-
-console.log("Example 3 - Low Relevancy:");
-console.log("Query:", query3);
-console.log("Response:", response3);
-
-const result3 = await metric.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.1, reason: 'The response is not relevant to the query. It provides information about the Great Wall of China but does not mention meditation.' }
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: 'スコアが 0.25 なのは、健全な朝食の構成要素として全粒穀物とタンパク質に言及しており、直接的な回答になっているためです。しかし、朝食のタイミングやそれが代謝や一日のエネルギーレベルに及ぼす影響に関する追加情報は、質問に直接関係していないため、全体の関連性スコアが低くなっています。'
+  }
+}
 ```
+
+
+
+## 関連性が低い例
+
+この例では、応答がクエリに答えておらず、内容もまったく無関係です。
+
+```typescript filename="src/example-low-answer-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"));
+
+const query = "What are the benefits of meditation?";
+const response = "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### 関連性が低い出力
+
+この出力は、クエリに答えておらず関連情報も提供していないため、スコアは0となります。
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'The score is 0 because the output about the Great Wall of China is completely unrelated to the benefits of meditation, providing no relevant information or context that addresses the input question.'
+  }
+}
+```
+
+
+
+## メトリクスの設定
+
+任意のパラメータを調整することで、`AnswerRelevancyMetric` のスコア計算方法をカスタマイズできます。たとえば、`uncertaintyWeight` は不確かな応答にどれだけ重みを与えるかを制御し、`scale` は到達可能な最大スコアを設定します。
+
+```typescript showLineNumbers copy
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
+  uncertaintyWeight: 0.3,
+  scale: 1,
+});
+```
+> 設定可能なオプションの一覧は、[AnswerRelevancyMetric](/reference/evals/answer-relevancy.mdx) を参照してください。
+
+
 
 ## 結果の理解
 
-この指標は以下を提供します：
+`AnswerRelevancyMetric` は次の形式の結果を返します:
 
-1. 0から1の間の関連性スコア：
-
-   - 1.0: 完全な関連性 - 応答がクエリに直接対応している
-   - 0.7-0.9: 高い関連性 - 応答が主にクエリに対応している
-   - 0.4-0.6: 中程度の関連性 - 応答が部分的にクエリに対応している
-   - 0.1-0.3: 低い関連性 - 応答がほとんどクエリに対応していない
-   - 0.0: 関連性なし - 応答が全くクエリに対応していない
-
-2. スコアの詳細な理由、以下の分析を含む：
-   - クエリと応答の整合性
-   - トピックの焦点
-   - 情報の関連性
-   - 改善提案
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/answer-relevancy"
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
   }
+}
+```
+
+### 関連性スコア
+
+0〜1 の関連性スコア:
+
+- **1.0**: 応答は関連性が高く焦点が定まっており、クエリに完全に答えている。
+- **0.7–0.9**: 応答は概ねクエリに答えているが、わずかに無関係な内容を含む場合がある。
+- **0.4–0.6**: 応答は部分的にクエリに答えているが、関連情報と無関係な情報が混在している。
+- **0.1–0.3**: 応答は関連する内容が最小限で、クエリの意図を大きく外している。
+- **0.0**: 応答は完全に無関係で、クエリにまったく答えていない。
+
+### 関連性に関する情報
+
+スコアの説明で、次のような詳細を含む:
+
+- クエリと応答の整合性
+- コンテンツの焦点と関連性
+- 応答を改善するための提案
+
+<GithubLink
+  outdated={true}
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/answer-relevancy"
 />

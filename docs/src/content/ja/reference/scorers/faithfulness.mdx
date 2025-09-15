@@ -1,0 +1,132 @@
+---
+title: "リファレンス: Faithfulness | Scorers | Mastra Docs"
+description: Mastraの Faithfulness Scorer のドキュメント。提供されたコンテキストと比較してLLM出力の事実的正確性を評価します。
+---
+
+
+
+# Faithfulness Scorer
+
+`createFaithfulnessScorer()`関数は、提供されたコンテキストと比較して、LLMの出力がどの程度事実的に正確であるかを評価します。出力からクレームを抽出し、コンテキストに対してそれらを検証するため、RAGパイプラインレスポンスの信頼性を測定するのに不可欠です。
+
+使用例については、[Faithfulness Examples](/examples/scorers/faithfulness)を参照してください。
+
+
+
+## パラメータ
+
+`createFaithfulnessScorer()` 関数は、以下のプロパティを持つ単一のオプションオブジェクトを受け取ります：
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "忠実性を評価するために使用されるモデルの設定。",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      required: true,
+      description: "出力の主張が検証される対象となるコンテキストチャンクの配列。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "最大スコア値。最終スコアはこのスケールに正規化されます。",
+    },
+  ]}
+/>
+
+この関数はMastraScorerクラスのインスタンスを返します。`.run()` メソッドは他のスコアラーと同じ入力を受け取りますが（[MastraScorerリファレンス](./mastra-scorer)を参照）、戻り値には以下に記載されているLLM固有のフィールドが含まれます。
+
+
+
+## .run() の戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "実行のID（オプション）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "string[]",
+      description: "出力から抽出された主張の配列。",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "前処理ステップでLLMに送信されたプロンプト（オプション）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "判定結果を含むオブジェクト: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "分析ステップでLLMに送信されたプロンプト（オプション）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "0から設定されたスケールまでのスコアで、コンテキストによって裏付けられる主張の割合を表す。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "どの主張が裏付けられ、矛盾し、または不確実とされたかを含む、スコアの詳細な説明。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "理由生成ステップでLLMに送信されたプロンプト（オプション）。",
+    },
+  ]}
+/>
+
+
+
+## スコアリング詳細
+
+スコアラーは、提供されたコンテキストに対するクレーム検証を通じて忠実性を評価します。
+
+### スコアリングプロセス
+
+1. クレームとコンテキストを分析：
+   - すべてのクレーム（事実的および推測的）を抽出
+   - 各クレームをコンテキストに対して検証
+   - 3つの判定のうち1つを割り当て：
+     - "yes" - クレームがコンテキストによってサポートされている
+     - "no" - クレームがコンテキストと矛盾している
+     - "unsure" - クレームが検証不可能
+2. 忠実性スコアを計算：
+   - サポートされたクレームをカウント
+   - 総クレーム数で除算
+   - 設定された範囲にスケール
+
+最終スコア: `(supported_claims / total_claims) * scale`
+
+### スコア解釈
+
+（0からスケール、デフォルト0-1）
+
+- 1.0: すべてのクレームがコンテキストによってサポートされている
+- 0.7-0.9: ほとんどのクレームがサポートされており、検証不可能なものは少数
+- 0.4-0.6: いくつかの矛盾を含む混合的なサポート
+- 0.1-0.3: 限定的なサポート、多くの矛盾
+- 0.0: サポートされたクレームなし
+
+
+
+## 関連項目
+
+- [回答関連性スコアラー](./answer-relevancy)
+- [ハルシネーションスコアラー](./hallucination)
