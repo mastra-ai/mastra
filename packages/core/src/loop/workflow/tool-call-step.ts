@@ -135,6 +135,7 @@ export function createToolCallStep<
 
             return await suspend({ toolCallSuspended: suspendPayload });
           },
+          resumeData,
         } as ToolCallOptions);
 
         span.setAttributes({

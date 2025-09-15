@@ -66,7 +66,7 @@ export interface ToolAction<
   description: string;
   execute?: (
     context: TContext,
-    options?: ToolExecutionOptions & { suspend?: (suspendPayload: any) => Promise<any> },
+    options?: ToolExecutionOptions & { suspend?: (suspendPayload: any) => Promise<any>; resumeData?: any },
   ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
   mastra?: Mastra;
   requireApproval?: boolean;
