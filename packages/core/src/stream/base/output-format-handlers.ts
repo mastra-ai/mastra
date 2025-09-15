@@ -383,7 +383,6 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
 
       // Only emit if we have valid partial matches and the result isn't empty
       if (partialResult.length > 0 && bestMatch && bestMatch !== this.textPreviousEnumResult) {
-        console.log('bestMatch', bestMatch);
         this.textPreviousEnumResult = bestMatch;
         return {
           shouldEmit: true,
