@@ -923,7 +923,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
-    it.only('should persist a workflow run with resourceId', async ctx => {
+    it('should persist a workflow run with resourceId', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
